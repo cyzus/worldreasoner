@@ -1,10 +1,10 @@
 """Event data model - represents discrete occurrences in causal graphs."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional, Dict, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class EventType(str, Enum):
@@ -158,11 +158,11 @@ class Event(BaseModel):
     )
     
     # Audit
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = None
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "evt_pol_20241105_001",
                 "title": "2024 US Presidential Election Result",
@@ -197,6 +197,7 @@ class Event(BaseModel):
                 }
             }
         }
+    )
 
     def add_causal_link(
         self,
@@ -241,7 +242,7 @@ class Event(BaseModel):
         """
         self.status = EventStatus.OCCURRED
         self.occurred_date = occurred_date
-        self.resolution_date = datetime.utcnow()
+        self.resolution_date = datetime.now(timezone.utc)
         if outcome_value is not None:
             self.outcome_value = outcome_value
             self.outcome_verified = True

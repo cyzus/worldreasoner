@@ -1,10 +1,10 @@
 """Question/forecast task data model."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class QuestionType(str, Enum):
@@ -62,6 +62,16 @@ class Question(BaseModel):
         description="Cryptographic hash for integrity verification"
     )
     
+    # Event reference (optional - for structured benchmark questions)
+    target_event_id: Optional[str] = Field(
+        None,
+        description="ID of the event this question is asking about (if event-based)"
+    )
+    related_event_ids: List[str] = Field(
+        default_factory=list,
+        description="Other relevant events (for multi-event or exploratory questions)"
+    )
+    
     # Question-specific metadata
     context: Optional[str] = Field(
         None,
@@ -80,32 +90,16 @@ class Question(BaseModel):
         description="Valid range for quantity questions {'min': x, 'max': y}"
     )
     
-    # Causal structure
-    causal_graph: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Graph structure of causal relationships"
-    )
-    
-    # Related content
-    related_articles: List[str] = Field(
-        default_factory=list,
-        description="Suggested starting articles for research"
-    )
-    key_events: Optional[List[Dict[str, Any]]] = Field(
-        None,
-        description="Important events in the causal chain"
-    )
-    
     # Metadata
     is_synthetic: bool = Field(default=False, description="Whether question uses synthetic data")
     benchmark_suite_id: Optional[str] = Field(
         None,
         description="ID of benchmark suite this question belongs to"
     )
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "q_pol_2024_001",
                 "question_text": "Will the Republican candidate win the 2024 US Presidential Election?",
@@ -117,10 +111,11 @@ class Question(BaseModel):
                 "resolution_date": "2024-11-06T00:00:00Z",
                 "ground_truth": True,
                 "ground_truth_hash": "sha256:abc123...",
+                "target_event_id": "evt_pol_20241105_001",
                 "context": "The 2024 United States presidential election will be held on November 5, 2024.",
-                "related_articles": ["art_pol_20240925_001", "art_pol_20240928_042"],
             }
         }
+    )
 
     def validate_prediction(self, prediction: Any) -> bool:
         """Validate that a prediction matches the expected type for this question.

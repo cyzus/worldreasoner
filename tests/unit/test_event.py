@@ -1,6 +1,6 @@
 """Unit tests for Event data model."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 import pytest
 
 from src.data.models.event import (
@@ -115,7 +115,7 @@ def test_mark_occurred():
         description="This event hasn't occurred yet",
         event_type=EventType.OUTCOME,
         domain="politics",
-        predicted_date=datetime.utcnow() + timedelta(days=30)
+        predicted_date=datetime.now(timezone.utc) + timedelta(days=30)
     )
     
     assert event.status == EventStatus.PREDICTED
@@ -123,7 +123,7 @@ def test_mark_occurred():
     assert event.outcome_verified is False
     
     # Mark as occurred
-    occurred_time = datetime.utcnow()
+    occurred_time = datetime.now(timezone.utc)
     event.mark_occurred(
         occurred_date=occurred_time,
         outcome_value="Candidate A wins"
@@ -262,7 +262,7 @@ def test_event_status_transitions():
     
     # Mark as occurred
     event.mark_occurred(
-        occurred_date=datetime.utcnow(),
+        occurred_date=datetime.now(timezone.utc),
         outcome_value="Result confirmed"
     )
     assert event.status == EventStatus.OCCURRED
