@@ -38,7 +38,7 @@ class Forecast(BaseModel):
     
     # Temporal context
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=datetime.now(datetime.timezone.utc),
         description="When forecast was submitted"
     )
     simulated_date: Optional[datetime] = Field(

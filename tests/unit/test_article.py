@@ -117,33 +117,6 @@ def test_article_validation_short_content():
         )
 
 
-def test_article_reliability_score_bounds():
-    """Test reliability score must be between 0 and 1."""
-    # Valid score
-    article = Article(
-        id="test_008",
-        title="Test Reliability Score",
-        content="Content goes here. " * 20,
-        source="Test Source",
-        published_date=datetime.now(),
-        domain="finance",
-        reliability_score=0.85,
-    )
-    assert article.reliability_score == 0.85
-    
-    # Invalid score (too high)
-    with pytest.raises(ValueError):
-        Article(
-            id="test_009",
-            title="Test Invalid Score",
-            content="Content goes here. " * 20,
-            source="Test Source",
-            published_date=datetime.now(),
-            domain="finance",
-            reliability_score=1.5,  # Invalid
-        )
-
-
 def test_article_json_serialization():
     """Test article can be serialized to JSON."""
     article = Article(

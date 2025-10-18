@@ -47,25 +47,9 @@ class Article(BaseModel):
         description="IDs of events discussed or documented in this article"
     )
     
-    # Quality metrics
-    reliability_score: float = Field(
-        default=1.0,
-        ge=0.0,
-        le=1.0,
-        description="Source reliability score (0-1, higher is better)"
-    )
-    
     # Computed fields
     word_count: Optional[int] = Field(None, description="Number of words in content")
     reading_time_minutes: Optional[int] = Field(None, description="Estimated reading time")
-    
-    # Outcome relevance (for benchmark questions)
-    outcome_relevance: Optional[float] = Field(
-        None,
-        ge=0.0,
-        le=1.0,
-        description="Relevance to specific outcome (0-1)"
-    )
     
     # Audit timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -84,7 +68,6 @@ class Article(BaseModel):
                 "tags": ["election-2024", "pennsylvania", "polling", "swing-states"],
                 "is_synthetic": False,
                 "event_ids": ["evt_pol_20240928_001", "evt_pol_20241105_001"],
-                "reliability_score": 0.87,
                 "word_count": 1247,
                 "reading_time_minutes": 5,
             }
