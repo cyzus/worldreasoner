@@ -2,6 +2,7 @@
 
 import pytest
 from src.llm import LiteLLMClient
+from src.utils.config import load_config
 
 class TestLiteLLMClientIntegration:
     """Integration tests for LiteLLMClient with real API calls."""
@@ -42,3 +43,42 @@ class TestLiteLLMClientIntegration:
         
         # The response should contain the requested phrase
         assert "Hello" in result or "hello" in result
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_acomplete_with_config_file(self):
+        """Test real API call using LLM config loaded from default.yaml.
+        
+        This test loads configuration from config/default.yaml and makes an actual API call.
+        """
+        # Load configuration from default.yaml
+        config = load_config("config/default.yaml")
+        
+        # Create client with config from file
+        client = LiteLLMClient(config.llm)
+        
+        messages = [
+            {"role": "user", "content": "What is 2+2? Answer with just the number."}
+        ]
+        
+        # Make real API call
+        result = await client.acomplete(messages)
+        
+        # Print the actual response and config for inspection
+        print(f"\n{'='*60}")
+        print(f"Loaded LLM Config:")
+        print(f"  Model: {config.llm.model}")
+        print(f"  Temperature: {config.llm.temperature}")
+        print(f"  Max Tokens: {config.llm.max_tokens}")
+        print(f"\nAPI Response: {result}")
+        print(f"Response type: {type(result)}")
+        print(f"Response length: {len(result)}")
+        print(f"{'='*60}\n")
+        
+        # Verify we got a non-empty response
+        assert result is not None
+        assert isinstance(result, str)
+        assert len(result) > 0
+        
+        # The response should contain the answer
+        assert "4" in result

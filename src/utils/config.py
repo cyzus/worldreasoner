@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
-from pydantic import BaseModel, Field
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, Field, ConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class DatabaseConfig(BaseModel):
@@ -45,8 +45,22 @@ class ServerConfig(BaseModel):
     log_level: str = "info"
 
 
+class LLMConfig(BaseModel):
+    """LLM configuration."""
+    
+    model: str = "gemini/gemini-2.5-flash"
+    temperature: float = 1.0
+    max_tokens: Optional[int] = None
+
+
 class Config(BaseSettings):
     """Main application configuration."""
+    
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_nested_delimiter="__",
+        extra="ignore"  # Ignore extra fields in config files
+    )
     
     # Application
     app_name: str = "worldreasoner"
@@ -62,12 +76,11 @@ class Config(BaseSettings):
     # Server
     server: ServerConfig = Field(default_factory=ServerConfig)
     
+    # LLM
+    llm: LLMConfig = Field(default_factory=LLMConfig)
+    
     # Paths
     data_dir: Path = Field(default_factory=lambda: Path("data"))
-    
-    class Config:
-        env_file = ".env"
-        env_nested_delimiter = "__"
 
 
 def load_config(config_path: Optional[str] = None) -> Config:
