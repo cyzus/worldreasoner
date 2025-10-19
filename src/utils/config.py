@@ -106,13 +106,30 @@ def load_config(config_path: Optional[str] = None) -> Config:
     return Config()
 
 
-# Global config instance
+# Global config instance (singleton pattern)
 _config: Optional[Config] = None
 
 
-def get_config() -> Config:
-    """Get global configuration instance."""
+def get_config(reload: bool = False) -> Config:
+    """Get global configuration instance.
+    
+    Args:
+        reload: If True, reload configuration from file even if already loaded
+        
+    Returns:
+        Global configuration instance
+        
+    Note:
+        This uses a singleton pattern for convenience. For better testability,
+        consider using load_config() directly and passing config explicitly.
+    """
     global _config
-    if _config is None:
+    if _config is None or reload:
         _config = load_config()
     return _config
+
+
+def reset_config() -> None:
+    """Reset global config instance (useful for testing)."""
+    global _config
+    _config = None
