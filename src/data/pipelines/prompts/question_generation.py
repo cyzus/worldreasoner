@@ -202,7 +202,6 @@ Return a summary when done.""",
             current_date=date_str,
             min_resolution_date=min_res_str,
             max_resolution_date=max_res_str,
-            current_date=date_str,
             domain_filter=domain_filter,
             tool_name=tool_name,
             ground_truth_instruction=ground_truth_instruction
