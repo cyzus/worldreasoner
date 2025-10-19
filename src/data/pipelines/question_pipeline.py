@@ -86,6 +86,7 @@ class QuestionPipeline(Pipeline):
         # Build pipeline stages
         self.article_stage = ArticleCollectionStage(article_config)
         self.event_stage = EventIdentificationStage(event_config)
+        # Question stage will receive articles later via set_articles()
         self.question_stage = QuestionGenerationStage(question_config)
         
         # Add stages to pipeline
@@ -156,6 +157,8 @@ class QuestionPipeline(Pipeline):
                 self._results.append(persist_result)
             
             # Stage 3: Generate Questions
+            # Pass articles to question stage so EventDetailsTool can access them
+            self.question_stage.set_articles(self.articles)
             self.questions = await self.question_stage.process(self.events)
             question_result = self.question_stage.get_result()
             if question_result:

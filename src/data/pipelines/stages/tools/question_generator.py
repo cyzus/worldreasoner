@@ -29,7 +29,11 @@ class QuestionGeneratorTool(Tool):
     
     Args:
         question_text (str): The actual question text (e.g., "Will X happen by date Y?")
-        question_type (str): Type of question (boolean|multiple_choice|numeric|timeframe)
+        question_type (str): Type of question - MUST be one of: boolean, mcq, quantity, timeframe
+            * boolean: Yes/no questions (e.g., "Will X happen by Y?")
+            * mcq: Multiple choice questions (provide options)
+            * quantity: Numerical value questions (e.g., "What percentage...", "How many...")
+            * timeframe: When will something happen questions
         domain (str): Question domain (finance|politics|tech|health|climate|general)
         difficulty (int): Difficulty level 1-5
         resolution_date (str): When the question can be resolved (ISO format)
@@ -44,7 +48,7 @@ class QuestionGeneratorTool(Tool):
     
     inputs = {
         "question_text": {"type": "string", "description": "The actual question text"},
-        "question_type": {"type": "string", "description": "Question type (boolean|multiple_choice|numeric|timeframe)"},
+        "question_type": {"type": "string", "description": "Question type - MUST be: boolean, mcq, quantity, or timeframe"},
         "domain": {"type": "string", "description": "Question domain (finance|politics|tech|health|climate|general)"},
         "difficulty": {"type": "integer", "description": "Difficulty level 1-5"},
         "resolution_date": {"type": "string", "description": "When question can be resolved (ISO format)"},
@@ -136,11 +140,43 @@ class QuestionGeneratorTool(Tool):
         else:
             horizon = TimeHorizon.LONG
         
+        # Validate and convert question_type with helpful error message
+        valid_types = ["boolean", "mcq", "quantity", "timeframe"]
+        common_mistakes = {
+            "numeric": "quantity",
+            "multiple_choice": "mcq",
+            "number": "quantity",
+            "multiplechoice": "mcq",
+            "bool": "boolean",
+            "yes_no": "boolean"
+        }
+        
+        # Normalize input (lowercase)
+        q_type_normalized = question_type.lower() if question_type else "boolean"
+        
+        # Check for common mistakes and provide helpful error
+        if q_type_normalized in common_mistakes:
+            correct_type = common_mistakes[q_type_normalized]
+            raise ValueError(
+                f"Invalid question_type '{question_type}'. "
+                f"Did you mean '{correct_type}'? "
+                f"Valid types are: {', '.join(valid_types)}"
+            )
+        
+        # Validate against QuestionType enum
+        try:
+            q_type_enum = QuestionType(q_type_normalized)
+        except ValueError:
+            raise ValueError(
+                f"Invalid question_type '{question_type}'. "
+                f"Must be EXACTLY one of: {', '.join(valid_types)} (case-sensitive, lowercase)"
+            )
+        
         # Create Question object
         question = Question(
             id=question_id,
             question_text=question_text,
-            question_type=QuestionType(question_type) if question_type else QuestionType.BOOLEAN,
+            question_type=q_type_enum,
             domain=domain,
             difficulty=min(5, max(1, difficulty)),
             time_horizon=horizon,

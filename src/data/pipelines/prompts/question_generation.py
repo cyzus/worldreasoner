@@ -32,6 +32,20 @@ Event {idx} (ID: {event_id}){status_note}:
 
 Create up to {max_questions} high-quality forecast questions.{domain_filter}
 
+AVAILABLE TOOLS:
+- **event_details**: Get full event description and complete article content for deeper context
+  * Use this when you need more information to create insightful questions
+  * Provides: full event description, complete source article text, all metadata
+  * Example: event_details(event_id="evt_tech_20251019_001")
+- **{tool_name}**: Store your generated forecast question
+
+STRATEGY:
+1. Review event summaries below (descriptions are truncated)
+2. For events that seem interesting, use event_details to get full context
+3. Read the complete article content to understand nuances
+4. Generate deep, insightful questions that go beyond surface-level facts
+5. Store questions using {tool_name} tool
+
 IMPORTANT - Resolution Date Requirements:
 - Today's date: {current_date}
 - Resolution dates MUST be within this range: {min_resolution_date} to {max_resolution_date}
@@ -51,7 +65,11 @@ For each question you create:
 2. Verify resolution_date is within the allowed range
 3. Call {tool_name} tool with all required fields:
    - question_text
-   - question_type (boolean, mcq, quantity, timeframe)
+   - question_type - MUST be EXACTLY one of these (case-sensitive):
+     * "boolean" - for yes/no questions (e.g., "Will X happen?")
+     * "mcq" - for multiple choice (provide answer options)
+     * "quantity" - for numerical answers (e.g., "What percentage...", "How many...")
+     * "timeframe" - for "when will X happen" questions
    - domain
    - difficulty (1-5)
    - resolution_date (ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)
@@ -61,6 +79,11 @@ For each question you create:
    - ground_truth (REQUIRED if PAST EVENT, omit if future)
    - cutoff_date (OPTIONAL - will be set during evaluation if needed)
 4. {ground_truth_instruction}
+
+CRITICAL - Question Type Validation:
+- Use "quantity" NOT "numeric"
+- Use "mcq" NOT "multiple_choice"
+- These must be exact matches (lowercase)
 
 Guidelines:
 - Questions should be specific and unambiguous
