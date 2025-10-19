@@ -24,9 +24,12 @@ classifiers = [
 ]
 
 dependencies = [
+    "litellm>=1.78.5",
     "pydantic",
+    "pydantic-settings>=2.11.0",
     "python-dotenv",
     "pyyaml>=6.0.3",
+    "smolagents>=1.22.0",
 ]
 
 
@@ -45,4 +48,9 @@ packages = ["src"]
 [tool.uv]
 # Use copy mode instead of hardlinks (fixes Windows/cross-filesystem issues)
 link-mode = "copy"
+
+[dependency-groups]
+dev = [
+    "pytest-asyncio>=1.2.0",
+]
 
