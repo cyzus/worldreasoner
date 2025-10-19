@@ -32,22 +32,46 @@ Event {idx} (ID: {event_id}){status_note}:
 
 Create up to {max_questions} high-quality forecast questions.{domain_filter}
 
+IMPORTANT - Resolution Date Requirements:
+- Today's date: {current_date}
+- Resolution dates MUST be within this range: {min_resolution_date} to {max_resolution_date}
+
+For PAST EVENTS (already occurred):
+  * resolution_date: Use the event date OR shortly after (when outcome became verifiable)
+  * Example: Event on 2024-11-09 → resolution_date could be 2024-11-09 or 2024-11-10
+  * MUST include ground_truth with the known outcome
+
+For FUTURE EVENTS (not yet occurred):
+  * resolution_date: Set between today and {max_resolution_date}
+  * Should be realistic (days to months in the future, not years)
+  * Example: For event predicted on 2026-01-15, resolution_date could be 2026-01-20
+
 For each question you create:
 1. Write the question text (clear, specific, resolvable)
-2. Call {tool_name} tool to store it with all required fields
-3. Include related event IDs
+2. Verify resolution_date is within the allowed range
+3. Call {tool_name} tool with all required fields:
+   - question_text
+   - question_type (boolean, mcq, quantity, timeframe)
+   - domain
+   - difficulty (1-5)
+   - resolution_date (ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)
+     * MUST be between {min_resolution_date} and {max_resolution_date}
+   - resolution_criteria (how to verify the answer)
+   - related_event_ids (comma-separated)
+   - ground_truth (REQUIRED if PAST EVENT, omit if future)
+   - cutoff_date (OPTIONAL - will be set during evaluation if needed)
 4. {ground_truth_instruction}
 
 Guidelines:
 - Questions should be specific and unambiguous
 - Boolean questions should have clear yes/no answers
 - Include a mix of difficulties (1-5)
-- Resolution dates should be realistic (days to months in future)
-- For past events, provide ground_truth based on the event description
 - Questions should be independently verifiable
+- Focus on questions that test real forecasting ability
+- Stay within the specified date range!
 
 Return a summary when done.""",
-        required_vars=["num_events", "events_text", "max_questions"],
+        required_vars=["num_events", "events_text", "max_questions", "current_date", "min_resolution_date", "max_resolution_date"],
         optional_vars={
             "domain_filter": "",
             "tool_name": "question_generator",
@@ -128,7 +152,28 @@ Return a summary when done.""",
         Returns:
             Formatted instruction string
         """
+        from datetime import timedelta
+        
         date_str = self.format_datetime(current_date)
+        
+        # Calculate resolution date range
+        # Min: earliest event date (or current_date - 1 year if no events)
+        # Max: current_date + 1 year (reasonable forecasting horizon)
+        event_dates = []
+        for event in events:
+            event_date = event.occurred_date or event.predicted_date
+            if event_date:
+                event_dates.append(event_date)
+        
+        if event_dates:
+            min_resolution_date = min(event_dates)
+        else:
+            min_resolution_date = current_date - timedelta(days=365)
+        
+        max_resolution_date = current_date + timedelta(days=365)
+        
+        min_res_str = self.format_datetime(min_resolution_date)
+        max_res_str = self.format_datetime(max_resolution_date)
         
         # Format all events
         events_text = self.format_items(
@@ -154,6 +199,10 @@ Return a summary when done.""",
             num_events=len(events),
             events_text=events_text,
             max_questions=max_questions,
+            current_date=date_str,
+            min_resolution_date=min_res_str,
+            max_resolution_date=max_res_str,
+            current_date=date_str,
             domain_filter=domain_filter,
             tool_name=tool_name,
             ground_truth_instruction=ground_truth_instruction

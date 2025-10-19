@@ -97,7 +97,9 @@ class QuestionGeneratorTool(Tool):
         except:
             res_date = datetime.now(timezone.utc) + timedelta(days=30)
         
-        # Parse cutoff date or use current time
+        # Parse cutoff date if provided (optional - for evaluation)
+        # If not provided, use None (will be set during evaluation)
+        cut_date = None
         if cutoff_date:
             try:
                 cut_date = datetime.fromisoformat(cutoff_date.replace('Z', '+00:00'))
@@ -105,9 +107,7 @@ class QuestionGeneratorTool(Tool):
                 if cut_date.tzinfo is None:
                     cut_date = cut_date.replace(tzinfo=timezone.utc)
             except:
-                cut_date = datetime.now(timezone.utc)
-        else:
-            cut_date = datetime.now(timezone.utc)
+                cut_date = None
         
         # Parse event IDs
         event_ids = []
@@ -118,7 +118,17 @@ class QuestionGeneratorTool(Tool):
         question_id = self._generate_question_id(domain, res_date, len(event_ids))
         
         # Determine time horizon based on resolution date
-        days_until_resolution = (res_date - cut_date).days
+        # Use current time as reference if cutoff_date not provided
+        reference_date = cut_date if cut_date else datetime.now(timezone.utc)
+        days_until_resolution = (res_date - reference_date).days
+        
+        # Validate resolution date is reasonable (not too far in past/future)
+        # The prompt should guide the agent to use appropriate dates, but we log warnings
+        if days_until_resolution < -730:  # More than 2 years in the past
+            print(f"Warning: Resolution date {res_date} is very far in the past (relative to {reference_date})")
+        elif days_until_resolution > 730:  # More than 2 years in the future
+            print(f"Warning: Resolution date {res_date} is very far in the future (relative to {reference_date})")
+        
         if days_until_resolution <= 30:
             horizon = TimeHorizon.SHORT
         elif days_until_resolution <= 180:

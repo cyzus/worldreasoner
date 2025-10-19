@@ -43,9 +43,9 @@ class Question(BaseModel):
     time_horizon: TimeHorizon = Field(..., description="Forecast time range")
     
     # Temporal boundaries
-    cutoff_date: datetime = Field(
-        ...,
-        description="Latest date for information access (simulated 'now')"
+    cutoff_date: Optional[datetime] = Field(
+        None,
+        description="Latest date for information access (simulated 'now' during evaluation)"
     )
     resolution_date: datetime = Field(
         ...,
@@ -140,3 +140,23 @@ class Question(BaseModel):
             # Could be string (ISO datetime) or dict with range
             return isinstance(prediction, (str, dict))
         return False
+    
+    def set_evaluation_cutoff(self, cutoff_date: datetime) -> 'Question':
+        """Set the cutoff date for evaluation/benchmarking.
+        
+        The cutoff_date simulates the "current time" when a forecaster makes their prediction.
+        This should be set during evaluation to ensure fair testing:
+        - For past events: Set to before the event occurred (to test forecasting ability)
+        - For future events: Set to the evaluation time (what info is available now)
+        
+        Args:
+            cutoff_date: The information cutoff datetime (timezone-aware)
+            
+        Returns:
+            Self for method chaining
+            
+        Example:
+            >>> question.set_evaluation_cutoff(datetime(2024, 11, 1, tzinfo=timezone.utc))
+        """
+        self.cutoff_date = cutoff_date
+        return self
