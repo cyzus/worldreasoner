@@ -12,19 +12,51 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class DatabaseConfig(BaseModel):
     """Database configuration."""
     
-    host: str = "localhost"
-    port: int = 5432
-    database: str = "worldreasoner"
-    username: str = "postgres"
-    password: str = ""
+    # Connection settings
+    host: str = Field(default="localhost", description="Database host")
+    port: int = Field(default=5432, description="Database port")
+    database: str = Field(default="worldreasoner", description="Database name")
+    username: str = Field(default="postgres", description="Database user")
+    password: str = Field(default="", description="Database password")
+    
+    # Connection pool settings
+    min_connections: int = Field(default=1, description="Minimum pool connections")
+    max_connections: int = Field(default=10, description="Maximum pool connections")
+    
+    # Optional settings
+    ssl_mode: Optional[str] = Field(default=None, description="SSL mode (disable, require, verify-full)")
+    db_schema: str = Field(default="public", description="Database schema")
+    
+    # Performance settings
+    batch_size: int = Field(default=100, description="Batch insert size")
     
     def get_url(self) -> str:
-        """Get database connection URL."""
-        return f"postgresql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
+        """Get database connection URL (sync).
+        
+        Returns:
+            Connection string for psycopg or SQLAlchemy
+        """
+        conn_str = f"postgresql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
+        if self.ssl_mode:
+            conn_str += f"?sslmode={self.ssl_mode}"
+        return conn_str
     
     def get_async_url(self) -> str:
-        """Get async database connection URL."""
-        return f"postgresql+asyncpg://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
+        """Get async database connection URL.
+        
+        Returns:
+            Connection string for asyncpg or async SQLAlchemy
+        """
+        return self.get_url().replace("postgresql://", "postgresql+asyncpg://")
+    
+    # Aliases for compatibility
+    def get_connection_string(self) -> str:
+        """Alias for get_url()."""
+        return self.get_url()
+    
+    def get_async_connection_string(self) -> str:
+        """Alias for get_async_url()."""
+        return self.get_async_url()
 
 
 class RedisConfig(BaseModel):
