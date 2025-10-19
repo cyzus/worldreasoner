@@ -3,7 +3,7 @@ from src.utils.config import Config, load_config
 
 class BaseAgent():
     """Base class for all agents in the SmolAgents framework."""
-    def __init__(self, config: Config = None, tools: list = None):
+    def __init__(self, config: Config = None, tools: list = None, max_steps: int = 10):
         self.config = config or load_config()
         self.llm_model = LiteLLMModel(
             model_id=self.config.llm.model,
@@ -12,6 +12,7 @@ class BaseAgent():
         self.agent = ToolCallingAgent(
             model=self.llm_model,
             tools=tools or [],
+            max_steps=max_steps,  # Configurable max steps
             stream_outputs=True
         )
     

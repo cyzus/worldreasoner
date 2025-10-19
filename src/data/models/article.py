@@ -18,6 +18,7 @@ class Article(BaseModel):
     id: str = Field(..., description="Unique article identifier")
     title: str = Field(..., min_length=10, max_length=500)
     content: str = Field(..., min_length=100, description="Full article text")
+    url: Optional[str] = Field(None, description="Source URL of the article")
     
     # Source information
     source: str = Field(..., description="Publication source name")
