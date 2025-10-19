@@ -14,7 +14,7 @@ from .models import (
 )
 
 # Configuration
-from .config import QuestionConfig, DatabaseConfig
+from .config import QuestionConfig
 
 # Pipelines (includes base classes and stages)
 from .pipelines import (
@@ -58,7 +58,6 @@ __all__ = [
     "QuestionType",
     # Configuration
     "QuestionConfig",
-    "DatabaseConfig",
     # Base classes
     "Pipeline",
     "PipelineStage",
