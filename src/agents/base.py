@@ -1,5 +1,5 @@
 from smolagents import ToolCallingAgent, LiteLLMModel
-from src.utils.config import Config, load_config
+from src.config import Config, load_config
 
 class BaseAgent():
     """Base class for all agents in the SmolAgents framework."""

@@ -2,7 +2,7 @@
 
 import pytest
 from src.llm import LiteLLMClient
-from src.utils.config import load_config
+from src.config import load_config
 
 class TestLiteLLMClientIntegration:
     """Integration tests for LiteLLMClient with real API calls."""

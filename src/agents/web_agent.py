@@ -1,13 +1,15 @@
 from smolagents import WebSearchTool, VisitWebpageTool
 
 from src.agents.base import BaseAgent
-from src.utils.config import Config, load_config
-from src.data.pipelines.stages.tools.web_fetch import WebFetchTool
+from src.config import Config, load_config
 
 
 class WebAgent(BaseAgent):
     """Agent specialized for web interactions."""
     def __init__(self, config: Config, tools: list = None, max_steps: int = 15):
+        # Lazy import to avoid circular dependency
+        from src.pipelines.stages.tools.web_fetch import WebFetchTool
+        
         # Create a new list with web tools
         web_tools = [
             WebSearchTool(),

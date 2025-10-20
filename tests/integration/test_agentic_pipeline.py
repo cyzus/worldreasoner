@@ -2,10 +2,10 @@
 
 import asyncio
 from datetime import datetime, timedelta
-from src.data.pipelines.question_pipeline import QuestionPipeline
-from src.data.pipelines.stages.article_collection import ArticleSource, ArticleCollectionConfig
-from src.data.config.question_config import QuestionConfig
-from src.utils.config import get_config, reset_config
+from src.pipelines.question.pipeline import QuestionPipeline
+from src.pipelines.stages.article_collection import ArticleSource, ArticleCollectionConfig
+from src.config.pipeline import QuestionPipelineConfig
+from src.config import get_config, reset_config
 
 
 async def test_agentic_pipeline():
@@ -44,10 +44,10 @@ async def test_agentic_pipeline():
     )
     
     # Configure question generation
-    question_config = QuestionConfig(
+    question_config = QuestionPipelineConfig(
         domains=["technology", "environment"],
         max_questions=5,
-        difficulty_range=(2, 4)
+        difficulty_levels=[2, 3, 4]
     )
     
     # Get database config

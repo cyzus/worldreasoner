@@ -12,7 +12,7 @@ if sys.platform == "win32":
 import asyncio
 import pytest
 from datetime import datetime, timedelta, timezone
-from src.data.pipelines.stages import (
+from src.pipelines.stages import (
     ArticleCollectionStage,
     ArticleCollectionConfig,
     ArticleSource,
@@ -20,10 +20,10 @@ from src.data.pipelines.stages import (
     EventIdentificationConfig,
     QuestionGenerationStage,
 )
-from src.data.pipelines.base import PipelineStageStatus
-from src.data.config.question_config import QuestionConfig
-from src.utils.config import get_config, reset_config
-from src.data.models import Article, Event, Question
+from src.pipelines.base import PipelineStageStatus
+from src.config.pipeline import QuestionPipelineConfig
+from src.config import get_config, reset_config
+from src.domain.models import Article, Event, Question
 
 
 @pytest.mark.integration
@@ -222,10 +222,10 @@ async def test_question_generation_stage():
         return []
     
     # Setup question generation
-    question_config = QuestionConfig(
+    question_config = QuestionPipelineConfig(
         domains=["technology"],
         max_questions=3,
-        difficulty_range=(2, 4)
+        difficulty_levels=[2, 3, 4]
     )
     
     # Create and run stage
@@ -335,10 +335,10 @@ async def test_pipeline_stages_integration():
     # Stage 3: Question Generation
     print("\n3. STAGE 3: Question Generation")
     print("-" * 80)
-    question_config = QuestionConfig(
+    question_config = QuestionPipelineConfig(
         domains=["technology"],
         max_questions=3,
-        difficulty_range=(2, 4)
+        difficulty_levels=[2, 3, 4]
     )
     
     question_stage = QuestionGenerationStage(question_config)

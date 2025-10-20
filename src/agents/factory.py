@@ -8,7 +8,7 @@ from smolagents import Tool
 
 from src.agents.base import BaseAgent
 from src.agents.web_agent import WebAgent
-from src.utils.config import Config, get_config
+from src.config import Config, get_config
 
 
 class AgentFactory:
