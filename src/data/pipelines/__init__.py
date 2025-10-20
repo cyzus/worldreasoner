@@ -7,7 +7,7 @@ from .base import (
     PipelineStageStatus,
 )
 from .question_pipeline import QuestionPipeline
-from .evidence_pipeline import EvidencePipeline
+# from .evidence_pipeline import EvidencePipeline  # TODO: Not implemented yet
 
 # Re-export stages for convenience
 from .stages import *
@@ -20,5 +20,5 @@ __all__ = [
     "PipelineStageStatus",
     # Pipelines
     "QuestionPipeline",
-    "EvidencePipeline",
+    # "EvidencePipeline",  # TODO: Not implemented yet
 ]

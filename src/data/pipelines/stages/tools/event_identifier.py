@@ -56,10 +56,17 @@ class EventIdentifierTool(Tool):
     }
     output_type = "string"  # JSON string
     
-    def __init__(self):
-        """Initialize the event identifier."""
+    def __init__(self, collector=None):
+        """Initialize the event identifier.
+        
+        Args:
+            collector: Optional ResultCollector[Event] for storing results.
+                      If provided, events are added to the collector instead of internal storage.
+        """
         super().__init__()
-        self.identified_events = []  # Store full Event objects internally
+        # Result storage - use collector if provided, otherwise internal list
+        self.collector = collector
+        self.identified_events = []  # Fallback for backward compatibility
     
     def forward(
         self,
@@ -137,8 +144,12 @@ class EventIdentifierTool(Tool):
             metadata={"confidence": confidence, "location": location} if location else {"confidence": confidence}
         )
         
-        # Store full event internally
-        self.identified_events.append(event)
+        # Store full event using collector if provided, otherwise use internal list
+        if self.collector:
+            self.collector.add(event)
+        else:
+            # Backward compatibility - store in internal list
+            self.identified_events.append(event)
         
         # Return summary to save tokens (NOT full event)
         summary = {

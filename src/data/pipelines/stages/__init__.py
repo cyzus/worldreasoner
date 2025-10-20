@@ -12,25 +12,12 @@ from .event_identification import (
 )
 from .question_generation import QuestionGenerationStage
 
-# Evidence Pipeline Stages
-from .causal_reasoning import (
-    CausalReasoningConfig,
-    CausalReasoningStage,
-)
-from .evidence_collection import (
-    EvidenceCollectionConfig,
-    EvidenceCollectionStage,
-)
-from .causal_graph import (
-    CausalGraphConfig,
-    CausalGraphStage,
-)
-
 # Shared Stages
 from .database_persistence import (
     DatabasePersistenceConfig,
     DatabasePersistenceStage,
 )
+from .collectors import ResultCollector
 
 __all__ = [
     # Question Pipeline Stages
@@ -40,14 +27,8 @@ __all__ = [
     "EventIdentificationConfig",
     "EventIdentificationStage",
     "QuestionGenerationStage",
-    # Evidence Pipeline Stages
-    "CausalReasoningConfig",
-    "CausalReasoningStage",
-    "EvidenceCollectionConfig",
-    "EvidenceCollectionStage",
-    "CausalGraphConfig",
-    "CausalGraphStage",
     # Shared Stages
     "DatabasePersistenceConfig",
     "DatabasePersistenceStage",
+    "ResultCollector",
 ]

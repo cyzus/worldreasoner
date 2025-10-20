@@ -7,9 +7,9 @@ from pydantic import BaseModel
 
 from ..base import PipelineStage
 from ...models import Article
-from src.agents.web_agent import WebAgent
-from src.utils.config import get_config
+from src.agents.factory import AgentFactory
 from .tools import ArticleCollectorTool
+from .collectors import ResultCollector
 from ..prompts import ArticleCollectionPrompts
 
 
@@ -45,10 +45,15 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
             db_path: Path to database for cross-run deduplication
         """
         super().__init__(name="ArticleCollection", config=config)
-        # Create WebAgent with ArticleCollectorTool (with database for deduplication)
-        app_config = get_config()
-        self.article_tool = ArticleCollectorTool(db_path=db_path)  # Enable cross-run deduplication
-        self.web_agent = WebAgent(config=app_config, tools=[self.article_tool])
+        
+        # Create result collector for articles
+        self.collector = ResultCollector[Article]()
+        
+        # Create ArticleCollectorTool with collector and database for deduplication
+        self.article_tool = ArticleCollectorTool(db_path=db_path, collector=self.collector)
+        
+        # Create WebAgent using factory
+        self.web_agent = AgentFactory.create_web_agent(tools=[self.article_tool])
     
     async def process(self, inputs: List[ArticleSource]) -> List[Article]:
         """Collect articles from sources using WebAgent.
@@ -93,6 +98,6 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
                 print(f"Error collecting from source {source.name}: {e}")
                 continue
         
-        # Get all collected articles from the tool's internal storage
-        all_articles = self.article_tool.collected_articles
+        # Get all collected articles from the collector
+        all_articles = self.collector.get_all()
         return all_articles

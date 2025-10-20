@@ -59,10 +59,17 @@ class QuestionGeneratorTool(Tool):
     }
     output_type = "string"  # JSON string
     
-    def __init__(self):
-        """Initialize the question generator."""
+    def __init__(self, collector=None):
+        """Initialize the question generator.
+        
+        Args:
+            collector: Optional ResultCollector[Question] for storing results.
+                      If provided, questions are added to the collector instead of internal storage.
+        """
         super().__init__()
-        self.generated_questions = []  # Store full Question objects internally
+        # Result storage - use collector if provided, otherwise internal list
+        self.collector = collector
+        self.generated_questions = []  # Fallback for backward compatibility
     
     def forward(
         self,
@@ -190,8 +197,12 @@ class QuestionGeneratorTool(Tool):
             is_synthetic=False,
         )
         
-        # Store full question internally
-        self.generated_questions.append(question)
+        # Store full question using collector if provided, otherwise use internal list
+        if self.collector:
+            self.collector.add(question)
+        else:
+            # Backward compatibility - store in internal list
+            self.generated_questions.append(question)
         
         # Return summary to save tokens (NOT full question)
         summary = {

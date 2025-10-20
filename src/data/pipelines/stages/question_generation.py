@@ -7,9 +7,9 @@ from pydantic import BaseModel
 from ..base import PipelineStage
 from ...models import Event, Question, Article
 from ...config import QuestionConfig
-from src.agents.base import BaseAgent
-from src.utils.config import get_config
+from src.agents.factory import AgentFactory
 from .tools import QuestionGeneratorTool, EventDetailsTool
+from .collectors import ResultCollector
 from ..prompts import QuestionGenerationPrompts
 
 
@@ -23,12 +23,19 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
     
     def __init__(self, config: QuestionConfig, articles: Optional[List[Article]] = None):
         super().__init__(name="QuestionGeneration", config=config)
+        
         # Store articles for EventDetailsTool
         self.articles = articles or []
-        # Tools will be initialized in process() when we have events
-        self.question_tool = QuestionGeneratorTool()
-        self.event_details_tool = None  # Will be created when we have events
-        self.base_agent = None  # Will be created in process()
+        
+        # Create result collector for questions
+        self.collector = ResultCollector[Question]()
+        
+        # Create question tool with collector
+        self.question_tool = QuestionGeneratorTool(collector=self.collector)
+        
+        # EventDetailsTool and agent will be initialized in process() when we have events
+        self.event_details_tool = None
+        self.base_agent = None
     
     def set_articles(self, articles: List[Article]):
         """Set articles for the EventDetailsTool.
@@ -66,10 +73,8 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
                 articles=self.articles
             )
             
-            # Create agent with both tools
-            app_config = get_config()
-            self.base_agent = BaseAgent(
-                config=app_config,
+            # Create agent using factory
+            self.base_agent = AgentFactory.create_base_agent(
                 tools=[self.event_details_tool, self.question_tool]
             )
             
@@ -90,8 +95,8 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
             # Agent's response is just a summary for logging
             print(f"Agent response: {result[:200] if isinstance(result, str) else result}")
             
-            # Get generated questions from the tool's internal storage
-            questions = self.question_tool.generated_questions
+            # Get generated questions from the collector
+            questions = self.collector.get_all()
             
             # Apply max_questions limit from config if set
             if self.config.max_questions:

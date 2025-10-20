@@ -56,18 +56,23 @@ class ArticleCollectorTool(Tool):
     }
     output_type = "string"  # JSON string
     
-    def __init__(self, db=None, db_path: str = None):
+    def __init__(self, db=None, db_path: str = None, collector=None):
         """Initialize the article collector.
         
         Args:
             db: Optional Database instance for cross-run deduplication
             db_path: Optional path to database file (creates new Database with schema if provided)
+            collector: Optional ResultCollector[Article] for storing results.
+                      If provided, articles are added to the collector instead of internal storage.
         """
         super().__init__()
         self.config = None
         self.seen_hashes = set()  # For in-memory deduplication within this run
         self.web_visitor = VisitWebpageTool()  # Internal tool for fetching content
-        self.collected_articles = []  # Store full Article objects internally
+        
+        # Result storage - use collector if provided, otherwise internal list
+        self.collector = collector
+        self.collected_articles = []  # Fallback for backward compatibility
         
         # Database for cross-run deduplication (optional)
         self.db = None
@@ -202,8 +207,12 @@ class ArticleCollectorTool(Tool):
         article.word_count = len(article.content.split())
         article.reading_time_minutes = max(1, article.word_count // 200)
         
-        # Store full article internally for later pipeline stages
-        self.collected_articles.append(article)
+        # Store full article using collector if provided, otherwise use internal list
+        if self.collector:
+            self.collector.add(article)
+        else:
+            # Backward compatibility - store in internal list
+            self.collected_articles.append(article)
         
         # Convert to JSON and return a SUMMARY to save tokens
         # Return only metadata, NOT the full content

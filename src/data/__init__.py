@@ -25,7 +25,7 @@ from .pipelines import (
     PipelineStageStatus,
     # Main pipelines
     QuestionPipeline,
-    EvidencePipeline,
+    # EvidencePipeline,  # TODO: Not implemented yet
     # Question Pipeline Stages
     ArticleSource,
     ArticleCollectionConfig,
@@ -33,16 +33,10 @@ from .pipelines import (
     EventIdentificationConfig,
     EventIdentificationStage,
     QuestionGenerationStage,
-    # Evidence Pipeline Stages
-    CausalReasoningConfig,
-    CausalReasoningStage,
-    EvidenceCollectionConfig,
-    EvidenceCollectionStage,
-    CausalGraphConfig,
-    CausalGraphStage,
     # Shared Stages
     DatabasePersistenceConfig,
     DatabasePersistenceStage,
+    ResultCollector,
 )
 
 __all__ = [
@@ -65,7 +59,7 @@ __all__ = [
     "PipelineStageStatus",
     # Main Pipelines
     "QuestionPipeline",
-    "EvidencePipeline",
+    # "EvidencePipeline",  # TODO: Not implemented yet
     # Question Pipeline Stages
     "ArticleSource",
     "ArticleCollectionConfig",
@@ -73,14 +67,8 @@ __all__ = [
     "EventIdentificationConfig",
     "EventIdentificationStage",
     "QuestionGenerationStage",
-    # Evidence Pipeline Stages
-    "CausalReasoningConfig",
-    "CausalReasoningStage",
-    "EvidenceCollectionConfig",
-    "EvidenceCollectionStage",
-    "CausalGraphConfig",
-    "CausalGraphStage",
     # Shared Stages
     "DatabasePersistenceConfig",
     "DatabasePersistenceStage",
+    "ResultCollector",
 ]

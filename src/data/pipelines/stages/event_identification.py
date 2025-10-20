@@ -6,9 +6,9 @@ from pydantic import BaseModel
 
 from ..base import PipelineStage
 from ...models import Article, Event
-from src.agents.base import BaseAgent
-from src.utils.config import get_config
+from src.agents.factory import AgentFactory
 from .tools import EventIdentifierTool, ArticleRetrievalTool
+from .collectors import ResultCollector
 from ..prompts import EventIdentificationPrompts
 
 
@@ -36,12 +36,16 @@ class EventIdentificationStage(PipelineStage[Article, Event]):
             db_path: Path to database for article retrieval
         """
         super().__init__(name="EventIdentification", config=config)
-        # Create BaseAgent with EventIdentifierTool and ArticleRetrievalTool
-        app_config = get_config()
-        self.event_tool = EventIdentifierTool()  # Keep reference to tool
-        self.article_retrieval_tool = ArticleRetrievalTool(db_path=db_path)  # Database access
-        self.base_agent = BaseAgent(
-            config=app_config,
+        
+        # Create result collector for events
+        self.collector = ResultCollector[Event]()
+        
+        # Create tools
+        self.event_tool = EventIdentifierTool(collector=self.collector)
+        self.article_retrieval_tool = ArticleRetrievalTool(db_path=db_path)
+        
+        # Create BaseAgent using factory
+        self.base_agent = AgentFactory.create_base_agent(
             tools=[self.event_tool, self.article_retrieval_tool]
         )
     
@@ -75,8 +79,8 @@ class EventIdentificationStage(PipelineStage[Article, Event]):
             # Agent's response is just a summary for logging
             print(f"Agent response: {result[:200] if isinstance(result, str) else result}")
             
-            # Get identified events from the tool's internal storage
-            events = self.event_tool.identified_events
+            # Get identified events from the collector
+            events = self.collector.get_all()
             
             # Update article.event_ids to link articles to events
             for article in inputs:
