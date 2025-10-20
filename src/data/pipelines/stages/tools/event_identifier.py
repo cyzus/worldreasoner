@@ -115,8 +115,8 @@ class EventIdentifierTool(Tool):
         if source_article_ids:
             article_ids = [aid.strip() for aid in source_article_ids.split(',')]
         
-        # Generate unique event ID
-        event_id = self._generate_event_id(domain, event_date, len(article_ids))
+        # Generate unique event ID (use count of identified_events as counter)
+        event_id = self._generate_event_id(domain, event_date, len(self.identified_events))
         
         # Determine status based on date
         status = EventStatus.OCCURRED if event_date <= datetime.now(timezone.utc) else EventStatus.PREDICTED

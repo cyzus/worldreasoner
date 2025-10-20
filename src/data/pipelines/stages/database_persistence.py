@@ -100,7 +100,7 @@ class DatabasePersistenceStage(PipelineStage[Any, Any]):
             saved = self.db.save_articles(batch)
             total_saved += saved
             
-            print(f"  💾 Saved {saved}/{len(batch)} articles (batch {i//self.batch_size + 1})")
+            print(f"  [DB] Saved {saved}/{len(batch)} articles (batch {i//self.batch_size + 1})")
         
         return total_saved
     
@@ -121,7 +121,7 @@ class DatabasePersistenceStage(PipelineStage[Any, Any]):
             saved = self.db.save_events(batch)
             total_saved += saved
             
-            print(f"  💾 Saved {saved}/{len(batch)} events (batch {i//self.batch_size + 1})")
+            print(f"  [DB] Saved {saved}/{len(batch)} events (batch {i//self.batch_size + 1})")
         
         return total_saved
     
@@ -142,6 +142,6 @@ class DatabasePersistenceStage(PipelineStage[Any, Any]):
             saved = self.db.save_questions(batch)
             total_saved += saved
             
-            print(f"  💾 Saved {saved}/{len(batch)} questions (batch {i//self.batch_size + 1})")
+            print(f"  [DB] Saved {saved}/{len(batch)} questions (batch {i//self.batch_size + 1})")
         
         return total_saved

@@ -60,8 +60,8 @@ class ArticleCollectorTool(Tool):
         """Initialize the article collector.
         
         Args:
-            db: Optional GenericDatabase instance for cross-run deduplication
-            db_path: Optional path to database file (creates new GenericDatabase if provided)
+            db: Optional Database instance for cross-run deduplication
+            db_path: Optional path to database file (creates new Database with schema if provided)
         """
         super().__init__()
         self.config = None
@@ -75,8 +75,9 @@ class ArticleCollectorTool(Tool):
             self.db = db
         elif db_path:
             # Lazy import to avoid circular dependency
-            from src.utils.database import GenericDatabase
-            self.db = GenericDatabase(db_path)
+            # Use Database wrapper which auto-creates schema
+            from src.utils.database import Database
+            self.db = Database(db_path)
     
     def setup(self):
         """Load configuration (called on first use)."""
@@ -111,7 +112,8 @@ class ArticleCollectorTool(Tool):
             # Normalize URL for better matching (remove trailing slash, fragments)
             normalized_url = self._normalize_url(url)
             
-            existing_articles = self.db.get_many(
+            # Use Database wrapper's get_articles method
+            existing_articles = self.db.db.get_many(
                 Article,
                 filters={'url': normalized_url}
             )

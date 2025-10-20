@@ -32,13 +32,6 @@ Event {idx} (ID: {event_id}){status_note}:
 
 Create up to {max_questions} high-quality forecast questions.{domain_filter}
 
-AVAILABLE TOOLS:
-- **event_details**: Get full event description and complete article content for deeper context
-  * Use this when you need more information to create insightful questions
-  * Provides: full event description, complete source article text, all metadata
-  * Example: event_details(event_id="evt_tech_20251019_001")
-- **{tool_name}**: Store your generated forecast question
-
 STRATEGY:
 1. Review event summaries below (descriptions are truncated)
 2. For events that seem interesting, use event_details to get full context

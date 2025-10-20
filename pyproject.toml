@@ -30,6 +30,7 @@ dependencies = [
     "python-dotenv",
     "pyyaml>=6.0.3",
     "smolagents[toolkit,litellm,mcp]>=1.22.0",
+    "crawl4ai>=0.4.0",
 ]
 
 

@@ -60,8 +60,8 @@ class ArticleRetrievalTool(Tool):
         """Initialize the article retrieval tool.
         
         Args:
-            db: Optional GenericDatabase instance
-            db_path: Optional path to database file (creates new GenericDatabase if provided)
+            db: Optional Database instance
+            db_path: Optional path to database file (creates new Database with schema if provided)
         """
         super().__init__()
         
@@ -70,8 +70,9 @@ class ArticleRetrievalTool(Tool):
         if db:
             self.db = db
         elif db_path:
-            from src.utils.database import GenericDatabase
-            self.db = GenericDatabase(db_path)
+            # Use Database wrapper which auto-creates schema
+            from src.utils.database import Database
+            self.db = Database(db_path)
         else:
             raise ValueError("Must provide either db or db_path")
     

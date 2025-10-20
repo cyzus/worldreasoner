@@ -15,8 +15,9 @@ Find up to {max_articles} relevant articles.{domain_context}
 
 For each article you find:
 1. Use web_search to find article URLs
-2. Call {tool_name} with ONLY the URL and metadata (title, source, date, author if available)
-3. Do NOT pass article content - the tool will fetch it internally to save tokens
+2. Use web_fetch to fetch article content
+3. Call {tool_name} with ONLY the URL and metadata (title, source, date, author if available)
+4. Do NOT pass article content - the tool will fetch it internally to save tokens
 
 Return a summary when done.""",
         required_vars=["source_name", "days_back", "max_articles"],

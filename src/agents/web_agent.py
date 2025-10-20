@@ -2,6 +2,7 @@ from smolagents import WebSearchTool, VisitWebpageTool
 
 from src.agents.base import BaseAgent
 from src.utils.config import Config, load_config
+from src.data.pipelines.stages.tools.web_fetch import WebFetchTool
 
 
 class WebAgent(BaseAgent):
@@ -10,7 +11,7 @@ class WebAgent(BaseAgent):
         # Create a new list with web tools
         web_tools = [
             WebSearchTool(),
-            VisitWebpageTool()
+            WebFetchTool()
         ]
         # Add any additional custom tools
         if tools:
