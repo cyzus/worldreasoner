@@ -63,7 +63,7 @@ async def test_agentic_pipeline():
         question_config=question_config,
         database_config=database_config,
         article_sources=article_sources,
-        enable_persistence=False  # Disable DB persistence for MVP test
+        enable_persistence=True  # Enable DB persistence
     )
     
     print("   [OK] Pipeline created with:")

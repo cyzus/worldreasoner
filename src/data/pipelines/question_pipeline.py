@@ -83,9 +83,10 @@ class QuestionPipeline(Pipeline):
             batch_size=database_config.batch_size,
         )
         
-        # Build pipeline stages
-        self.article_stage = ArticleCollectionStage(article_config)
-        self.event_stage = EventIdentificationStage(event_config)
+        # Build pipeline stages (use same db path for all stages)
+        db_path = "worldreasoner.db"
+        self.article_stage = ArticleCollectionStage(article_config, db_path=db_path)
+        self.event_stage = EventIdentificationStage(event_config, db_path=db_path)
         # Question stage will receive articles later via set_articles()
         self.question_stage = QuestionGenerationStage(question_config)
         
@@ -97,13 +98,13 @@ class QuestionPipeline(Pipeline):
         # Add persistence stages if enabled
         if enable_persistence:
             self.article_persist = DatabasePersistenceStage(
-                database_config, persist_config, "article"
+                persist_config, "article"
             )
             self.event_persist = DatabasePersistenceStage(
-                database_config, persist_config, "event"
+                persist_config, "event"
             )
             self.question_persist = DatabasePersistenceStage(
-                database_config, persist_config, "question"
+                persist_config, "question"
             )
         
         # Storage for intermediate results

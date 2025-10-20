@@ -5,6 +5,7 @@ from enum import Enum
 from typing import List, Optional, Dict, Any
 
 from pydantic import BaseModel, Field, ConfigDict
+from ...utils.database import register_model
 
 
 class EventType(str, Enum):
@@ -70,6 +71,7 @@ class CausalLink(BaseModel):
     )
 
 
+@register_model('events', indexes=['domain', 'status', 'event_type'])
 class Event(BaseModel):
     """Discrete occurrence or state change in the world.
     

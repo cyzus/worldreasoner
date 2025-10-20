@@ -4,8 +4,10 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from pydantic import BaseModel, Field, ConfigDict
+from ...utils.database import register_model
 
 
+@register_model('articles', indexes=['domain', 'source', 'published_date'])
 class Article(BaseModel):
     """News article with temporal and causal metadata.
     

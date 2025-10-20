@@ -8,7 +8,7 @@ from ..base import PipelineStage
 from ...models import Article, Event
 from src.agents.base import BaseAgent
 from src.utils.config import get_config
-from .tools import EventIdentifierTool
+from .tools import EventIdentifierTool, ArticleRetrievalTool
 from ..prompts import EventIdentificationPrompts
 
 
@@ -25,14 +25,25 @@ class EventIdentificationStage(PipelineStage[Article, Event]):
     """Identifies events from articles using LLM-powered agent.
     
     Uses agentic approach to analyze articles and extract structured events.
+    Agent has access to database to query articles as needed.
     """
     
-    def __init__(self, config: EventIdentificationConfig):
+    def __init__(self, config: EventIdentificationConfig, db_path: str = "worldreasoner.db"):
+        """Initialize event identification stage.
+        
+        Args:
+            config: Event identification configuration
+            db_path: Path to database for article retrieval
+        """
         super().__init__(name="EventIdentification", config=config)
-        # Create BaseAgent with EventIdentifierTool
+        # Create BaseAgent with EventIdentifierTool and ArticleRetrievalTool
         app_config = get_config()
         self.event_tool = EventIdentifierTool()  # Keep reference to tool
-        self.base_agent = BaseAgent(config=app_config, tools=[self.event_tool])
+        self.article_retrieval_tool = ArticleRetrievalTool(db_path=db_path)  # Database access
+        self.base_agent = BaseAgent(
+            config=app_config,
+            tools=[self.event_tool, self.article_retrieval_tool]
+        )
     
     async def process(self, inputs: List[Article]) -> List[Event]:
         """Identify events from articles using LLM agent.

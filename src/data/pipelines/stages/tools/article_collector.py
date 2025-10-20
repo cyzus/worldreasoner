@@ -56,13 +56,27 @@ class ArticleCollectorTool(Tool):
     }
     output_type = "string"  # JSON string
     
-    def __init__(self):
-        """Initialize the article collector."""
+    def __init__(self, db=None, db_path: str = None):
+        """Initialize the article collector.
+        
+        Args:
+            db: Optional GenericDatabase instance for cross-run deduplication
+            db_path: Optional path to database file (creates new GenericDatabase if provided)
+        """
         super().__init__()
         self.config = None
-        self.seen_hashes = set()  # For deduplication
+        self.seen_hashes = set()  # For in-memory deduplication within this run
         self.web_visitor = VisitWebpageTool()  # Internal tool for fetching content
         self.collected_articles = []  # Store full Article objects internally
+        
+        # Database for cross-run deduplication (optional)
+        self.db = None
+        if db:
+            self.db = db
+        elif db_path:
+            # Lazy import to avoid circular dependency
+            from src.utils.database import GenericDatabase
+            self.db = GenericDatabase(db_path)
     
     def setup(self):
         """Load configuration (called on first use)."""
@@ -91,7 +105,34 @@ class ArticleCollectorTool(Tool):
         Returns:
             JSON string of Article object
         """
-        # Internally fetch the full article content
+        # STAGE 1: Fast URL-based deduplication (before fetching content)
+        # This is the most efficient check - prevents unnecessary web scraping
+        if self.db:
+            # Normalize URL for better matching (remove trailing slash, fragments)
+            normalized_url = self._normalize_url(url)
+            
+            existing_articles = self.db.get_many(
+                Article,
+                filters={'url': normalized_url}
+            )
+            if existing_articles:
+                existing = existing_articles[0]
+                return json.dumps({
+                    "id": existing.id,
+                    "title": existing.title,
+                    "url": existing.url,
+                    "source": existing.source,
+                    "author": existing.author,
+                    "published_date": existing.published_date.isoformat(),
+                    "domain": existing.domain,
+                    "word_count": existing.word_count,
+                    "reading_time_minutes": existing.reading_time_minutes,
+                    "content_preview": existing.content[:200] + "..." if len(existing.content) > 200 else existing.content,
+                    "status": "already_exists",
+                    "message": f"Article already in database (duplicate URL: {normalized_url})"
+                })
+        
+        # STAGE 2: Fetch content (only if URL not found)
         # This avoids passing large content through the LLM
         try:
             content = self.web_visitor.forward(url)
@@ -109,10 +150,23 @@ class ArticleCollectorTool(Tool):
         else:
             pub_date = datetime.now(timezone.utc)
         
-        # Check for duplicate content
+        # STAGE 3: Content hash deduplication (catches syndicated/republished articles)
+        # Check if we've already seen this content (in-memory for current run)
         content_hash = self._compute_content_hash(content)
         if content_hash in self.seen_hashes:
-            return json.dumps({"error": "Duplicate article detected", "hash": content_hash})
+            return json.dumps({
+                "error": "Duplicate article detected (same content, different URL)",
+                "hash": content_hash,
+                "url": url,
+                "message": "This article content already exists in the current collection"
+            })
+        
+        # Also check database for content hash (cross-run syndication detection)
+        if self.db:
+            # Query by content_hash if your Article model has this field
+            # For now, we'll skip this to avoid performance issues
+            # In production, you might want to add a content_hash field and index
+            pass
         
         self.seen_hashes.add(content_hash)
         
@@ -123,17 +177,21 @@ class ArticleCollectorTool(Tool):
         parsed_url = urlparse(url)
         source_domain = parsed_url.netloc
         
+        # Store normalized URL for consistency
+        normalized_url = self._normalize_url(url)
+        
         # Create Article object
         article = Article(
             id=article_id,
             title=title,
             content=content,
-            url=url,
+            url=normalized_url,  # Use normalized URL for consistency
             source=source,
             author=author or "Unknown",
             published_date=pub_date,
             domain=domain,
             tags=[domain, source_domain],
+            event_ids=[],  # Initialize with empty list (will be populated later in pipeline)
             is_synthetic=False,
             language='en',
         )
@@ -167,6 +225,47 @@ class ArticleCollectorTool(Tool):
         """Generate unique article ID."""
         date_str = published_date.strftime('%Y%m%d')
         return f"art_{domain}_{date_str}_{counter+1:03d}"
+    
+    def _normalize_url(self, url: str) -> str:
+        """Normalize URL for consistent duplicate detection.
+        
+        Removes:
+        - Trailing slashes
+        - URL fragments (#section)
+        - Common tracking parameters
+        - Converts http to https
+        
+        Args:
+            url: Raw URL
+            
+        Returns:
+            Normalized URL
+        """
+        from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
+        
+        parsed = urlparse(url)
+        
+        # Convert http to https
+        scheme = 'https' if parsed.scheme == 'http' else parsed.scheme
+        
+        # Remove trailing slash from path
+        path = parsed.path.rstrip('/')
+        
+        # Remove common tracking parameters
+        if parsed.query:
+            params = parse_qs(parsed.query)
+            # Remove common tracking params
+            tracking_params = {'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 
+                              'fbclid', 'gclid', 'ref', 'source'}
+            cleaned_params = {k: v for k, v in params.items() if k not in tracking_params}
+            query = urlencode(cleaned_params, doseq=True) if cleaned_params else ''
+        else:
+            query = ''
+        
+        # Reconstruct URL without fragment
+        normalized = urlunparse((scheme, parsed.netloc, path, parsed.params, query, ''))
+        
+        return normalized
     
     def _compute_content_hash(self, content: str) -> str:
         """Compute SHA-256 hash of normalized content for deduplication.

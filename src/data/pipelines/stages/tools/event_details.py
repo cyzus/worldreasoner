@@ -1,8 +1,11 @@
 """Tool for retrieving full event details and linked article content."""
 
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 from smolagents import Tool
 from src.data.models import Event, Article
+
+if TYPE_CHECKING:
+    from src.utils.database import Database
 
 
 class EventDetailsTool(Tool):
@@ -10,6 +13,8 @@ class EventDetailsTool(Tool):
     
     The agent can use this tool to get more context about events before
     generating questions, allowing for deeper, more insightful questions.
+    
+    Can work with either in-memory data or database backend.
     """
     
     name = "event_details"
@@ -36,16 +41,46 @@ class EventDetailsTool(Tool):
     }
     output_type = "string"
     
-    def __init__(self, events: List[Event], articles: List[Article]):
-        """Initialize tool with events and articles.
+    def __init__(
+        self, 
+        events: Optional[List[Event]] = None, 
+        articles: Optional[List[Article]] = None,
+        db: Optional["Database"] = None,
+        db_path: Optional[str] = None
+    ):
+        """Initialize tool with either in-memory data or database.
         
         Args:
-            events: List of all events available
-            articles: List of all articles available
+            events: Optional list of events (for in-memory mode)
+            articles: Optional list of articles (for in-memory mode)
+            db: Optional Database instance (for database mode)
+            db_path: Optional path to database file (creates new Database if provided)
+            
+        Note:
+            Priority: db > db_path > in-memory (events + articles)
         """
         super().__init__()
-        self.events_by_id = {event.id: event for event in events}
-        self.articles_by_id = {article.id: article for article in articles}
+        
+        # Database mode
+        if db:
+            self.db = db
+            self.use_db = True
+        elif db_path:
+            # Lazy import to avoid circular dependency
+            from src.utils.database import Database
+            self.db = Database(db_path)
+            self.use_db = True
+        # In-memory mode
+        elif events is not None and articles is not None:
+            self.events_by_id = {event.id: event for event in events}
+            self.articles_by_id = {article.id: article for article in articles}
+            self.db = None
+            self.use_db = False
+        else:
+            raise ValueError(
+                "Must provide either (events + articles) for in-memory mode, "
+                "or (db) or (db_path) for database mode"
+            )
     
     def forward(self, event_id: str) -> str:
         """Get full details for an event.
@@ -55,6 +90,62 @@ class EventDetailsTool(Tool):
             
         Returns:
             JSON string with event details and article content
+        """
+        import json
+        
+        if self.use_db:
+            return self._forward_db(event_id)
+        else:
+            return self._forward_memory(event_id)
+    
+    def _forward_db(self, event_id: str) -> str:
+        """Get event details from database.
+        
+        Args:
+            event_id: Event ID to look up
+            
+        Returns:
+            JSON string with event details
+        """
+        import json
+        
+        # Fetch event from database
+        event = self.db.get_event(event_id)
+        if not event:
+            # Get available events for helpful error message
+            all_events = self.db.get_events()
+            return json.dumps({
+                "error": f"Event '{event_id}' not found in database",
+                "available_events": [e.id for e in all_events[:10]]  # First 10
+            })
+        
+        # Fetch linked articles from database
+        linked_articles = []
+        if event.article_ids:
+            articles = self.db.get_articles(event.article_ids)
+            for article in articles:
+                linked_articles.append({
+                    "id": article.id,
+                    "title": article.title,
+                    "url": article.url,
+                    "source": article.source,
+                    "published_date": str(article.published_date),
+                    "content": article.content,  # Full content!
+                    "word_count": article.word_count
+                })
+        
+        # Build response
+        response = self._build_response(event, linked_articles)
+        return json.dumps(response, indent=2)
+    
+    def _forward_memory(self, event_id: str) -> str:
+        """Get event details from in-memory data.
+        
+        Args:
+            event_id: Event ID to look up
+            
+        Returns:
+            JSON string with event details
         """
         import json
         
@@ -81,8 +172,21 @@ class EventDetailsTool(Tool):
                     "word_count": article.word_count
                 })
         
-        # Build comprehensive response
-        response = {
+        # Build response
+        response = self._build_response(event, linked_articles)
+        return json.dumps(response, indent=2)
+    
+    def _build_response(self, event: Event, linked_articles: List[dict]) -> dict:
+        """Build standardized response structure.
+        
+        Args:
+            event: Event object
+            linked_articles: List of article dicts
+            
+        Returns:
+            Response dictionary
+        """
+        return {
             "event": {
                 "id": event.id,
                 "title": event.title,
@@ -99,5 +203,4 @@ class EventDetailsTool(Tool):
             "linked_articles": linked_articles,
             "summary": f"Event '{event.title}' with {len(linked_articles)} linked article(s)"
         }
-        
-        return json.dumps(response, indent=2)
+

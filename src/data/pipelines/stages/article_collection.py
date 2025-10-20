@@ -37,11 +37,17 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
     Uses agentic approach with WebAgent to intelligently search and scrape articles.
     """
     
-    def __init__(self, config: ArticleCollectionConfig):
+    def __init__(self, config: ArticleCollectionConfig, db_path: str = "worldreasoner.db"):
+        """Initialize article collection stage.
+        
+        Args:
+            config: Article collection configuration
+            db_path: Path to database for cross-run deduplication
+        """
         super().__init__(name="ArticleCollection", config=config)
-        # Create WebAgent with ArticleCollectorTool
+        # Create WebAgent with ArticleCollectorTool (with database for deduplication)
         app_config = get_config()
-        self.article_tool = ArticleCollectorTool()  # Keep reference to tool
+        self.article_tool = ArticleCollectorTool(db_path=db_path)  # Enable cross-run deduplication
         self.web_agent = WebAgent(config=app_config, tools=[self.article_tool])
     
     async def process(self, inputs: List[ArticleSource]) -> List[Article]:

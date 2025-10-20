@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, ConfigDict
+from ...utils.database import register_model
 
 
 class QuestionType(str, Enum):
@@ -24,6 +25,7 @@ class TimeHorizon(str, Enum):
     LONG = "long"  # 6+ months
 
 
+@register_model('questions', indexes=['domain', 'difficulty', 'time_horizon'])
 class Question(BaseModel):
     """Benchmark forecast question.
     
