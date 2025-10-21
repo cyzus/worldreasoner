@@ -25,6 +25,8 @@ class PipelineStageResult(BaseModel, Generic[TOutput]):
     
     Generic type parameter TOutput allows type-safe storage of stage outputs.
     """
+    model_config = {"arbitrary_types_allowed": True}
+    
     stage_name: str
     status: PipelineStageStatus
     items_processed: int = 0
@@ -34,9 +36,6 @@ class PipelineStageResult(BaseModel, Generic[TOutput]):
     completed_at: Optional[datetime] = None
     error_message: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
-    
-    class Config:
-        arbitrary_types_allowed = True
     
     def duration_seconds(self) -> Optional[float]:
         """Calculate execution duration in seconds."""
