@@ -25,6 +25,7 @@ classifiers = [
 
 dependencies = [
     "litellm>=1.78.5",
+    "loguru>=0.7.0",
     "pydantic",
     "pydantic-settings>=2.11.0",
     "python-dotenv",

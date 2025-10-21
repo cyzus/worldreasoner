@@ -1,10 +1,10 @@
 from smolagents import ToolCallingAgent, LiteLLMModel
-from src.config import Config, load_config
+from src.config import Config, get_config
 
 class BaseAgent():
     """Base class for all agents in the SmolAgents framework."""
     def __init__(self, config: Config = None, tools: list = None, max_steps: int = 10):
-        self.config = config or load_config()
+        self.config = config or get_config()
         self.llm_model = LiteLLMModel(
             model_id=self.config.llm.model,
             **self.config.llm.model_dump(exclude={"model"})

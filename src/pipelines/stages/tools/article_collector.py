@@ -7,7 +7,7 @@ from typing import List, Optional
 from urllib.parse import urlparse
 
 from smolagents import Tool, VisitWebpageTool
-from src.config import load_config
+from src.config import get_config
 from src.domain.models import Article
 
 
@@ -87,7 +87,7 @@ class ArticleCollectorTool(Tool):
     def setup(self):
         """Load configuration (called on first use)."""
         if self.config is None:
-            self.config = load_config()
+            self.config = get_config()
     
     def forward(
         self,

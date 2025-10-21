@@ -20,16 +20,23 @@ class PipelineStageStatus(str, Enum):
     SKIPPED = "skipped"
 
 
-class PipelineStageResult(BaseModel):
-    """Result from a pipeline stage execution."""
+class PipelineStageResult(BaseModel, Generic[TOutput]):
+    """Result from a pipeline stage execution.
+    
+    Generic type parameter TOutput allows type-safe storage of stage outputs.
+    """
     stage_name: str
     status: PipelineStageStatus
     items_processed: int = 0
     items_output: int = 0
+    outputs: List[TOutput] = Field(default_factory=list)
     started_at: datetime
     completed_at: Optional[datetime] = None
     error_message: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    
+    class Config:
+        arbitrary_types_allowed = True
     
     def duration_seconds(self) -> Optional[float]:
         """Calculate execution duration in seconds."""
@@ -64,16 +71,16 @@ class PipelineStage(ABC, Generic[TInput, TOutput]):
         """
         pass
     
-    async def execute(self, inputs: List[TInput]) -> PipelineStageResult:
+    async def execute(self, inputs: List[TInput]) -> PipelineStageResult[TOutput]:
         """Execute the stage with error handling and metrics.
         
         Args:
             inputs: List of input items to process
             
         Returns:
-            PipelineStageResult with execution metadata
+            PipelineStageResult with execution metadata and outputs
         """
-        result = PipelineStageResult(
+        result = PipelineStageResult[TOutput](
             stage_name=self.name,
             status=PipelineStageStatus.RUNNING,
             items_processed=len(inputs),
@@ -84,6 +91,7 @@ class PipelineStage(ABC, Generic[TInput, TOutput]):
             outputs = await self.process(inputs)
             result.status = PipelineStageStatus.COMPLETED
             result.items_output = len(outputs)
+            result.outputs = outputs
             result.completed_at = datetime.now(timezone.utc)
         except Exception as e:
             result.status = PipelineStageStatus.FAILED

@@ -1,7 +1,7 @@
 from smolagents import WebSearchTool, VisitWebpageTool
 
 from src.agents.base import BaseAgent
-from src.config import Config, load_config
+from src.config import Config
 
 
 class WebAgent(BaseAgent):

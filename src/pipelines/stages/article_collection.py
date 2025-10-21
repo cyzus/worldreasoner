@@ -11,6 +11,7 @@ from src.agents.factory import AgentFactory
 from .tools import ArticleCollectorTool
 from .collectors import ResultCollector
 from ..prompts import ArticleCollectionPrompts
+from src.utils.logging import logger
 
 
 class ArticleSource(BaseModel):
@@ -91,11 +92,11 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
                 result = self.web_agent.run(instruction)
                 
                 # Agent's response is just a summary for logging
-                print(f"Agent response: {result[:200] if isinstance(result, str) else result}")
+                logger.debug(f"Agent response from {source.name}: {result[:200] if isinstance(result, str) else result}")
                     
             except Exception as e:
                 # Log error but continue with other sources
-                print(f"Error collecting from source {source.name}: {e}")
+                logger.error(f"Error collecting from source {source.name}: {e}")
                 continue
         
         # Get all collected articles from the collector

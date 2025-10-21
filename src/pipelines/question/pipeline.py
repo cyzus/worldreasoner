@@ -23,6 +23,7 @@ from ..stages import (
 from src.config.pipeline import QuestionPipelineConfig
 from src.config import DatabaseConfig
 from src.domain.models import Article, Event, Question
+from src.utils.logging import logger
 
 
 class QuestionPipeline(Pipeline):
@@ -122,18 +123,18 @@ class QuestionPipeline(Pipeline):
         
         try:
             # Stage 1: Collect Articles
-            self.articles = await self.article_stage.process(
+            logger.info("Stage 1: Collecting articles...")
+            article_result = await self.article_stage.execute(
                 self.article_stage.config.sources
             )
-            article_result = self.article_stage.get_result()
-            if article_result:
-                self._results.append(article_result)
+            self._results.append(article_result)
+            self.articles = article_result.outputs
             
             if not self.articles:
-                print("Warning: No articles collected")
+                logger.warning("No articles collected")
                 return self._results
             
-            print(f"Collected {len(self.articles)} articles")
+            logger.info(f"Collected {len(self.articles)} articles")
             
             # Persist articles if enabled
             if self.enable_persistence and self.articles:
@@ -141,16 +142,16 @@ class QuestionPipeline(Pipeline):
                 self._results.append(persist_result)
             
             # Stage 2: Identify Events
-            self.events = await self.event_stage.process(self.articles)
-            event_result = self.event_stage.get_result()
-            if event_result:
-                self._results.append(event_result)
+            logger.info("Stage 2: Identifying events...")
+            event_result = await self.event_stage.execute(self.articles)
+            self._results.append(event_result)
+            self.events = event_result.outputs
             
             if not self.events:
-                print("Warning: No events identified")
+                logger.warning("No events identified")
                 return self._results
             
-            print(f"Identified {len(self.events)} events")
+            logger.info(f"Identified {len(self.events)} events")
             
             # Persist events if enabled
             if self.enable_persistence and self.events:
@@ -158,28 +159,31 @@ class QuestionPipeline(Pipeline):
                 self._results.append(persist_result)
             
             # Stage 3: Generate Questions
+            logger.info("Stage 3: Generating questions...")
             # Pass articles to question stage so EventDetailsTool can access them
             self.question_stage.set_articles(self.articles)
-            self.questions = await self.question_stage.process(self.events)
-            question_result = self.question_stage.get_result()
-            if question_result:
-                self._results.append(question_result)
+            question_result = await self.question_stage.execute(self.events)
+            self._results.append(question_result)
+            self.questions = question_result.outputs
             
             if not self.questions:
-                print("Warning: No questions generated")
+                logger.warning("No questions generated")
                 return self._results
             
-            print(f"Generated {len(self.questions)} questions")
+            logger.info(f"Generated {len(self.questions)} questions")
             
             # Persist questions if enabled
             if self.enable_persistence and self.questions:
                 persist_result = await self.question_persist.execute(self.questions)
                 self._results.append(persist_result)
             
+            logger.success("Pipeline completed successfully!")
+            
         except Exception as e:
             # Add error to last result if exists
             if self._results:
                 self._results[-1].error_message = str(e)
+            logger.error(f"Pipeline failed: {e}")
             raise
         
         return self._results

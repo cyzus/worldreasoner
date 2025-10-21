@@ -2,6 +2,7 @@
 
 import json
 from typing import List
+from datetime import datetime, timezone
 from pydantic import BaseModel
 
 from ..base import PipelineStage
@@ -10,6 +11,7 @@ from src.agents.factory import AgentFactory
 from .tools import EventIdentifierTool, ArticleRetrievalTool
 from .collectors import ResultCollector
 from ..prompts import EventIdentificationPrompts
+from src.utils.logging import logger
 
 
 class EventIdentificationConfig(BaseModel):
@@ -63,7 +65,6 @@ class EventIdentificationStage(PipelineStage[Article, Event]):
         
         try:
             # Get current date for context
-            from datetime import datetime, timezone
             current_date = datetime.now(timezone.utc)
             
             # Get instruction from prompts module
@@ -77,7 +78,7 @@ class EventIdentificationStage(PipelineStage[Article, Event]):
             result = self.base_agent.run(instruction)
             
             # Agent's response is just a summary for logging
-            print(f"Agent response: {result[:200] if isinstance(result, str) else result}")
+            logger.debug(f"Agent response for event identification: {result[:200] if isinstance(result, str) else result}")
             
             # Get identified events from the collector
             events = self.collector.get_all()
@@ -93,5 +94,5 @@ class EventIdentificationStage(PipelineStage[Article, Event]):
             return events
             
         except Exception as e:
-            print(f"Error identifying events: {e}")
+            logger.error(f"Error identifying events: {e}")
             return []
