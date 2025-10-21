@@ -89,10 +89,12 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
                 )
                 
                 # Run the agent with the instruction
+                logger.info(f"Running agent for source: {source.name}")
                 result = self.web_agent.run(instruction)
                 
                 # Agent's response is just a summary for logging
                 logger.debug(f"Agent response from {source.name}: {result[:200] if isinstance(result, str) else result}")
+                logger.info(f"After agent run, collector has {self.collector.count()} articles")
                     
             except Exception as e:
                 # Log error but continue with other sources
@@ -101,4 +103,5 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
         
         # Get all collected articles from the collector
         all_articles = self.collector.get_all()
+        logger.info(f"ArticleCollectionStage collected {len(all_articles)} articles from collector")
         return all_articles

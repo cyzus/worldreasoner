@@ -57,8 +57,8 @@ async def test_article_collection_stage():
     print("\n1. Processing article sources...")
     result = await stage.execute(sources)
     
-    # Get collected articles from tool
-    articles = stage.article_tool.collected_articles
+    # Get collected articles from result.outputs
+    articles = result.outputs
     
     # Assertions
     print(f"\n2. Validation:")
@@ -135,8 +135,8 @@ async def test_event_identification_stage():
     print("\n2. Identifying events from articles...")
     result = await stage.execute(articles)
     
-    # Get events from tool
-    events = stage.event_tool.identified_events
+    # Get events from result.outputs
+    events = result.outputs
     
     # Assertions
     print(f"\n3. Validation:")
@@ -235,8 +235,8 @@ async def test_question_generation_stage():
     print("\n2. Generating forecast questions from events...")
     result = await stage.execute(events)
     
-    # Get questions from tool
-    questions = stage.question_tool.generated_questions
+    # Get questions from result.outputs
+    questions = result.outputs
     
     # Assertions
     print(f"\n3. Validation:")

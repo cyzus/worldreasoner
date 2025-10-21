@@ -6,16 +6,18 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from urllib.parse import urlparse
 
-from smolagents import Tool, VisitWebpageTool
+from smolagents import Tool
 from src.config import get_config
 from src.domain.models import Article
+from src.utils.logging import logger
+from src.pipelines.stages.tools.web_fetch import WebFetchTool
 
 
 class ArticleCollectorTool(Tool):
     """Fetches and stores article data from URLs into Article objects.
     
     This tool helps the agent:
-    1. Internally fetch full article content from a URL (using VisitWebpageTool)
+    1. Internally fetch full article content from a URL (using WebFetchTool)
     2. Convert content into structured Article format
     3. Generate unique article IDs
     4. Handle deduplication via content hashing
@@ -68,11 +70,13 @@ class ArticleCollectorTool(Tool):
         super().__init__()
         self.config = None
         self.seen_hashes = set()  # For in-memory deduplication within this run
-        self.web_visitor = VisitWebpageTool()  # Internal tool for fetching content
+        self.web_visitor = WebFetchTool()  # Internal tool for fetching content
         
         # Result storage - use collector if provided, otherwise internal list
         self.collector = collector
         self.collected_articles = []  # Fallback for backward compatibility
+        
+        logger.info(f"ArticleCollectorTool initialized with collector: {collector is not None}")
         
         # Database for cross-run deduplication (optional)
         self.db = None
@@ -124,6 +128,16 @@ class ArticleCollectorTool(Tool):
             )
             if existing_articles:
                 existing = existing_articles[0]
+                
+                # Add to collector even if duplicate (for current pipeline run)
+                # Note: Check 'is not None' because ResultCollector.__bool__ returns False when empty
+                if self.collector is not None:
+                    self.collector.add(existing)
+                    logger.debug(f"Added existing article {existing.id} to collector (duplicate URL, total: {self.collector.count()})")
+                else:
+                    self.collected_articles.append(existing)
+                    logger.debug(f"Added existing article {existing.id} to internal list (duplicate URL, total: {len(self.collected_articles)})")
+                
                 return json.dumps({
                     "id": existing.id,
                     "title": existing.title,
@@ -161,6 +175,7 @@ class ArticleCollectorTool(Tool):
         # Check if we've already seen this content (in-memory for current run)
         content_hash = self._compute_content_hash(content)
         if content_hash in self.seen_hashes:
+            logger.debug(f"Skipping duplicate content hash: {content_hash} for URL: {url}")
             return json.dumps({
                 "error": "Duplicate article detected (same content, different URL)",
                 "hash": content_hash,
@@ -208,11 +223,14 @@ class ArticleCollectorTool(Tool):
         article.reading_time_minutes = max(1, article.word_count // 200)
         
         # Store full article using collector if provided, otherwise use internal list
-        if self.collector:
+        # Note: Check 'is not None' because ResultCollector.__bool__ returns False when empty
+        if self.collector is not None:
             self.collector.add(article)
+            logger.info(f"Added article {article.id} to collector (total now: {self.collector.count()})")
         else:
             # Backward compatibility - store in internal list
             self.collected_articles.append(article)
+            logger.info(f"Added article {article.id} to internal list (total now: {len(self.collected_articles)})")
         
         # Convert to JSON and return a SUMMARY to save tokens
         # Return only metadata, NOT the full content

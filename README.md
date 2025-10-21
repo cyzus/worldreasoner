@@ -205,27 +205,6 @@ Add to your Claude Desktop MCP configuration:
 }
 ```
 
-## Documentation
-
-### Architecture & Design
-- **[Architecture](docs/architecture/OVERVIEW.md)**: System design and components
-- **[Event Architecture](docs/EVENT_ARCHITECTURE.md)**: Events as causal nodes
-- **[Code Structure](docs/CODE_STRUCTURE.md)**: Project organization and module details
-- **[Data Schema](docs/DATA_SCHEMA.md)**: Database and data model specifications
-
-### Pipelines
-- **[Pipeline Guide](docs/guides/PIPELINE.md)**: Complete pipeline documentation
-- **[Dual Pipeline Architecture](docs/DUAL_PIPELINE_ARCHITECTURE.md)**: Question and Evidence pipelines
-- **[Pipeline Architecture](docs/PIPELINE_ARCHITECTURE.md)**: Detailed stage specifications
-- **[Pipeline Diagrams](docs/PIPELINE_DIAGRAMS.md)**: Visual architecture diagrams
-- **[Pipeline Implementation](docs/PIPELINE_IMPLEMENTATION.md)**: Current implementation status
-
-### API & Evaluation
-- **[MCP API](docs/MCP_API.md)**: API reference and examples
-- **[Evaluation](docs/EVALUATION.md)**: Metrics and evaluation framework
-- **[Benchmark Tasks](docs/BENCHMARK_TASKS.md)**: Task types and examples
-
-
 ## Dual Pipeline System
 
 WorldReasoner uses **two complementary pipelines**:
@@ -242,7 +221,7 @@ Builds causal explanations using hindsight:
 - **Input**: Resolved questions with ground truth
 - **Process**: Hindsight reasoning → Evidence collection → Causal graph
 - **Output**: Validated causal explanations
-- **Timing**: Runs after outcomes are known (30+ days later)
+- **Timing**: Immediately after questions are generated (and the ground truth is known)
 
 This dual approach ensures:
 - ✅ Ground truth explanations built WITH hindsight (accurate causality)

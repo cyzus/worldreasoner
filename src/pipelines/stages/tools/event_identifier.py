@@ -145,7 +145,8 @@ class EventIdentifierTool(Tool):
         )
         
         # Store full event using collector if provided, otherwise use internal list
-        if self.collector:
+        # Note: Check 'is not None' because ResultCollector.__bool__ returns False when empty
+        if self.collector is not None:
             self.collector.add(event)
         else:
             # Backward compatibility - store in internal list

@@ -95,3 +95,66 @@ class TestWebFetchTool:
         # Should either succeed quickly or fail with timeout
         assert "success" in result
         assert isinstance(result["success"], bool)
+    
+    @pytest.mark.asyncio
+    async def test_web_fetch_multiple_urls(self):
+        """Test fetching from multiple different URLs to verify robustness."""
+        tool = WebFetchTool()
+        
+        # Test URLs with different characteristics
+        test_urls = [
+            {
+                "url": "https://www.example.com",
+                "expected_title_contains": "Example Domain",
+                "description": "Simple example site"
+            },
+            {
+                "url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+                "expected_title_contains": "Artificial intelligence",
+                "description": "Wikipedia article"
+            },
+            {
+                "url": "https://www.python.org",
+                "expected_title_contains": "Python",
+                "description": "Python.org homepage"
+            },
+            {
+                "url": "https://github.com",
+                "expected_title_contains": "GitHub",
+                "description": "GitHub homepage"
+            }
+        ]
+        
+        import json
+        results = []
+        
+        for test_case in test_urls:
+            result_json = await tool.forward_async(test_case["url"], timeout=30)
+            result = json.loads(result_json)
+            results.append(result)
+            
+            # Verify basic structure
+            assert "success" in result, f"Missing 'success' for {test_case['description']}"
+            assert "url" in result, f"Missing 'url' for {test_case['description']}"
+            assert result["url"] == test_case["url"], f"URL mismatch for {test_case['description']}"
+            
+            # If fetch succeeded, verify content
+            if result["success"]:
+                assert "title" in result, f"Missing 'title' for {test_case['description']}"
+                assert "markdown" in result, f"Missing 'markdown' for {test_case['description']}"
+                assert len(result["markdown"]) > 0, f"Empty markdown for {test_case['description']}"
+                
+                # Check if expected title content is present (case-insensitive)
+                assert test_case["expected_title_contains"].lower() in result["title"].lower(), \
+                    f"Expected title to contain '{test_case['expected_title_contains']}' for {test_case['description']}, got: {result['title']}"
+            else:
+                # If it failed, should have an error message
+                assert "error" in result and result["error"] is not None, \
+                    f"Failed fetch should have error message for {test_case['description']}"
+        
+        # Verify we got results for all URLs
+        assert len(results) == len(test_urls), "Should have results for all test URLs"
+        
+        # At least one should succeed (example.com is very reliable)
+        success_count = sum(1 for r in results if r["success"])
+        assert success_count >= 1, "At least one URL should fetch successfully"

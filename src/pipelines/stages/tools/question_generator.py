@@ -198,7 +198,8 @@ class QuestionGeneratorTool(Tool):
         )
         
         # Store full question using collector if provided, otherwise use internal list
-        if self.collector:
+        # Note: Check 'is not None' because ResultCollector.__bool__ returns False when empty
+        if self.collector is not None:
             self.collector.add(question)
         else:
             # Backward compatibility - store in internal list
