@@ -1,14 +1,8 @@
 """Utilities for WorldReasoner."""
 
-from .database import Database, GenericDatabase, register_model
-from .config import Config, DatabaseConfig, get_config, load_config
+from .logging import logger, setup_logging
 
 __all__ = [
-    "Database",
-    "GenericDatabase",
-    "register_model",
-    "Config",
-    "DatabaseConfig",
-    "get_config",
-    "load_config"
+    "logger",
+    "setup_logging",
 ]
