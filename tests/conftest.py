@@ -2,6 +2,32 @@
 
 This module provides reusable fixtures for database management,
 ensuring proper cleanup and isolation between tests.
+
+## Temporary Database Locations
+
+By default, pytest creates temp databases in your system's temp directory:
+- Windows: C:\\Users\\<username>\\AppData\\Local\\Temp\\pytest-of-<username>\\pytest-<N>\\
+- Linux/Mac: /tmp/pytest-of-<username>/pytest-<N>/
+
+## Debugging: Keep Databases for Inspection
+
+If you want to inspect databases during/after tests, use one of these options:
+
+Option 1: Use --basetemp to specify a custom location:
+    pytest tests/ --basetemp=./test-output
+    # Databases will be in ./test-output/test_<testname>/test.db
+
+Option 2: Use persistent_test_db_path fixture instead:
+    def test_something(persistent_test_db_path):
+        # Database will be in ./test-dbs/<testname>.db (NOT auto-cleaned)
+
+Option 3: Use pytest --keeptemp flag (if available in your pytest version):
+    pytest tests/ --keeptemp
+
+Option 4: Print the database path in your test:
+    def test_something(test_db_path):
+        print(f"\\nDatabase location: {test_db_path}")
+        # Run with: pytest -s to see output
 """
 import pytest
 from pathlib import Path
@@ -15,8 +41,19 @@ def test_db_path(tmp_path):
     The database file is created in pytest's temporary directory
     and automatically cleaned up when the test finishes.
 
+    Default location (auto-cleaned):
+    - Windows: C:\\Users\\<user>\\AppData\\Local\\Temp\\pytest-of-<user>\\pytest-<N>\\test.db
+    - Linux/Mac: /tmp/pytest-of-<user>/pytest-<N>/test.db
+
+    To see the exact location, run with -s flag:
+        pytest -s tests/your_test.py
+
+    To keep databases for inspection, use:
+        pytest --basetemp=./test-output tests/
+
     Usage:
         def test_something(test_db_path):
+            print(f"DB at: {test_db_path}")  # See with pytest -s
             stage = ArticleCollectionStage(config, db_path=test_db_path)
             # Database will be cleaned up automatically
 
@@ -26,7 +63,45 @@ def test_db_path(tmp_path):
     Returns:
         str: Path to temporary database file
     """
-    return str(tmp_path / "test.db")
+    db_path = tmp_path / "test.db"
+    return str(db_path)
+
+
+@pytest.fixture
+def persistent_test_db_path(request):
+    """Provide a persistent database path for debugging (NOT auto-cleaned).
+
+    Use this fixture when you want to inspect the database after the test.
+    Databases are saved to ./test-dbs/<testname>.db
+
+    WARNING: These databases are NOT automatically cleaned up.
+    You must manually delete them or run: rm -rf test-dbs/
+
+    Usage:
+        def test_something(persistent_test_db_path):
+            # Database will be in ./test-dbs/test_something.db
+            stage = ArticleCollectionStage(config, db_path=persistent_test_db_path)
+            # Database persists after test for inspection
+
+    Args:
+        request: pytest's request fixture (provides test name)
+
+    Returns:
+        str: Path to persistent database file
+    """
+    # Create test-dbs directory if it doesn't exist
+    test_db_dir = Path("test-dbs")
+    test_db_dir.mkdir(exist_ok=True)
+
+    # Use test name as database filename
+    test_name = request.node.name
+    db_path = test_db_dir / f"{test_name}.db"
+
+    # Remove old database if exists
+    if db_path.exists():
+        db_path.unlink()
+
+    return str(db_path)
 
 
 @pytest.fixture

@@ -109,7 +109,7 @@ async def test_event_identification_stage(test_db_path):
 
     article_config = ArticleCollectionConfig(
         sources=article_sources,
-        start_date=datetime.now(timezone.utc) - timedelta(days=7),
+        start_date=datetime.now(timezone.utc) - timedelta(days=15),
         end_date=datetime.now(timezone.utc),
         max_articles_per_source=3,
         domains=["technology"]

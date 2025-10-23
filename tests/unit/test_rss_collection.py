@@ -108,7 +108,7 @@ class TestArticleCollectionWithRSS:
         return rss_sources
     
     @pytest.mark.integration
-    async def test_all_rss_sources_from_config(self, test_db_path):
+    async def test_all_rss_sources_from_config(self, persistent_test_db_path):
         """Test collecting articles from ALL RSS sources defined in config."""
         # Load all RSS sources from config
         sources = self.load_rss_sources_from_config()
@@ -129,7 +129,7 @@ class TestArticleCollectionWithRSS:
         )
 
         # Create stage with test database (using tmp_path fixture)
-        stage = ArticleCollectionStage(config=config, db_path=test_db_path)
+        stage = ArticleCollectionStage(config=config, db_path=persistent_test_db_path)
 
         # Execute stage
         result = await stage.execute(sources)
@@ -137,7 +137,7 @@ class TestArticleCollectionWithRSS:
         # Persist all collected articles to the database
         from src.core.database import GenericDatabase
         from src.domain.models.article import Article
-        db = GenericDatabase(test_db_path)
+        db = GenericDatabase(persistent_test_db_path)
         db.create_table(Article)
         db.save_many(Article, result.outputs)
 

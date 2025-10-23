@@ -208,3 +208,7 @@ __marimo__/
 
 # data files
 *.db
+
+# Test artifacts
+test-dbs/
+test-output/
