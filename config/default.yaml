@@ -45,5 +45,6 @@ data_dir: ./data
 
 # LLM
 llm:
-  model: gemini/gemini-2.5-flash
+  # model: gemini/gemini-2.5-flash
+  model: litellm_proxy/gemini/gemini-2.5-flash
   temperature: 1.0

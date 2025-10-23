@@ -6,6 +6,7 @@ from .event_identifier import EventIdentifierTool
 from .question_generator import QuestionGeneratorTool
 from .event_details import EventDetailsTool
 from .web_fetch import WebFetchTool
+from .rss_fetch import RssFetchTool
 
 __all__ = [
     "ArticleCollectorTool",
@@ -14,4 +15,5 @@ __all__ = [
     "QuestionGeneratorTool",
     "EventDetailsTool",
     "WebFetchTool",
+    "RssFetchTool",
 ]

@@ -1,0 +1,95 @@
+# Article Sources Configuration
+# Defines RSS feeds and web sources for article collection
+
+sources:
+  # Technology RSS Feeds
+  - name: "TechCrunch"
+    url: "https://techcrunch.com/feed/"
+    scraper_type: "rss"
+    domain: "tech"
+    rate_limit_per_second: 1.0
+  
+  - name: "Ars Technica"
+    url: "https://feeds.arstechnica.com/arstechnica/index"
+    scraper_type: "rss"
+    domain: "tech"
+    rate_limit_per_second: 1.0
+  
+  - name: "The Verge"
+    url: "https://www.theverge.com/rss/index.xml"
+    scraper_type: "rss"
+    domain: "tech"
+    rate_limit_per_second: 1.0
+
+  # Finance RSS Feeds
+  - name: "Seeking Alpha"
+    url: "https://seekingalpha.com/feed"
+    scraper_type: "rss"
+    domain: "finance"
+    rate_limit_per_second: 1.0
+
+
+  # Climate RSS Feeds
+  - name: "Climate Home News"
+    url: "https://www.climatechangenews.com/feed/"
+    scraper_type: "rss"
+    domain: "climate"
+    rate_limit_per_second: 1.0
+  
+  - name: "Inside Climate News"
+    url: "https://insideclimatenews.org/feed/"
+    scraper_type: "rss"
+    domain: "climate"
+    rate_limit_per_second: 1.0
+  
+  # Politics RSS Feeds  
+  - name: "The Hill"
+    url: "https://thehill.com/feed/"
+    scraper_type: "rss"
+    domain: "politics"
+    rate_limit_per_second: 1.0
+  
+  # Health RSS Feeds  
+  - name: "STAT News"
+    url: "https://www.statnews.com/feed/"
+    scraper_type: "rss"
+    domain: "health"
+    rate_limit_per_second: 1.0
+  
+  # General News RSS Feeds
+  - name: "BBC News"
+    url: "http://feeds.bbci.co.uk/news/rss.xml"
+    scraper_type: "rss"
+    domain: "general"
+    rate_limit_per_second: 1.0  
+
+  # Web scraping sources (for agent-based collection)
+  - name: "Nature News"
+    url: "https://www.nature.com/latest-news"
+    scraper_type: "web"
+    domain: "general"
+    rate_limit_per_second: 0.5
+  
+  - name: "Science Magazine"
+    url: "https://www.science.org/news"
+    scraper_type: "web"
+    domain: "general"
+    rate_limit_per_second: 0.5
+
+# Collection settings
+collection:
+  # Number of days to look back for articles
+  days_back: 7
+  
+  # Maximum articles per source
+  max_articles_per_source: 10
+  
+  # Domain filters (empty = all domains)
+  domains: []
+  
+  # Rate limiting
+  global_rate_limit_per_second: 2.0
+  
+  # Retry settings
+  max_retries: 3
+  retry_delay_seconds: 2

@@ -85,7 +85,7 @@ class QuestionPipeline(Pipeline):
         )
         
         # Build pipeline stages (use same db path for all stages)
-        db_path = "worldreasoner.db"
+        db_path = database_config.db_path
         self.article_stage = ArticleCollectionStage(article_config, db_path=db_path)
         self.event_stage = EventIdentificationStage(event_config, db_path=db_path)
         # Question stage will receive articles later via set_articles()

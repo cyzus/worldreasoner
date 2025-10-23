@@ -18,8 +18,6 @@ class EventIdentificationConfig(BaseModel):
     """Configuration for event identification."""
     min_articles_per_event: int = 3
     confidence_threshold: float = 0.7
-    use_llm: bool = True  # Use LLM for event extraction
-    llm_model: str = "gpt-4"
     clustering_method: str = "semantic"  # "semantic", "temporal", "hybrid"
 
 

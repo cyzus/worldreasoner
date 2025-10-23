@@ -61,6 +61,28 @@ Evidence Pipeline (Backward): Resolved Questions → Evidence → Causal Graph
 - **Evidence Pipeline** (planned): Collects hindsight evidence for resolved questions
 - **Pipeline Stages** (`src/pipelines/stages/`): Composable, type-safe processing units with error handling
 
+### Dual Collection Approach
+
+Article collection supports **two methods** (automatically detected via `scraper_type`):
+
+1. **RSS-based** (`scraper_type: "rss"`): Fast, reliable feed parsing
+   - Uses `RssFetchTool` to parse RSS/Atom feeds
+   - Fetches full content via `ArticleCollectorTool`
+   - ~0.07 articles/sec, zero LLM costs
+   - 95%+ reliability for sites with RSS feeds
+
+2. **Agent-based** (`scraper_type: "web"`): Flexible AI-guided scraping
+   - Uses `WebAgent` with `web_search` for discovery
+   - Intelligent filtering and content extraction
+   - ~0.03 articles/sec, uses LLM tokens
+   - Works for sites without RSS
+
+**Best practice**: Configure both in `config/sources.yaml` for optimal coverage
+- Use RSS for 90% of news sites (fast, free)
+- Use agent-based as fallback (flexible, handles edge cases)
+
+See `docs/RSS_VS_AGENT_COLLECTION.md` for detailed comparison
+
 ### Agentic Tools Pattern (Token Optimization)
 
 **Critical Design**: Tools fetch/process heavy data internally, returning only summaries to agents (98% token reduction).
