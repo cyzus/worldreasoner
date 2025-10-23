@@ -70,6 +70,80 @@ class PipelineStage(ABC, Generic[TInput, TOutput]):
         """
         pass
     
+    async def process_batch(self, inputs: List[TInput], batch_size: int) -> List[TOutput]:
+        """Process inputs in batches to handle large datasets.
+        
+        Args:
+            inputs: List of input items to process
+            batch_size: Maximum items per batch
+            
+        Returns:
+            List of all output items from all batches
+        """
+        if not inputs:
+            return []
+        
+        if batch_size <= 0:
+            # No batching, process all at once
+            return await self.process(inputs)
+        
+        all_outputs = []
+        
+        # Process in batches
+        for i in range(0, len(inputs), batch_size):
+            batch = inputs[i:i + batch_size]
+            
+            try:
+                batch_outputs = await self.process(batch)
+                all_outputs.extend(batch_outputs)
+            except Exception as e:
+                # Log error but continue with other batches
+                print(f"Error processing batch {i//batch_size + 1}: {e}")
+                continue
+        
+        return all_outputs
+    
+    async def execute_batched(self, inputs: List[TInput], batch_size: int) -> PipelineStageResult[TOutput]:
+        """Execute the stage with batching for large datasets.
+        
+        Args:
+            inputs: List of input items to process
+            batch_size: Maximum items per batch
+            
+        Returns:
+            PipelineStageResult with aggregated execution metadata and outputs
+        """
+        started_at = datetime.now(timezone.utc)
+        status = PipelineStageStatus.RUNNING
+        error_message = None
+        
+        try:
+            # Process in batches
+            all_outputs = await self.process_batch(inputs, batch_size)
+            
+            status = PipelineStageStatus.COMPLETED
+            
+        except Exception as e:
+            status = PipelineStageStatus.FAILED
+            all_outputs = []
+            error_message = str(e)
+        
+        completed_at = datetime.now(timezone.utc)
+        
+        result = PipelineStageResult[TOutput](
+            stage_name=self.name,
+            status=status,
+            items_processed=len(inputs),
+            items_output=len(all_outputs),
+            outputs=all_outputs,
+            started_at=started_at,
+            completed_at=completed_at,
+            error_message=error_message
+        )
+        
+        self._result = result
+        return result
+    
     async def execute(self, inputs: List[TInput]) -> PipelineStageResult[TOutput]:
         """Execute the stage with error handling and metrics.
         

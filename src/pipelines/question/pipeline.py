@@ -141,9 +141,12 @@ class QuestionPipeline(Pipeline):
                 persist_result = await self.article_persist.execute(self.articles)
                 self._results.append(persist_result)
             
-            # Stage 2: Identify Events
+            # Stage 2: Identify Events (with batching for large article sets)
             logger.info("Stage 2: Identifying events...")
-            event_result = await self.event_stage.execute(self.articles)
+            event_result = await self.event_stage.execute_batched(
+                self.articles, 
+                batch_size=self.question_config.article_batch_size
+            )
             self._results.append(event_result)
             self.events = event_result.outputs
             
@@ -158,11 +161,14 @@ class QuestionPipeline(Pipeline):
                 persist_result = await self.event_persist.execute(self.events)
                 self._results.append(persist_result)
             
-            # Stage 3: Generate Questions
+            # Stage 3: Generate Questions (with batching for large event sets)
             logger.info("Stage 3: Generating questions...")
             # Pass articles to question stage so EventDetailsTool can access them
             self.question_stage.set_articles(self.articles)
-            question_result = await self.question_stage.execute(self.events)
+            question_result = await self.question_stage.execute_batched(
+                self.events,
+                batch_size=self.question_config.event_batch_size
+            )
             self._results.append(question_result)
             self.questions = question_result.outputs
             

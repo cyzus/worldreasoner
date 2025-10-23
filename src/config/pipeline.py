@@ -80,6 +80,16 @@ class QuestionPipelineConfig(BaseModel):
         default=True,
         description="Only generate questions with verifiable outcomes"
     )
+    
+    # Batch processing settings (for handling large datasets)
+    article_batch_size: int = Field(
+        default=50,
+        description="Maximum articles to process in a single batch for event identification"
+    )
+    event_batch_size: int = Field(
+        default=20,
+        description="Maximum events to process in a single batch for question generation"
+    )
 
 
 # Alias for backward compatibility
