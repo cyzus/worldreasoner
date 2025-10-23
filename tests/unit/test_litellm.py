@@ -2,7 +2,7 @@
 
 import pytest
 from src.llm import LiteLLMClient
-from src.config import load_config
+from src.config import get_config
 
 class TestLiteLLMClientIntegration:
     """Integration tests for LiteLLMClient with real API calls."""
@@ -15,11 +15,8 @@ class TestLiteLLMClientIntegration:
         This test makes an actual API call. Run with: pytest -m integration
         Skip with: pytest -m "not integration"
         """
-        llm_config = {
-            "model": "gemini/gemini-2.5-flash",
-            "temperature": 0.7,
-            "max_tokens": 50
-        }
+        config = get_config()
+        llm_config = config.llm
         client = LiteLLMClient(llm_config)
         
         messages = [
@@ -52,7 +49,7 @@ class TestLiteLLMClientIntegration:
         This test loads configuration from config/default.yaml and makes an actual API call.
         """
         # Load configuration from default.yaml
-        config = load_config("config/default.yaml")
+        config = get_config()
         
         # Create client with config from file
         client = LiteLLMClient(config.llm)

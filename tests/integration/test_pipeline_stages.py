@@ -28,12 +28,12 @@ from src.domain.models import Article, Event, Question
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_article_collection_stage():
+async def test_article_collection_stage(test_db_path):
     """Test ArticleCollectionStage in isolation."""
     print("\n" + "=" * 80)
     print("Test 1: Article Collection Stage")
     print("=" * 80)
-    
+
     # Setup configuration
     sources = [
         ArticleSource(
@@ -42,7 +42,7 @@ async def test_article_collection_stage():
             scraper_type="web"
         )
     ]
-    
+
     config = ArticleCollectionConfig(
         sources=sources,
         start_date=datetime.now(timezone.utc) - timedelta(days=7),
@@ -50,9 +50,9 @@ async def test_article_collection_stage():
         max_articles_per_source=2,
         domains=["technology"]
     )
-    
-    # Create and run stage
-    stage = ArticleCollectionStage(config, db_path="test_worldreasoner.db")
+
+    # Create and run stage (using tmp_path fixture)
+    stage = ArticleCollectionStage(config, db_path=test_db_path)
     
     print("\n1. Processing article sources...")
     result = await stage.execute(sources)
@@ -91,12 +91,12 @@ async def test_article_collection_stage():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_event_identification_stage():
+async def test_event_identification_stage(test_db_path):
     """Test EventIdentificationStage in isolation."""
     print("\n" + "=" * 80)
     print("Test 2: Event Identification Stage")
     print("=" * 80)
-    
+
     # First collect articles
     print("\n1. Collecting sample articles...")
     article_sources = [
@@ -106,7 +106,7 @@ async def test_event_identification_stage():
             scraper_type="web"
         )
     ]
-    
+
     article_config = ArticleCollectionConfig(
         sources=article_sources,
         start_date=datetime.now(timezone.utc) - timedelta(days=7),
@@ -114,23 +114,23 @@ async def test_event_identification_stage():
         max_articles_per_source=3,
         domains=["technology"]
     )
-    
-    article_stage = ArticleCollectionStage(article_config, db_path="test_worldreasoner.db")
+
+    article_stage = ArticleCollectionStage(article_config, db_path=test_db_path)
     articles = await article_stage.process(article_sources)
     print(f"   - Collected {len(articles)} articles")
-    
+
     if len(articles) == 0:
         print("   [SKIP] No articles collected, skipping event identification")
         return []
-    
+
     # Setup event identification
     event_config = EventIdentificationConfig(
         min_articles_per_event=1,
         confidence_threshold=0.7
     )
-    
-    # Create and run stage
-    stage = EventIdentificationStage(event_config, db_path="test_worldreasoner.db")
+
+    # Create and run stage (using same tmp_path)
+    stage = EventIdentificationStage(event_config, db_path=test_db_path)
     
     print("\n2. Identifying events from articles...")
     result = await stage.execute(articles)
@@ -176,12 +176,12 @@ async def test_event_identification_stage():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_question_generation_stage():
+async def test_question_generation_stage(test_db_path):
     """Test QuestionGenerationStage in isolation."""
     print("\n" + "=" * 80)
     print("Test 3: Question Generation Stage")
     print("=" * 80)
-    
+
     # First collect articles and identify events
     print("\n1. Setting up prerequisites (articles + events)...")
     article_sources = [
@@ -191,7 +191,7 @@ async def test_question_generation_stage():
             scraper_type="web"
         )
     ]
-    
+
     article_config = ArticleCollectionConfig(
         sources=article_sources,
         start_date=datetime.now(timezone.utc) - timedelta(days=7),
@@ -199,21 +199,21 @@ async def test_question_generation_stage():
         max_articles_per_source=3,
         domains=["technology"]
     )
-    
-    article_stage = ArticleCollectionStage(article_config, db_path="test_worldreasoner.db")
+
+    article_stage = ArticleCollectionStage(article_config, db_path=test_db_path)
     articles = await article_stage.process(article_sources)
     print(f"   - Collected {len(articles)} articles")
-    
+
     if len(articles) == 0:
         print("   [SKIP] No articles collected, skipping question generation")
         return []
-    
+
     event_config = EventIdentificationConfig(
         min_articles_per_event=1,
         confidence_threshold=0.7
     )
-    
-    event_stage = EventIdentificationStage(event_config, db_path="test_worldreasoner.db")
+
+    event_stage = EventIdentificationStage(event_config, db_path=test_db_path)
     events = await event_stage.process(articles)
     print(f"   - Identified {len(events)} events")
     
@@ -286,16 +286,16 @@ async def test_question_generation_stage():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pipeline_stages_integration():
+async def test_pipeline_stages_integration(test_db_path):
     """Test all three stages working together in sequence."""
     print("\n" + "=" * 80)
     print("Test 4: Full Pipeline Integration (All Stages)")
     print("=" * 80)
-    
+
     # Reset config
     reset_config()
     config = get_config()
-    
+
     # Stage 1: Article Collection
     print("\n1. STAGE 1: Article Collection")
     print("-" * 80)
@@ -306,7 +306,7 @@ async def test_pipeline_stages_integration():
             scraper_type="web"
         )
     ]
-    
+
     article_config = ArticleCollectionConfig(
         sources=article_sources,
         start_date=datetime.now(timezone.utc) - timedelta(days=7),
@@ -314,12 +314,12 @@ async def test_pipeline_stages_integration():
         max_articles_per_source=2,
         domains=["technology"]
     )
-    
-    article_stage = ArticleCollectionStage(article_config, db_path="test_worldreasoner.db")
+
+    article_stage = ArticleCollectionStage(article_config, db_path=test_db_path)
     articles = await article_stage.process(article_sources)
     print(f"   [OK] Collected {len(articles)} articles")
     assert len(articles) > 0, "Should collect articles"
-    
+
     # Stage 2: Event Identification
     print("\n2. STAGE 2: Event Identification")
     print("-" * 80)
@@ -327,8 +327,8 @@ async def test_pipeline_stages_integration():
         min_articles_per_event=1,
         confidence_threshold=0.7
     )
-    
-    event_stage = EventIdentificationStage(event_config, db_path="test_worldreasoner.db")
+
+    event_stage = EventIdentificationStage(event_config, db_path=test_db_path)
     events = await event_stage.process(articles)
     print(f"   [OK] Identified {len(events)} events")
     
