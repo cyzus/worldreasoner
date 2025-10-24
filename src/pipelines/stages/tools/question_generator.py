@@ -125,8 +125,9 @@ class QuestionGeneratorTool(Tool):
         if related_event_ids:
             event_ids = [eid.strip() for eid in related_event_ids.split(',')]
         
-        # Generate unique question ID (use count of generated_questions as counter)
-        question_id = self._generate_question_id(domain, res_date, len(self.generated_questions))
+        # Generate unique question ID (use collector count as counter if available, otherwise generated_questions)
+        counter = len(self.collector) if self.collector is not None else len(self.generated_questions)
+        question_id = self._generate_question_id(domain, res_date, counter)
         
         # Determine time horizon based on resolution date
         # Use current time as reference if cutoff_date not provided

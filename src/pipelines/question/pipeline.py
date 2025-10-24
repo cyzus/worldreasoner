@@ -82,6 +82,7 @@ class QuestionPipeline(Pipeline):
         # Configure database persistence
         persist_config = DatabasePersistenceConfig(
             batch_size=database_config.batch_size,
+            db_path=database_config.db_path,
         )
         
         # Build pipeline stages (use same db path for all stages)
