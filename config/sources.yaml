@@ -29,52 +29,52 @@ sources:
     rate_limit_per_second: 1.0
 
 
-  # Climate RSS Feeds
-  - name: "Climate Home News"
-    url: "https://www.climatechangenews.com/feed/"
-    scraper_type: "rss"
-    domain: "climate"
-    rate_limit_per_second: 1.0
+  # # Climate RSS Feeds
+  # - name: "Climate Home News"
+  #   url: "https://www.climatechangenews.com/feed/"
+  #   scraper_type: "rss"
+  #   domain: "climate"
+  #   rate_limit_per_second: 1.0
   
-  - name: "Inside Climate News"
-    url: "https://insideclimatenews.org/feed/"
-    scraper_type: "rss"
-    domain: "climate"
-    rate_limit_per_second: 1.0
+  # - name: "Inside Climate News"
+  #   url: "https://insideclimatenews.org/feed/"
+  #   scraper_type: "rss"
+  #   domain: "climate"
+  #   rate_limit_per_second: 1.0
   
-  # Politics RSS Feeds  
-  - name: "The Hill"
-    url: "https://thehill.com/feed/"
-    scraper_type: "rss"
-    domain: "politics"
-    rate_limit_per_second: 1.0
+  # # Politics RSS Feeds  
+  # - name: "The Hill"
+  #   url: "https://thehill.com/feed/"
+  #   scraper_type: "rss"
+  #   domain: "politics"
+  #   rate_limit_per_second: 1.0
   
-  # Health RSS Feeds  
-  - name: "STAT News"
-    url: "https://www.statnews.com/feed/"
-    scraper_type: "rss"
-    domain: "health"
-    rate_limit_per_second: 1.0
+  # # Health RSS Feeds  
+  # - name: "STAT News"
+  #   url: "https://www.statnews.com/feed/"
+  #   scraper_type: "rss"
+  #   domain: "health"
+  #   rate_limit_per_second: 1.0
   
-  # General News RSS Feeds
-  - name: "BBC News"
-    url: "http://feeds.bbci.co.uk/news/rss.xml"
-    scraper_type: "rss"
-    domain: "general"
-    rate_limit_per_second: 1.0  
+  # # General News RSS Feeds
+  # - name: "BBC News"
+  #   url: "http://feeds.bbci.co.uk/news/rss.xml"
+  #   scraper_type: "rss"
+  #   domain: "general"
+  #   rate_limit_per_second: 1.0  
 
-  # Web scraping sources (for agent-based collection)
-  - name: "Nature News"
-    url: "https://www.nature.com/latest-news"
-    scraper_type: "web"
-    domain: "general"
-    rate_limit_per_second: 0.5
+  # # Web scraping sources (for agent-based collection)
+  # - name: "Nature News"
+  #   url: "https://www.nature.com/latest-news"
+  #   scraper_type: "web"
+  #   domain: "general"
+  #   rate_limit_per_second: 0.5
   
-  - name: "Science Magazine"
-    url: "https://www.science.org/news"
-    scraper_type: "web"
-    domain: "general"
-    rate_limit_per_second: 0.5
+  # - name: "Science Magazine"
+  #   url: "https://www.science.org/news"
+  #   scraper_type: "web"
+  #   domain: "general"
+  #   rate_limit_per_second: 0.5
 
 # Collection settings
 collection:
