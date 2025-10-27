@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from ..base import PipelineStage
 from src.config import DatabaseConfig
 from src.domain.models import Article, Event, Question, CausalHypothesis
+from src.utils.logging import logger
 
 if TYPE_CHECKING:
     from src.core.database import Database
@@ -99,10 +100,23 @@ class DatabasePersistenceStage(PipelineStage[Any, Any]):
         # Process in batches
         for i in range(0, len(articles), self.batch_size):
             batch = articles[i:i + self.batch_size]
+            # Debug: print IDs being saved for this batch
+            try:
+                ids = [a.id for a in batch]
+                logger.info(f"[DB] Saving article IDs (batch {i//self.batch_size + 1}): {ids}")
+            except Exception:
+                logger.info(f"[DB] Saving {len(batch)} articles (batch {i//self.batch_size + 1})")
+
             saved = self.db.save_articles(batch)
             total_saved += saved
-            
-            print(f"  [DB] Saved {saved}/{len(batch)} articles (batch {i//self.batch_size + 1})")
+
+            # Log results and a quick DB stat snapshot
+            logger.info(f"[DB] Saved {saved}/{len(batch)} articles (batch {i//self.batch_size + 1})")
+            try:
+                stats = self.db.get_stats()
+                logger.debug(f"[DB] Stats after articles batch: {stats}")
+            except Exception:
+                pass
         
         return total_saved
     
@@ -120,10 +134,22 @@ class DatabasePersistenceStage(PipelineStage[Any, Any]):
         # Process in batches
         for i in range(0, len(events), self.batch_size):
             batch = events[i:i + self.batch_size]
+            # Debug: print IDs being saved for this batch
+            try:
+                ids = [e.id for e in batch]
+                logger.info(f"[DB] Saving event IDs (batch {i//self.batch_size + 1}): {ids}")
+            except Exception:
+                logger.info(f"[DB] Saving {len(batch)} events (batch {i//self.batch_size + 1})")
+
             saved = self.db.save_events(batch)
             total_saved += saved
-            
-            print(f"  [DB] Saved {saved}/{len(batch)} events (batch {i//self.batch_size + 1})")
+
+            logger.info(f"[DB] Saved {saved}/{len(batch)} events (batch {i//self.batch_size + 1})")
+            try:
+                stats = self.db.get_stats()
+                logger.debug(f"[DB] Stats after events batch: {stats}")
+            except Exception:
+                pass
         
         return total_saved
     
@@ -141,10 +167,23 @@ class DatabasePersistenceStage(PipelineStage[Any, Any]):
         # Process in batches
         for i in range(0, len(questions), self.batch_size):
             batch = questions[i:i + self.batch_size]
+
+            # Debug: print IDs being saved for this batch so we can detect duplicates/overwrites
+            try:
+                ids = [q.id for q in batch]
+                logger.info(f"[DB] Saving question IDs (batch {i//self.batch_size + 1}): {ids}")
+            except Exception:
+                logger.info(f"[DB] Saving {len(batch)} questions (batch {i//self.batch_size + 1})")
+
             saved = self.db.save_questions(batch)
             total_saved += saved
 
-            print(f"  [DB] Saved {saved}/{len(batch)} questions (batch {i//self.batch_size + 1})")
+            logger.info(f"[DB] Saved {saved}/{len(batch)} questions (batch {i//self.batch_size + 1})")
+            try:
+                stats = self.db.get_stats()
+                logger.debug(f"[DB] Stats after questions batch: {stats}")
+            except Exception:
+                pass
 
         return total_saved
 

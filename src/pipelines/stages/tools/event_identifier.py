@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime, timezone
+import uuid
 from typing import List
 
 from smolagents import Tool
@@ -170,5 +171,6 @@ class EventIdentifierTool(Tool):
     def _generate_event_id(self, domain: str, event_date: datetime, counter: int) -> str:
         """Generate unique event ID."""
         date_str = event_date.strftime('%Y%m%d')
-        return f"evt_{domain}_{date_str}_{counter+1:03d}"
+        suffix = uuid.uuid4().hex[:8]
+        return f"evt_{domain}_{date_str}_{counter+1:03d}_{suffix}"
 

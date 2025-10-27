@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime, timedelta, timezone
+import uuid
 
 from smolagents import Tool
 from src.domain.models import Event, Question, QuestionType, TimeHorizon
@@ -223,5 +224,7 @@ class QuestionGeneratorTool(Tool):
     def _generate_question_id(self, domain: str, resolution_date: datetime, counter: int) -> str:
         """Generate unique question ID."""
         date_str = resolution_date.strftime('%Y%m%d')
-        return f"q_{domain}_{date_str}_{counter+1:03d}"
+        # Append a short UUID suffix to reduce chance of collisions/overwrites
+        suffix = uuid.uuid4().hex[:8]
+        return f"q_{domain}_{date_str}_{counter+1:03d}_{suffix}"
 

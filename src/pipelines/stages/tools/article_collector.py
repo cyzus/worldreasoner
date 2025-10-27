@@ -3,6 +3,7 @@
 import hashlib
 import json
 from datetime import datetime, timezone
+import uuid
 from typing import List, Optional
 from urllib.parse import urlparse
 
@@ -253,7 +254,8 @@ class ArticleCollectorTool(Tool):
     def _generate_article_id(self, domain: str, published_date: datetime, counter: int) -> str:
         """Generate unique article ID."""
         date_str = published_date.strftime('%Y%m%d')
-        return f"art_{domain}_{date_str}_{counter+1:03d}"
+        suffix = uuid.uuid4().hex[:8]
+        return f"art_{domain}_{date_str}_{counter+1:03d}_{suffix}"
     
     def _normalize_url(self, url: str) -> str:
         """Normalize URL for consistent duplicate detection.
