@@ -337,10 +337,10 @@ Consistency Checker → Domain Diversifier → Benchmark Dataset
 If you use WorldReasoner in your research, please cite:
 
 ```bibtex
-@software{worldreasoner2024,
+@software{worldreasoner2025,
   title = {WorldReasoner: A Temporal Forecast Benchmark for Large Language Models},
-  author = {[Authors]},
-  year = {2024},
+  author = {[Yizhou Chi]},
+  year = {2025},
   url = {https://github.com/cyzus/worldreasoner}
 }
 ```
