@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 
 from src.pipelines.base import PipelineStage
-from src.domain.models import Question, Article, CausalHypothesis
+from src.domain.models import Question, Article, CausalHypothesis, Event
 from src.agents.factory import AgentFactory
 from src.pipelines.stages.tools import ArticleRetrievalTool, CausalReasonerTool
 from src.pipelines.stages.collectors import ResultCollector
@@ -140,6 +140,9 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
         # Clear collector before starting
         initial_count = len(self.collector.get_all())
 
+        # Load related events from database to provide valid event IDs
+        related_events = self._load_related_events(question)
+
         # Generate hindsight analysis instruction
         current_date = datetime.now(timezone.utc)
         instruction = self.prompts.get_hindsight_analysis_instruction(
@@ -148,6 +151,7 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
             evidence_articles=evidence_articles,
             min_confidence=self.config.min_confidence,
             min_strength=self.config.min_strength,
+            related_events=related_events,
         )
 
         logger.debug(f"Running causal analysis agent for {question.id}")
@@ -259,3 +263,35 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
         unique.sort(key=lambda h: h.confidence, reverse=True)
 
         return unique
+
+    def _load_related_events(self, question: Question) -> List[Event]:
+        """Load events that could be potential causal sources.
+
+        Args:
+            question: The question being analyzed
+
+        Returns:
+            List of related events
+        """
+        try:
+            # Get all events in the same domain
+            filters = {}
+            if question.domain:
+                filters['domain'] = question.domain
+
+            events = self.db.get_many(Event, filters=filters)
+
+            # Filter to events before or concurrent with the question's resolution
+            if question.resolution_date:
+                events = [
+                    e for e in events
+                    if e.occurred_date and e.occurred_date <= question.resolution_date
+                ]
+
+            # Limit to most recent 20 events to avoid overwhelming the LLM
+            events.sort(key=lambda e: e.occurred_date or e.predicted_date, reverse=True)
+            return events[:20]
+
+        except Exception as e:
+            logger.warning(f"Failed to load related events: {e}")
+            return []

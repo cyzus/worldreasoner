@@ -41,6 +41,13 @@ to identify which factors actually led to this result.
 
 {evidence_articles_text}
 
+========== AVAILABLE EVENT IDS (Use as SOURCE events) ==========
+{related_events_text}
+
+IMPORTANT: You MUST use event IDs from the list above as source events.
+Do NOT invent new event IDs. If no events from the list are related,
+that's OK - you can return zero causal links.
+
 AVAILABLE TOOLS:
 1. article_retrieval - Query database for additional articles (before or after outcome)
 2. causal_reasoner - Record each causal relationship you identify
@@ -51,7 +58,7 @@ AVAILABLE TOOLS:
    - Consider direct causes vs enabling factors vs correlations
 
 2. FOR EACH CAUSAL LINK:
-   - Source event: What caused the outcome?
+   - Source event: MUST be an event ID from the list above
    - Target event: {target_event_id} (the outcome itself)
    - Relation type: causes | enables | prevents | correlates | conditional
    - Strength: How strong was the causal effect? (0.0-1.0)
@@ -68,6 +75,7 @@ AVAILABLE TOOLS:
    - Only propose links with strength >= {min_strength}
    - Must cite at least one evidence article
    - Explain the mechanism, don't just assert causation
+   - ONLY use event IDs from the provided list as sources
 
 ========== IMPORTANT GUIDELINES ==========
 - Focus on what ACTUALLY happened (not predictions or speculation)
@@ -78,11 +86,13 @@ AVAILABLE TOOLS:
   * Correlations: A and B related but not causal
 - Multiple causes are expected - identify all significant ones
 - Call causal_reasoner once per causal link
+- Do NOT invent event IDs - only use those from the list
 
 Return a summary when finished identifying all causal relationships.""",
         required_vars=[
             "question_id", "question_text", "ground_truth", "resolution_date",
-            "target_event_id", "evidence_articles_text", "min_confidence", "min_strength"
+            "target_event_id", "evidence_articles_text", "related_events_text",
+            "min_confidence", "min_strength"
         ]
     )
 
@@ -182,6 +192,7 @@ Return a summary when you've collected enough evidence articles.""",
         min_confidence: float = 0.6,
         min_strength: float = 0.3,
         content_preview_length: int = 200,
+        related_events: List = None,
     ) -> str:
         """Generate instruction for hindsight causal analysis.
 
@@ -192,6 +203,7 @@ Return a summary when you've collected enough evidence articles.""",
             min_confidence: Minimum confidence threshold
             min_strength: Minimum strength threshold
             content_preview_length: Length of content preview
+            related_events: List of Event objects that could be sources
 
         Returns:
             Formatted instruction string
@@ -206,6 +218,20 @@ Return a summary when you've collected enough evidence articles.""",
             content_preview_length=content_preview_length
         )
 
+        # Format related events
+        if related_events:
+            events_list = []
+            for idx, event in enumerate(related_events, 1):
+                event_str = f"{idx}. {event.id}"
+                if event.title:
+                    event_str += f" - {event.title}"
+                if event.occurred_date:
+                    event_str += f" ({self.format_datetime(event.occurred_date)})"
+                events_list.append(event_str)
+            related_events_text = "\n".join(events_list)
+        else:
+            related_events_text = "(No related events found in database)"
+
         return self.HINDSIGHT_ANALYSIS_TEMPLATE.format(
             question_id=question.id,
             question_text=question.question_text,
@@ -213,6 +239,7 @@ Return a summary when you've collected enough evidence articles.""",
             resolution_date=resolution_str,
             target_event_id=question.target_event_id,
             evidence_articles_text=evidence_text,
+            related_events_text=related_events_text,
             min_confidence=min_confidence,
             min_strength=min_strength,
         )
