@@ -176,3 +176,7 @@ class EvidencePipelineConfig(BaseModel):
         default=True,
         description="Skip questions that already have causal hypotheses (set False to force re-process)"
     )
+    domain_filter: Optional[str] = Field(
+        default=None,
+        description="Filter to specific domain (e.g., 'tech', 'finance')"
+    )
