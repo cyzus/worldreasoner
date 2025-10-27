@@ -506,12 +506,13 @@ class Database:
     def _init_schema(self):
         """Initialize database schema for all registered models."""
         # Import models to ensure they're registered
-        from ..domain.models import Article, Event, Question
-        
+        from ..domain.models import Article, Event, Question, CausalHypothesis
+
         # Create tables for all registered models
         self.db.create_table(Article)
         self.db.create_table(Event)
         self.db.create_table(Question)
+        self.db.create_table(CausalHypothesis)
     
     # Article operations
     def save_article(self, article) -> bool:
@@ -592,14 +593,43 @@ class Database:
         if domain:
             filters['domain'] = domain
         return self.db.get_many(Question, ids=question_ids, filters=filters)
-    
+
+    # CausalHypothesis operations
+    def save_causal_hypothesis(self, hypothesis) -> bool:
+        """Save or update a causal hypothesis."""
+        from ..domain.models import CausalHypothesis
+        return self.db.save(CausalHypothesis, hypothesis)
+
+    def save_causal_hypotheses(self, hypotheses: List) -> int:
+        """Save multiple causal hypotheses."""
+        from ..domain.models import CausalHypothesis
+        return self.db.save_many(CausalHypothesis, hypotheses)
+
+    def get_causal_hypothesis(self, hypothesis_id: str):
+        """Get causal hypothesis by ID."""
+        from ..domain.models import CausalHypothesis
+        return self.db.get(CausalHypothesis, hypothesis_id)
+
+    def get_causal_hypotheses(
+        self,
+        hypothesis_ids: Optional[List[str]] = None,
+        question_id: Optional[str] = None
+    ) -> List:
+        """Get multiple causal hypotheses with optional filters."""
+        from ..domain.models import CausalHypothesis
+        filters = {}
+        if question_id:
+            filters['question_id'] = question_id
+        return self.db.get_many(CausalHypothesis, ids=hypothesis_ids, filters=filters)
+
     # Utility operations
     def clear_all(self):
         """Clear all data (for testing)."""
-        from ..domain.models import Article, Event, Question
+        from ..domain.models import Article, Event, Question, CausalHypothesis
         self.db.clear_all(Article)
         self.db.clear_all(Event)
         self.db.clear_all(Question)
+        self.db.clear_all(CausalHypothesis)
     
     def get_stats(self) -> Dict[str, int]:
         """Get database statistics."""

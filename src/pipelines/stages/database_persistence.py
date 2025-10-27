@@ -9,7 +9,8 @@ from pydantic import BaseModel
 
 from ..base import PipelineStage
 from src.config import DatabaseConfig
-from src.domain.models import Article, Event, Question
+from src.domain.models import Article, Event, Question, CausalHypothesis
+from src.utils.logging import logger
 
 if TYPE_CHECKING:
     from src.core.database import Database
@@ -24,22 +25,22 @@ class DatabasePersistenceConfig(BaseModel):
 
 class DatabasePersistenceStage(PipelineStage[Any, Any]):
     """Persists data to database.
-    
+
     Used in both pipelines to save results to SQLite database.
-    Handles articles, events, and questions based on entity_type.
+    Handles articles, events, questions, and causal hypotheses based on entity_type.
     """
-    
+
     def __init__(
-        self, 
+        self,
         persistence_config: DatabasePersistenceConfig,
-        entity_type: str,  # "article", "event", "question"
+        entity_type: str,  # "article", "event", "question", "causal_hypothesis"
         db: "Database" = None  # Optional: pass existing Database instance
     ):
         """Initialize persistence stage.
-        
+
         Args:
             persistence_config: Configuration for persistence behavior
-            entity_type: Type of entities to persist ("article", "event", "question")
+            entity_type: Type of entities to persist ("article", "event", "question", "causal_hypothesis")
             db: Optional Database instance (creates new one if not provided)
         """
         super().__init__(
@@ -58,16 +59,16 @@ class DatabasePersistenceStage(PipelineStage[Any, Any]):
     
     async def process(self, inputs: List[Any]) -> List[Any]:
         """Persist entities to database.
-        
+
         Args:
-            inputs: List of entities to persist (Article, Event, or Question objects)
-            
+            inputs: List of entities to persist (Article, Event, Question, or CausalHypothesis objects)
+
         Returns:
             Same entities (unchanged, as IDs are already set)
         """
         if not inputs:
             return inputs
-        
+
         # Dispatch to appropriate save method based on entity type
         if self.entity_type == "article":
             self._save_articles(inputs)
@@ -75,12 +76,14 @@ class DatabasePersistenceStage(PipelineStage[Any, Any]):
             self._save_events(inputs)
         elif self.entity_type == "question":
             self._save_questions(inputs)
+        elif self.entity_type == "causal_hypothesis":
+            self._save_causal_hypotheses(inputs)
         else:
             raise ValueError(
                 f"Unknown entity_type '{self.entity_type}'. "
-                f"Must be 'article', 'event', or 'question'"
+                f"Must be 'article', 'event', 'question', or 'causal_hypothesis'"
             )
-        
+
         return inputs
     
     def _save_articles(self, articles: List[Article]) -> int:
@@ -97,10 +100,23 @@ class DatabasePersistenceStage(PipelineStage[Any, Any]):
         # Process in batches
         for i in range(0, len(articles), self.batch_size):
             batch = articles[i:i + self.batch_size]
+            # Debug: print IDs being saved for this batch
+            try:
+                ids = [a.id for a in batch]
+                logger.info(f"[DB] Saving article IDs (batch {i//self.batch_size + 1}): {ids}")
+            except Exception:
+                logger.info(f"[DB] Saving {len(batch)} articles (batch {i//self.batch_size + 1})")
+
             saved = self.db.save_articles(batch)
             total_saved += saved
-            
-            print(f"  [DB] Saved {saved}/{len(batch)} articles (batch {i//self.batch_size + 1})")
+
+            # Log results and a quick DB stat snapshot
+            logger.info(f"[DB] Saved {saved}/{len(batch)} articles (batch {i//self.batch_size + 1})")
+            try:
+                stats = self.db.get_stats()
+                logger.debug(f"[DB] Stats after articles batch: {stats}")
+            except Exception:
+                pass
         
         return total_saved
     
@@ -118,30 +134,76 @@ class DatabasePersistenceStage(PipelineStage[Any, Any]):
         # Process in batches
         for i in range(0, len(events), self.batch_size):
             batch = events[i:i + self.batch_size]
+            # Debug: print IDs being saved for this batch
+            try:
+                ids = [e.id for e in batch]
+                logger.info(f"[DB] Saving event IDs (batch {i//self.batch_size + 1}): {ids}")
+            except Exception:
+                logger.info(f"[DB] Saving {len(batch)} events (batch {i//self.batch_size + 1})")
+
             saved = self.db.save_events(batch)
             total_saved += saved
-            
-            print(f"  [DB] Saved {saved}/{len(batch)} events (batch {i//self.batch_size + 1})")
+
+            logger.info(f"[DB] Saved {saved}/{len(batch)} events (batch {i//self.batch_size + 1})")
+            try:
+                stats = self.db.get_stats()
+                logger.debug(f"[DB] Stats after events batch: {stats}")
+            except Exception:
+                pass
         
         return total_saved
     
     def _save_questions(self, questions: List[Question]) -> int:
         """Save questions to database in batches.
-        
+
         Args:
             questions: List of Question objects
-            
+
         Returns:
             Number of questions saved
         """
         total_saved = 0
-        
+
         # Process in batches
         for i in range(0, len(questions), self.batch_size):
             batch = questions[i:i + self.batch_size]
+
+            # Debug: print IDs being saved for this batch so we can detect duplicates/overwrites
+            try:
+                ids = [q.id for q in batch]
+                logger.info(f"[DB] Saving question IDs (batch {i//self.batch_size + 1}): {ids}")
+            except Exception:
+                logger.info(f"[DB] Saving {len(batch)} questions (batch {i//self.batch_size + 1})")
+
             saved = self.db.save_questions(batch)
             total_saved += saved
-            
-            print(f"  [DB] Saved {saved}/{len(batch)} questions (batch {i//self.batch_size + 1})")
-        
+
+            logger.info(f"[DB] Saved {saved}/{len(batch)} questions (batch {i//self.batch_size + 1})")
+            try:
+                stats = self.db.get_stats()
+                logger.debug(f"[DB] Stats after questions batch: {stats}")
+            except Exception:
+                pass
+
+        return total_saved
+
+    def _save_causal_hypotheses(self, hypotheses: List[CausalHypothesis]) -> int:
+        """Save causal hypotheses to database in batches.
+
+        Args:
+            hypotheses: List of CausalHypothesis objects
+
+        Returns:
+            Number of hypotheses saved
+        """
+        total_saved = 0
+
+        # Process in batches
+        for i in range(0, len(hypotheses), self.batch_size):
+            batch = hypotheses[i:i + self.batch_size]
+            saved = self.db.save_causal_hypotheses(batch)
+            total_saved += saved
+
+            print(f"  [DB] Saved {saved}/{len(batch)} causal hypotheses (batch {i//self.batch_size + 1})")
+
         return total_saved

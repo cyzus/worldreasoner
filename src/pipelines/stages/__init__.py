@@ -12,6 +12,20 @@ from .event_identification import (
 )
 from .question_generation import QuestionGenerationStage
 
+# Evidence Pipeline Stages
+from .evidence_collection import (
+    HindsightEvidenceCollectionStage,
+    EvidenceCollectionConfig,
+)
+from .causal_reasoning import (
+    CausalReasoningStage,
+    CausalReasoningConfig,
+)
+from .graph_building import (
+    CausalGraphBuildingStage,
+    CausalGraphConfig,
+)
+
 # Shared Stages
 from .database_persistence import (
     DatabasePersistenceConfig,
@@ -27,6 +41,13 @@ __all__ = [
     "EventIdentificationConfig",
     "EventIdentificationStage",
     "QuestionGenerationStage",
+    # Evidence Pipeline Stages
+    "HindsightEvidenceCollectionStage",
+    "EvidenceCollectionConfig",
+    "CausalReasoningStage",
+    "CausalReasoningConfig",
+    "CausalGraphBuildingStage",
+    "CausalGraphConfig",
     # Shared Stages
     "DatabasePersistenceConfig",
     "DatabasePersistenceStage",
