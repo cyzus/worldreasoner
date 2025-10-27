@@ -74,6 +74,12 @@ def parse_args():
         help='Days before resolution to collect evidence (default: 30)'
     )
     parser.add_argument(
+        '--min-resolution-age',
+        type=int,
+        default=0,
+        help='Minimum days since resolution required to process (default: 1)'
+    )
+    parser.add_argument(
         '--min-articles',
         type=int,
         default=5,
@@ -148,8 +154,9 @@ async def run_pipeline(args):
         max_links_per_event=10,
 
         # Question filtering
-        min_resolution_age_days=1,
         max_resolution_age_days=365,
+        # Allow override from CLI
+        min_resolution_age_days=args.min_resolution_age,
         max_questions=max_questions,
         skip_already_processed=not args.force_reprocess,
         domain_filter=args.domain,

@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime, timezone
+import uuid
 from typing import Optional
 
 from smolagents import Tool
@@ -181,4 +182,5 @@ class CausalReasonerTool(Tool):
         """
         self._counter += 1
         timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
-        return f"hyp_{question_id}_{timestamp}_{self._counter:03d}"
+        suffix = uuid.uuid4().hex[:8]
+        return f"hyp_{question_id}_{timestamp}_{self._counter:03d}_{suffix}"

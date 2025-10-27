@@ -105,6 +105,7 @@ Question: {question_text}
 Actual Outcome: {ground_truth}
 Resolution Date: {resolution_date}
 Domain: {domain}
+Evidence window: {start_date} to {end_date} (all dates BEFORE the resolution date)
 
 ========== YOUR TASK ==========
 Collect articles published BEFORE {resolution_date} that discussed:
@@ -135,7 +136,7 @@ FOCUS ON:
 
 Return a summary when you've collected enough evidence articles.""",
         required_vars=[
-            "question_text", "ground_truth", "resolution_date", "domain", "min_articles"
+            "question_text", "ground_truth", "resolution_date", "domain", "min_articles", "start_date", "end_date"
         ]
     )
 
@@ -249,6 +250,9 @@ Return a summary when you've collected enough evidence articles.""",
         current_date: datetime,
         question: Question,
         min_articles: int = 5,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+        evidence_window_days: int = None,
     ) -> str:
         """Generate instruction for collecting hindsight evidence.
 
@@ -263,12 +267,18 @@ Return a summary when you've collected enough evidence articles.""",
         date_str = self.format_datetime(current_date)
         resolution_str = self.format_datetime(question.resolution_date) if question.resolution_date else "N/A"
 
+        # If datetime start/end were provided, format them; otherwise use placeholder
+        start_date_str = self.format_datetime(start_date) if start_date is not None else "(unspecified)"
+        end_date_str = self.format_datetime(end_date) if end_date is not None else "(unspecified)"
+
         return self.EVIDENCE_COLLECTION_TEMPLATE.format(
             question_text=question.question_text,
             ground_truth=str(question.ground_truth),
             resolution_date=resolution_str,
             domain=question.domain,
             min_articles=min_articles,
+            start_date=start_date_str,
+            end_date=end_date_str,
         )
 
     def get_instruction(self, **kwargs) -> str:

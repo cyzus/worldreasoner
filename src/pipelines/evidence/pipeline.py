@@ -65,6 +65,7 @@ class EvidencePipeline(Pipeline):
             evidence_window_days=evidence_config.evidence_window_days,
             min_evidence_articles=evidence_config.min_evidence_articles,
             include_expert_analysis=evidence_config.include_expert_analysis,
+            min_resolution_age_days=evidence_config.min_resolution_age_days,
         )
         self.evidence_stage = HindsightEvidenceCollectionStage(
             evidence_collection_config,

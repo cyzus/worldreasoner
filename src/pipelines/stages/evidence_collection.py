@@ -1,8 +1,8 @@
 """Hindsight evidence collection stage for Evidence Pipeline."""
 
-from typing import List
+from typing import List, Optional
 from datetime import datetime, timedelta, timezone
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from src.pipelines.base import PipelineStage
 from src.domain.models import Question, Article
@@ -18,7 +18,17 @@ class EvidenceCollectionConfig(BaseModel):
 
     evidence_window_days: int = Field(
         default=30,
+        ge=1,
         description="Days before resolution to collect evidence (causal factors)"
+    )
+    # Optional explicit window bounds (if provided they take precedence)
+    evidence_start_date: Optional[datetime] = Field(
+        default=None,
+        description="Optional explicit start date for evidence collection (ISO datetime). If set, overrides default start calculation."
+    )
+    evidence_end_date: Optional[datetime] = Field(
+        default=None,
+        description="Optional explicit end date for evidence collection (ISO datetime). If set, overrides default end calculation."
     )
     min_evidence_articles: int = Field(
         default=5,
@@ -28,6 +38,25 @@ class EvidenceCollectionConfig(BaseModel):
         default=True,
         description="Prioritize analysis articles discussing causal factors"
     )
+    # Minimum days since resolution to allow evidence collection for a question
+    min_resolution_age_days: int = Field(
+        default=1,
+        ge=0,
+        description="Minimum days since resolution required to collect evidence for a question (0 = allow same-day)"
+    )
+
+    @model_validator(mode='after')
+    def check_start_end(self):
+        """Validate that evidence_end_date is not before evidence_start_date at config time.
+
+        This is a config-level validation: it cannot know per-question resolution dates,
+        but it ensures the configured explicit window bounds are consistent.
+        """
+        start = self.evidence_start_date
+        end = self.evidence_end_date
+        if start is not None and end is not None and end < start:
+            raise ValueError('evidence_end_date must be the same or after evidence_start_date')
+        return self
 
 
 class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
@@ -99,8 +128,10 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
 
             # Check if resolution is too recent (allow time for analysis to be published)
             days_since_resolution = (datetime.now(timezone.utc) - question.resolution_date).days
-            if days_since_resolution < 1:
-                logger.info(f"Question {question.id} resolved too recently ({days_since_resolution} days), skipping")
+            if days_since_resolution < self.config.min_resolution_age_days:
+                logger.info(
+                    f"Question {question.id} resolved too recently ({days_since_resolution} days), skipping (min required: {self.config.min_resolution_age_days}d)"
+                )
                 continue
 
             # Collect evidence for this question
@@ -127,29 +158,21 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
         # Clear collector before starting
         initial_count = len(self.collector.get_all())
 
-        # Generate evidence collection instruction
+        # Generate evidence collection instruction including temporal guidance
         current_date = datetime.now(timezone.utc)
-        instruction = self.prompts.get_evidence_collection_instruction(
+
+        # Compute evidence window using helper (keeps logic testable)
+        start_date, end_date = self._compute_evidence_window(question)
+
+        # Let the prompt generator include the temporal guidance (centralized in prompts)
+        full_instruction = self.prompts.get_evidence_collection_instruction(
             current_date=current_date,
             question=question,
             min_articles=self.config.min_evidence_articles,
+            start_date=start_date,
+            end_date=end_date,
+            evidence_window_days=self.config.evidence_window_days,
         )
-
-        # Add temporal context to instruction
-        resolution_date_str = question.resolution_date.strftime('%Y-%m-%d')
-        start_date = question.resolution_date - timedelta(days=self.config.evidence_window_days)
-        start_date_str = start_date.strftime('%Y-%m-%d')
-
-        temporal_guidance = f"""
-TEMPORAL CONSTRAINTS:
-- Resolution date (when outcome occurred): {resolution_date_str}
-- Evidence window: {start_date_str} to {resolution_date_str}
-- Only collect articles published BEFORE {resolution_date_str}
-- Look for articles discussing factors/events that led up to the outcome
-- We have hindsight (know the outcome), but search for pre-event causal factors
-"""
-
-        full_instruction = instruction + "\n" + temporal_guidance
 
         logger.debug(f"Running evidence collection agent for {question.id}")
 
@@ -176,3 +199,51 @@ TEMPORAL CONSTRAINTS:
                 article.event_ids.append(question.target_event_id)
 
         return new_articles
+
+    def _compute_evidence_window(self, question: Question):
+        """Compute (start_date, end_date) for evidence collection based on config and question.
+
+        Rules:
+        - If config provides both explicit start/end, use them (config-level validation ensures end >= start).
+        - If config provides start only, compute end = start + (evidence_window_days - 1), capped at resolution-1.
+        - If no explicit start, anchor end = resolution - 1 and start = resolution - evidence_window_days.
+        - After computing, clamp end to resolution-1 if it is on/after resolution, and ensure end >= start.
+        """
+        # Read optional start/end from config (prefer datetimes; pydantic will parse ISO strings)
+        start_dt = self.config.evidence_start_date
+        end_dt = self.config.evidence_end_date
+
+        # Resolution-based candidate end (must be at least one day prior to resolution)
+        resolution_minus_one = question.resolution_date - timedelta(days=1)
+
+        if start_dt and end_dt:
+            start_date = start_dt
+            end_date = end_dt
+        elif start_dt and not end_dt:
+            start_date = start_dt
+            end_date = start_dt + timedelta(days=self.config.evidence_window_days - 1)
+            if end_date > resolution_minus_one:
+                logger.debug(
+                    f"Computed end_date {end_date.isoformat()} exceeds resolution-1 {resolution_minus_one.isoformat()} for question {question.id}; capping to resolution-1"
+                )
+                end_date = resolution_minus_one
+        else:
+            # No explicit start provided in config: anchor to resolution
+            end_date = resolution_minus_one
+            start_date = question.resolution_date - timedelta(days=self.config.evidence_window_days)
+
+        # If end_date is on/after resolution_date, clamp to resolution_minus_one
+        if end_date >= question.resolution_date:
+            logger.warning(
+                f"Evidence end_date {end_date.isoformat()} is on/after resolution_date {question.resolution_date.isoformat()} for question {question.id}; clamping to resolution-1"
+            )
+            end_date = resolution_minus_one
+
+        # Ensure end_date is not before start_date
+        if end_date < start_date:
+            logger.warning(
+                f"Computed end_date {end_date.isoformat()} is before start_date {start_date.isoformat()} for question {question.id}; clamping end_date to start_date"
+            )
+            end_date = start_date
+
+        return start_date, end_date
