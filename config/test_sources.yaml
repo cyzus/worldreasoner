@@ -1,0 +1,36 @@
+# Article Sources Configuration
+# Defines RSS feeds and web sources for article collection
+
+sources:
+  # Technology RSS Feeds
+  - name: "TechCrunch"
+    url: "https://techcrunch.com/feed/"
+    scraper_type: "rss"
+    domain: "tech"
+    rate_limit_per_second: 1.0
+  
+  # General News RSS Feeds
+  - name: "BBC News"
+    url: "http://feeds.bbci.co.uk/news/rss.xml"
+    scraper_type: "rss"
+    domain: "general"
+    rate_limit_per_second: 1.0  
+
+
+# Collection settings
+collection:
+  # Number of days to look back for articles
+  days_back: 7
+  
+  # Maximum articles per source
+  max_articles_per_source: 10
+  
+  # Domain filters (empty = all domains)
+  domains: []
+  
+  # Rate limiting
+  global_rate_limit_per_second: 2.0
+  
+  # Retry settings
+  max_retries: 3
+  retry_delay_seconds: 2
