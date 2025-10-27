@@ -1,7 +1,7 @@
 """Article data model."""
 
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from pydantic import BaseModel, Field, ConfigDict
 from ...core.database import register_model
@@ -49,11 +49,17 @@ class Article(BaseModel):
         default_factory=list,
         description="IDs of events discussed or documented in this article"
     )
-    
+
     # Computed fields
     word_count: Optional[int] = Field(None, description="Number of words in content")
     reading_time_minutes: Optional[int] = Field(None, description="Estimated reading time")
-    
+
+    # Additional metadata
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional article-specific metadata (e.g., evidence_type, related_question_ids)"
+    )
+
     # Audit timestamps
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = None

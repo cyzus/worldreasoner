@@ -128,8 +128,53 @@ def test_article_json_serialization():
         domain="climate",
         tags=["environment", "policy"],
     )
-    
+
     json_str = article.model_dump_json()
     assert "test_010" in json_str
     assert "climate" in json_str
     assert "environment" in json_str
+
+
+def test_article_metadata():
+    """Test article metadata field."""
+    article = Article(
+        id="test_011",
+        title="Test Article Metadata",
+        content="This tests the metadata field functionality. " * 20,
+        source="Test Source",
+        published_date=datetime.now(),
+        domain="tech",
+    )
+
+    # Metadata should be empty dict by default
+    assert article.metadata == {}
+
+    # Can add metadata
+    article.metadata['evidence_type'] = 'hindsight'
+    article.metadata['related_question_ids'] = ['q_001', 'q_002']
+    article.metadata['custom_field'] = 'custom_value'
+
+    assert article.metadata['evidence_type'] == 'hindsight'
+    assert len(article.metadata['related_question_ids']) == 2
+    assert article.metadata['custom_field'] == 'custom_value'
+
+
+def test_article_metadata_at_creation():
+    """Test creating article with metadata."""
+    article = Article(
+        id="test_012",
+        title="Test Article with Initial Metadata",
+        content="This tests creating article with metadata at instantiation. " * 20,
+        source="Test Source",
+        published_date=datetime.now(),
+        domain="finance",
+        metadata={
+            "evidence_type": "hindsight",
+            "confidence": 0.8,
+            "source_pipeline": "evidence"
+        }
+    )
+
+    assert article.metadata['evidence_type'] == 'hindsight'
+    assert article.metadata['confidence'] == 0.8
+    assert article.metadata['source_pipeline'] == 'evidence'

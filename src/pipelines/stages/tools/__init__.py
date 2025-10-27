@@ -7,6 +7,7 @@ from .question_generator import QuestionGeneratorTool
 from .event_details import EventDetailsTool
 from .web_fetch import WebFetchTool
 from .rss_fetch import RssFetchTool
+from .causal_reasoner import CausalReasonerTool
 
 __all__ = [
     "ArticleCollectorTool",
@@ -16,4 +17,5 @@ __all__ = [
     "EventDetailsTool",
     "WebFetchTool",
     "RssFetchTool",
+    "CausalReasonerTool",
 ]

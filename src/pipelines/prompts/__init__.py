@@ -16,6 +16,7 @@ from .base import (
 from .article_collection import ArticleCollectionPrompts
 from .event_identification import EventIdentificationPrompts
 from .question_generation import QuestionGenerationPrompts
+from .hindsight_analysis import HindsightAnalysisPrompts
 
 __all__ = [
     # Base classes
@@ -26,4 +27,5 @@ __all__ = [
     "ArticleCollectionPrompts",
     "EventIdentificationPrompts",
     "QuestionGenerationPrompts",
+    "HindsightAnalysisPrompts",
 ]
