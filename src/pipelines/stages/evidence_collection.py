@@ -5,11 +5,11 @@ from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel, Field, model_validator
 
 from src.pipelines.base import PipelineStage
-from src.domain.models import Question, Article
+from src.domain.models import Question, Article, Event
 from src.agents.factory import AgentFactory
-from src.pipelines.stages.tools import ArticleCollectorTool
+from src.pipelines.stages.tools import ArticleCollectorTool, EventIdentifierTool
 from src.pipelines.stages.collectors import ResultCollector
-from src.pipelines.prompts import HindsightAnalysisPrompts
+from src.pipelines.prompts import HindsightAnalysisPrompts, EventIdentificationPrompts
 from src.utils.logging import logger
 
 
@@ -86,20 +86,32 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
         """
         super().__init__(name="HindsightEvidenceCollection", config=config)
 
+        self.db_path = db_path
+
         # Create result collector for evidence articles
-        self.collector = ResultCollector[Article]()
+        self.article_collector = ResultCollector[Article]()
 
         # Create ArticleCollectorTool with collector and database
         self.article_tool = ArticleCollectorTool(
             db_path=db_path,
-            collector=self.collector
+            collector=self.article_collector
         )
 
         # Create WebAgent with article collection tool
         self.web_agent = AgentFactory.create_web_agent(tools=[self.article_tool])
 
-        # Prompt generator
-        self.prompts = HindsightAnalysisPrompts()
+        # Create result collector for extracted events
+        self.event_collector = ResultCollector[Event]()
+
+        # Create EventIdentifierTool for LLM-based event extraction
+        self.event_tool = EventIdentifierTool(collector=self.event_collector)
+
+        # Create base agent for event extraction
+        self.event_agent = AgentFactory.create_base_agent(tools=[self.event_tool])
+
+        # Prompt generators
+        self.hindsight_prompts = HindsightAnalysisPrompts()
+        self.event_prompts = EventIdentificationPrompts()
 
     async def process(self, inputs: List[Question]) -> List[Article]:
         """Collect hindsight evidence for resolved questions.
@@ -156,7 +168,7 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
             List of evidence articles
         """
         # Clear collector before starting
-        initial_count = len(self.collector.get_all())
+        initial_count = len(self.article_collector.get_all())
 
         # Generate evidence collection instruction including temporal guidance
         current_date = datetime.now(timezone.utc)
@@ -165,7 +177,7 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
         start_date, end_date = self._compute_evidence_window(question)
 
         # Let the prompt generator include the temporal guidance (centralized in prompts)
-        full_instruction = self.prompts.get_evidence_collection_instruction(
+        full_instruction = self.hindsight_prompts.get_evidence_collection_instruction(
             current_date=current_date,
             question=question,
             min_articles=self.config.min_evidence_articles,
@@ -185,7 +197,7 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
             # Continue anyway - may have collected some articles
 
         # Get articles collected during this run
-        all_collected = self.collector.get_all()
+        all_collected = self.article_collector.get_all()
         new_articles = all_collected[initial_count:]  # Only articles added during this run
 
         # Tag articles with evidence metadata
@@ -197,6 +209,10 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
             # Link to target event if possible
             if question.target_event_id and question.target_event_id not in article.event_ids:
                 article.event_ids.append(question.target_event_id)
+
+        # Extract intermediate events from articles using LLM
+        await self._extract_events_from_articles(new_articles, question)
+        logger.info(f"Extracted intermediate events from {len(new_articles)} articles for {question.id}")
 
         return new_articles
 
@@ -247,3 +263,65 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
             end_date = start_date
 
         return start_date, end_date
+
+    async def _extract_events_from_articles(self, articles: List[Article], question: Question) -> None:
+        """Extract intermediate events from articles using LLM agent.
+
+        The agent analyzes articles and uses the event_identifier tool to extract
+        significant events that could serve as causal sources.
+
+        Args:
+            articles: Evidence articles to extract events from
+            question: The question context (for domain and metadata)
+        """
+        if not articles:
+            return
+
+        # Track initial event count
+        initial_event_count = len(self.event_collector.get_all())
+
+        # Generate event extraction instruction using centralized prompt
+        current_date = datetime.now(timezone.utc)
+        instruction = self.event_prompts.get_evidence_extraction_instruction(
+            current_date=current_date,
+            articles=articles,
+            question_domain=question.domain or "general"
+        )
+
+        logger.debug(f"Running event extraction agent for {len(articles)} articles")
+
+        try:
+            # Run the agent
+            result = self.event_agent.run(instruction)
+            logger.debug(f"Event extraction agent completed: {result}")
+        except Exception as e:
+            logger.warning(f"Event extraction agent error: {e}")
+            # Continue anyway - may have collected some events
+
+        # Get events collected during this run
+        all_events = self.event_collector.get_all()
+        new_events = all_events[initial_event_count:]
+
+        # Persist extracted events to database
+        if new_events:
+            from src.core.database import GenericDatabase
+            db = GenericDatabase(self.db_path)
+
+            for event in new_events:
+                # Link event to the question
+                if 'related_question_ids' not in event.metadata:
+                    event.metadata['related_question_ids'] = []
+                if question.id not in event.metadata['related_question_ids']:
+                    event.metadata['related_question_ids'].append(question.id)
+
+                # Mark as extracted from evidence articles
+                event.metadata['extracted_for_evidence'] = True
+
+                # Save event to database
+                try:
+                    db.save(Event, event)
+                    logger.debug(f"Persisted extracted event: {event.id}")
+                except Exception as e:
+                    logger.warning(f"Failed to persist event {event.id}: {e}")
+
+            logger.info(f"Extracted and persisted {len(new_events)} intermediate events")

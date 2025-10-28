@@ -201,7 +201,7 @@ async def run_pipeline(args):
         # Display results
         summary = pipeline.get_summary()
 
-        logger.info("\n" + "=" * 80)
+        logger.info("=" * 80)
         logger.info("PIPELINE COMPLETED")
         logger.info("=" * 80)
         logger.info(f"Questions processed: {summary['resolved_questions']}")

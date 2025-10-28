@@ -1,11 +1,14 @@
 """Evidence generation pipeline for WorldReasoner.
 
 This pipeline builds causal explanations with hindsight:
-1. Collect evidence articles AFTER outcomes are known
-2. Identify causal relationships using hindsight
+1. Collect evidence articles AFTER outcomes are known (per question)
+2. Identify causal relationships using hindsight (per question)
 3. Build validated causal graphs
+
+Uses async processing with per-question analysis to preserve context and enable parallelism.
 """
 
+import asyncio
 from typing import List, Optional, Tuple
 from datetime import datetime, timezone, timedelta
 
@@ -44,6 +47,7 @@ class EvidencePipeline(Pipeline):
         evidence_config: EvidencePipelineConfig,
         database_config: DatabaseConfig,
         enable_persistence: bool = True,
+        max_concurrent_questions: int = 3,
     ):
         """Initialize the evidence pipeline.
 
@@ -51,12 +55,17 @@ class EvidencePipeline(Pipeline):
             evidence_config: Configuration for evidence pipeline
             database_config: Database connection configuration
             enable_persistence: Whether to save to database
+            max_concurrent_questions: Max number of questions to process in parallel (default: 3)
         """
         super().__init__(name="EvidencePipeline")
 
         self.evidence_config = evidence_config
         self.database_config = database_config
         self.enable_persistence = enable_persistence
+        self.max_concurrent_questions = max_concurrent_questions
+
+        # Semaphore to limit concurrent question processing
+        self.semaphore = asyncio.Semaphore(max_concurrent_questions)
 
         db_path = database_config.db_path
 
@@ -120,7 +129,7 @@ class EvidencePipeline(Pipeline):
         self,
         resolved_questions: Optional[List[Question]] = None
     ) -> List[PipelineStageResult]:
-        """Run the evidence pipeline.
+        """Run the evidence pipeline with per-question async processing.
 
         Args:
             resolved_questions: Optional list of resolved questions.
@@ -142,60 +151,50 @@ class EvidencePipeline(Pipeline):
                 logger.warning("No resolved questions found")
                 return self._results
 
-            logger.info(f"Processing {len(self.resolved_questions)} resolved questions")
-
-            # Stage 1: Collect Hindsight Evidence
-            logger.info("Stage 1: Collecting hindsight evidence...")
-            evidence_result = await self.evidence_stage.execute_batched(
-                self.resolved_questions,
-                batch_size=self.evidence_config.question_batch_size
+            logger.info(
+                f"Processing {len(self.resolved_questions)} questions "
+                f"with max {self.max_concurrent_questions} in parallel"
             )
-            self._results.append(evidence_result)
-            self.evidence_articles = evidence_result.outputs
 
-            if not self.evidence_articles:
-                logger.warning("No evidence articles collected")
-                return self._results
+            # Process each question through the pipeline (stages 1-2)
+            # Stage 3 (graph building) happens after collecting all hypotheses
+            question_tasks = [
+                self._process_single_question(question)
+                for question in self.resolved_questions
+            ]
 
-            logger.info(f"Collected {len(self.evidence_articles)} evidence articles")
-
-            # Persist evidence articles
-            if self.enable_persistence and self.evidence_articles:
-                logger.info("Persisting evidence articles...")
-                persist_result = await self.article_persist.execute(self.evidence_articles)
-                self._results.append(persist_result)
-
-            # Prepare inputs for Stage 2: pair questions with their evidence
-            question_evidence_pairs = self._pair_questions_with_evidence()
-
-            if not question_evidence_pairs:
-                logger.warning("No question-evidence pairs created")
-                return self._results
-
-            logger.info(f"Created {len(question_evidence_pairs)} question-evidence pairs")
-
-            # Stage 2: Causal Reasoning
-            logger.info("Stage 2: Identifying causal relationships...")
-            reasoning_result = await self.reasoning_stage.execute_batched(
-                question_evidence_pairs,
-                batch_size=self.evidence_config.reasoning_batch_size
+            # Run question processing tasks in parallel with concurrency limit
+            question_results = await asyncio.gather(
+                *question_tasks,
+                return_exceptions=True
             )
-            self._results.append(reasoning_result)
-            self.causal_hypotheses = reasoning_result.outputs
+
+            # Collect results and hypotheses
+            successful_count = 0
+            failed_count = 0
+            for i, result in enumerate(question_results):
+                if isinstance(result, Exception):
+                    logger.error(
+                        f"Question {self.resolved_questions[i].id} processing failed: {result}"
+                    )
+                    failed_count += 1
+                else:
+                    self.evidence_articles.extend(result.get("evidence_articles", []))
+                    self.causal_hypotheses.extend(result.get("causal_hypotheses", []))
+                    successful_count += 1
+
+            logger.info(
+                f"Per-question processing complete: {successful_count} successful, {failed_count} failed"
+            )
 
             if not self.causal_hypotheses:
                 logger.warning("No causal hypotheses generated")
                 return self._results
 
-            logger.info(f"Generated {len(self.causal_hypotheses)} causal hypotheses")
+            logger.info(f"Total: {len(self.evidence_articles)} evidence articles, "
+                       f"{len(self.causal_hypotheses)} causal hypotheses")
 
-            # Persist hypotheses
-            if self.enable_persistence and self.causal_hypotheses:
-                logger.info("Persisting causal hypotheses...")
-                persist_result = await self.hypothesis_persist.execute(self.causal_hypotheses)
-                self._results.append(persist_result)
-
-            # Stage 3: Build Causal Graph
+            # Stage 3: Build Causal Graph (after all question processing)
             logger.info("Stage 3: Building causal graph...")
             graph_result = await self.graph_stage.execute(self.causal_hypotheses)
             self._results.append(graph_result)
@@ -222,6 +221,75 @@ class EvidencePipeline(Pipeline):
             raise
 
         return self._results
+
+    async def _process_single_question(self, question: Question) -> dict:
+        """Process a single question through stages 1 and 2.
+
+        This method:
+        1. Collects evidence for THIS question only
+        2. Performs causal reasoning with that evidence
+        3. Persists results immediately
+        4. Returns evidence and hypotheses for aggregation
+
+        Args:
+            question: The question to process
+
+        Returns:
+            Dictionary with 'evidence_articles' and 'causal_hypotheses' lists
+
+        Raises:
+            Exception: Propagates errors for asyncio.gather to handle
+        """
+        async with self.semaphore:
+            logger.info(f"Processing question: {question.id}")
+            evidence_articles = []
+            causal_hypotheses = []
+
+            try:
+                # Stage 1: Collect evidence for this question only
+                logger.debug(f"[{question.id}] Collecting evidence...")
+                evidence_result = await self.evidence_stage.execute([question])
+                evidence_articles = evidence_result.outputs
+
+                if not evidence_articles:
+                    logger.warning(f"[{question.id}] No evidence articles collected")
+                    return {"evidence_articles": [], "causal_hypotheses": []}
+
+                logger.info(f"[{question.id}] Collected {len(evidence_articles)} evidence articles")
+
+                # Persist evidence articles immediately
+                if self.enable_persistence:
+                    await self.article_persist.execute(evidence_articles)
+
+                # Stage 2: Causal reasoning with collected evidence
+                logger.debug(f"[{question.id}] Performing causal reasoning...")
+                question_evidence_pair = (question, evidence_articles)
+                reasoning_result = await self.reasoning_stage.execute([question_evidence_pair])
+                causal_hypotheses = reasoning_result.outputs
+
+                if not causal_hypotheses:
+                    logger.warning(f"[{question.id}] No causal hypotheses generated")
+                    return {
+                        "evidence_articles": evidence_articles,
+                        "causal_hypotheses": []
+                    }
+
+                logger.info(f"[{question.id}] Generated {len(causal_hypotheses)} causal hypotheses")
+
+                # Persist hypotheses immediately
+                if self.enable_persistence:
+                    await self.hypothesis_persist.execute(causal_hypotheses)
+
+                logger.info(f"[{question.id}] Processing complete")
+
+                return {
+                    "evidence_articles": evidence_articles,
+                    "causal_hypotheses": causal_hypotheses
+                }
+
+            except Exception as e:
+                logger.error(f"[{question.id}] Error during processing: {e}")
+                raise
 
     def _load_resolved_questions(self) -> List[Question]:
         """Load resolved questions from database that haven't been processed yet.
@@ -300,33 +368,6 @@ class EvidencePipeline(Pipeline):
             logger.info(f"Skipped {skipped_already_processed} already processed questions")
 
         return resolved
-
-    def _pair_questions_with_evidence(self) -> List[Tuple[Question, List[Article]]]:
-        """Pair each question with its evidence articles.
-
-        Returns:
-            List of (Question, List[Article]) tuples
-        """
-        pairs = []
-
-        for question in self.resolved_questions:
-            # Find evidence articles related to this question
-            related_articles = [
-                article for article in self.evidence_articles
-                if (
-                    # Check if question ID is in related_question_ids metadata
-                    question.id in article.metadata.get('related_question_ids', [])
-                    # Or check if target event is in article's event_ids
-                    or (question.target_event_id and question.target_event_id in article.event_ids)
-                )
-            ]
-
-            if related_articles:
-                pairs.append((question, related_articles))
-            else:
-                logger.warning(f"No evidence articles found for question {question.id}")
-
-        return pairs
 
     def get_summary(self) -> dict:
         """Get a summary of pipeline results.

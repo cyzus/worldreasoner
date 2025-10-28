@@ -37,6 +37,11 @@ class CausalReasoningConfig(BaseModel):
         default=3,
         description="Max length of causal chains"
     )
+    max_related_events: int = Field(
+        default=30,
+        ge=1,
+        description="Maximum number of related events to provide as context"
+    )
 
 
 class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalHypothesis]):
@@ -267,11 +272,15 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
     def _load_related_events(self, question: Question) -> List[Event]:
         """Load events that could be potential causal sources.
 
+        This includes:
+        1. Events extracted from evidence articles (most recent first)
+        2. Other events in the same domain that occurred before resolution
+
         Args:
             question: The question being analyzed
 
         Returns:
-            List of related events
+            List of related events ordered by recency
         """
         try:
             # Get all events in the same domain
@@ -281,16 +290,28 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
 
             events = self.db.get_many(Event, filters=filters)
 
-            # Filter to events before or concurrent with the question's resolution
-            if question.resolution_date:
-                events = [
-                    e for e in events
-                    if e.occurred_date and e.occurred_date <= question.resolution_date
-                ]
+            # Prioritize extracted events (from evidence articles)
+            extracted_events = []
+            other_events = []
 
-            # Limit to most recent 20 events to avoid overwhelming the LLM
-            events.sort(key=lambda e: e.occurred_date or e.predicted_date, reverse=True)
-            return events[:20]
+            for event in events:
+                # Check if event was extracted from evidence articles (metadata indicator)
+                if event.metadata and event.metadata.get('extracted_for_evidence'):
+                    # Extracted events are good causal sources even if same-day
+                    # (article published on same day could still cause same-day effect)
+                    extracted_events.append(event)
+                else:
+                    # Other events must occur before resolution to be causal sources
+                    if event.occurred_date and event.occurred_date <= question.resolution_date:
+                        other_events.append(event)
+
+            # Combine: extracted events first (freshest), then other events
+            all_events = extracted_events + other_events
+
+            # Limit to most recent N events to avoid overwhelming the LLM
+            # (configurable via max_related_events)
+            all_events.sort(key=lambda e: e.occurred_date or e.predicted_date, reverse=True)
+            return all_events[:self.config.max_related_events]
 
         except Exception as e:
             logger.warning(f"Failed to load related events: {e}")
