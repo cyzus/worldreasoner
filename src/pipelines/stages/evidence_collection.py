@@ -1,5 +1,6 @@
 """Hindsight evidence collection stage for Evidence Pipeline."""
 
+import asyncio
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel, Field, model_validator
@@ -189,8 +190,8 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
         logger.debug(f"Running evidence collection agent for {question.id}")
 
         try:
-            # Run the agent
-            result = self.web_agent.run(full_instruction)
+            # Run the agent in a thread pool to avoid blocking the event loop
+            result = await asyncio.to_thread(self.web_agent.run, full_instruction)
             logger.debug(f"Agent completed: {result}")
         except Exception as e:
             logger.error(f"Agent error for {question.id}: {e}")
@@ -291,8 +292,8 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
         logger.debug(f"Running event extraction agent for {len(articles)} articles")
 
         try:
-            # Run the agent
-            result = self.event_agent.run(instruction)
+            # Run the agent in a thread pool to avoid blocking the event loop
+            result = await asyncio.to_thread(self.event_agent.run, instruction)
             logger.debug(f"Event extraction agent completed: {result}")
         except Exception as e:
             logger.warning(f"Event extraction agent error: {e}")

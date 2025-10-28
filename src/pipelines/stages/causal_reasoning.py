@@ -1,5 +1,6 @@
 """Causal reasoning stage - identifies causal relationships using hindsight."""
 
+import asyncio
 from typing import List, Tuple
 from datetime import datetime, timezone
 from pydantic import BaseModel, Field
@@ -162,8 +163,8 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
         logger.debug(f"Running causal analysis agent for {question.id}")
 
         try:
-            # Run the agent
-            result = self.agent.run(instruction)
+            # Run the agent in a thread pool to avoid blocking the event loop
+            result = await asyncio.to_thread(self.agent.run, instruction)
             logger.debug(f"Agent completed: {result}")
         except Exception as e:
             logger.error(f"Agent error for {question.id}: {e}")
