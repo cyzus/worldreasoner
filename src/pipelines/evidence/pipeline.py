@@ -181,6 +181,8 @@ class EvidencePipeline(Pipeline):
                 else:
                     self.evidence_articles.extend(result.get("evidence_articles", []))
                     self.causal_hypotheses.extend(result.get("causal_hypotheses", []))
+                    # Collect stage results (stages 1 and 2)
+                    self._results.extend(result.get("stage_results", []))
                     successful_count += 1
 
             logger.info(
@@ -235,7 +237,7 @@ class EvidencePipeline(Pipeline):
             question: The question to process
 
         Returns:
-            Dictionary with 'evidence_articles' and 'causal_hypotheses' lists
+            Dictionary with 'evidence_articles', 'causal_hypotheses', and stage results
 
         Raises:
             Exception: Propagates errors for asyncio.gather to handle
@@ -244,16 +246,22 @@ class EvidencePipeline(Pipeline):
             logger.info(f"Processing question: {question.id}")
             evidence_articles = []
             causal_hypotheses = []
+            stage_results = []
 
             try:
                 # Stage 1: Collect evidence for this question only
                 logger.debug(f"[{question.id}] Collecting evidence...")
                 evidence_result = await self.evidence_stage.execute([question])
                 evidence_articles = evidence_result.outputs
+                stage_results.append(evidence_result)
 
                 if not evidence_articles:
                     logger.warning(f"[{question.id}] No evidence articles collected")
-                    return {"evidence_articles": [], "causal_hypotheses": []}
+                    return {
+                        "evidence_articles": [],
+                        "causal_hypotheses": [],
+                        "stage_results": stage_results
+                    }
 
                 logger.info(f"[{question.id}] Collected {len(evidence_articles)} evidence articles")
 
@@ -266,12 +274,14 @@ class EvidencePipeline(Pipeline):
                 question_evidence_pair = (question, evidence_articles)
                 reasoning_result = await self.reasoning_stage.execute([question_evidence_pair])
                 causal_hypotheses = reasoning_result.outputs
+                stage_results.append(reasoning_result)
 
                 if not causal_hypotheses:
                     logger.warning(f"[{question.id}] No causal hypotheses generated")
                     return {
                         "evidence_articles": evidence_articles,
-                        "causal_hypotheses": []
+                        "causal_hypotheses": [],
+                        "stage_results": stage_results
                     }
 
                 logger.info(f"[{question.id}] Generated {len(causal_hypotheses)} causal hypotheses")
@@ -284,7 +294,8 @@ class EvidencePipeline(Pipeline):
 
                 return {
                     "evidence_articles": evidence_articles,
-                    "causal_hypotheses": causal_hypotheses
+                    "causal_hypotheses": causal_hypotheses,
+                    "stage_results": stage_results
                 }
 
             except Exception as e:
