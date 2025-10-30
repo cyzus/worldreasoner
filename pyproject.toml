@@ -33,6 +33,9 @@ dependencies = [
     "smolagents[toolkit,litellm,mcp]>=1.22.0",
     "crawl4ai>=0.4.0",
     "feedparser>=6.0.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "websockets>=14.0",
 ]
 
 
@@ -43,10 +46,10 @@ Repository = "https://github.com/cyzus/worldreasoner"
 Issues = "https://github.com/cyzus/worldreasoner/issues"
 
 [project.scripts]
-worldreasoner = "src.cli.server:main"
+worldreasoner = "backend.server:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+packages = ["src", "backend"]
 
 [tool.uv]
 # Use copy mode instead of hardlinks (fixes Windows/cross-filesystem issues)

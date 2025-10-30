@@ -1,0 +1,13 @@
+.graph-visualization {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.graph-visualization canvas {
+  cursor: grab;
+}
+
+.graph-visualization canvas:active {
+  cursor: grabbing;
+}

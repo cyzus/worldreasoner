@@ -37,6 +37,23 @@ python run_question_pipeline.py --sources config/sources.yaml --db worldreasoner
 uv run python tests/integration/test_agentic_pipeline.py
 ```
 
+### Running the Graph Visualization System
+```bash
+# Start backend API server (development mode with auto-reload)
+uv run worldreasoner --reload
+
+# In another terminal, start frontend
+cd frontend
+npm install  # First time only
+npm run dev
+
+# Access at:
+# - Frontend: http://localhost:3000
+# - API docs: http://localhost:8000/docs
+```
+
+See `GRAPH_VISUALIZATION.md` for detailed documentation.
+
 ### Testing
 ```bash
 # Run all unit tests
@@ -75,9 +92,10 @@ WorldReasoner uses **two complementary pipelines**:
    - Implementation: `src/pipelines/question/pipeline.py`
 
 2. **Evidence Pipeline (Backward-Looking)**: Builds causal explanations using hindsight
-   - Flow: Resolved Questions → Hindsight Reasoning → Evidence → Causal Graph
+   - Flow: Resolved Questions → Evidence Articles → Causal Hypotheses → Event Graph Updates
    - Runs after questions resolve to create ground truth explanations
-   - Status: Planned (not yet implemented)
+   - Uses async processing with per-question analysis for parallelism
+   - Implementation: `src/pipelines/evidence/pipeline.py`
 
 ### Design Patterns
 
@@ -104,19 +122,34 @@ WorldReasoner uses **two complementary pipelines**:
 ### Directory Structure
 
 ```
-src/
-├── config/              # Configuration (app, database, pipeline)
-│   ├── app.py          # App and LLM config
-│   ├── database.py     # SQLite config
-│   └── pipeline.py     # Pipeline configs
-├── core/               # Shared infrastructure
-│   └── database.py     # Generic database layer (ONLY db interface)
-├── domain/             # Business logic & models
-│   └── models/         # Article, Event, Question, Forecast
-├── pipelines/          # Data processing pipelines
-│   ├── base.py        # PipelineStage, Pipeline base classes
-│   ├── question/      # Question generation pipeline
-│   ├── stages/        # Reusable pipeline stages
+worldreasoner/
+├── backend/            # FastAPI backend & graph services (NEW)
+│   ├── api/           # REST API
+│   │   ├── routes/    # Graph, events, websocket endpoints
+│   │   └── app.py     # FastAPI app factory
+│   ├── services/      # Business logic layer
+│   │   └── graph/     # Graph abstraction (SQLite/future graph DB)
+│   └── server.py      # CLI entry point
+├── frontend/          # React visualization frontend (NEW)
+│   ├── src/
+│   │   ├── components/  # UI components
+│   │   ├── api/        # API client
+│   │   └── App.jsx     # Main app
+│   └── package.json
+├── src/               # Core WorldReasoner
+│   ├── config/        # Configuration (app, database, pipeline)
+│   │   ├── app.py    # App and LLM config
+│   │   ├── database.py  # SQLite config
+│   │   └── pipeline.py  # Pipeline configs
+│   ├── core/         # Shared infrastructure
+│   │   └── database.py  # Generic database layer (ONLY db interface)
+│   ├── domain/       # Business logic & models
+│   │   └── models/   # Article, Event, Question, Forecast
+│   ├── pipelines/    # Data processing pipelines
+│   │   ├── base.py  # PipelineStage, Pipeline base classes
+│   │   ├── question/  # Question generation pipeline
+│   │   ├── evidence/  # Evidence & causal reasoning pipeline
+│   │   ├── stages/    # Reusable pipeline stages
 │   └── prompts/       # Agent prompt templates
 ├── agents/            # AI agents (smolagents)
 │   ├── base.py       # BaseAgent

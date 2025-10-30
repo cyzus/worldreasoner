@@ -1,0 +1,137 @@
+.event-details {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 380px;
+  background: #ffffff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  max-height: calc(100vh - 2rem);
+  overflow: hidden;
+  animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1.5rem;
+  border-bottom: 1px solid #dee2e6;
+  background: #f8f9fa;
+}
+
+.details-header h3 {
+  color: #212529;
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+  flex: 1;
+  line-height: 1.4;
+  letter-spacing: -0.3px;
+}
+
+.close-btn {
+  background: #f8d7da;
+  border: 1px solid #f5c2c7;
+  color: #842029;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  margin-left: 1rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.close-btn:hover {
+  background: #f1aeb5;
+  border-color: #ea868f;
+  transform: scale(1.05);
+}
+
+.details-content {
+  padding: 1.5rem;
+  overflow-y: auto;
+  max-height: calc(100vh - 10rem);
+}
+
+.detail-row {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.detail-row:last-of-type {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.detail-row .label {
+  color: #6c757d;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.detail-row .value {
+  color: #212529;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  display: block;
+  font-weight: 400;
+}
+
+.button-group {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #dee2e6;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.button-group button {
+  background: #212529;
+  border: 1px solid #212529;
+  color: #ffffff;
+  padding: 0.875rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.button-group button:hover {
+  background: #343a40;
+  border-color: #343a40;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.button-group button:active {
+  transform: translateY(0);
+}
