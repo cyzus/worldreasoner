@@ -113,22 +113,48 @@ def register_model(
 
 class GenericDatabase(Generic[T]):
     """Generic type-safe database interface for Pydantic models.
-    
+
     Automatically handles:
     - Schema creation from Pydantic model fields
     - Type conversion (Python <-> SQLite)
     - JSON serialization for complex types
     - CRUD operations
     - Batch operations
+    - Temporal filtering (when cutoff_date is provided)
     """
-    
-    def __init__(self, db_path: str = "worldreasoner.db"):
+
+    def __init__(self, db_path: str = "worldreasoner.db", cutoff_date: Optional[datetime] = None):
         """Initialize database connection.
-        
+
         Args:
             db_path: Path to SQLite database file
+            cutoff_date: Optional cutoff date for temporal filtering (timezone-aware).
+                        If provided, Articles and Events will be automatically filtered.
+                        If not provided, checks for active TemporalContext.
+
+        Raises:
+            ValueError: If cutoff_date is not timezone-aware
         """
         self.db_path = Path(db_path)
+        self.cutoff_date = cutoff_date
+
+        # Create temporal gateway if cutoff provided or context active
+        if cutoff_date is not None:
+            if cutoff_date.tzinfo is None:
+                raise ValueError("cutoff_date must be timezone-aware (use datetime.now(timezone.utc))")
+            from .temporal_gateway import TemporalGateway
+            self.gateway = TemporalGateway(cutoff_date)
+        else:
+            # Check for active TemporalContext
+            from .temporal_gateway import TemporalContext
+            context_cutoff = TemporalContext.get_current_cutoff()
+            if context_cutoff is not None:
+                from .temporal_gateway import TemporalGateway
+                self.gateway = TemporalGateway(context_cutoff)
+                self.cutoff_date = context_cutoff
+            else:
+                self.gateway = None
+
         self._ensure_db_exists()
     
     def _ensure_db_exists(self):
@@ -349,25 +375,38 @@ class GenericDatabase(Generic[T]):
     
     def get(self, model: Type[T], id_value: str) -> Optional[T]:
         """Retrieve a model instance by ID.
-        
+
         Args:
             model: Pydantic model class
             id_value: ID value to retrieve
-            
+
         Returns:
-            Model instance or None if not found
+            Model instance or None if not found or temporally inaccessible
         """
         table_name = _registry.get_table_name(model)
-        
+
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(f"SELECT * FROM {table_name} WHERE id = ?", (id_value,))
             row = cursor.fetchone()
-            
+
             if not row:
                 return None
-            
-            return self._row_to_model(model, dict(row))
+
+            instance = self._row_to_model(model, dict(row))
+
+            # Apply temporal filtering if gateway exists
+            if self.gateway is not None:
+                from ..domain.models import Article, Event
+
+                if model == Article:
+                    if not self.gateway.is_article_accessible(instance):
+                        return None
+                elif model == Event:
+                    if not self.gateway.is_event_accessible(instance):
+                        return None
+
+            return instance
     
     def get_many(
         self,
@@ -376,38 +415,59 @@ class GenericDatabase(Generic[T]):
         filters: Optional[Dict[str, Any]] = None
     ) -> List[T]:
         """Retrieve multiple model instances.
-        
+
         Args:
             model: Pydantic model class
             ids: Optional list of specific IDs to retrieve
             filters: Optional dict of field:value filters
-            
+
         Returns:
-            List of model instances
+            List of model instances (temporally filtered if gateway active)
         """
+        from ..domain.models import Article, Event
+
         table_name = _registry.get_table_name(model)
-        
+        filters = filters or {}
+
         query = f"SELECT * FROM {table_name} WHERE 1=1"
         params = []
-        
+
         # Add ID filter
         if ids:
             placeholders = ','.join('?' * len(ids))
             query += f" AND id IN ({placeholders})"
             params.extend(ids)
-        
+
+        # Add temporal filter at SQL level (performance optimization)
+        # Note: Uses < (strictly before) not <= to exclude items at cutoff
+        if self.gateway is not None:
+            if model == Article:
+                query += " AND published_date < ?"
+                params.append(self.cutoff_date.isoformat())
+            elif model == Event:
+                query += " AND occurred_date < ?"
+                params.append(self.cutoff_date.isoformat())
+
         # Add field filters
-        if filters:
-            for field_name, value in filters.items():
-                query += f" AND {field_name} = ?"
-                params.append(value)
-        
+        for field_name, value in filters.items():
+            query += f" AND {field_name} = ?"
+            params.append(value)
+
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(query, params)
             rows = cursor.fetchall()
-            
-            return [self._row_to_model(model, dict(row)) for row in rows]
+
+            instances = [self._row_to_model(model, dict(row)) for row in rows]
+
+        # Apply Python-level filtering for safety (catches None dates, etc.)
+        if self.gateway is not None:
+            if model == Article:
+                instances = self.gateway.filter_articles(instances)
+            elif model == Event:
+                instances = self.gateway.filter_events(instances)
+
+        return instances
     
     def delete(self, model: Type[T], id_value: str) -> bool:
         """Delete a model instance by ID.
