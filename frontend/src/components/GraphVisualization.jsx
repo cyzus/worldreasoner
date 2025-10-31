@@ -9,6 +9,7 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
   const timeRef = useRef(0)
   const previousNodesRef = useRef(new Map())
   const hasZoomedRef = useRef(false) // Track if we've done initial zoom
+  const draggedNodeRef = useRef(null) // Track currently dragged node
 
   // D3 force controls (Obsidian-style adjustable)
   const [forceSettings, setForceSettings] = useState({
@@ -18,10 +19,6 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
     centerStrength: 0.05     // Very gentle center force (like in examples)
   })
 
-  // Debug log
-  useEffect(() => {
-    console.log('GraphVisualization received data:', graphData)
-  }, [graphData])
 
   // Preserve node positions when filtering to prevent jarring movements
   useEffect(() => {
@@ -36,7 +33,8 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
           node.vx = prevNode.vx || 0
           node.vy = prevNode.vy || 0
         }
-        // Update the map with current position
+        // IMPORTANT: Never save or restore fx/fy - they should only be set during active drag
+        // Update the map with current position (only x, y, vx, vy - NOT fx/fy)
         previousNodesRef.current.set(node.id, {
           x: node.x,
           y: node.y,
@@ -69,6 +67,7 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
       return () => clearTimeout(timer)
     }
   }, [graphData.nodes.length]) // Only when node count changes
+
 
   // Configure Obsidian-style forces and keep simulation running
   useEffect(() => {
@@ -135,7 +134,6 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
       })
     })
 
-    // Don't reheat - let forces update naturally without explosion
   }, [graphData, forceSettings])
 
 
@@ -150,6 +148,10 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
     const fontSize = 11 / globalScale
     const nodeSize = Math.max(4, node.size * 4)
     const isSelected = selectedNode && selectedNode.id === node.id
+
+    // Calculate label opacity based on zoom level for smooth fade
+    // Labels fully visible at zoom >= 1.0, fade out smoothly as zoom decreases
+    const labelOpacity = Math.min(1, Math.max(0, (globalScale - 0.3) / 0.7))
 
     // Draw glow for selected node
     if (isSelected) {
@@ -180,23 +182,30 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
     ctx.lineWidth = (isSelected ? 3 : 1.5) / globalScale
     ctx.stroke()
 
-    // Draw label with shadow
-    ctx.font = `600 ${fontSize}px Inter, sans-serif`
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
+    // Only draw label if opacity is significant (performance optimization)
+    if (labelOpacity > 0.05) {
+      ctx.font = `600 ${fontSize}px Inter, sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
 
-    // Text shadow for readability
-    ctx.shadowColor = 'rgba(255, 255, 255, 0.8)'
-    ctx.shadowBlur = 3
-    ctx.shadowOffsetY = 0
+      // Text shadow for readability, also fades with label
+      ctx.shadowColor = `rgba(255, 255, 255, ${0.8 * labelOpacity})`
+      ctx.shadowBlur = 3
+      ctx.shadowOffsetY = 0
 
-    ctx.fillStyle = isSelected ? '#212529' : '#495057'
-    ctx.fillText(label, node.x, node.y + nodeSize + fontSize + 4 / globalScale)
+      // Apply opacity to text color
+      const textColor = isSelected ? '#212529' : '#495057'
+      const rgb = textColor === '#212529'
+        ? [33, 37, 41]
+        : [73, 80, 87]
+      ctx.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${labelOpacity})`
+      ctx.fillText(label, node.x, node.y + nodeSize + fontSize + 4 / globalScale)
 
-    // Reset shadow
-    ctx.shadowColor = 'transparent'
-    ctx.shadowBlur = 0
-    ctx.shadowOffsetY = 0
+      // Reset shadow
+      ctx.shadowColor = 'transparent'
+      ctx.shadowBlur = 0
+      ctx.shadowOffsetY = 0
+    }
   }
 
   // Helper function to lighten colors
@@ -291,22 +300,33 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
           onNodeClick(node)
         }}
         onNodeDrag={(node) => {
-          // Fix node position while dragging (Obsidian-style)
-          node.fx = node.x
-          node.fy = node.y
+          // Wake up simulation when dragging starts (in case it stopped from panning)
+          if (!draggedNodeRef.current && graphRef.current?.d3ReheatSimulation) {
+            graphRef.current.d3ReheatSimulation()
+          }
+          draggedNodeRef.current = node
         }}
         onNodeDragEnd={(node) => {
-          // Release node so forces can pull it back smoothly if dragged too far
+          // Release node - let forces take over
           node.fx = undefined
           node.fy = undefined
+          draggedNodeRef.current = null
+        }}
+        onBackgroundClick={() => {
+          // If there was a dragged node that didn't get released, release it now
+          if (draggedNodeRef.current) {
+            delete draggedNodeRef.current.fx
+            delete draggedNodeRef.current.fy
+            draggedNodeRef.current = null
+          }
         }}
         backgroundColor="#ffffff"
         linkDirectionalArrowLength={0} // We draw custom arrows
         linkDirectionalArrowRelPos={1}
         cooldownTicks={200}
         warmupTicks={0}
-        d3AlphaDecay={0.04} // Faster cooldown = less explosive start (was 0.015)
-        d3VelocityDecay={0.8} // Much higher damping = smoother, less explosive (was 0.5)
+        d3AlphaDecay={0.04}
+        d3VelocityDecay={0.8}
         d3AlphaMin={0.001}
         onEngineStop={() => {
           // No automatic zoom - let user control zoom manually
@@ -314,6 +334,8 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
         enableNodeDrag={true}
         enableZoomInteraction={true}
         enablePanInteraction={true}
+        minZoom={0.1}  // Allow zooming out to see full graph
+        maxZoom={8}    // Allow zooming in for details
       />
     </div>
   )
