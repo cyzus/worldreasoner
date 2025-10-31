@@ -251,9 +251,11 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
     const startNodeSize = Math.max(4, (start.size || 1) * 4)
     const endNodeSize = Math.max(4, (end.size || 1) * 4)
 
-    // Arrow dimensions (larger for visibility)
-    const arrowLength = 12 / globalScale
-    const arrowWidth = 8 / globalScale
+    // Arrow dimensions - scale with zoom but clamp to reasonable range
+    // Clamp globalScale between 0.3 and 0.8 to keep arrows small
+    const clampedScale = Math.max(0.3, Math.min(0.8, globalScale))
+    const arrowLength = 10 * clampedScale
+    const arrowWidth = 6 * clampedScale
 
     // Adjust start and end points to account for node size and arrow
     const startX = start.x + (startNodeSize * Math.cos(angle))
