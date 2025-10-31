@@ -10,7 +10,7 @@ from datetime import datetime
 from collections import deque
 
 from src.core.database import GenericDatabase
-from src.domain.models import Event, Article
+from src.domain.models import Event, Article, CausalHypothesis
 from src.utils.logging import logger
 from .interface import (
     GraphService,
@@ -40,6 +40,7 @@ class SQLiteGraphService(GraphService):
         """
         self.db = GenericDatabase(db_path)
         self._subscribers: List[callable] = []
+        self._hypotheses_cache: Optional[List[CausalHypothesis]] = None
 
     async def get_graph(self, query: Optional[GraphQuery] = None) -> GraphData:
         """Retrieve graph data from SQLite.
@@ -75,7 +76,7 @@ class SQLiteGraphService(GraphService):
 
         # Convert to graph format
         nodes = self._events_to_nodes(events)
-        edges = self._events_to_edges(events, query)
+        edges = self._get_causal_edges([e.id for e in events], query)
 
         # Apply edge limits
         if query.max_edges and len(edges) > query.max_edges:
@@ -203,9 +204,10 @@ class SQLiteGraphService(GraphService):
             if not current_event:
                 continue
 
-            # Explore outgoing links
-            for link in current_event.causes:
-                next_id = link.target_event_id
+            # Explore outgoing links using causal hypotheses
+            outgoing_hyps = self._get_outgoing_hypotheses(current_id)
+            for hypothesis in outgoing_hyps:
+                next_id = hypothesis.target_event_id
 
                 # Avoid revisiting in this path
                 if next_id in path:
@@ -228,8 +230,15 @@ class SQLiteGraphService(GraphService):
             Dictionary with graph statistics
         """
         events = self.db.get_many(Event, filters={})
+        hypotheses = self._get_hypotheses()
 
-        total_links = sum(len(e.causes) for e in events)
+        # Count hypotheses by type
+        edge_type_counts = {}
+        for h in hypotheses:
+            relation = h.relation_type.value if hasattr(h.relation_type, 'value') else str(h.relation_type)
+            edge_type_counts[relation] = edge_type_counts.get(relation, 0) + 1
+
+        # Count nodes by domain
         node_types = {}
         for e in events:
             domain = e.domain or "unknown"
@@ -237,10 +246,12 @@ class SQLiteGraphService(GraphService):
 
         return {
             "total_nodes": len(events),
-            "total_edges": total_links,
+            "total_edges": len(hypotheses),
             "node_type_counts": node_types,
-            "edge_type_counts": {"causal": total_links},
-            "average_out_degree": total_links / len(events) if events else 0,
+            "edge_type_counts": edge_type_counts,
+            "average_out_degree": len(hypotheses) / len(events) if events else 0,
+            "validated_edges": sum(1 for h in hypotheses if h.validated),
+            "unvalidated_edges": sum(1 for h in hypotheses if not h.validated),
         }
 
     async def subscribe_to_updates(self, callback) -> None:
@@ -353,17 +364,20 @@ class SQLiteGraphService(GraphService):
             if not current_event:
                 continue
 
-            # Outgoing edges
+            # Outgoing edges (this event causes others)
             if direction in ("outgoing", "both"):
-                for link in current_event.causes:
-                    target_id = link.target_event_id
+                outgoing_hyps = self._get_outgoing_hypotheses(current_id)
+                for hypothesis in outgoing_hyps:
+                    target_id = hypothesis.target_event_id
                     if target_id not in visited and target_id in event_map:
                         visited.add(target_id)
                         queue.append((target_id, depth + 1))
 
-            # Incoming edges
+            # Incoming edges (this event is caused by others)
             if direction in ("incoming", "both"):
-                for source_id in current_event.caused_by_ids:
+                incoming_hyps = self._get_incoming_hypotheses(current_id)
+                for hypothesis in incoming_hyps:
+                    source_id = hypothesis.source_event_id
                     if source_id not in visited and source_id in event_map:
                         visited.add(source_id)
                         queue.append((source_id, depth + 1))
@@ -401,61 +415,109 @@ class SQLiteGraphService(GraphService):
                 "event_type": event.event_type.value if event.event_type else None,
                 "status": event.status.value if event.status else None,
                 "importance": getattr(event, 'importance', 1.0),
-                "num_causes": len(event.causes),
-                "num_caused_by": len(event.caused_by_ids),
             },
             size=getattr(event, 'importance', 1.0),
             color=self._domain_to_color(event.domain),
         )
 
-    def _events_to_edges(
+    def _get_causal_edges(
         self,
-        events: List[Event],
+        event_ids: List[str],
         query: Optional[GraphQuery] = None
     ) -> List[GraphEdge]:
-        """Convert event causal links to graph edges.
+        """Get causal edges from causal_hypotheses table.
+
+        This reads from the causal_hypotheses table which is the source of truth
+        for all causal relationships. Each hypothesis contains:
+        - The causal link (source -> target)
+        - Evidence metadata (confidence, strength, reasoning)
+        - Supporting articles (evidence_article_ids)
+        - Validation status
 
         Args:
-            events: List of events
+            event_ids: List of event IDs to include in the graph
             query: Optional query for edge filtering
 
         Returns:
             List of graph edges
         """
         edges = []
-        event_ids = {e.id for e in events}
+        event_ids_set = set(event_ids)
 
-        for event in events:
-            for link in event.causes:
-                # Only include edges where both nodes are in the graph
-                if link.target_event_id not in event_ids:
+        # Fetch all causal hypotheses from database
+        hypotheses = self.db.get_many(CausalHypothesis, filters={})
+
+        for hypothesis in hypotheses:
+            # Only include edges where both nodes are in the graph
+            if hypothesis.source_event_id not in event_ids_set:
+                continue
+            if hypothesis.target_event_id not in event_ids_set:
+                continue
+
+            # Apply edge type filtering
+            if query and query.edge_types:
+                if hypothesis.relation_type not in query.edge_types:
                     continue
 
-                # Apply edge type filtering
-                if query and query.edge_types:
-                    if link.relation_type not in query.edge_types:
-                        continue
+            # Apply weight filtering
+            if query and query.min_edge_weight:
+                if hypothesis.strength < query.min_edge_weight:
+                    continue
 
-                # Apply weight filtering
-                if query and query.min_edge_weight:
-                    if link.strength < query.min_edge_weight:
-                        continue
-
-                edges.append(GraphEdge(
-                    source_id=event.id,
-                    target_id=link.target_event_id,
-                    edge_type=link.relation_type,
-                    properties={
-                        "strength": link.strength,
-                        "confidence": link.confidence,
-                        "reasoning": link.reasoning,
-                        "evidence_count": len(link.evidence_article_ids),
-                    },
-                    weight=link.strength,
-                    label=link.relation_type,
-                ))
+            # Create edge from hypothesis
+            edges.append(GraphEdge(
+                source_id=hypothesis.source_event_id,
+                target_id=hypothesis.target_event_id,
+                edge_type=hypothesis.relation_type,
+                properties={
+                    "strength": hypothesis.strength,
+                    "confidence": hypothesis.confidence,
+                    "reasoning": hypothesis.reasoning,
+                    "evidence_article_ids": hypothesis.evidence_article_ids,
+                    "evidence_count": len(hypothesis.evidence_article_ids),
+                    "question_id": hypothesis.question_id,
+                    "validated": hypothesis.validated,
+                    "identified_by": hypothesis.identified_by,
+                },
+                weight=hypothesis.strength,
+                label=hypothesis.relation_type,
+            ))
 
         return edges
+
+    def _get_hypotheses(self) -> List[CausalHypothesis]:
+        """Get all causal hypotheses with caching.
+
+        Returns:
+            List of all causal hypotheses
+        """
+        if self._hypotheses_cache is None:
+            self._hypotheses_cache = self.db.get_many(CausalHypothesis, filters={})
+        return self._hypotheses_cache
+
+    def _get_outgoing_hypotheses(self, event_id: str) -> List[CausalHypothesis]:
+        """Get causal hypotheses where event is the source.
+
+        Args:
+            event_id: Source event ID
+
+        Returns:
+            List of hypotheses where this event is the cause
+        """
+        all_hypotheses = self._get_hypotheses()
+        return [h for h in all_hypotheses if h.source_event_id == event_id]
+
+    def _get_incoming_hypotheses(self, event_id: str) -> List[CausalHypothesis]:
+        """Get causal hypotheses where event is the target.
+
+        Args:
+            event_id: Target event ID
+
+        Returns:
+            List of hypotheses where this event is the effect
+        """
+        all_hypotheses = self._get_hypotheses()
+        return [h for h in all_hypotheses if h.target_event_id == event_id]
 
     def _in_time_range(
         self,
