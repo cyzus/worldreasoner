@@ -16,7 +16,13 @@ Find up to {max_articles} relevant articles.{domain_context}
 For each article you find:
 1. Use web_search to find article URLs
 2. Use web_fetch to fetch article content
-3. Call {tool_name} with ONLY the URL and metadata (title, source, date, author if available)
+3. Call {tool_name} with:
+   - url: Article URL
+   - title: Article title
+   - source: Publication name
+   - domain: Article category
+   - published_date: Publication date in ISO format (if available)
+   - author: Author name (if available)
 4. Do NOT pass article content - the tool will fetch it internally to save tokens
 
 Return a summary when done.""",

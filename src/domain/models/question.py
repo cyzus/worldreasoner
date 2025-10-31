@@ -43,12 +43,8 @@ class Question(BaseModel):
     domain: str = Field(..., description="Primary domain (finance|politics|tech|health|climate)")
     difficulty: int = Field(..., ge=1, le=5, description="Difficulty rating 1-5")
     time_horizon: TimeHorizon = Field(..., description="Forecast time range")
-    
+
     # Temporal boundaries
-    cutoff_date: Optional[datetime] = Field(
-        None,
-        description="Latest date for information access (simulated 'now' during evaluation)"
-    )
     resolution_date: datetime = Field(
         ...,
         description="When ground truth becomes available/verifiable"
@@ -99,8 +95,10 @@ class Question(BaseModel):
         description="ID of benchmark suite this question belongs to"
     )
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
 
     model_config = ConfigDict(
+        extra="allow",  # Allow transient fields like cutoff_date during evaluation
         json_schema_extra={
             "example": {
                 "id": "q_pol_2024_001",
@@ -109,7 +107,6 @@ class Question(BaseModel):
                 "domain": "politics",
                 "difficulty": 4,
                 "time_horizon": "short",
-                "cutoff_date": "2024-11-04T23:59:59Z",
                 "resolution_date": "2024-11-06T00:00:00Z",
                 "ground_truth": True,
                 "ground_truth_hash": "sha256:abc123...",
@@ -144,19 +141,22 @@ class Question(BaseModel):
         return False
     
     def set_evaluation_cutoff(self, cutoff_date: datetime) -> 'Question':
-        """Set the cutoff date for evaluation/benchmarking.
-        
+        """Set the cutoff date for evaluation/benchmarking (transient, not persisted).
+
         The cutoff_date simulates the "current time" when a forecaster makes their prediction.
+        This is a RUNTIME-ONLY attribute used by the temporal gateway during evaluation.
+        It is NOT persisted to the database - it should be set fresh for each evaluation run.
+
         This should be set during evaluation to ensure fair testing:
         - For past events: Set to before the event occurred (to test forecasting ability)
         - For future events: Set to the evaluation time (what info is available now)
-        
+
         Args:
             cutoff_date: The information cutoff datetime (timezone-aware)
-            
+
         Returns:
             Self for method chaining
-            
+
         Example:
             >>> question.set_evaluation_cutoff(datetime(2024, 11, 1, tzinfo=timezone.utc))
         """

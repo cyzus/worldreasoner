@@ -77,17 +77,22 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
             
             title = item.get('title', '')
             published = item.get('published', None)
+            author = item.get('author', "")
             
             # Fetch full article content (runs in executor to not block)
             # Note: article_tool.forward is synchronous, but we run it in executor
+            # Use lambda to pass keyword arguments correctly
             loop = asyncio.get_event_loop()
             summary = await loop.run_in_executor(
                 None,
-                self.article_tool.forward,
-                link,
-                title,
-                source_name,
-                published
+                lambda: self.article_tool.forward(
+                    url=link,
+                    title=title,
+                    source=source_name,
+                    domain="general",  # Default domain category for RSS articles
+                    published_date=published,
+                    author=author
+                )
             )
             
             logger.debug(f"[RSS] Collected: {summary}")
