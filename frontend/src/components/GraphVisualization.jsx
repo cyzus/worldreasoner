@@ -303,11 +303,11 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
         backgroundColor="#ffffff"
         linkDirectionalArrowLength={0} // We draw custom arrows
         linkDirectionalArrowRelPos={1}
-        cooldownTicks={200} // Longer settling time for smoother motion
+        cooldownTicks={200}
         warmupTicks={0}
-        d3AlphaDecay={0.015} // Slower decay = smoother settling
-        d3VelocityDecay={0.5} // Higher damping = less oscillation
-        d3AlphaMin={0.001} // Lower minimum for complete settling
+        d3AlphaDecay={0.04} // Faster cooldown = less explosive start (was 0.015)
+        d3VelocityDecay={0.8} // Much higher damping = smoother, less explosive (was 0.5)
+        d3AlphaMin={0.001}
         onEngineStop={() => {
           // No automatic zoom - let user control zoom manually
         }}
