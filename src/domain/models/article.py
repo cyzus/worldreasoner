@@ -37,13 +37,7 @@ class Article(BaseModel):
     # Metadata
     is_synthetic: bool = Field(default=False, description="Whether article is generated")
     language: str = Field(default="en", description="ISO 639-1 language code")
-    
-    # Search and retrieval
-    embeddings: Optional[List[float]] = Field(
-        None, 
-        description="Vector embeddings for semantic search (typically 1536-dim)"
-    )
-    
+
     # Event references
     event_ids: List[str] = Field(
         default_factory=list,

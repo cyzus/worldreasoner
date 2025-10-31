@@ -121,42 +121,22 @@ class Event(BaseModel):
         default_factory=list,
         description="Events that this event causes (outgoing edges)"
     )
-    caused_by_ids: List[str] = Field(
-        default_factory=list,
-        description="IDs of events that caused this event (incoming edges)"
-    )
-    
+
     # Documentation
     article_ids: List[str] = Field(
         default_factory=list,
         description="Articles that document or discuss this event"
     )
-    
-    # Outcome data (for resolved events)
-    outcome_value: Optional[Any] = Field(
-        None,
-        description="Actual outcome value (for measurable events)"
-    )
-    outcome_verified: bool = Field(
-        default=False,
-        description="Whether outcome has been verified"
-    )
-    
+
     # Metadata
     is_synthetic: bool = Field(
         default=False,
         description="Whether event is part of synthetic dataset"
     )
-    
-    # Structured data
-    entities: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Named entities involved (people, orgs, places)"
-    )
-    
+
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
-        description="Additional event-specific metadata"
+        description="Additional event-specific metadata (entities, custom fields, etc.)"
     )
     
     # Audit
@@ -191,9 +171,7 @@ class Event(BaseModel):
                     "art_pol_20241105_123",
                     "art_pol_20241106_001"
                 ],
-                "outcome_value": "Candidate A wins with 287 electoral votes",
-                "outcome_verified": True,
-                "entities": {
+                "metadata": {
                     "candidates": ["Candidate A", "Candidate B"],
                     "swing_states": ["Pennsylvania", "Michigan", "Wisconsin"]
                 }
@@ -233,21 +211,16 @@ class Event(BaseModel):
 
     def mark_occurred(
         self,
-        occurred_date: datetime,
-        outcome_value: Optional[Any] = None
+        occurred_date: datetime
     ) -> None:
-        """Mark event as occurred with outcome data.
-        
+        """Mark event as occurred.
+
         Args:
             occurred_date: When the event occurred
-            outcome_value: The actual outcome/result
         """
         self.status = EventStatus.OCCURRED
         self.occurred_date = occurred_date
         self.resolution_date = datetime.now(timezone.utc)
-        if outcome_value is not None:
-            self.outcome_value = outcome_value
-            self.outcome_verified = True
 
     def get_causal_descendants(self) -> List[str]:
         """Get all event IDs that this event directly causes.
@@ -270,31 +243,27 @@ class Event(BaseModel):
 
     def compute_importance(self) -> float:
         """Compute event importance from graph structure and metadata.
-        
+
         Importance is derived from:
         - Number of causal effects (outgoing edges)
         - Strength of causal effects
         - Media coverage (article count)
-        - Incoming causal links
-        
+
         Returns:
             Importance score between 0 and 1
         """
         # Base score from outgoing causal effects
-        outgoing_score = min(len(self.causes) * 0.15, 0.5)
-        
+        outgoing_score = min(len(self.causes) * 0.2, 0.6)
+
         # Weighted by average strength of effects
         if self.causes:
             avg_strength = sum(link.strength for link in self.causes) / len(self.causes)
             outgoing_score *= avg_strength
-        
+
         # Media coverage score
-        article_score = min(len(self.article_ids) * 0.05, 0.3)
-        
-        # Incoming causal links (being caused by many events = important)
-        incoming_score = min(len(self.caused_by_ids) * 0.1, 0.2)
-        
+        article_score = min(len(self.article_ids) * 0.05, 0.4)
+
         # Combine scores
-        total_score = outgoing_score + article_score + incoming_score
-        
+        total_score = outgoing_score + article_score
+
         return min(total_score, 1.0)
