@@ -10,7 +10,7 @@ from src.domain.models import Question, Article, Event
 from src.agents.factory import AgentFactory
 from src.pipelines.stages.tools import ArticleCollectorTool, EventIdentifierTool
 from src.pipelines.stages.collectors import ResultCollector
-from src.pipelines.prompts import HindsightAnalysisPrompts, EventIdentificationPrompts
+from src.pipelines.prompts import HindsightAnalysisPrompts
 from src.utils.logging import logger
 
 
@@ -112,7 +112,6 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
 
         # Prompt generators
         self.hindsight_prompts = HindsightAnalysisPrompts()
-        self.event_prompts = EventIdentificationPrompts()
 
     async def process(self, inputs: List[Question]) -> List[Article]:
         """Collect hindsight evidence for resolved questions.
@@ -283,7 +282,7 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
 
         # Generate event extraction instruction using centralized prompt
         current_date = datetime.now(timezone.utc)
-        instruction = self.event_prompts.get_evidence_extraction_instruction(
+        instruction = self.hindsight_prompts.get_evidence_extraction_instruction(
             current_date=current_date,
             articles=articles,
             question_domain=question.domain or "general"

@@ -34,7 +34,10 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
         
         # Create question tool with collector
         self.question_tool = QuestionGeneratorTool(collector=self.collector)
-        
+
+        # Prompt generator
+        self.prompts = QuestionGenerationPrompts()
+
         # EventDetailsTool and agent will be initialized in process() when we have events
         self.event_details_tool = None
         self.base_agent = None
@@ -83,7 +86,7 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
             max_questions = self.config.max_questions or 10
             
             # Get instruction from prompts module
-            instruction = QuestionGenerationPrompts.get_generation_instruction(
+            instruction = self.prompts.get_instruction(
                 current_date=current_date,
                 events=inputs,
                 max_questions=max_questions,

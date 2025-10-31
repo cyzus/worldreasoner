@@ -68,32 +68,3 @@ Return a summary when done.""",
         )
         
         return f"Today's date is {date_str}.\n\n{instruction_body}"
-    
-    @staticmethod
-    def get_collection_instruction(
-        current_date: datetime,
-        source_name: str,
-        days_back: int,
-        max_articles: int,
-        domain_context: str = ""
-    ) -> str:
-        """Static convenience method for backward compatibility.
-        
-        Args:
-            current_date: Current datetime
-            source_name: Name of the source to search
-            days_back: Number of days to look back
-            max_articles: Maximum number of articles to collect
-            domain_context: Optional domain context string
-            
-        Returns:
-            Formatted instruction string
-        """
-        generator = ArticleCollectionPrompts()
-        return generator.get_instruction(
-            current_date=current_date,
-            source_name=source_name,
-            days_back=days_back,
-            max_articles=max_articles,
-            domain_context=domain_context
-        )

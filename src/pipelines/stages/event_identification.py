@@ -48,6 +48,9 @@ class EventIdentificationStage(PipelineStage[Article, Event]):
         self.base_agent = AgentFactory.create_base_agent(
             tools=[self.event_tool, self.article_retrieval_tool]
         )
+
+        # Prompt generator
+        self.prompts = EventIdentificationPrompts()
     
     async def process(self, inputs: List[Article]) -> List[Event]:
         """Identify events from articles using LLM agent.
@@ -66,7 +69,7 @@ class EventIdentificationStage(PipelineStage[Article, Event]):
             current_date = datetime.now(timezone.utc)
             
             # Get instruction from prompts module
-            instruction = EventIdentificationPrompts.get_identification_instruction(
+            instruction = self.prompts.get_instruction(
                 current_date=current_date,
                 articles=inputs,
                 confidence_threshold=self.config.confidence_threshold

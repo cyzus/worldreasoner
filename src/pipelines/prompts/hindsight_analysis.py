@@ -281,6 +281,75 @@ Return a summary when you've collected enough evidence articles.""",
             end_date=end_date_str,
         )
 
+    def get_evidence_extraction_instruction(
+        self,
+        current_date: datetime,
+        articles: List[Article],
+        question_domain: str = "general",
+        content_preview_length: int = 500,
+    ) -> str:
+        """Generate instruction for extracting events from evidence articles.
+
+        Used in the hindsight evidence collection stage to extract intermediate
+        events from collected articles that can serve as causal sources.
+
+        Args:
+            current_date: Current datetime
+            articles: List of evidence articles to extract events from
+            question_domain: Domain of the question being analyzed
+            content_preview_length: Length of content preview (default: 500)
+
+        Returns:
+            Formatted instruction string
+        """
+        date_str = self.format_datetime(current_date)
+
+        # Format articles with more content for better event extraction
+        article_summaries = []
+        for idx, article in enumerate(articles, 1):
+            content_preview = self.truncate_text(
+                article.content,
+                max_length=content_preview_length,
+                suffix="..."
+            )
+            summary = f"""
+Article {idx} (ID: {article.id}):
+- Title: {article.title}
+- Published: {article.published_date.isoformat() if article.published_date else 'Unknown'}
+- Source: {article.source or 'Unknown'}
+- Domain: {article.domain or 'general'}
+- Content: {content_preview}
+"""
+            article_summaries.append(summary)
+
+        articles_text = "\n---\n".join(article_summaries)
+
+        instruction = f"""Today's date is {date_str}.
+
+You are analyzing evidence articles related to a forecast question to extract key events.
+
+ARTICLES TO ANALYZE:
+{articles_text}
+
+TASK:
+1. Read through each article carefully
+2. Identify significant events, developments, or milestones mentioned
+3. For each important event, use the event_identifier tool to record it
+
+GUIDELINES:
+- Extract events that represent real developments, decisions, or outcomes
+- Include the article ID(s) when calling the tool
+- Use domain: {question_domain}
+- Be specific with titles and descriptions
+- Set occurred_date to when the event actually happened (from article publication or context)
+- Set confidence based on how clearly the article discusses the event
+- Extract multiple events if an article mentions several developments
+- Events should be substantive and factual, not hypothetical
+
+Only call event_identifier for real, important events. Do not create hypothetical events."""
+
+        return instruction
+
     def get_instruction(self, **kwargs) -> str:
         """Get generic instruction (delegates to specific instruction methods).
 

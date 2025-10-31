@@ -58,6 +58,9 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
         
         # Create WebAgent using factory
         self.web_agent = AgentFactory.create_web_agent(tools=[self.article_tool])
+
+        # Prompt generator
+        self.prompts = ArticleCollectionPrompts()
     
     async def _fetch_rss_item_async(self, item: dict, source_name: str) -> bool:
         """Fetch a single RSS item asynchronously.
@@ -174,7 +177,7 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
                 domain_context = f" Focus on topics related to: {', '.join(self.config.domains)}."
             
             # Get instruction from prompts module
-            instruction = ArticleCollectionPrompts.get_collection_instruction(
+            instruction = self.prompts.get_instruction(
                 current_date=current_date,
                 source_name=source.name,
                 days_back=days_back,
