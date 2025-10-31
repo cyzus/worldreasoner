@@ -94,6 +94,11 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
       ?.y(0)
       ?.strength(forceSettings.centerStrength)
 
+    // Wake up simulation to apply new force settings
+    if (fg.d3ReheatSimulation) {
+      fg.d3ReheatSimulation()
+    }
+
     // Calculate dynamic boundary size based on number of nodes
     // More compact formula to reduce sparseness
     const nodeCount = graphData.nodes.length
@@ -300,8 +305,9 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
           onNodeClick(node)
         }}
         onNodeDrag={(node) => {
-          // Wake up simulation when dragging starts (in case it stopped from panning)
+          // Wake up simulation gently only when drag starts (not on every drag event)
           if (!draggedNodeRef.current && graphRef.current?.d3ReheatSimulation) {
+            // Restart simulation at low energy for forces to apply
             graphRef.current.d3ReheatSimulation()
           }
           draggedNodeRef.current = node
@@ -329,7 +335,7 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
         d3VelocityDecay={0.8}
         d3AlphaMin={0.001}
         onEngineStop={() => {
-          // No automatic zoom - let user control zoom manually
+          // Let simulation rest when not interacting
         }}
         enableNodeDrag={true}
         enableZoomInteraction={true}
