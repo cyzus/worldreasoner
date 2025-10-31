@@ -91,9 +91,17 @@ function App() {
       return nodeIds.has(sourceId) && nodeIds.has(targetId)
     })
 
-    setGraphData({
-      nodes: filteredNodes,
-      links: filteredLinks,
+    // Update with new filtered data
+    setGraphData(prev => {
+      // Check if data actually changed to avoid unnecessary updates
+      if (prev.nodes.length === filteredNodes.length &&
+          prev.links.length === filteredLinks.length) {
+        return prev // Return same reference if no change
+      }
+      return {
+        nodes: filteredNodes,
+        links: filteredLinks,
+      }
     })
   }, [fullGraphData])
 

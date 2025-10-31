@@ -297,6 +297,9 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
       <ForceGraph2D
         ref={graphRef}
         graphData={graphData}
+        nodeId="id" // CRITICAL: Stable node identity prevents simulation restart
+        linkSource="source"
+        linkTarget="target"
         nodeLabel={(node) => node.name}
         nodeCanvasObject={paintNode}
         nodeCanvasObjectMode={() => 'replace'}
