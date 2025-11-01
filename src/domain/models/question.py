@@ -20,7 +20,7 @@ class QuestionType(str, Enum):
 class TimeHorizon(str, Enum):
     """Forecast time horizon categories."""
 
-    SHORT = "short"  # 1-7 days
+    SHORT = "short"  # 1-30 days
     MEDIUM = "medium"  # 1-6 months
     LONG = "long"  # 6+ months
 

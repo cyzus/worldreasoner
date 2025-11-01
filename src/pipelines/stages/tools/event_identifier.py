@@ -6,7 +6,8 @@ import uuid
 from typing import List
 
 from smolagents import Tool
-from src.domain.models import Article, Event, EventType, EventStatus
+from src.domain.models import Article, Event, EventType, EventStatus, Domain
+from src.utils.enums import enum_to_list
 
 
 class EventIdentifierTool(Tool):
@@ -44,12 +45,22 @@ class EventIdentifierTool(Tool):
         str: JSON string with the created Event object including generated ID
     """
     
+    # Auto-generate inputs from Enum classes (single source of truth)
     inputs = {
         "title": {"type": "string", "description": "Short event title"},
         "description": {"type": "string", "description": "Detailed event description"},
-        "domain": {"type": "string", "description": "Event domain (finance|politics|tech|health|climate|general)"},
+        "domain": {
+            "type": "string",
+            "description": f"Event domain - one of: {', '.join(enum_to_list(Domain))}",
+            "enum": enum_to_list(Domain)
+        },
         "occurred_date": {"type": "string", "description": "When event occurred (ISO format)", "nullable": True},
-        "event_type": {"type": "string", "description": "Event type (decision|outcome|indicator|milestone|external_shock)", "nullable": True},
+        "event_type": {
+            "type": "string",
+            "description": f"Event type - one of: {', '.join(enum_to_list(EventType))}",
+            "enum": enum_to_list(EventType),
+            "nullable": True
+        },
         "confidence": {"type": "number", "description": "Confidence level (0.0-1.0)", "nullable": True},
         "location": {"type": "string", "description": "Event location", "nullable": True},
         "entities": {"type": "string", "description": "JSON string of involved entities", "nullable": True},
@@ -75,25 +86,25 @@ class EventIdentifierTool(Tool):
         description: str,
         domain: str,
         occurred_date: str = None,
-        event_type: str = "indicator",
+        event_type: str = None,
         confidence: float = 0.8,
         location: str = None,
         entities: str = None,
         source_article_ids: str = None
     ) -> str:
         """Store event data and return as structured JSON.
-        
+
         Args:
             title: Event title
             description: Event description
-            domain: Event domain
+            domain: Event domain (string, will be converted to enum)
             occurred_date: Optional occurrence date (ISO format)
-            event_type: Type of event
+            event_type: Type of event (string, will be converted to enum)
             confidence: Confidence level
             location: Optional location
             entities: Optional JSON string of entities
             source_article_ids: Optional comma-separated article IDs
-            
+
         Returns:
             JSON string of Event object
         """
@@ -122,20 +133,37 @@ class EventIdentifierTool(Tool):
         article_ids = []
         if source_article_ids:
             article_ids = [aid.strip() for aid in source_article_ids.split(',')]
-        
+
+        # Validate and convert domain
+        try:
+            domain_enum = Domain(domain.lower() if domain else "general")
+        except ValueError:
+            # Fall back to general if invalid
+            print(f"Warning: Invalid domain '{domain}', using 'general'")
+            domain_enum = Domain.GENERAL
+
+        # Validate and convert event_type
+        event_type_enum = EventType.INDICATOR  # Default
+        if event_type:
+            try:
+                event_type_enum = EventType(event_type.lower())
+            except ValueError:
+                print(f"Warning: Invalid event_type '{event_type}', using 'indicator'")
+                event_type_enum = EventType.INDICATOR
+
         # Generate unique event ID (use count of identified_events as counter)
-        event_id = self._generate_event_id(domain, event_date, len(self.identified_events))
-        
+        event_id = self._generate_event_id(domain_enum, event_date, len(self.identified_events))
+
         # Determine status based on date
         status = EventStatus.OCCURRED if event_date <= datetime.now(timezone.utc) else EventStatus.PREDICTED
-        
+
         # Create Event object
         event = Event(
             id=event_id,
             title=title,
             description=description,
-            event_type=EventType(event_type) if event_type else EventType.INDICATOR,
-            domain=domain,
+            event_type=event_type_enum,
+            domain=domain_enum,
             occurred_date=event_date if status == EventStatus.OCCURRED else None,
             predicted_date=event_date if status == EventStatus.PREDICTED else None,
             status=status,
@@ -168,9 +196,10 @@ class EventIdentifierTool(Tool):
         
         return json.dumps(summary, indent=2, default=str)
     
-    def _generate_event_id(self, domain: str, event_date: datetime, counter: int) -> str:
+    def _generate_event_id(self, domain: Domain, event_date: datetime, counter: int) -> str:
         """Generate unique event ID."""
         date_str = event_date.strftime('%Y%m%d')
         suffix = uuid.uuid4().hex[:8]
-        return f"evt_{domain}_{date_str}_{counter+1:03d}_{suffix}"
+        # Domain is a str enum, so it works directly in f-strings
+        return f"evt_{domain.value}_{date_str}_{counter+1:03d}_{suffix}"
 

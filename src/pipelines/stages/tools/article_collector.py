@@ -9,8 +9,9 @@ from urllib.parse import urlparse
 
 from smolagents import Tool
 from src.config import get_config
-from src.domain.models import Article
+from src.domain.models import Article, Domain
 from src.utils.logging import logger
+from src.utils.enums import enum_to_list
 from src.pipelines.stages.tools.web_fetch import WebFetchTool
 
 
@@ -49,11 +50,17 @@ class ArticleCollectorTool(Tool):
         str: JSON string with the created Article object including generated ID and metadata
     """
     
+    # Auto-generate inputs from Enum classes (single source of truth)
     inputs = {
         "url": {"type": "string", "description": "Source URL to fetch the article from"},
         "title": {"type": "string", "description": "Article headline/title from search results"},
         "source": {"type": "string", "description": "Publication name"},
-        "domain": {"type": "string", "description": "Domain category (finance|politics|tech|health|climate|general)", "nullable": True},
+        "domain": {
+            "type": "string",
+            "description": f"Domain category - one of: {', '.join(enum_to_list(Domain))}",
+            "enum": enum_to_list(Domain),
+            "nullable": True
+        },
         "published_date": {"type": "string", "description": "Publication date (ISO format)", "nullable": True},
         "author": {"type": "string", "description": "Author name", "nullable": True},
     }
@@ -104,15 +111,15 @@ class ArticleCollectorTool(Tool):
         author: Optional[str] = None
     ) -> str:
         """Fetch article content from URL and store as structured JSON.
-        
+
         Args:
             url: Source URL to fetch article from
             title: Article headline from search results
             source: Publication name
-            domain: Article domain category
+            domain: Article domain category (string, will be converted to enum)
             published_date: Optional publication date (ISO format)
             author: Optional author name
-            
+
         Returns:
             JSON string of Article object
         """
@@ -192,17 +199,25 @@ class ArticleCollectorTool(Tool):
             pass
         
         self.seen_hashes.add(content_hash)
-        
+
+        # Validate and convert domain
+        try:
+            domain_enum = Domain(domain.lower() if domain else "general")
+        except ValueError:
+            # Fall back to general if invalid
+            print(f"Warning: Invalid domain '{domain}', using 'general'")
+            domain_enum = Domain.GENERAL
+
         # Generate unique ID
-        article_id = self._generate_article_id(domain, pub_date, len(self.seen_hashes))
-        
+        article_id = self._generate_article_id(domain_enum, pub_date, len(self.seen_hashes))
+
         # Extract domain from URL if not provided
         parsed_url = urlparse(url)
         source_domain = parsed_url.netloc
-        
+
         # Store normalized URL for consistency
         normalized_url = self._normalize_url(url)
-        
+
         # Create Article object
         article = Article(
             id=article_id,
@@ -212,8 +227,8 @@ class ArticleCollectorTool(Tool):
             source=source,
             author=author or "Unknown",
             published_date=pub_date,
-            domain=domain,
-            tags=[domain, source_domain],
+            domain=domain_enum,
+            tags=[domain_enum.value, source_domain],
             event_ids=[],  # Initialize with empty list (will be populated later in pipeline)
             is_synthetic=False,
             language='en',
@@ -251,11 +266,12 @@ class ArticleCollectorTool(Tool):
         
         return json.dumps(summary, indent=2, default=str)
     
-    def _generate_article_id(self, domain: str, published_date: datetime, counter: int) -> str:
+    def _generate_article_id(self, domain: Domain, published_date: datetime, counter: int) -> str:
         """Generate unique article ID."""
         date_str = published_date.strftime('%Y%m%d')
         suffix = uuid.uuid4().hex[:8]
-        return f"art_{domain}_{date_str}_{counter+1:03d}_{suffix}"
+        # Domain is a str enum, so it works directly in f-strings
+        return f"art_{domain.value}_{date_str}_{counter+1:03d}_{suffix}"
     
     def _normalize_url(self, url: str) -> str:
         """Normalize URL for consistent duplicate detection.

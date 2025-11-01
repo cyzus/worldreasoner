@@ -28,8 +28,7 @@ Article {idx} (ID: {article_id}):
 
 {articles_text}
 
-IMPORTANT: You have access to the article_retrieval tool to query the database for more articles if needed.
-Use it to find related articles by domain, source, or keywords to get better context about events.
+IMPORTANT: You can use tools to retrieve article details if require more information.
 
 For each event you identify:
 1. Extract event details (title, description, date, confidence, location, entities)
