@@ -44,11 +44,11 @@ class TestLiteLLMClientIntegration:
     @pytest.mark.asyncio
     @pytest.mark.integration
     async def test_acomplete_with_config_file(self):
-        """Test real API call using LLM config loaded from default.yaml.
-        
-        This test loads configuration from config/default.yaml and makes an actual API call.
+        """Test real API call using LLM config loaded from config files.
+
+        This test loads configuration from config.example.yaml + config.yaml and makes an actual API call.
         """
-        # Load configuration from default.yaml
+        # Load configuration from config files
         config = get_config()
         
         # Create client with config from file

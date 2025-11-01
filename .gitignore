@@ -209,6 +209,9 @@ __marimo__/
 # data files
 *.db
 
+# Configuration (actual config with secrets, not the example template)
+config/config.yaml
+
 # Test artifacts
 test-dbs/
 test-output/

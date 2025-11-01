@@ -13,16 +13,6 @@ class ServerConfig(BaseModel):
     log_level: str = Field(default="info", description="Logging level")
 
 
-class RedisConfig(BaseModel):
-    """Redis cache configuration (optional - for future use)."""
-    
-    host: str = Field(default="localhost", description="Redis host")
-    port: int = Field(default=6379, description="Redis port")
-    db: int = Field(default=0, description="Redis database number")
-    password: Optional[str] = Field(default=None, description="Redis password")
-    enabled: bool = Field(default=False, description="Enable Redis caching")
-
-
 class LLMConfig(BaseModel):
     """LLM configuration for agent interactions."""
     

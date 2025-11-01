@@ -16,7 +16,6 @@ from src.pipelines.stages.article_collection import ArticleSource
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run the WorldReasoner question pipeline.")
-    parser.add_argument('--config', type=str, default='config/default.yaml', help='Path to default.yaml config file')
     parser.add_argument('--sources', type=str, default='config/sources.yaml', help='Path to sources.yaml config file')
     parser.add_argument('--db', type=str, default='worldreasoner.db', help='Path to output database file')
     parser.add_argument('--start-date', type=str, help='Start date (YYYY-MM-DD)')

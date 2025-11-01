@@ -11,21 +11,26 @@ from pathlib import Path
 
 def setup_logging(
     level: str = "INFO",
-    log_file: str = "logs/worldreasoner.log",
+    log_file: str = None,
     rotation: str = "10 MB",
     retention: str = "7 days"
 ) -> None:
     """Configure loguru logger with sensible defaults.
-    
+
     Args:
         level: Logging level (DEBUG, INFO, WARNING, ERROR)
-        log_file: Path to log file (relative to project root)
+        log_file: Path to log file. If None, uses default from constants
         rotation: When to rotate log file
         retention: How long to keep old logs
     """
+    # Use default log file pattern if not specified
+    if log_file is None:
+        from src.config import LOGS_DIR
+        log_file = str(LOGS_DIR / "worldreasoner_{time}.log")
+
     # Remove default handler
     logger.remove()
-    
+
     # Add console handler with nice formatting
     logger.add(
         sys.stderr,
@@ -33,11 +38,11 @@ def setup_logging(
         level=level,
         colorize=True
     )
-    
+
     # Add file handler with rotation
     log_path = Path(log_file)
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     logger.add(
         log_file,
         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
@@ -46,7 +51,7 @@ def setup_logging(
         retention=retention,
         compression="zip"
     )
-    
+
     logger.info(f"Logging initialized at level {level}")
 
 

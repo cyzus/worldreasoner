@@ -1,10 +1,5 @@
 # WorldReasoner Configuration
 
-# Application
-app_name: worldreasoner
-version: 0.1.0
-debug: true
-
 # Database
 database:
   host: localhost
@@ -12,13 +7,6 @@ database:
   database: worldreasoner
   username: postgres
   password: ""  # Set via environment variable: WORLDREASONER__DATABASE__PASSWORD
-
-# Redis (for caching)
-redis:
-  host: localhost
-  port: 6379
-  db: 0
-  password: null
 
 # MCP Server
 server:
@@ -46,5 +34,4 @@ data_dir: ./data
 # LLM
 llm:
   model: gemini/gemini-2.5-flash
-  # model: litellm_proxy/gemini/gemini-2.5-flash
   temperature: 1.0

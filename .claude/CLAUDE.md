@@ -24,8 +24,8 @@ uv sync
 uv run playwright install
 
 # Set up configuration
-cp config/default.yaml config/local.yaml
-# Edit config/local.yaml with your LLM API keys
+cp config/config.example.yaml config/config.yaml
+# Edit config/config.yaml with your LLM API keys
 ```
 
 ### Running the Pipeline
@@ -266,8 +266,8 @@ cutoff = datetime(2024, 11, 4)  # Naive datetime
 
 ### Configuration
 
-- **Default**: `config/default.yaml` (committed)
-- **Local overrides**: `config/local.yaml` (gitignored, create from default)
+- **Default**: `config/config.example.yaml` (committed template)
+- **Local overrides**: `config/config.yaml` (gitignored, create from example)
 - **Article sources**: `config/sources.yaml` (RSS and web scraping configs)
 - **Access**: Use `src.config.get_config()` (singleton pattern)
 - **LLM**: Uses `litellm` wrapper supporting Gemini, OpenAI, etc.

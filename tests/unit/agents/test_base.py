@@ -20,7 +20,7 @@ class TestBaseAgent:
         
     def test_base_agent_with_custom_config(self):
         """Test BaseAgent initialization with custom config."""
-        config = load_config("config/default.yaml")
+        config = load_config()  # Loads from config.example.yaml + config.yaml
         agent = BaseAgent(config=config)
         
         assert agent.config == config

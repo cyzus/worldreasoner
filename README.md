@@ -162,8 +162,8 @@ uv sync
 uv run playwright install
 
 # Set up configuration
-cp config/default.yaml config/local.yaml
-# Edit config/local.yaml with your LLM API keys and settings
+cp config/config.example.yaml config/config.yaml
+# Edit config/config.yaml with your LLM API keys and settings
 ```
 
 ### Running the Pipeline
