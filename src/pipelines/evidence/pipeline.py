@@ -95,7 +95,6 @@ class EvidencePipeline(Pipeline):
 
         # Stage 3: Causal Graph Building
         graph_config = CausalGraphConfig(
-            allow_cycles=evidence_config.allow_causal_cycles,
             validate_temporal_ordering=evidence_config.validate_temporal_ordering,
             max_links_per_event=evidence_config.max_links_per_event,
         )
