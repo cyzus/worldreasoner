@@ -42,18 +42,7 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
         self.article_retrieval_tool = None
 
         self.base_agent = None
-    
-    def set_articles(self, articles: List[Article]):
-        """Set articles for the EventDetailsTool.
-
-        DEPRECATED: This method is no longer needed as tools now use database directly.
-
-        Args:
-            articles: List of articles (ignored)
-        """
-        # No-op for backward compatibility
-        pass
-    
+        
     async def process(self, inputs: List[Event]) -> List[Question]:
         """Generate forecast questions from events using LLM agent.
         

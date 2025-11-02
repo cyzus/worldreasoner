@@ -41,85 +41,27 @@ def parse_args():
     )
 
     # Database configuration
-    parser.add_argument(
-        '--db',
-        type=str,
-        default='worldreasoner.db',
-        help='Path to database file (default: worldreasoner.db)'
-    )
+    parser.add_argument('--db', type=str, default='worldreasoner.db', help='Path to database file (default: worldreasoner.db)')
 
     # Question filtering
-    parser.add_argument(
-        '--max-questions',
-        type=int,
-        default=2,
-        help='Maximum questions to process (0 = unlimited, default: 2)'
-    )
-    parser.add_argument(
-        '--domain',
-        type=str,
-        help='Filter to specific domain (e.g., tech, finance, politics)'
-    )
-    parser.add_argument(
-        '--force-reprocess',
-        action='store_true',
-        help='Re-process questions even if they already have hypotheses'
-    )
+    parser.add_argument('--max-questions', type=int, default=2, help='Maximum questions to process (0 = unlimited, default: 2)')
+    parser.add_argument('--domain', type=str, default='', help='Filter to specific domain (e.g., tech, finance, politics)')
+    parser.add_argument('--force-reprocess', action='store_true', help='Re-process questions even if they already have hypotheses')
 
     # Evidence collection settings
-    parser.add_argument(
-        '--evidence-window',
-        type=int,
-        default=30,
-        help='Days before resolution to collect evidence (default: 30)'
-    )
-    parser.add_argument(
-        '--min-resolution-age',
-        type=int,
-        default=0,
-        help='Minimum days since resolution required to process (default: 1)'
-    )
-    parser.add_argument(
-        '--min-articles',
-        type=int,
-        default=5,
-        help='Minimum evidence articles per question (default: 5)'
-    )
+    parser.add_argument('--evidence-window', type=int, default=30, help='Days before resolution to collect evidence (default: 30)')
+    parser.add_argument('--min-resolution-age', type=int, default=0, help='Minimum days since resolution required to process (default: 1)')
+    parser.add_argument('--min-articles', type=int, default=5, help='Minimum evidence articles per question (default: 5)')
 
     # Causal reasoning thresholds
-    parser.add_argument(
-        '--confidence',
-        type=float,
-        default=0.6,
-        help='Minimum confidence threshold (0.0-1.0, default: 0.6)'
-    )
-    parser.add_argument(
-        '--strength',
-        type=float,
-        default=0.3,
-        help='Minimum causal strength threshold (0.0-1.0, default: 0.3)'
-    )
+    parser.add_argument('--confidence', type=float, default=0.6, help='Minimum confidence threshold (0.0-1.0, default: 0.6)')
+    parser.add_argument('--strength', type=float, default=0.3, help='Minimum causal strength threshold (0.0-1.0, default: 0.3)')
 
     # Processing settings
-    parser.add_argument(
-        '--question-batch-size',
-        type=int,
-        default=10,
-        help='Batch size for evidence collection (default: 10)'
-    )
-    parser.add_argument(
-        '--reasoning-batch-size',
-        type=int,
-        default=20,
-        help='Batch size for causal reasoning (default: 20)'
-    )
-
+    parser.add_argument('--question-batch-size', type=int, default=10, help='Batch size for evidence collection (default: 10)')
+    parser.add_argument('--reasoning-batch-size', type=int, default=20, help='Batch size for causal reasoning (default: 20)')
     # Output control
-    parser.add_argument(
-        '--verbose',
-        action='store_true',
-        help='Show detailed output with sample results'
-    )
+    parser.add_argument('--verbose', action='store_true', help='Show detailed output with sample results')
 
     return parser.parse_args()
 
