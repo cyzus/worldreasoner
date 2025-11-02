@@ -89,26 +89,8 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
 
         self.db_path = db_path
 
-        # Create result collector for evidence articles
-        self.article_collector = ResultCollector[Article]()
-
-        # Create ArticleCollectorTool with collector and database
-        self.article_tool = ArticleCollectorTool(
-            db_path=db_path,
-            collector=self.article_collector
-        )
-
-        # Create WebAgent with article collection tool
-        self.web_agent = AgentFactory.create_web_agent(tools=[self.article_tool])
-
-        # Create result collector for extracted events
-        self.event_collector = ResultCollector[Event]()
-
-        # Create EventIdentifierTool for LLM-based event extraction
-        self.event_tool = EventIdentifierTool(collector=self.event_collector)
-
-        # Create base agent for event extraction
-        self.event_agent = AgentFactory.create_base_agent(tools=[self.event_tool])
+        # Note: Tools/collectors/agents are instantiated per-question to avoid
+        # shared mutable state when this stage is executed concurrently.
 
         # Prompt generators
         self.hindsight_prompts = HindsightAnalysisPrompts()
@@ -167,8 +149,13 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
         Returns:
             List of evidence articles
         """
-        # Clear collector before starting
-        initial_count = len(self.article_collector.get_all())
+        # Instantiate per-question collector, tool, and agent to avoid cross-talk
+        article_collector = ResultCollector[Article]()
+        article_tool = ArticleCollectorTool(
+            db_path=self.db_path,
+            collector=article_collector
+        )
+        web_agent = AgentFactory.create_web_agent(tools=[article_tool])
 
         # Generate evidence collection instruction including temporal guidance
         current_date = datetime.now(timezone.utc)
@@ -190,15 +177,14 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
 
         try:
             # Run the agent in a thread pool to avoid blocking the event loop
-            result = await asyncio.to_thread(self.web_agent.run, full_instruction)
+            result = await asyncio.to_thread(web_agent.run, full_instruction)
             logger.debug(f"Agent completed: {result}")
         except Exception as e:
             logger.error(f"Agent error for {question.id}: {e}")
             # Continue anyway - may have collected some articles
 
-        # Get articles collected during this run
-        all_collected = self.article_collector.get_all()
-        new_articles = all_collected[initial_count:]  # Only articles added during this run
+        # Get articles collected during this run (isolated collector)
+        new_articles = article_collector.get_all()
 
         # Tag articles with evidence metadata
         for article in new_articles:
@@ -277,8 +263,10 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
         if not articles:
             return
 
-        # Track initial event count
-        initial_event_count = len(self.event_collector.get_all())
+        # Instantiate per-question event collector, tool, and agent
+        event_collector = ResultCollector[Event]()
+        event_tool = EventIdentifierTool(collector=event_collector)
+        event_agent = AgentFactory.create_base_agent(tools=[event_tool])
 
         # Generate event extraction instruction using centralized prompt
         current_date = datetime.now(timezone.utc)
@@ -292,15 +280,14 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
 
         try:
             # Run the agent in a thread pool to avoid blocking the event loop
-            result = await asyncio.to_thread(self.event_agent.run, instruction)
+            result = await asyncio.to_thread(event_agent.run, instruction)
             logger.debug(f"Event extraction agent completed: {result}")
         except Exception as e:
             logger.warning(f"Event extraction agent error: {e}")
             # Continue anyway - may have collected some events
 
         # Get events collected during this run
-        all_events = self.event_collector.get_all()
-        new_events = all_events[initial_event_count:]
+        new_events = event_collector.get_all()
 
         # Persist extracted events to database
         if new_events:

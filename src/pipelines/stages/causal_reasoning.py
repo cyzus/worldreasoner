@@ -71,17 +71,8 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
         # Database for retrieving additional articles
         self.db = GenericDatabase(db_path)
 
-        # Create result collector for hypotheses
-        self.collector = ResultCollector[CausalHypothesis]()
-
-        # Create tools
-        self.causal_tool = CausalReasonerTool(collector=self.collector)
+        # Tools/agents will be created per-analysis to avoid shared-state issues
         self.article_retrieval_tool = ArticleRetrievalTool(db_path=db_path)
-
-        # Create agent with both tools
-        self.agent = AgentFactory.create_base_agent(
-            tools=[self.causal_tool, self.article_retrieval_tool]
-        )
 
         # Prompt generator
         self.prompts = HindsightAnalysisPrompts()
@@ -143,8 +134,12 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
         Returns:
             List of causal hypotheses
         """
-        # Clear collector before starting
-        initial_count = len(self.collector.get_all())
+        # Create a per-analysis collector and agent to avoid cross-talk when running concurrently
+        collector = ResultCollector[CausalHypothesis]()
+        causal_tool = CausalReasonerTool(collector=collector)
+        agent = AgentFactory.create_base_agent(
+            tools=[causal_tool, self.article_retrieval_tool]
+        )
 
         # Load related events from database to provide valid event IDs
         related_events = self._load_related_events(question)
@@ -164,15 +159,14 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
 
         try:
             # Run the agent in a thread pool to avoid blocking the event loop
-            result = await asyncio.to_thread(self.agent.run, instruction)
+            result = await asyncio.to_thread(agent.run, instruction)
             logger.debug(f"Agent completed: {result}")
         except Exception as e:
             logger.error(f"Agent error for {question.id}: {e}")
             # Continue anyway - may have collected some hypotheses
 
         # Get hypotheses collected during this run
-        all_collected = self.collector.get_all()
-        new_hypotheses = all_collected[initial_count:]
+        new_hypotheses = collector.get_all()
 
         # Validate each hypothesis
         validated_hypotheses = []

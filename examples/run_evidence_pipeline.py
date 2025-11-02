@@ -175,7 +175,7 @@ async def run_pipeline(args):
         logger.info("\n" + "=" * 80)
 
     except Exception as e:
-        logger.error("\n" + "=" * 80)
+        logger.error("=" * 80)
         logger.error("PIPELINE FAILED")
         logger.error("=" * 80)
         logger.error(f"Error: {e}")
