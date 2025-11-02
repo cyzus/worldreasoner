@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, ConfigDict
 from ...core.database import register_model
+from .domain import Domain
 
 
 class QuestionType(str, Enum):
@@ -17,15 +18,7 @@ class QuestionType(str, Enum):
     TIMEFRAME = "timeframe"
 
 
-class TimeHorizon(str, Enum):
-    """Forecast time horizon categories."""
-
-    SHORT = "short"  # 1-30 days
-    MEDIUM = "medium"  # 1-6 months
-    LONG = "long"  # 6+ months
-
-
-@register_model('questions', indexes=['domain', 'difficulty', 'time_horizon'])
+@register_model('questions', indexes=['domain', 'difficulty'])
 class Question(BaseModel):
     """Benchmark forecast question.
     
@@ -40,9 +33,8 @@ class Question(BaseModel):
     question_type: QuestionType = Field(..., description="Type of answer expected")
     
     # Classification
-    domain: str = Field(..., description="Primary domain (finance|politics|tech|health|climate)")
+    domain: Domain = Field(..., description="Primary domain")
     difficulty: int = Field(..., ge=1, le=5, description="Difficulty rating 1-5")
-    time_horizon: TimeHorizon = Field(..., description="Forecast time range")
 
     # Temporal boundaries
     resolution_date: datetime = Field(
@@ -102,7 +94,6 @@ class Question(BaseModel):
                 "question_type": "boolean",
                 "domain": "politics",
                 "difficulty": 4,
-                "time_horizon": "short",
                 "resolution_date": "2024-11-06T00:00:00Z",
                 "ground_truth": True,
                 "ground_truth_hash": "sha256:abc123...",

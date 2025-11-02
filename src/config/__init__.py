@@ -26,7 +26,7 @@ from .settings import (
 # Import component configs
 from .database import DatabaseConfig
 from .app import ServerConfig, LLMConfig
-from .pipeline import QuestionPipelineConfig, QuestionConfig
+from .pipeline import QuestionPipelineConfig
 
 
 __all__ = [

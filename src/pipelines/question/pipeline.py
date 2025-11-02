@@ -165,7 +165,6 @@ class QuestionPipeline(Pipeline):
             # Stage 3: Generate Questions (with batching for large event sets)
             logger.info("Stage 3: Generating questions...")
             # Pass articles to question stage so EventDetailsTool can access them
-            self.question_stage.set_articles(self.articles)
             question_result = await self.question_stage.execute_batched(
                 self.events,
                 batch_size=self.question_config.event_batch_size

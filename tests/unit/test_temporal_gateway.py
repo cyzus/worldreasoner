@@ -8,7 +8,7 @@ from src.core.temporal_gateway import (
     TemporalContext,
     ValidationResult
 )
-from src.domain.models import Article, Event, Question, Forecast, EventStatus, EventType, QuestionType, TimeHorizon
+from src.domain.models import Article, Event, Question, Forecast, EventStatus, EventType, QuestionType
 
 
 class TestTemporalGateway:
@@ -219,7 +219,6 @@ class TestTemporalGateway:
             question_type=QuestionType.BOOLEAN,
             domain="tech",
             difficulty=3,
-            time_horizon=TimeHorizon.SHORT,
             cutoff_date=cutoff_date,
             resolution_date=cutoff_date + timedelta(days=2),
             ground_truth=True
@@ -249,7 +248,6 @@ class TestTemporalGateway:
             question_type=QuestionType.BOOLEAN,
             domain="tech",
             difficulty=3,
-            time_horizon=TimeHorizon.SHORT,
             cutoff_date=cutoff_date,
             resolution_date=cutoff_date + timedelta(days=2),
             ground_truth=True
@@ -280,7 +278,6 @@ class TestTemporalGateway:
             question_type=QuestionType.BOOLEAN,
             domain="tech",
             difficulty=3,
-            time_horizon=TimeHorizon.SHORT,
             cutoff_date=None,  # No cutoff
             resolution_date=cutoff_date + timedelta(days=2),
             ground_truth=True,

@@ -33,7 +33,7 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
         self.collector = ResultCollector[Question]()
 
         # Create question tool with collector
-        self.question_tool = QuestionGeneratorTool(collector=self.collector)
+        self.question_tool = QuestionGeneratorTool(collector=self.collector, require_ground_truth=config.require_ground_truth)
 
         # Prompt generator
         self.prompts = QuestionGenerationPrompts()

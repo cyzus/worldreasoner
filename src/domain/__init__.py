@@ -12,7 +12,6 @@ from .models import (
     CausalRelationType,
     Question,
     QuestionType,
-    TimeHorizon,
     Forecast,
 )
 
@@ -25,6 +24,5 @@ __all__ = [
     "CausalRelationType",
     "Question",
     "QuestionType",
-    "TimeHorizon",
     "Forecast",
 ]

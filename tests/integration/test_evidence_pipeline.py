@@ -24,7 +24,7 @@ from datetime import datetime, timezone, timedelta
 from src.pipelines.evidence import EvidencePipeline
 from src.config.pipeline import EvidencePipelineConfig
 from src.config import DatabaseConfig
-from src.domain.models import Question, Article, Event, EventType, EventStatus, QuestionType, TimeHorizon
+from src.domain.models import Question, Article, Event, EventType, EventStatus, QuestionType
 from src.core.database import GenericDatabase
 
 
@@ -160,7 +160,6 @@ async def test_evidence_pipeline_with_mock_resolved_question(test_db_path):
         question_type=QuestionType.BOOLEAN,
         domain="finance",
         difficulty=3,
-        time_horizon=TimeHorizon.SHORT,
         resolution_date=datetime.now(timezone.utc) - timedelta(days=10),
         ground_truth=True,
         target_event_id=event.id,

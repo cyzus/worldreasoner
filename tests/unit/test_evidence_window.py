@@ -2,7 +2,7 @@ from datetime import datetime, timezone, timedelta
 import pytest
 
 from src.pipelines.stages.evidence_collection import EvidenceCollectionConfig, HindsightEvidenceCollectionStage
-from src.domain.models.question import Question, QuestionType, TimeHorizon
+from src.domain.models.question import Question, QuestionType
 
 
 def make_question(resolution_date: datetime) -> Question:
@@ -12,7 +12,6 @@ def make_question(resolution_date: datetime) -> Question:
         question_type=QuestionType.BOOLEAN,
         domain="test",
         difficulty=1,
-        time_horizon=TimeHorizon.SHORT,
         resolution_date=resolution_date,
         ground_truth=True,
     )
