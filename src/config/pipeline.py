@@ -10,19 +10,11 @@ class QuestionPipelineConfig(BaseModel):
     
     # Question generation limits
     max_questions: int = Field(default=10, description="Maximum questions to generate")
-    questions_per_domain: Optional[int] = Field(
-        default=None, 
-        description="Max questions per domain (None = unlimited)"
-    )
     
     # Question characteristics
     difficulty_levels: List[int] = Field(
         default=[1, 2, 3, 4, 5],
         description="Allowed difficulty levels (1-5)"
-    )
-    time_horizons: List[str] = Field(
-        default=["short", "medium", "long"],
-        description="Allowed time horizons"
     )
     domains: List[str] = Field(
         default=["finance", "politics", "tech", "health", "climate"],
@@ -42,11 +34,7 @@ class QuestionPipelineConfig(BaseModel):
         default_factory=date.today,
         description="End date for article collection"
     )
-    forecast_horizon_days: int = Field(
-        default=30,
-        description="How many days ahead to forecast"
-    )
-    
+
     # Event identification settings
     min_articles_per_event: int = Field(
         default=3,
@@ -58,24 +46,7 @@ class QuestionPipelineConfig(BaseModel):
         le=1.0,
         description="Minimum confidence to consider an event valid"
     )
-    
-    # Causal graph settings
-    min_causal_links: int = Field(
-        default=1,
-        description="Minimum causal links for a question"
-    )
-    causal_confidence_threshold: float = Field(
-        default=0.5,
-        ge=0.0,
-        le=1.0,
-        description="Minimum confidence for causal relationships"
-    )
-    
-    # Data filtering
-    exclude_synthetic: bool = Field(
-        default=False,
-        description="Exclude synthetic data"
-    )
+           
     require_ground_truth: bool = Field(
         default=True,
         description="Only generate questions with verifiable outcomes"
@@ -90,10 +61,6 @@ class QuestionPipelineConfig(BaseModel):
         default=20,
         description="Maximum events to process in a single batch for question generation"
     )
-
-
-# Alias for backward compatibility
-QuestionConfig = QuestionPipelineConfig
 
 
 class EvidencePipelineConfig(BaseModel):
@@ -135,11 +102,6 @@ class EvidencePipelineConfig(BaseModel):
         description="Maximum length of causal chains to trace"
     )
 
-    # Graph building settings
-    allow_causal_cycles: bool = Field(
-        default=False,
-        description="Whether to allow cycles in the causal graph"
-    )
     validate_temporal_ordering: bool = Field(
         default=True,
         description="Ensure causes temporally precede effects"

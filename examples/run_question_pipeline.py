@@ -5,7 +5,7 @@ Usage:
     python run_question_pipeline.py --sources config/sources.yaml --db output.db --start-date YYYY-MM-DD --end-date YYYY-MM-DD --domains tech,finance --max-questions 10 --article-batch-size 50 --event-batch-size 20
 """
 import argparse
-from datetime import datetime, timedelta, timezone, date
+from datetime import datetime
 import yaml
 import asyncio
 from src.pipelines.question.pipeline import QuestionPipeline
@@ -21,9 +21,10 @@ def parse_args():
     parser.add_argument('--start-date', type=str, help='Start date (YYYY-MM-DD)')
     parser.add_argument('--end-date', type=str, help='End date (YYYY-MM-DD)')
     parser.add_argument('--domains', type=str, default='', help='Comma-separated list of domains (optional)')
-    parser.add_argument('--max-questions', type=int, default=10, help='Maximum questions to generate')
-    parser.add_argument('--article-batch-size', type=int, default=20, help='Batch size for event identification (articles)')
-    parser.add_argument('--event-batch-size', type=int, default=20, help='Batch size for question generation (events)')
+    # If not specified, defer to config defaults by using None here
+    parser.add_argument('--max-questions', type=int, default=None, help='Maximum questions to generate (defaults to config)')
+    parser.add_argument('--article-batch-size', type=int, default=None, help='Batch size for event identification (articles) (defaults to config)')
+    parser.add_argument('--event-batch-size', type=int, default=None, help='Batch size for question generation (events) (defaults to config)')
     return parser.parse_args()
 
 
@@ -44,21 +45,30 @@ def load_sources(sources_path, domains):
 
 
 async def run_pipeline(args):
-    start_date = args.start_date or (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d") # Default to 7 days ago
-    end_date = args.end_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    # Parse dates only if provided; otherwise let config defaults apply
+    start_date = datetime.strptime(args.start_date, "%Y-%m-%d").date() if args.start_date else None
+    end_date = datetime.strptime(args.end_date, "%Y-%m-%d").date() if args.end_date else None
     domains = [d.strip() for d in args.domains.split(',') if d.strip()] if args.domains else []
     sources = load_sources(args.sources, domains)
     if not sources:
         print("No sources found for the specified domains.")
         return
-    question_config = QuestionPipelineConfig(
-        max_questions=args.max_questions,
-        domains=domains if domains else ["finance", "politics", "tech", "health", "climate"],
-        start_date=datetime.strptime(start_date, "%Y-%m-%d").date(),
-        end_date=datetime.strptime(end_date, "%Y-%m-%d").date(),
-        article_batch_size=args.article_batch_size,
-        event_batch_size=args.event_batch_size,
-    )
+    # Build config kwargs: only pass values explicitly provided; otherwise rely on model defaults
+    config_kwargs = {}
+    if args.max_questions is not None:
+        config_kwargs["max_questions"] = args.max_questions
+    if start_date is not None:
+        config_kwargs["start_date"] = start_date
+    if end_date is not None:
+        config_kwargs["end_date"] = end_date
+    if args.article_batch_size is not None:
+        config_kwargs["article_batch_size"] = args.article_batch_size
+    if args.event_batch_size is not None:
+        config_kwargs["event_batch_size"] = args.event_batch_size
+    if domains:
+        config_kwargs["domains"] = domains
+
+    question_config = QuestionPipelineConfig(**config_kwargs)
     db_config = DatabaseConfig(db_path=args.db)
     pipeline = QuestionPipeline(
         question_config=question_config,
