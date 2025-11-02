@@ -34,7 +34,7 @@ Create up to {max_questions} high-quality forecast questions.{domain_filter}
 
 STRATEGY:
 1. Review event summaries below (descriptions are truncated)
-2. For events that seem interesting, use event_details to get full context
+2. For events that seem interesting, use tool to get full details
 3. Read the complete article content to understand nuances
 4. Generate deep, insightful questions that go beyond surface-level facts
 5. Store questions using {tool_name} tool
@@ -57,52 +57,22 @@ For FUTURE EVENTS (not yet occurred):
 For each question you create:
 1. Write the question text (clear, specific, resolvable)
 2. Verify resolution_date is within the allowed range
-3. Call {tool_name} tool with all required fields:
-   - question_text
-   - question_type - MUST be EXACTLY one of these (case-sensitive):
-     * "boolean" - for yes/no questions (e.g., "Will X happen?")
-     * "mcq" - for multiple choice (MUST provide 'options' parameter)
-     * "quantity" - for numerical answers (optionally provide 'quantity_unit' and 'quantity_bounds')
-     * "timeframe" - for "when will X happen" questions
-   - domain
-   - difficulty (1-5)
-   - resolution_date (ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)
-     * MUST be between {min_resolution_date} and {max_resolution_date}
-     * For time-ranged questions, use the END of the range
-   - resolution_criteria (how to verify the answer)
-   - related_event_ids (comma-separated)
-   - ground_truth (REQUIRED if PAST EVENT, omit if future)
-   - options (REQUIRED for MCQ - comma-separated choices)
-     * Example: "Before Dec 2025,Jan-Mar 2026,Apr-Jun 2026,After Jun 2026"
-   - quantity_unit (OPTIONAL for quantity questions)
-     * Example: "USD", "users", "percentage", "GW"
-   - quantity_bounds (OPTIONAL for quantity questions - format: "min:X,max:Y")
-     * Example: "min:0,max:100" for percentages
+3. Call {tool_name} tool to store the generated questions
 4. {ground_truth_instruction}
-
-CRITICAL - Question Type Validation:
-- Use "quantity" NOT "numeric"
-- Use "mcq" NOT "multiple_choice"
-- These must be exact matches (lowercase)
 
 REQUIRED DIVERSITY (aim for these proportions):
 Question Types:
-- 40-50% boolean (yes/no questions)
-- 20-30% quantity (numerical forecasts)
-- 15-25% mcq (multiple choice)
-- 5-15% timeframe (when will X happen)
+- 1/4 boolean (yes/no questions)
+- 1/4 quantity (numerical forecasts)
+- 1/4 mcq (multiple choice)
+- 1/4 timeframe (when will X happen)
 
 Difficulty Distribution:
-- 10-20% difficulty 1 (very easy, obvious from articles)
-- 20-30% difficulty 2 (easy, requires basic reasoning)
-- 30-40% difficulty 3 (moderate, requires synthesis)
-- 20-30% difficulty 4 (hard, requires deeper analysis)
-- 5-10% difficulty 5 (very hard, requires expert knowledge or multi-step reasoning)
-
-Time Horizons (for future questions):
-- Some short-term (< 1 month) - verify near-term outcomes
-- Some medium-term (1-6 months) - test genuine forecasting
-- Some long-term (6+ months) - test strategic thinking
+- 1/5 difficulty 1 (very easy, obvious from articles)
+- 1/5 difficulty 2 (easy, requires basic reasoning)
+- 1/5 difficulty 3 (moderate, requires synthesis)
+- 1/5 difficulty 4 (hard, requires deeper analysis)
+- 1/5 difficulty 5 (very hard, requires expert knowledge or multi-step reasoning)
 
 Question Variety Examples:
 ✓ Direct: "Will Company X's acquisition of Y be completed by DATE?"
@@ -115,7 +85,7 @@ Question Variety Examples:
 
 Using Time Frames (Recommended):
 - Instead of: "Will X open on 2025-11-01?"
-  Consider: "Will X open between November 1-15, 2025?" (provides tolerance)
+  Consider: "Will X open in November, 2025?" (provides tolerance)
 - For timeframe questions: "When will X reach Y users: (A) Before Dec 2025, (B) Jan-Mar 2026, (C) Apr-Jun 2026, (D) After Jun 2026"
 - Set resolution_date to the END of the time range
 
@@ -127,12 +97,9 @@ Speculative/Future Event Questions:
 
 Guidelines:
 - Questions should be specific and unambiguous
-- Boolean questions should have clear yes/no answers
-- Include a mix of difficulties (follow distribution above)
 - Questions should be independently verifiable
 - Focus on questions that test real forecasting ability, not just information retrieval
 - Use time ranges in question text for more realistic forecasting
-- Generate both retrospective (past events) AND predictive (future) questions
 - Stay within the specified date range!
 
 Return a summary when done.""",

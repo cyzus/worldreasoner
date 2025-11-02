@@ -9,7 +9,7 @@ from ..base import PipelineStage
 from src.domain.models import Event, Question, Article
 from src.config.pipeline import QuestionPipelineConfig
 from src.agents.factory import AgentFactory
-from .tools import QuestionGeneratorTool, EventDetailsTool
+from .tools import QuestionGeneratorTool, EventDetailsTool, ArticleRetrievalTool
 from .collectors import ResultCollector
 from ..prompts import QuestionGenerationPrompts
 from src.utils.logging import logger
@@ -23,32 +23,36 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
     for deeper context when generating questions.
     """
     
-    def __init__(self, config: QuestionPipelineConfig, articles: Optional[List[Article]] = None):
+    def __init__(self, config: QuestionPipelineConfig, db_path: Optional[str] = None):
         super().__init__(name="QuestionGeneration", config=config)
-        
-        # Store articles for EventDetailsTool
-        self.articles = articles or []
-        
+
+        # Store db_path for tools
+        self.db_path = db_path
+
         # Create result collector for questions
         self.collector = ResultCollector[Question]()
-        
+
         # Create question tool with collector
         self.question_tool = QuestionGeneratorTool(collector=self.collector)
 
         # Prompt generator
         self.prompts = QuestionGenerationPrompts()
 
-        # EventDetailsTool and agent will be initialized in process() when we have events
         self.event_details_tool = None
+        self.article_retrieval_tool = None
+
         self.base_agent = None
     
     def set_articles(self, articles: List[Article]):
         """Set articles for the EventDetailsTool.
-        
+
+        DEPRECATED: This method is no longer needed as tools now use database directly.
+
         Args:
-            articles: List of articles to make available to the agent
+            articles: List of articles (ignored)
         """
-        self.articles = articles
+        # No-op for backward compatibility
+        pass
     
     async def process(self, inputs: List[Event]) -> List[Question]:
         """Generate forecast questions from events using LLM agent.
@@ -71,15 +75,13 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
             # Get current date for context
             current_date = datetime.now(timezone.utc)
             
-            # Create EventDetailsTool with events and articles
-            self.event_details_tool = EventDetailsTool(
-                events=inputs,
-                articles=self.articles
-            )
+            # Create tools with database access
+            self.event_details_tool = EventDetailsTool(db_path=self.db_path)
+            self.article_retrieval_tool = ArticleRetrievalTool(db_path=self.db_path)
             
             # Create agent using factory
             self.base_agent = AgentFactory.create_base_agent(
-                tools=[self.event_details_tool, self.question_tool]
+                tools=[self.event_details_tool, self.question_tool, self.article_retrieval_tool]
             )
             
             # Determine max questions

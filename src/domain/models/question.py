@@ -51,9 +51,9 @@ class Question(BaseModel):
     )
     
     # Ground truth (hidden from forecasters during evaluation)
-    ground_truth: Any = Field(
-        ...,
-        description="Actual outcome (type depends on question_type)"
+    ground_truth: Optional[Any] = Field(
+        None,
+        description="Actual outcome (type depends on question_type). None for unresolved questions."
     )
     ground_truth_hash: Optional[str] = Field(
         None,
@@ -90,10 +90,6 @@ class Question(BaseModel):
     
     # Metadata
     is_synthetic: bool = Field(default=False, description="Whether question uses synthetic data")
-    benchmark_suite_id: Optional[str] = Field(
-        None,
-        description="ID of benchmark suite this question belongs to"
-    )
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
 

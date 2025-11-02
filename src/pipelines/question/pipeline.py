@@ -89,8 +89,8 @@ class QuestionPipeline(Pipeline):
         db_path = database_config.db_path
         self.article_stage = ArticleCollectionStage(article_config, db_path=db_path)
         self.event_stage = EventIdentificationStage(event_config, db_path=db_path)
-        # Question stage will receive articles later via set_articles()
-        self.question_stage = QuestionGenerationStage(question_config)
+        # Question stage uses database directly
+        self.question_stage = QuestionGenerationStage(question_config, db_path=db_path)
         
         # Add stages to pipeline
         self.add_stage(self.article_stage)

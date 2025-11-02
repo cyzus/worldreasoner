@@ -28,12 +28,11 @@ Article {idx} (ID: {article_id}):
 
 {articles_text}
 
-IMPORTANT: You can use tools to retrieve article details if require more information.
-
 For each event you identify:
-1. Extract event details (title, description, date, confidence, location, entities)
-2. Call {tool_name} tool to store it
-3. Include the article ID in source_article_ids
+1. Retrieve associated article details if helpful.
+2. Extract event attributes
+3. Call {tool_name} tool to store the events
+4. Include the article ID in source_article_ids
 
 Only include events with confidence >= {confidence_threshold}.
 Return a summary when done.""",

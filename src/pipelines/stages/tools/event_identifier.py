@@ -26,21 +26,18 @@ class EventIdentifierTool(Tool):
     
     name = "event_identifier"
     description = """Stores identified event data into structured Event format.
-    
+
     Use this tool AFTER you've analyzed articles and identified specific events.
     Call this tool once for EACH event you identify (not all at once).
-    
+
     Args:
         title (str): Short descriptive title of the event
         description (str): Detailed description of what happened/will happen
         domain (str): Event domain (finance|politics|tech|health|climate|general)
         occurred_date (str, optional): When the event occurred (ISO format)
         event_type (str, optional): Type of event (decision|outcome|indicator|milestone|external_shock)
-        confidence (float, optional): Your confidence this is a real event (0.0-1.0)
-        location (str, optional): Where the event took place
-        entities (str, optional): JSON string of involved entities (people, orgs, etc.)
         source_article_ids (str, optional): Comma-separated article IDs mentioning this event
-    
+
     Returns:
         str: JSON string with the created Event object including generated ID
     """
@@ -61,9 +58,6 @@ class EventIdentifierTool(Tool):
             "enum": enum_to_list(EventType),
             "nullable": True
         },
-        "confidence": {"type": "number", "description": "Confidence level (0.0-1.0)", "nullable": True},
-        "location": {"type": "string", "description": "Event location", "nullable": True},
-        "entities": {"type": "string", "description": "JSON string of involved entities", "nullable": True},
         "source_article_ids": {"type": "string", "description": "Comma-separated article IDs", "nullable": True},
     }
     output_type = "string"  # JSON string
@@ -87,9 +81,6 @@ class EventIdentifierTool(Tool):
         domain: str,
         occurred_date: str = None,
         event_type: str = None,
-        confidence: float = 0.8,
-        location: str = None,
-        entities: str = None,
         source_article_ids: str = None
     ) -> str:
         """Store event data and return as structured JSON.
@@ -100,9 +91,6 @@ class EventIdentifierTool(Tool):
             domain: Event domain (string, will be converted to enum)
             occurred_date: Optional occurrence date (ISO format)
             event_type: Type of event (string, will be converted to enum)
-            confidence: Confidence level
-            location: Optional location
-            entities: Optional JSON string of entities
             source_article_ids: Optional comma-separated article IDs
 
         Returns:
@@ -120,14 +108,6 @@ class EventIdentifierTool(Tool):
                 event_date = datetime.now(timezone.utc)
         else:
             event_date = datetime.now(timezone.utc)
-        
-        # Parse entities if provided
-        entities_dict = {}
-        if entities:
-            try:
-                entities_dict = json.loads(entities)
-            except:
-                pass
         
         # Parse article IDs
         article_ids = []
@@ -168,9 +148,7 @@ class EventIdentifierTool(Tool):
             predicted_date=event_date if status == EventStatus.PREDICTED else None,
             status=status,
             article_ids=article_ids,
-            is_synthetic=False,
-            entities=entities_dict,
-            metadata={"confidence": confidence, "location": location} if location else {"confidence": confidence}
+            is_synthetic=False
         )
         
         # Store full event using collector if provided, otherwise use internal list
@@ -189,7 +167,6 @@ class EventIdentifierTool(Tool):
             "event_type": event.event_type.value,
             "status": event.status.value,
             "occurred_date": event.occurred_date.isoformat() if event.occurred_date else None,
-            "confidence": confidence,
             "description_preview": description[:150] + "..." if len(description) > 150 else description,
             "status": "stored"
         }
