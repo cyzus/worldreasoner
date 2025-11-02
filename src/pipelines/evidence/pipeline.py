@@ -121,6 +121,10 @@ class EvidencePipeline(Pipeline):
         self.resolved_questions: List[Question] = []
         self.evidence_articles: List[Article] = []
         self.causal_hypotheses: List[CausalHypothesis] = []
+        
+        # DB stats captured during question loading (for summaries/logging)
+        self.db_total_questions = 0
+        self.db_unresolved_questions = 0
 
     async def run(
         self,
@@ -309,6 +313,10 @@ class EvidencePipeline(Pipeline):
         # Get all questions
         all_questions = db.get_many(Question, filters={})
 
+        # Capture DB stats: how many are unresolved (no ground_truth yet)
+        self.db_total_questions = len(all_questions)
+        self.db_unresolved_questions = sum(1 for q in all_questions if q.ground_truth is None)
+
         # Get all existing causal hypotheses to check which questions were already processed
         processed_question_ids = set()
         if self.evidence_config.skip_already_processed:
@@ -365,6 +373,13 @@ class EvidencePipeline(Pipeline):
             f"{f', limit: {self.evidence_config.max_questions}' if self.evidence_config.max_questions else ''})"
         )
 
+        # Also report DB-level resolution stats to help users see what's available
+        logger.info(
+            f"Questions in DB: total={self.db_total_questions}, "
+            f"unresolved={self.db_unresolved_questions}, "
+            f"resolved={self.db_total_questions - self.db_unresolved_questions}"
+        )
+
         if skipped_already_processed > 0:
             logger.info(f"Skipped {skipped_already_processed} already processed questions")
 
@@ -382,4 +397,7 @@ class EvidencePipeline(Pipeline):
             "causal_hypotheses": len(self.causal_hypotheses),
             "stages_completed": len([r for r in self._results if r.status == PipelineStageStatus.COMPLETED]),
             "stages_failed": len([r for r in self._results if r.status == PipelineStageStatus.FAILED]),
+            # DB-level stats captured during question loading
+            "db_total_questions": self.db_total_questions,
+            "db_unresolved_questions": self.db_unresolved_questions,
         }

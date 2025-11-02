@@ -146,6 +146,12 @@ async def run_pipeline(args):
         logger.info("=" * 80)
         logger.info("PIPELINE COMPLETED")
         logger.info("=" * 80)
+        # Optionally report DB-level question stats if available
+        db_total = summary.get('db_total_questions')
+        db_unresolved = summary.get('db_unresolved_questions')
+        if isinstance(db_total, int) and isinstance(db_unresolved, int):
+            logger.info(f"Questions in DB: total={db_total}, unresolved={db_unresolved}, resolved={db_total - db_unresolved}")
+
         logger.info(f"Questions processed: {summary['resolved_questions']}")
         logger.info(f"Evidence articles: {summary['evidence_articles']}")
         logger.info(f"Causal hypotheses: {summary['causal_hypotheses']}")
