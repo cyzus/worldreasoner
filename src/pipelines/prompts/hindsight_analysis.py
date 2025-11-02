@@ -35,16 +35,18 @@ Resolution Date: {resolution_date}
 Target Event: {target_event_id}
 
 ========== YOUR TASK ==========
-Analyze evidence articles from BEFORE the outcome to identify what caused it.
+Analyze evidence articles from BEFORE the outcome to identify CAUSAL GRAPHS that led to it.
 We have HINDSIGHT (know the outcome), but we're looking at pre-event articles
 to identify which factors actually led to this result.
 
+IMPORTANT: Build MULTI-HOP CAUSAL GRAPHS (up to {max_causal_depth} steps deep), not just direct links!
+
 {evidence_articles_text}
 
-========== AVAILABLE EVENT IDS (Use as SOURCE events) ==========
+========== AVAILABLE EVENT IDS ==========
 {related_events_text}
 
-IMPORTANT: You MUST use event IDs from the list above as source events.
+IMPORTANT: You MUST use event IDs from the list above.
 Do NOT invent new event IDs. If no events from the list are related,
 that's OK - you can return zero causal links.
 
@@ -53,46 +55,62 @@ AVAILABLE TOOLS:
 2. causal_reasoner - Record each causal relationship you identify
 
 ========== INSTRUCTIONS ==========
-1. IDENTIFY CAUSES: What events/factors directly caused this outcome?
-   - Look for explicit causal language in the evidence
-   - Consider direct causes vs enabling factors vs correlations
+1. BUILD CAUSAL GRAPH (up to {max_causal_depth} hops):
+   - Start with the TARGET EVENT: {target_event_id}
+   - What directly caused it? (1-hop causes)
+   - What caused THOSE causes? (2-hop causes)
+   - Continue building the graph backwards up to {max_causal_depth} levels deep
+   
+   Example graph path: Event A → Event B → Event C → Target Event
+   Record this as THREE separate links:
+   - A causes B (causal_reasoner call #1)
+   - B causes C (causal_reasoner call #2)
+   - C causes Target (causal_reasoner call #3)
 
-2. FOR EACH CAUSAL LINK:
-   - Source event: MUST be an event ID from the list above
-   - Target event: {target_event_id} (the outcome itself)
+2. IDENTIFY DIFFERENT TYPES OF RELATIONSHIPS:
+   - Direct causes: A directly caused B
+   - Enabling factors: A made B possible (use "enables")
+   - Preventing factors: A blocked or inhibited B (use "prevents")
+   - Correlations: A and B related but not clearly causal (use "correlates")
+   - Conditional: A causes B only if conditions are met (use "conditional")
+
+3. FOR EACH CAUSAL LINK IN THE GRAPH:
+   - Source event: Event that causes something (MUST be from event list)
+   - Target event: Event that is caused (can be intermediate OR final target)
    - Relation type: causes | enables | prevents | correlates | conditional
    - Strength: How strong was the causal effect? (0.0-1.0)
    - Confidence: How sure are you based on evidence? (0.0-1.0)
-   - Reasoning: Explain the causal mechanism clearly
-   - Evidence: Cite article IDs that support this claim
+   - Reasoning: Explain the mechanism clearly - WHY did source cause target?
+   - Evidence: Cite article IDs that support this specific link
 
-3. USE THE TOOLS:
+4. USE THE TOOLS EFFECTIVELY:
    - Use article_retrieval to find more context if needed
-   - Use causal_reasoner to record EACH causal link separately
+   - Use causal_reasoner ONCE per link (multiple calls to build the graph!)
+   - Build the graph systematically from target backwards
 
-4. QUALITY STANDARDS:
+5. QUALITY STANDARDS:
    - Only propose links with confidence >= {min_confidence}
    - Only propose links with strength >= {min_strength}
-   - Must cite at least one evidence article
+   - Must cite at least one evidence article per link
    - Explain the mechanism, don't just assert causation
-   - ONLY use event IDs from the provided list as sources
+   - ONLY use event IDs from the provided list
 
 ========== IMPORTANT GUIDELINES ==========
 - Focus on what ACTUALLY happened (not predictions or speculation)
 - Use the hindsight evidence to identify true causal factors
-- Distinguish between:
-  * Direct causes: A directly caused B
-  * Enabling factors: A made B possible
-  * Correlations: A and B related but not causal
-- Multiple causes are expected - identify all significant ones
-- Call causal_reasoner once per causal link
+- BUILD THE GRAPH! Don't just find direct causes - trace causality backwards
+- Example: If inflation caused rate hikes, and rate hikes caused recession,
+  create TWO links (inflation→rate_hikes, rate_hikes→recession)
+- Multiple parallel paths are expected (branching causality)
+- Intermediate events can be both effects (of earlier events) and causes (of later events)
+- Call causal_reasoner once per link, multiple times to build the graph
 - Do NOT invent event IDs - only use those from the list
 
-Return a summary when finished identifying all causal relationships.""",
+Return a summary when finished identifying all causal relationships (direct and multi-hop).""",
         required_vars=[
             "question_id", "question_text", "ground_truth", "resolution_date",
             "target_event_id", "evidence_articles_text", "related_events_text",
-            "min_confidence", "min_strength"
+            "min_confidence", "min_strength", "max_causal_depth"
         ]
     )
 
@@ -194,6 +212,7 @@ Return a summary when you've collected enough evidence articles.""",
         min_strength: float = 0.3,
         content_preview_length: int = 200,
         related_events: List = None,
+        max_causal_depth: int = 3,
     ) -> str:
         """Generate instruction for hindsight causal analysis.
 
@@ -205,6 +224,7 @@ Return a summary when you've collected enough evidence articles.""",
             min_strength: Minimum strength threshold
             content_preview_length: Length of content preview
             related_events: List of Event objects that could be sources
+            max_causal_depth: Maximum depth of causal chains to build
 
         Returns:
             Formatted instruction string
@@ -243,6 +263,7 @@ Return a summary when you've collected enough evidence articles.""",
             related_events_text=related_events_text,
             min_confidence=min_confidence,
             min_strength=min_strength,
+            max_causal_depth=max_causal_depth,
         )
 
     def get_evidence_collection_instruction(

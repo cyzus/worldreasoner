@@ -36,7 +36,7 @@ class CausalReasoningConfig(BaseModel):
     )
     max_causal_depth: int = Field(
         default=3,
-        description="Max length of causal chains"
+        description="Max depth of causal graph paths"
     )
     max_related_events: int = Field(
         default=30,
@@ -153,6 +153,7 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
             min_confidence=self.config.min_confidence,
             min_strength=self.config.min_strength,
             related_events=related_events,
+            max_causal_depth=self.config.max_causal_depth,
         )
 
         logger.debug(f"Running causal analysis agent for {question.id}")

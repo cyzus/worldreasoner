@@ -99,7 +99,7 @@ class EvidencePipelineConfig(BaseModel):
     )
     max_causal_depth: int = Field(
         default=3,
-        description="Maximum length of causal chains to trace"
+        description="Maximum depth of causal graph paths to trace"
     )
 
     validate_temporal_ordering: bool = Field(

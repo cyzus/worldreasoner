@@ -29,10 +29,15 @@ class CausalReasonerTool(Tool):
     Use this tool AFTER analyzing evidence to record a causal relationship you identified.
     Call once for EACH causal link you identify (not all at once).
 
+    IMPORTANT: For multi-hop graphs, create SEPARATE links for each step:
+    - If A→B→C, call this tool twice: once for A→B, once for B→C
+    - Build causal graphs by connecting intermediate events
+    - Target event can be an intermediate event OR the final outcome
+
     Args:
         question_id (str): ID of the question being analyzed
-        source_event_id (str): ID of the event that caused the outcome
-        target_event_id (str): ID of the event that was caused (the outcome)
+        source_event_id (str): ID of the event that caused the target
+        target_event_id (str): ID of the event that was caused (can be intermediate or final)
         relation_type (str): Type of causation (causes|enables|prevents|correlates|conditional)
         strength (float): Strength of causal effect (0.0-1.0)
         confidence (float): Your confidence in this link (0.0-1.0)
@@ -54,7 +59,7 @@ class CausalReasonerTool(Tool):
         },
         "target_event_id": {
             "type": "string",
-            "description": "Event ID of the effect (outcome)"
+            "description": "Event ID of the effect (can be intermediate or final outcome)"
         },
         "relation_type": {
             "type": "string",
