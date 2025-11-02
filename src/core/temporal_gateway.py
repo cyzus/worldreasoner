@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from ..utils.logging import logger
 
 if TYPE_CHECKING:
-    from ..domain.models import Article, Event, Question, Forecast, CausalLink
+    from ..domain.models import Article, Event, Question, Forecast
 
 
 @dataclass

@@ -8,11 +8,11 @@ from .models import (
     Event,
     EventType,
     EventStatus,
-    CausalLink,
     CausalRelationType,
     Question,
     QuestionType,
     Forecast,
+    CausalHypothesis,
 )
 
 __all__ = [
@@ -20,9 +20,9 @@ __all__ = [
     "Event",
     "EventType",
     "EventStatus",
-    "CausalLink",
     "CausalRelationType",
     "Question",
     "QuestionType",
     "Forecast",
+    "CausalHypothesis",
 ]

@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, ConfigDict
 
-from .event import CausalLink
+from .causal_hypothesis import CausalHypothesis
 
 
 class Forecast(BaseModel):
@@ -47,9 +47,9 @@ class Forecast(BaseModel):
         default_factory=list,
         description="Event IDs that the LLM identified as relevant"
     )
-    causal_links: List[CausalLink] = Field(
+    causal_hypotheses: List[CausalHypothesis] = Field(
         default_factory=list,
-        description="Causal graph edges the LLM constructed (can form a DAG, not just a chain)"
+        description="Causal hypotheses the LLM constructed during reasoning (can form a DAG, not just a chain)"
     )
     
     # Temporal context
@@ -104,33 +104,48 @@ class Forecast(BaseModel):
                     "evt_pol_20241025_debate",
                     "evt_pol_20241105_001"
                 ],
-                "causal_links": [
+                "causal_hypotheses": [
                     {
+                        "id": "hyp_forecast_001",
                         "source_event_id": "evt_pol_20240915_poll_shift",
                         "target_event_id": "evt_pol_20241020_campaign_strategy",
                         "relation_type": "causes",
                         "strength": 0.7,
                         "confidence": 0.8,
                         "reasoning": "Poll results influenced campaign spending allocation",
-                        "evidence_article_ids": ["art_pol_20240928_001"]
+                        "evidence_article_ids": ["art_pol_20240928_001"],
+                        "discovered_by_question_ids": [],
+                        "identified_by": "llm_forecast",
+                        "first_identified_at": "2024-09-30T18:45:00Z",
+                        "last_confirmed_at": "2024-09-30T18:45:00Z"
                     },
                     {
+                        "id": "hyp_forecast_002",
                         "source_event_id": "evt_pol_20241020_campaign_strategy",
                         "target_event_id": "evt_pol_20241105_001",
                         "relation_type": "enables",
                         "strength": 0.5,
                         "confidence": 0.6,
                         "reasoning": "Increased ad spending in swing states likely to impact voter turnout",
-                        "evidence_article_ids": ["art_pol_20240929_018"]
+                        "evidence_article_ids": ["art_pol_20240929_018"],
+                        "discovered_by_question_ids": [],
+                        "identified_by": "llm_forecast",
+                        "first_identified_at": "2024-09-30T18:45:00Z",
+                        "last_confirmed_at": "2024-09-30T18:45:00Z"
                     },
                     {
+                        "id": "hyp_forecast_003",
                         "source_event_id": "evt_pol_20241025_debate",
                         "target_event_id": "evt_pol_20241105_001",
                         "relation_type": "causes",
                         "strength": 0.6,
                         "confidence": 0.7,
                         "reasoning": "Debate performance affects undecided voters",
-                        "evidence_article_ids": ["art_pol_20241026_003"]
+                        "evidence_article_ids": ["art_pol_20241026_003"],
+                        "discovered_by_question_ids": [],
+                        "identified_by": "llm_forecast",
+                        "first_identified_at": "2024-09-30T18:45:00Z",
+                        "last_confirmed_at": "2024-09-30T18:45:00Z"
                     }
                 ],
                 "timestamp": "2024-09-30T18:45:00Z",
