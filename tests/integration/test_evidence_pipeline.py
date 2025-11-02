@@ -110,7 +110,6 @@ async def test_evidence_pipeline_with_no_resolved_questions(test_db_path):
     assert len(pipeline.resolved_questions) == 0
     assert len(pipeline.evidence_articles) == 0
     assert len(pipeline.causal_hypotheses) == 0
-    assert len(pipeline.enhanced_events) == 0
 
     print("   [OK] Pipeline handled empty input gracefully")
 
@@ -201,7 +200,6 @@ async def test_evidence_pipeline_with_mock_resolved_question(test_db_path):
     print(f"   - Resolved questions: {summary['resolved_questions']}")
     print(f"   - Evidence articles: {summary['evidence_articles']}")
     print(f"   - Causal hypotheses: {summary['causal_hypotheses']}")
-    print(f"   - Enhanced events: {summary['enhanced_events']}")
 
     assert summary['resolved_questions'] == 1
     print("   [OK] Summary generated correctly")

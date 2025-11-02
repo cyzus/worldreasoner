@@ -244,14 +244,18 @@ class SQLiteGraphService(GraphService):
             domain = e.domain or "unknown"
             node_types[domain] = node_types.get(domain, 0) + 1
 
+        # Count hypotheses by discovery count
+        single_discovery = sum(1 for h in hypotheses if len(h.discovered_by_question_ids) == 1)
+        multi_discovery = sum(1 for h in hypotheses if len(h.discovered_by_question_ids) > 1)
+
         return {
             "total_nodes": len(events),
             "total_edges": len(hypotheses),
             "node_type_counts": node_types,
             "edge_type_counts": edge_type_counts,
             "average_out_degree": len(hypotheses) / len(events) if events else 0,
-            "validated_edges": sum(1 for h in hypotheses if h.validated),
-            "unvalidated_edges": sum(1 for h in hypotheses if not h.validated),
+            "single_discovery_edges": single_discovery,
+            "multi_discovery_edges": multi_discovery,
         }
 
     async def subscribe_to_updates(self, callback) -> None:
@@ -475,9 +479,11 @@ class SQLiteGraphService(GraphService):
                     "reasoning": hypothesis.reasoning,
                     "evidence_article_ids": hypothesis.evidence_article_ids,
                     "evidence_count": len(hypothesis.evidence_article_ids),
-                    "question_id": hypothesis.question_id,
-                    "validated": hypothesis.validated,
+                    "discovered_by_question_ids": hypothesis.discovered_by_question_ids,
+                    "discovery_count": len(hypothesis.discovered_by_question_ids),
                     "identified_by": hypothesis.identified_by,
+                    "first_identified_at": hypothesis.first_identified_at.isoformat() if hypothesis.first_identified_at else None,
+                    "last_confirmed_at": hypothesis.last_confirmed_at.isoformat() if hypothesis.last_confirmed_at else None,
                 },
                 weight=hypothesis.strength,
                 label=hypothesis.relation_type,

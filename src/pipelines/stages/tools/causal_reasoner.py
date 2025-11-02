@@ -136,9 +136,9 @@ class CausalReasonerTool(Tool):
         hypothesis_id = self._generate_hypothesis_id(question_id)
 
         # Create CausalHypothesis object
+        current_time = datetime.now(timezone.utc)
         hypothesis = CausalHypothesis(
             id=hypothesis_id,
-            question_id=question_id,
             source_event_id=source_event_id,
             target_event_id=target_event_id,
             relation_type=relation,
@@ -146,9 +146,10 @@ class CausalReasonerTool(Tool):
             confidence=confidence,
             reasoning=reasoning,
             evidence_article_ids=evidence_ids,
+            discovered_by_question_ids=[question_id],
             identified_by="evidence_pipeline",
-            identified_at=datetime.now(timezone.utc),
-            validated=False,
+            first_identified_at=current_time,
+            last_confirmed_at=current_time,
         )
 
         # Store hypothesis

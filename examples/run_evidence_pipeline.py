@@ -149,11 +149,7 @@ async def run_pipeline(args):
         logger.info(f"Questions processed: {summary['resolved_questions']}")
         logger.info(f"Evidence articles: {summary['evidence_articles']}")
         logger.info(f"Causal hypotheses: {summary['causal_hypotheses']}")
-        logger.info(f"Events enhanced: {summary['enhanced_events']}")
-        logger.info(f"Stages completed: {summary['stages_completed']}/{len(pipeline.stages)}")
-
-        if summary['stages_failed'] > 0:
-            logger.warning(f"Stages failed: {summary['stages_failed']}")
+        logger.info(f"Stage executions: {summary['stages_completed']} completed, {summary['stages_failed']} failed")
 
         # Show stage details
         logger.info("\nStage Results:")
@@ -174,13 +170,7 @@ async def run_pipeline(args):
                     logger.info(f"  {i}. {hyp.source_event_id} -> {hyp.target_event_id}")
                     logger.info(f"     {hyp.relation_type.value} (strength: {hyp.strength:.2f}, confidence: {hyp.confidence:.2f})")
                     logger.info(f"     Evidence: {len(hyp.evidence_article_ids)} articles")
-
-            if pipeline.enhanced_events:
-                logger.info("\nSample Enhanced Events:")
-                for i, event in enumerate(pipeline.enhanced_events[:3], 1):
-                    logger.info(f"  {i}. {event.title}")
-                    logger.info(f"     ID: {event.id}")
-                    # Note: Causal links are now stored separately and can be queried via event.get_outgoing_links(db)
+                    logger.info(f"     Discovered by: {len(hyp.discovered_by_question_ids)} question(s)")
 
         logger.info("\n" + "=" * 80)
 

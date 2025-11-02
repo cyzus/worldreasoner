@@ -33,12 +33,12 @@ from src.utils.logging import logger
 class EvidencePipeline(Pipeline):
     """Pipeline for building causal explanations with hindsight.
 
-    Flow: Resolved Questions → Evidence Articles → Causal Hypotheses → Enhanced Events
+    Flow: Resolved Questions → Evidence Articles → Causal Hypotheses → Graph
 
     This pipeline:
     - Collects evidence articles AFTER outcomes are known
     - Uses hindsight to identify true causal factors
-    - Builds validated causal graphs
+    - Saves causal hypotheses to the graph database
     - Creates ground truth explanations for evaluation
     """
 
@@ -116,13 +116,11 @@ class EvidencePipeline(Pipeline):
             )
             self.article_persist = DatabasePersistenceStage(persist_config, "article")
             self.hypothesis_persist = DatabasePersistenceStage(persist_config, "causal_hypothesis")
-            self.event_persist = DatabasePersistenceStage(persist_config, "event")
 
         # Storage for pipeline outputs
         self.resolved_questions: List[Question] = []
         self.evidence_articles: List[Article] = []
         self.causal_hypotheses: List[CausalHypothesis] = []
-        self.enhanced_events: List[Event] = []
 
     async def run(
         self,
@@ -196,22 +194,13 @@ class EvidencePipeline(Pipeline):
                        f"{len(self.causal_hypotheses)} causal hypotheses")
 
             # Stage 3: Build Causal Graph (after all question processing)
+            # Note: Hypotheses are already saved by graph building stage
             logger.info("Stage 3: Building causal graph...")
             graph_result = await self.graph_stage.execute(self.causal_hypotheses)
             self._results.append(graph_result)
-            self.enhanced_events = graph_result.outputs
 
-            if not self.enhanced_events:
-                logger.warning("No events enhanced")
-                return self._results
-
-            logger.info(f"Enhanced {len(self.enhanced_events)} events with causal links")
-
-            # Persist enhanced events
-            if self.enable_persistence and self.enhanced_events:
-                logger.info("Persisting enhanced events...")
-                persist_result = await self.event_persist.execute(self.enhanced_events)
-                self._results.append(persist_result)
+            saved_hypotheses = graph_result.outputs
+            logger.info(f"Saved {len(saved_hypotheses)} causal hypotheses to graph")
 
             logger.info("Evidence Pipeline completed successfully!")
 
@@ -325,7 +314,9 @@ class EvidencePipeline(Pipeline):
         if self.evidence_config.skip_already_processed:
             try:
                 existing_hypotheses = db.get_many(CausalHypothesis, filters={})
-                processed_question_ids = {h.question_id for h in existing_hypotheses}
+                # Collect all question IDs from discovered_by_question_ids lists
+                for h in existing_hypotheses:
+                    processed_question_ids.update(h.discovered_by_question_ids)
             except Exception as e:
                 # Table might not exist on first run - that's okay
                 logger.debug(f"Could not load existing hypotheses (first run?): {e}")
@@ -389,7 +380,6 @@ class EvidencePipeline(Pipeline):
             "resolved_questions": len(self.resolved_questions),
             "evidence_articles": len(self.evidence_articles),
             "causal_hypotheses": len(self.causal_hypotheses),
-            "enhanced_events": len(self.enhanced_events),
             "stages_completed": len([r for r in self._results if r.status == PipelineStageStatus.COMPLETED]),
             "stages_failed": len([r for r in self._results if r.status == PipelineStageStatus.FAILED]),
         }
