@@ -34,43 +34,6 @@ class CausalRelationType(str, Enum):
     CONDITIONAL = "conditional"    # Causes only if conditions met
 
 
-class CausalLink(BaseModel):
-    """Represents a directed causal relationship between events."""
-    
-    source_event_id: str = Field(..., description="Event that causes/influences")
-    target_event_id: str = Field(..., description="Event that is caused/influenced")
-    relation_type: CausalRelationType = Field(default=CausalRelationType.CAUSES)
-    
-    strength: float = Field(
-        default=0.5,
-        ge=0.0,
-        le=1.0,
-        description="Strength of causal relationship (0-1)"
-    )
-    
-    confidence: float = Field(
-        default=0.5,
-        ge=0.0,
-        le=1.0,
-        description="Confidence in this causal link (0-1)"
-    )
-    
-    time_lag_hours: Optional[float] = Field(
-        None,
-        description="Typical time delay between cause and effect"
-    )
-    
-    evidence_article_ids: List[str] = Field(
-        default_factory=list,
-        description="Articles that document this causal relationship"
-    )
-    
-    reasoning: Optional[str] = Field(
-        None,
-        description="Explanation of the causal mechanism"
-    )
-
-
 @register_model('events', indexes=['domain', 'status', 'event_type'])
 class Event(BaseModel):
     """Discrete occurrence or state change in the world.
@@ -115,12 +78,6 @@ class Event(BaseModel):
         default=EventStatus.PREDICTED,
         description="Current status of the event"
     )
-    
-    # Causal relationships
-    causes: List[CausalLink] = Field(
-        default_factory=list,
-        description="Events that this event causes (outgoing edges)"
-    )
 
     # Documentation
     article_ids: List[str] = Field(
@@ -143,6 +100,44 @@ class Event(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = None
 
+    def get_outgoing_links(self, db) -> List["CausalHypothesis"]:
+        """Get all causal hypotheses where this event is the source (cause).
+
+        Args:
+            db: Database instance (GenericDatabase)
+
+        Returns:
+            List of outgoing CausalHypothesis objects
+        """
+        from .causal_hypothesis import CausalHypothesis
+        return db.get_many(CausalHypothesis, filters={'source_event_id': self.id})
+
+    def get_incoming_links(self, db) -> List["CausalHypothesis"]:
+        """Get all causal hypotheses where this event is the target (effect).
+
+        Args:
+            db: Database instance (GenericDatabase)
+
+        Returns:
+            List of incoming CausalHypothesis objects
+        """
+        from .causal_hypothesis import CausalHypothesis
+        return db.get_many(CausalHypothesis, filters={'target_event_id': self.id})
+
+    def get_all_links(self, db) -> Dict[str, List["CausalHypothesis"]]:
+        """Get both outgoing and incoming causal hypotheses.
+
+        Args:
+            db: Database instance (GenericDatabase)
+
+        Returns:
+            Dict with 'outgoing' and 'incoming' keys containing hypothesis lists
+        """
+        return {
+            'outgoing': self.get_outgoing_links(db),
+            'incoming': self.get_incoming_links(db)
+        }
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -155,17 +150,6 @@ class Event(BaseModel):
                 "occurred_date": "2024-11-05T23:00:00Z",
                 "resolution_date": "2024-11-06T08:00:00Z",
                 "status": "occurred",
-                "causes": [
-                    {
-                        "source_event_id": "evt_pol_20241105_001",
-                        "target_event_id": "evt_fin_20241106_001",
-                        "relation_type": "causes",
-                        "strength": 0.8,
-                        "confidence": 0.9,
-                        "evidence_article_ids": ["art_fin_20241106_042"],
-                        "reasoning": "Election results typically cause immediate market reactions"
-                    }
-                ],
                 "article_ids": [
                     "art_pol_20241020_001",
                     "art_pol_20241105_123",
@@ -178,92 +162,3 @@ class Event(BaseModel):
             }
         }
     )
-
-    def add_causal_link(
-        self,
-        target_event_id: str,
-        relation_type: CausalRelationType = CausalRelationType.CAUSES,
-        strength: float = 0.5,
-        confidence: float = 0.5,
-        reasoning: Optional[str] = None,
-        evidence_article_ids: Optional[List[str]] = None
-    ) -> None:
-        """Add a causal link to another event.
-        
-        Args:
-            target_event_id: ID of the event this event causes
-            relation_type: Type of causal relationship
-            strength: Strength of causal effect (0-1)
-            confidence: Confidence in this causal link (0-1)
-            reasoning: Explanation of causal mechanism
-            evidence_article_ids: Articles documenting this relationship
-        """
-        link = CausalLink(
-            source_event_id=self.id,
-            target_event_id=target_event_id,
-            relation_type=relation_type,
-            strength=strength,
-            confidence=confidence,
-            reasoning=reasoning,
-            evidence_article_ids=evidence_article_ids or []
-        )
-        self.causes.append(link)
-
-    def mark_occurred(
-        self,
-        occurred_date: datetime
-    ) -> None:
-        """Mark event as occurred.
-
-        Args:
-            occurred_date: When the event occurred
-        """
-        self.status = EventStatus.OCCURRED
-        self.occurred_date = occurred_date
-        self.resolution_date = datetime.now(timezone.utc)
-
-    def get_causal_descendants(self) -> List[str]:
-        """Get all event IDs that this event directly causes.
-        
-        Returns:
-            List of event IDs
-        """
-        return [link.target_event_id for link in self.causes]
-
-    def get_evidence_articles(self) -> List[str]:
-        """Get all article IDs that provide evidence for causal links.
-        
-        Returns:
-            List of unique article IDs
-        """
-        evidence_ids = set(self.article_ids)
-        for link in self.causes:
-            evidence_ids.update(link.evidence_article_ids)
-        return list(evidence_ids)
-
-    def compute_importance(self) -> float:
-        """Compute event importance from graph structure and metadata.
-
-        Importance is derived from:
-        - Number of causal effects (outgoing edges)
-        - Strength of causal effects
-        - Media coverage (article count)
-
-        Returns:
-            Importance score between 0 and 1
-        """
-        # Base score from outgoing causal effects
-        outgoing_score = min(len(self.causes) * 0.2, 0.6)
-
-        # Weighted by average strength of effects
-        if self.causes:
-            avg_strength = sum(link.strength for link in self.causes) / len(self.causes)
-            outgoing_score *= avg_strength
-
-        # Media coverage score
-        article_score = min(len(self.article_ids) * 0.05, 0.4)
-
-        # Combine scores
-        total_score = outgoing_score + article_score
-
-        return min(total_score, 1.0)

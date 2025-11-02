@@ -180,7 +180,7 @@ async def run_pipeline(args):
                 for i, event in enumerate(pipeline.enhanced_events[:3], 1):
                     logger.info(f"  {i}. {event.title}")
                     logger.info(f"     ID: {event.id}")
-                    logger.info(f"     Causal links: {len(event.causes)} outgoing, {len(event.caused_by_ids)} incoming")
+                    # Note: Causal links are now stored separately and can be queried via event.get_outgoing_links(db)
 
         logger.info("\n" + "=" * 80)
 

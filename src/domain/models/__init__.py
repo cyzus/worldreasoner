@@ -1,7 +1,7 @@
 """Data models for WorldReasoner."""
 
 from .article import Article
-from .event import Event, EventType, EventStatus, CausalLink, CausalRelationType
+from .event import Event, EventType, EventStatus, CausalRelationType
 from .question import Question, QuestionType
 from .forecast import Forecast
 from .causal_hypothesis import CausalHypothesis
@@ -12,7 +12,6 @@ __all__ = [
     "Event",
     "EventType",
     "EventStatus",
-    "CausalLink",
     "CausalRelationType",
     "Question",
     "QuestionType",

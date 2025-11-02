@@ -1,11 +1,11 @@
-"""Causal graph building stage - converts hypotheses to permanent links."""
+"""Causal graph building stage - validates and saves hypotheses to graph."""
 
-from typing import List, Dict, Optional
+from typing import List, Optional
 from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 
 from src.pipelines.base import PipelineStage
-from src.domain.models import Event, CausalHypothesis, CausalLink
+from src.domain.models import Event, CausalHypothesis
 from src.core.database import GenericDatabase
 from src.utils.logging import logger
 
@@ -27,18 +27,16 @@ class CausalGraphConfig(BaseModel):
     )
 
 
-class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, Event]):
-    """Builds causal graph by adding validated links to events.
+class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, CausalHypothesis]):
+    """Validates and saves causal hypotheses to the graph.
 
     This stage:
-    1. Loads existing events from database
-    2. Converts CausalHypothesis objects to CausalLink objects
-    3. Adds links to source event's `causes` list
-    4. Updates target event's `caused_by_ids` list
-    5. Validates temporal ordering and prevents cycles
-    6. Recomputes event importance scores
+    1. Validates that source and target events exist
+    2. Checks for duplicates and merges if found
+    3. Validates temporal ordering and prevents cycles
+    4. Saves CausalHypothesis objects directly to database
 
-    Returns only the modified events that need to be persisted.
+    Returns the saved/updated CausalHypothesis objects.
     """
 
     def __init__(
@@ -55,21 +53,21 @@ class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, Event]):
         super().__init__(name="CausalGraphBuilding", config=config)
         self.db = GenericDatabase(db_path)
 
-    async def process(self, inputs: List[CausalHypothesis]) -> List[Event]:
-        """Convert hypotheses to causal links in event graph.
+    async def process(self, inputs: List[CausalHypothesis]) -> List[CausalHypothesis]:
+        """Validate and save causal hypotheses to graph.
 
         Args:
-            inputs: List of validated causal hypotheses
+            inputs: List of causal hypotheses to add
 
         Returns:
-            List of events that were modified (need to be re-saved)
+            List of saved/updated CausalHypothesis objects
         """
         logger.info(f"Building causal graph from {len(inputs)} hypotheses")
 
-        modified_events: Dict[str, Event] = {}  # event_id -> Event
+        saved_hypotheses: List[CausalHypothesis] = []
         link_stats = {
             'added': 0,
-            'duplicate': 0,
+            'merged': 0,
             'invalid_events': 0,
             'temporal_violation': 0,
             'max_links_exceeded': 0,
@@ -82,52 +80,43 @@ class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, Event]):
                 f"{hypothesis.source_event_id} -> {hypothesis.target_event_id}"
             )
 
-            # Add link to graph
-            result = self._add_causal_link(hypothesis, modified_events)
+            # Add hypothesis to graph
+            result = self._add_hypothesis(hypothesis, saved_hypotheses)
 
             # Update stats
-            if result in link_stats:
+            if isinstance(result, str) and result in link_stats:
                 link_stats[result] += 1
-
-        # Recompute importance scores for modified events
-        for event in modified_events.values():
-            event.compute_importance()
-
-        # Mark hypotheses as validated
-        for hypothesis in inputs:
-            if self._hypothesis_was_added(hypothesis, modified_events):
-                hypothesis.mark_validated(notes="Added to causal graph")
 
         # Log statistics
         logger.info(
             f"Graph building complete: "
             f"added={link_stats['added']}, "
-            f"duplicate={link_stats['duplicate']}, "
+            f"merged={link_stats['merged']}, "
             f"invalid={link_stats['invalid_events']}, "
             f"temporal={link_stats['temporal_violation']}, "
             f"max_links={link_stats['max_links_exceeded']}, "
             f"cycles={link_stats['cycle_prevented']}"
         )
 
-        return list(modified_events.values())
+        return saved_hypotheses
 
-    def _add_causal_link(
+    def _add_hypothesis(
         self,
         hypothesis: CausalHypothesis,
-        modified_events: Dict[str, Event]
+        saved_hypotheses: List[CausalHypothesis]
     ) -> str:
-        """Add a causal link to the graph.
+        """Add a hypothesis to the graph or merge with existing.
 
         Args:
             hypothesis: Hypothesis to add
-            modified_events: Dict of modified events (updated in-place)
+            saved_hypotheses: List of saved hypotheses (updated in-place)
 
         Returns:
-            Status string: 'added', 'duplicate', 'invalid_events', etc.
+            Status string: 'added', 'merged', 'invalid_events', etc.
         """
-        # Load source and target events (from cache or database)
-        source_event = self._get_event(hypothesis.source_event_id, modified_events)
-        target_event = self._get_event(hypothesis.target_event_id, modified_events)
+        # Validate source and target events exist
+        source_event = self.db.get(Event, hypothesis.source_event_id)
+        target_event = self.db.get(Event, hypothesis.target_event_id)
 
         if not source_event:
             logger.warning(f"Source event not found: {hypothesis.source_event_id}")
@@ -137,12 +126,27 @@ class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, Event]):
             logger.warning(f"Target event not found: {hypothesis.target_event_id}")
             return 'invalid_events'
 
-        # Check if link already exists
-        if self._link_exists(source_event, hypothesis.target_event_id):
+        # Check if hypothesis already exists in database
+        existing_hypotheses = self.db.get_many(
+            CausalHypothesis,
+            filters={
+                'source_event_id': hypothesis.source_event_id,
+                'target_event_id': hypothesis.target_event_id
+            }
+        )
+
+        if existing_hypotheses:
+            # Merge with existing - add to discovered_by_question_ids
+            existing = existing_hypotheses[0]
+            if hypothesis.discovered_by_question_ids:
+                for qid in hypothesis.discovered_by_question_ids:
+                    existing.add_discovery(qid)
+            self.db.save(CausalHypothesis, existing)
+            saved_hypotheses.append(existing)
             logger.debug(
-                f"Link already exists: {source_event.id} -> {target_event.id}"
+                f"Merged with existing: {source_event.id} -> {target_event.id}"
             )
-            return 'duplicate'
+            return 'merged'
 
         # Validate temporal ordering
         if self.config.validate_temporal_ordering:
@@ -154,84 +158,32 @@ class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, Event]):
                 return 'temporal_violation'
 
         # Check max links limit
-        if len(source_event.causes) >= self.config.max_links_per_event:
+        existing_outgoing = self.db.get_many(
+            CausalHypothesis,
+            filters={'source_event_id': hypothesis.source_event_id}
+        )
+        if len(existing_outgoing) >= self.config.max_links_per_event:
             logger.warning(
                 f"Max links exceeded for {source_event.id} "
-                f"({len(source_event.causes)}/{self.config.max_links_per_event})"
+                f"({len(existing_outgoing)}/{self.config.max_links_per_event})"
             )
             return 'max_links_exceeded'
 
         # Check for cycles (if not allowed)
         if not self.config.allow_cycles:
-            if self._creates_cycle(source_event.id, target_event.id, modified_events):
+            if self._creates_cycle(hypothesis.source_event_id, hypothesis.target_event_id):
                 logger.warning(
                     f"Cycle prevented: {source_event.id} -> {target_event.id}"
                 )
                 return 'cycle_prevented'
 
-        # Create causal link
-        link = CausalLink(
-            source_event_id=hypothesis.source_event_id,
-            target_event_id=hypothesis.target_event_id,
-            relation_type=hypothesis.relation_type,
-            strength=hypothesis.strength,
-            confidence=hypothesis.confidence,
-            reasoning=hypothesis.reasoning,
-            evidence_article_ids=hypothesis.evidence_article_ids
-        )
+        # Save new hypothesis directly to database
+        self.db.save(CausalHypothesis, hypothesis)
+        saved_hypotheses.append(hypothesis)
 
-        # Add link to source event
-        source_event.causes.append(link)
-        modified_events[source_event.id] = source_event
-
-        # Add to target event's incoming links
-        if source_event.id not in target_event.caused_by_ids:
-            target_event.caused_by_ids.append(source_event.id)
-            modified_events[target_event.id] = target_event
-
-        # Update event timestamps
-        source_event.updated_at = datetime.now(timezone.utc)
-        target_event.updated_at = datetime.now(timezone.utc)
-
-        logger.debug(f"Added link: {source_event.id} -> {target_event.id}")
+        logger.debug(f"Added hypothesis: {source_event.id} -> {target_event.id}")
         return 'added'
 
-    def _get_event(
-        self,
-        event_id: str,
-        modified_events: Dict[str, Event]
-    ) -> Optional[Event]:
-        """Get event from cache or database.
-
-        Args:
-            event_id: Event ID to retrieve
-            modified_events: Cache of modified events
-
-        Returns:
-            Event object or None if not found
-        """
-        # Check cache first
-        if event_id in modified_events:
-            return modified_events[event_id]
-
-        # Load from database
-        event = self.db.get(Event, event_id)
-        return event
-
-    def _link_exists(self, source_event: Event, target_event_id: str) -> bool:
-        """Check if a causal link already exists.
-
-        Args:
-            source_event: Source event
-            target_event_id: Target event ID
-
-        Returns:
-            True if link exists
-        """
-        return any(
-            link.target_event_id == target_event_id
-            for link in source_event.causes
-        )
 
     def _validate_temporal_order(
         self,
@@ -261,8 +213,7 @@ class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, Event]):
     def _creates_cycle(
         self,
         source_id: str,
-        target_id: str,
-        modified_events: Dict[str, Event]
+        target_id: str
     ) -> bool:
         """Check if adding this link would create a cycle.
 
@@ -271,19 +222,17 @@ class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, Event]):
         Args:
             source_id: Source event ID
             target_id: Target event ID
-            modified_events: Cache of modified events
 
         Returns:
             True if adding this link would create a cycle
         """
         # If target can reach source, adding source->target creates a cycle
-        return self._can_reach(target_id, source_id, modified_events, visited=set())
+        return self._can_reach(target_id, source_id, visited=set())
 
     def _can_reach(
         self,
         from_id: str,
         to_id: str,
-        modified_events: Dict[str, Event],
         visited: set
     ) -> bool:
         """Check if from_id can reach to_id via existing links.
@@ -291,7 +240,6 @@ class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, Event]):
         Args:
             from_id: Starting event ID
             to_id: Target event ID
-            modified_events: Cache of modified events
             visited: Set of visited event IDs (for cycle detection)
 
         Returns:
@@ -305,38 +253,15 @@ class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, Event]):
 
         visited.add(from_id)
 
-        # Get from event
-        from_event = self._get_event(from_id, modified_events)
-        if not from_event:
-            return False
+        # Get all outgoing hypotheses from database
+        outgoing_links = self.db.get_many(
+            CausalHypothesis,
+            filters={'source_event_id': from_id}
+        )
 
         # Check each outgoing link
-        for link in from_event.causes:
-            if self._can_reach(link.target_event_id, to_id, modified_events, visited):
+        for link in outgoing_links:
+            if self._can_reach(link.target_event_id, to_id, visited):
                 return True
 
         return False
-
-    def _hypothesis_was_added(
-        self,
-        hypothesis: CausalHypothesis,
-        modified_events: Dict[str, Event]
-    ) -> bool:
-        """Check if a hypothesis was successfully added to the graph.
-
-        Args:
-            hypothesis: Hypothesis to check
-            modified_events: Modified events
-
-        Returns:
-            True if hypothesis was added
-        """
-        source_event = modified_events.get(hypothesis.source_event_id)
-        if not source_event:
-            return False
-
-        return any(
-            link.target_event_id == hypothesis.target_event_id
-            and link.relation_type == hypothesis.relation_type
-            for link in source_event.causes
-        )

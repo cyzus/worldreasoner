@@ -129,37 +129,6 @@ class TemporalGateway:
 
         return filtered
 
-    def filter_event_causal_links(self, event: "Event") -> "Event":
-        """Return event with only causal links to pre-cutoff events.
-
-        This creates a new Event object with filtered causal links. The original
-        event is not modified.
-
-        Args:
-            event: Event to filter
-
-        Returns:
-            New Event with filtered causes list
-        """
-        from ..domain.models import Event
-
-        if not event.causes:
-            return event
-
-        filtered_causes = []
-
-        for link in event.causes:
-            # For now, we don't have the target event loaded
-            # So we'll keep all links and rely on event filtering
-            # to handle the target event accessibility
-            # TODO: Load and check target event if needed
-            filtered_causes.append(link)
-
-        # Create new event with filtered causes
-        event_dict = event.model_dump()
-        event_dict['causes'] = filtered_causes
-
-        return Event(**event_dict)
 
     def is_article_accessible(self, article: "Article") -> bool:
         """Check if a single article is accessible.

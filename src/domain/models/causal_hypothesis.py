@@ -1,7 +1,7 @@
-"""Causal hypothesis model - proposed causal explanations from LLM analysis."""
+"""Causal hypothesis model - LLM-proposed causal relationships between events."""
 
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -9,14 +9,16 @@ from .event import CausalRelationType
 from ...core.database import register_model
 
 
-@register_model('causal_hypotheses', indexes=['target_event_id', 'confidence', 'strength'])
+@register_model('causal_hypotheses', indexes=['source_event_id', 'target_event_id', 'confidence', 'strength'])
 class CausalHypothesis(BaseModel):
-    """A proposed causal explanation extracted by LLM with hindsight.
+    """LLM-proposed causal relationship between events.
 
-    CausalHypothesis is an intermediate validation layer between LLM output
-    and permanent CausalLink objects in the event graph. This allows for
-    quality control, deduplication, and consistency checks before committing
-    causal relationships to the graph.
+    These represent causal relationships discovered through hindsight analysis.
+    They are NOT validated against ground truth - confidence/strength scores are
+    LLM estimates. Multiple analyses may discover the same relationship.
+
+    This is the single source of truth for causal relationships in the graph.
+    No separate "validated" links - these ARE the graph edges.
     """
 
     # Core identification
@@ -50,6 +52,12 @@ class CausalHypothesis(BaseModel):
         description="Confidence in this causal link (0-1)"
     )
 
+    # Temporal characteristics
+    time_lag_hours: Optional[float] = Field(
+        None,
+        description="Typical time delay between cause and effect"
+    )
+
     # Explanation and evidence
     reasoning: str = Field(
         ...,
@@ -61,30 +69,22 @@ class CausalHypothesis(BaseModel):
         description="Articles that support this causal claim"
     )
 
-    # Context
-    question_id: str = Field(
-        ...,
-        description="Question that triggered this analysis"
+    # Discovery tracking (can be discovered multiple times)
+    discovered_by_question_ids: List[str] = Field(
+        default_factory=list,
+        description="Question IDs that led to discovering this relationship"
     )
-
-    # Metadata
     identified_by: str = Field(
         default="evidence_pipeline",
         description="Source of this hypothesis (pipeline, manual, etc.)"
     )
-    identified_at: datetime = Field(
+    first_identified_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        description="When this hypothesis was generated"
+        description="When this hypothesis was first discovered"
     )
-
-    # Validation status
-    validated: bool = Field(
-        default=False,
-        description="Whether this hypothesis has been validated and added to graph"
-    )
-    validation_notes: str = Field(
-        default="",
-        description="Notes from validation process"
+    last_confirmed_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="When this hypothesis was most recently rediscovered"
     )
 
     def meets_thresholds(
@@ -111,11 +111,14 @@ class CausalHypothesis(BaseModel):
         """
         return len(self.evidence_article_ids) > 0
 
-    def mark_validated(self, notes: str = "") -> None:
-        """Mark hypothesis as validated and added to graph.
+    def add_discovery(self, question_id: str) -> None:
+        """Record that this hypothesis was discovered by another question.
+
+        Updates last_confirmed_at and adds question_id if not already present.
 
         Args:
-            notes: Optional validation notes
+            question_id: Question ID that discovered this relationship
         """
-        self.validated = True
-        self.validation_notes = notes
+        if question_id not in self.discovered_by_question_ids:
+            self.discovered_by_question_ids.append(question_id)
+        self.last_confirmed_at = datetime.now(timezone.utc)
