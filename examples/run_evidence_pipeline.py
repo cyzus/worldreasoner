@@ -146,11 +146,12 @@ async def run_pipeline(args):
         logger.info("=" * 80)
         logger.info("PIPELINE COMPLETED")
         logger.info("=" * 80)
-        # Optionally report DB-level question stats if available
+        # Display DB-level question stats
         db_total = summary.get('db_total_questions')
-        db_unresolved = summary.get('db_unresolved_questions')
-        if isinstance(db_total, int) and isinstance(db_unresolved, int):
-            logger.info(f"Questions in DB: total={db_total}, unresolved={db_unresolved}, resolved={db_total - db_unresolved}")
+        db_resolved = summary.get('db_resolved_questions')
+        db_unprocessed = summary.get('db_unprocessed_questions')
+        if isinstance(db_total, int) and isinstance(db_resolved, int) and isinstance(db_unprocessed, int):
+            logger.info(f"Questions in DB: total={db_total}, resolved={db_resolved}, unprocessed={db_unprocessed}")
 
         logger.info(f"Questions processed: {summary['resolved_questions']}")
         logger.info(f"Evidence articles: {summary['evidence_articles']}")
@@ -178,7 +179,7 @@ async def run_pipeline(args):
                     logger.info(f"     Evidence: {len(hyp.evidence_article_ids)} articles")
                     logger.info(f"     Discovered by: {len(hyp.discovered_by_question_ids)} question(s)")
 
-        logger.info("\n" + "=" * 80)
+        logger.info("=" * 80)
 
     except Exception as e:
         logger.error("=" * 80)

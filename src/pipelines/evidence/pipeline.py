@@ -124,7 +124,8 @@ class EvidencePipeline(Pipeline):
         
         # DB stats captured during question loading (for summaries/logging)
         self.db_total_questions = 0
-        self.db_unresolved_questions = 0
+        self.db_resolved_questions = 0
+        self.db_unprocessed_questions = 0
 
     async def run(
         self,
@@ -313,9 +314,10 @@ class EvidencePipeline(Pipeline):
         # Get all questions
         all_questions = db.get_many(Question, filters={})
 
-        # Capture DB stats: how many are unresolved (no ground_truth yet)
+        # Capture DB stats
         self.db_total_questions = len(all_questions)
-        self.db_unresolved_questions = sum(1 for q in all_questions if q.ground_truth is None)
+        resolved_with_ground_truth = [q for q in all_questions if q.resolution_date and q.ground_truth is not None]
+        self.db_resolved_questions = len(resolved_with_ground_truth)
 
         # Get all existing causal hypotheses to check which questions were already processed
         processed_question_ids = set()
@@ -329,6 +331,13 @@ class EvidencePipeline(Pipeline):
                 # Table might not exist on first run - that's okay
                 logger.debug(f"Could not load existing hypotheses (first run?): {e}")
                 processed_question_ids = set()
+
+        # Count unprocessed: resolved questions that haven't been processed yet
+        unprocessed_count = 0
+        for q in resolved_with_ground_truth:
+            if q.id not in processed_question_ids:
+                unprocessed_count += 1
+        self.db_unprocessed_questions = unprocessed_count
 
         # Filter for resolved questions in date range
         resolved = []
@@ -373,11 +382,11 @@ class EvidencePipeline(Pipeline):
             f"{f', limit: {self.evidence_config.max_questions}' if self.evidence_config.max_questions else ''})"
         )
 
-        # Also report DB-level resolution stats to help users see what's available
+        # Report DB-level stats to help users understand what's available
         logger.info(
             f"Questions in DB: total={self.db_total_questions}, "
-            f"unresolved={self.db_unresolved_questions}, "
-            f"resolved={self.db_total_questions - self.db_unresolved_questions}"
+            f"resolved={self.db_resolved_questions}, "
+            f"unprocessed={self.db_unprocessed_questions}"
         )
 
         if skipped_already_processed > 0:
@@ -399,5 +408,6 @@ class EvidencePipeline(Pipeline):
             "stages_failed": len([r for r in self._results if r.status == PipelineStageStatus.FAILED]),
             # DB-level stats captured during question loading
             "db_total_questions": self.db_total_questions,
-            "db_unresolved_questions": self.db_unresolved_questions,
+            "db_resolved_questions": self.db_resolved_questions,
+            "db_unprocessed_questions": self.db_unprocessed_questions,
         }
