@@ -3,7 +3,7 @@ import GraphVisualization from './components/GraphVisualization'
 import ControlPanel from './components/ControlPanel'
 import EventDetails from './components/EventDetails'
 import Timeline from './components/Timeline'
-import { fetchGraph, fetchStatistics } from './api/graphApi'
+import { fetchGraph, fetchStatistics, fetchQuestions, fetchQuestionEvents } from './api/graphApi'
 import './App.css'
 
 function App() {
@@ -20,6 +20,8 @@ function App() {
     minEdgeWeight: 0,
   })
   const [timeFilter, setTimeFilter] = useState(null) // { start: Date, end: Date }
+  const [questions, setQuestions] = useState([]) // List of all questions
+  const [selectedQuestionId, setSelectedQuestionId] = useState(null) // Currently selected question filter
 
   // Load full graph data once
   const loadGraph = useCallback(async (queryParams = {}) => {
@@ -115,12 +117,24 @@ function App() {
     }
   }, [])
 
+  // Load questions
+  const loadQuestions = useCallback(async () => {
+    try {
+      const questionsData = await fetchQuestions()
+      setQuestions(questionsData)
+      console.log('Loaded questions:', questionsData.length)
+    } catch (err) {
+      console.error('Failed to load questions:', err)
+    }
+  }, [])
+
   // Initial load
   useEffect(() => {
     console.log('Initial load with filters:', filters)
     loadGraph(filters)
     loadStatistics()
-  }, [loadGraph, loadStatistics])
+    loadQuestions()
+  }, [loadGraph, loadStatistics, loadQuestions])
 
   // Handle filter changes
   const handleFilterChange = (newFilters) => {
@@ -188,6 +202,113 @@ function App() {
     applyTimeFilter(startDate, endDate)
   }
 
+  // Handle question filter
+  const handleQuestionFilter = useCallback(async (questionId, depth = 2) => {
+    if (!questionId) {
+      // No filter, show all data
+      setGraphData(fullGraphData)
+      setSelectedQuestionId(null)
+      setTimeFilter(null)
+      return
+    }
+
+    setSelectedQuestionId(questionId)
+
+    // Find the question
+    const question = questions.find(q => q.id === questionId)
+    if (!question) {
+      console.warn('Question not found:', questionId)
+      return
+    }
+
+    console.log('Filtering by question:', question.question_text)
+
+    try {
+      // Fetch all events related to this question (including from metadata and hypotheses)
+      const questionEventsData = await fetchQuestionEvents(questionId)
+      const seedEventIds = new Set(questionEventsData.event_ids)
+
+      console.log('=== Question Filter Statistics ===')
+      console.log(`Direct events: ${questionEventsData.direct_events}`)
+      console.log(`Extracted during evidence: ${questionEventsData.extracted_events}`)
+      console.log(`In causal hypotheses: ${questionEventsData.hypothesis_events}`)
+      console.log(`Orphaned (extracted but not in hypotheses): ${questionEventsData.orphaned_events}`)
+      console.log(`Total seed events: ${questionEventsData.total_events}`)
+      console.log(`Causal hypotheses: ${questionEventsData.hypotheses_count}`)
+      console.log('Seed event IDs:', Array.from(seedEventIds).slice(0, 5), '...')
+
+      // BFS to find neighborhood around these events
+      const visited = new Set(seedEventIds)
+      const queue = Array.from(seedEventIds).map(id => ({ id, depth: 0 }))
+
+      while (queue.length > 0) {
+        const { id: currentId, depth: currentDepth } = queue.shift()
+
+        if (currentDepth >= depth) continue
+
+        // Find connected nodes (both incoming and outgoing)
+        fullGraphData.links.forEach(link => {
+          const sourceId = typeof link.source === 'object' ? link.source.id : link.source
+          const targetId = typeof link.target === 'object' ? link.target.id : link.target
+
+          // Outgoing links (causes)
+          if (sourceId === currentId && !visited.has(targetId)) {
+            visited.add(targetId)
+            queue.push({ id: targetId, depth: currentDepth + 1 })
+          }
+
+          // Incoming links (caused by)
+          if (targetId === currentId && !visited.has(sourceId)) {
+            visited.add(sourceId)
+            queue.push({ id: sourceId, depth: currentDepth + 1 })
+          }
+        })
+      }
+
+      console.log(`Expanded to ${visited.size} nodes (from ${seedEventIds.size} seed events, depth ${depth})`)
+
+      // Filter nodes to include the neighborhood
+      const filteredNodes = fullGraphData.nodes.filter(node => visited.has(node.id))
+
+      // Filter links to only include those between visible nodes
+      const filteredLinks = fullGraphData.links.filter(link => {
+        const sourceId = typeof link.source === 'object' ? link.source.id : link.source
+        const targetId = typeof link.target === 'object' ? link.target.id : link.target
+        return visited.has(sourceId) && visited.has(targetId)
+      })
+
+      console.log(`Final result: ${filteredNodes.length} nodes, ${filteredLinks.length} links`)
+
+      // Update with new filtered data
+      setGraphData({
+        nodes: filteredNodes,
+        links: filteredLinks,
+      })
+
+      // Clear time filter when filtering by question
+      setTimeFilter(null)
+    } catch (error) {
+      console.error('Failed to fetch question events:', error)
+      // Fallback to old behavior using only related_event_ids
+      const seedEventIds = new Set()
+      if (question.target_event_id) {
+        seedEventIds.add(question.target_event_id)
+      }
+      question.related_event_ids.forEach(id => seedEventIds.add(id))
+
+      const filteredNodes = fullGraphData.nodes.filter(node => seedEventIds.has(node.id))
+      const nodeIds = new Set(filteredNodes.map(n => n.id))
+      const filteredLinks = fullGraphData.links.filter(link => {
+        const sourceId = typeof link.source === 'object' ? link.source.id : link.source
+        const targetId = typeof link.target === 'object' ? link.target.id : link.target
+        return nodeIds.has(sourceId) && nodeIds.has(targetId)
+      })
+
+      setGraphData({ nodes: filteredNodes, links: filteredLinks })
+      setTimeFilter(null)
+    }
+  }, [fullGraphData, questions])
+
   return (
     <div className="app">
       <header className="app-header">
@@ -208,6 +329,8 @@ function App() {
           onFilterChange={handleFilterChange}
           onRefresh={() => loadGraph(filters)}
           loading={loading}
+          questions={questions}
+          onQuestionFilter={handleQuestionFilter}
         />
 
         <div className="graph-main">

@@ -159,7 +159,7 @@ async def run_pipeline(args):
         logger.info(f"Stage executions: {summary['stages_completed']} completed, {summary['stages_failed']} failed")
 
         # Show stage details
-        logger.info("\nStage Results:")
+        logger.info("Stage Results:")
         for i, result in enumerate(results, 1):
             status_symbol = "✓" if result.status.value == "completed" else "✗"
             logger.info(

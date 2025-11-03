@@ -1,9 +1,13 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import './ControlPanel.css'
 
-const ControlPanel = ({ filters, onFilterChange, onRefresh, loading }) => {
+const ControlPanel = ({ filters, onFilterChange, onRefresh, loading, questions, onQuestionFilter }) => {
   const [localFilters, setLocalFilters] = useState(filters)
   const [isExpanded, setIsExpanded] = useState(true)
+  const [selectedQuestionId, setSelectedQuestionId] = useState('')
+  const [questionSearch, setQuestionSearch] = useState('')
+  const [showQuestionList, setShowQuestionList] = useState(false)
+  const questionSearchRef = useRef(null)
 
   const handleApply = () => {
     onFilterChange(localFilters)
@@ -18,7 +22,64 @@ const ControlPanel = ({ filters, onFilterChange, onRefresh, loading }) => {
     }
     setLocalFilters(defaultFilters)
     onFilterChange(defaultFilters)
+    setSelectedQuestionId('')
+    setQuestionSearch('')
+    if (onQuestionFilter) {
+      onQuestionFilter(null)
+    }
   }
+
+  const handleQuestionSelect = (questionId) => {
+    setSelectedQuestionId(questionId)
+    const question = questions.find(q => q.id === questionId)
+    if (question) {
+      setQuestionSearch(question.question_text)
+    }
+    setShowQuestionList(false)
+    if (onQuestionFilter) {
+      onQuestionFilter(questionId || null)
+    }
+  }
+
+  const handleQuestionSearchChange = (e) => {
+    setQuestionSearch(e.target.value)
+    setShowQuestionList(true)
+    // If search is cleared, reset filter
+    if (!e.target.value) {
+      setSelectedQuestionId('')
+      if (onQuestionFilter) {
+        onQuestionFilter(null)
+      }
+    }
+  }
+
+  const handleClearQuestion = () => {
+    setQuestionSearch('')
+    setSelectedQuestionId('')
+    setShowQuestionList(false)
+    if (onQuestionFilter) {
+      onQuestionFilter(null)
+    }
+  }
+
+  // Filter questions based on search
+  const filteredQuestions = questions.filter(q =>
+    q.question_text.toLowerCase().includes(questionSearch.toLowerCase())
+  )
+
+  // Close question list when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (questionSearchRef.current && !questionSearchRef.current.contains(event.target)) {
+        setShowQuestionList(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
 
   return (
     <div className={`control-panel ${isExpanded ? 'expanded' : 'collapsed'}`}>
@@ -34,6 +95,61 @@ const ControlPanel = ({ filters, onFilterChange, onRefresh, loading }) => {
 
       {isExpanded && (
         <div className="panel-content">
+          <div className="filter-section question-search-section" ref={questionSearchRef}>
+            <label>Filter by Question</label>
+            <div className="question-search-container">
+              <input
+                type="text"
+                placeholder="Search questions..."
+                value={questionSearch}
+                onChange={handleQuestionSearchChange}
+                onFocus={() => setShowQuestionList(true)}
+                disabled={loading}
+                className="question-search-input"
+              />
+              {questionSearch && (
+                <button
+                  className="clear-search-btn"
+                  onClick={handleClearQuestion}
+                  title="Clear search"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            {showQuestionList && questionSearch && (
+              <div className="question-list">
+                {filteredQuestions.length > 0 ? (
+                  filteredQuestions.slice(0, 10).map(q => (
+                    <div
+                      key={q.id}
+                      className={`question-item ${selectedQuestionId === q.id ? 'selected' : ''}`}
+                      onClick={() => handleQuestionSelect(q.id)}
+                    >
+                      <div className="question-text">{q.question_text}</div>
+                      <div className="question-meta">
+                        <span className="question-domain">{q.domain}</span>
+                        <span className="question-difficulty">Difficulty: {q.difficulty}/5</span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="question-item no-results">No questions found</div>
+                )}
+                {filteredQuestions.length > 10 && (
+                  <div className="question-item more-results">
+                    {filteredQuestions.length - 10} more... (refine search)
+                  </div>
+                )}
+              </div>
+            )}
+            <small>
+              {selectedQuestionId
+                ? 'Showing all extracted events + causal neighborhood (depth 2)'
+                : 'Search and select a question to filter the graph'}
+            </small>
+          </div>
+
           <div className="filter-section">
             <label>Node Types</label>
             <select

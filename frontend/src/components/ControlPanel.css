@@ -187,3 +187,144 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Question search styles */
+.question-search-section {
+  position: relative;
+}
+
+.question-search-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.question-search-input {
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid #ced4da;
+  color: #212529;
+  padding: 0.625rem 2rem 0.625rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.question-search-input:focus {
+  outline: none;
+  border-color: #495057;
+  box-shadow: 0 0 0 3px rgba(73, 80, 87, 0.1);
+}
+
+.question-search-input::placeholder {
+  color: #adb5bd;
+}
+
+.clear-search-btn {
+  position: absolute;
+  right: 6px;
+  background: #e9ecef;
+  border: none;
+  color: #495057;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1.25rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.clear-search-btn:hover {
+  background: #dee2e6;
+  color: #212529;
+}
+
+.question-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  margin-top: 0.25rem;
+  max-height: 400px;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+}
+
+.question-item {
+  padding: 0.75rem;
+  cursor: pointer;
+  border-bottom: 1px solid #e9ecef;
+  transition: background 0.15s ease;
+}
+
+.question-item:last-child {
+  border-bottom: none;
+}
+
+.question-item:hover {
+  background: #f8f9fa;
+}
+
+.question-item.selected {
+  background: #e7f5ff;
+  border-left: 3px solid #495057;
+}
+
+.question-item.no-results {
+  color: #6c757d;
+  font-style: italic;
+  cursor: default;
+  text-align: center;
+}
+
+.question-item.no-results:hover {
+  background: transparent;
+}
+
+.question-item.more-results {
+  color: #6c757d;
+  font-size: 0.8125rem;
+  font-style: italic;
+  text-align: center;
+  cursor: default;
+  background: #f8f9fa;
+}
+
+.question-item.more-results:hover {
+  background: #f8f9fa;
+}
+
+.question-text {
+  color: #212529;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  margin-bottom: 0.375rem;
+}
+
+.question-meta {
+  display: flex;
+  gap: 0.625rem;
+  font-size: 0.75rem;
+}
+
+.question-domain {
+  color: #495057;
+  background: #e9ecef;
+  padding: 0.125rem 0.5rem;
+  border-radius: 3px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.question-difficulty {
+  color: #6c757d;
+}

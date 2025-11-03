@@ -82,3 +82,28 @@ export async function fetchEvent(eventId) {
   const response = await axios.get(`${API_BASE_URL}/events/${eventId}`)
   return response.data
 }
+
+/**
+ * Fetch all questions
+ */
+export async function fetchQuestions(domain = null) {
+  const params = domain ? { domain } : {}
+  const response = await axios.get(`${API_BASE_URL}/questions/`, { params })
+  return response.data
+}
+
+/**
+ * Fetch single question details
+ */
+export async function fetchQuestion(questionId) {
+  const response = await axios.get(`${API_BASE_URL}/questions/${questionId}`)
+  return response.data
+}
+
+/**
+ * Fetch all events related to a question (including from causal hypotheses)
+ */
+export async function fetchQuestionEvents(questionId) {
+  const response = await axios.get(`${API_BASE_URL}/questions/${questionId}/events`)
+  return response.data
+}
