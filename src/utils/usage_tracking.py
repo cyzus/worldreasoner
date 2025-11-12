@@ -155,19 +155,23 @@ def extract_usage_from_agent(agent, model_name: Optional[str] = None) -> UsageMe
         completion_tokens = token_counts.output_tokens or 0
         total_tokens = prompt_tokens + completion_tokens
 
-        # Estimate cost using LiteLLM
+        # Estimate cost using LiteLLM's cost_per_token function
         estimated_cost = 0.0
         if model_name and total_tokens > 0:
             try:
-                estimated_cost = litellm.completion_cost(
-                    model=model_name,
+                # Strip litellm_proxy/ prefix if present for cost lookup
+                lookup_model = model_name.replace("litellm_proxy/", "")
+
+                # LiteLLM's cost_per_token returns (prompt_cost, completion_cost) in USD
+                prompt_cost, completion_cost = litellm.cost_per_token(
+                    model=lookup_model,
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens
                 )
+                estimated_cost = prompt_cost + completion_cost
             except Exception as cost_err:
-                logger.warning(
-                    f"Could not estimate cost for model '{model_name}': {cost_err}. "
-                    f"Model may not be in LiteLLM's pricing database."
+                logger.debug(
+                    f"Could not estimate cost for model '{model_name}': {cost_err}"
                 )
 
         return UsageMetrics(
