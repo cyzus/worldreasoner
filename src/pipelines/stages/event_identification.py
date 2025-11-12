@@ -12,6 +12,7 @@ from .tools import EventIdentifierTool, ArticleRetrievalTool
 from .collectors import ResultCollector
 from ..prompts import EventIdentificationPrompts
 from src.utils.logging import logger
+from src.utils.usage_tracking import UsageTracker, log_usage
 
 
 class EventIdentificationConfig(BaseModel):
@@ -51,6 +52,9 @@ class EventIdentificationStage(PipelineStage[Article, Event]):
 
         # Prompt generator
         self.prompts = EventIdentificationPrompts()
+
+        # Usage tracking
+        self.usage_tracker = UsageTracker()
     
     async def process(self, inputs: List[Article]) -> List[Event]:
         """Identify events from articles using LLM agent.
@@ -77,10 +81,16 @@ class EventIdentificationStage(PipelineStage[Article, Event]):
             
             # Run the agent with the instruction
             result = self.base_agent.run(instruction)
-            
+
+            # Track token usage
+            usage_metrics = self.base_agent.get_last_usage()
+            if usage_metrics:
+                self.usage_tracker.add_usage(usage_metrics)
+                log_usage(usage_metrics, context="EventIdentification")
+
             # Agent's response is just a summary for logging
             logger.debug(f"Agent response for event identification: {result[:200] if isinstance(result, str) else result}")
-            
+
             # Get identified events from the collector
             events = self.collector.get_all()
             
@@ -91,7 +101,11 @@ class EventIdentificationStage(PipelineStage[Article, Event]):
                     if event.domain == article.domain:
                         if event.id not in article.event_ids:
                             article.event_ids.append(event.id)
-            
+
+            # Log usage summary for this stage
+            if self.usage_tracker.total_calls > 0:
+                self.usage_tracker.log_summary(context="EventIdentification")
+
             return events
             
         except Exception as e:

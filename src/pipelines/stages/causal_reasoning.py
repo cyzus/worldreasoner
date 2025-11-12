@@ -12,6 +12,7 @@ from src.pipelines.stages.tools import ArticleRetrievalTool, CausalReasonerTool
 from src.pipelines.stages.collectors import ResultCollector
 from src.pipelines.prompts import HindsightAnalysisPrompts
 from src.utils.logging import logger
+from src.utils.usage_tracking import UsageTracker, log_usage
 from src.core.database import GenericDatabase
 
 
@@ -77,6 +78,9 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
         # Prompt generator
         self.prompts = HindsightAnalysisPrompts()
 
+        # Usage tracking (aggregates across all questions)
+        self.usage_tracker = UsageTracker()
+
     async def process(
         self,
         inputs: List[Tuple[Question, List[Article]]]
@@ -117,6 +121,10 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
         # Filter hypotheses by quality thresholds
         filtered = self._filter_hypotheses(all_hypotheses)
         logger.info(f"Generated {len(all_hypotheses)} hypotheses, {len(filtered)} passed quality filters")
+
+        # Log usage summary for this stage
+        if self.usage_tracker.total_calls > 0:
+            self.usage_tracker.log_summary(context="CausalReasoning")
 
         return filtered
 
@@ -162,6 +170,12 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
             # Run the agent in a thread pool to avoid blocking the event loop
             result = await asyncio.to_thread(agent.run, instruction)
             logger.debug(f"Agent completed: {result}")
+
+            # Track token usage
+            usage_metrics = agent.get_last_usage()
+            if usage_metrics:
+                self.usage_tracker.add_usage(usage_metrics)
+                log_usage(usage_metrics, context=f"CausalReasoning - {question.id}")
         except Exception as e:
             logger.error(f"Agent error for {question.id}: {e}")
             # Continue anyway - may have collected some hypotheses

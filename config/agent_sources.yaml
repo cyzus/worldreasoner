@@ -1,18 +1,12 @@
 sources:
-  - name: "Reuters World"
-    url: "https://www.reuters.com/world/"
-    scraper_type: "web"
-    domain: "world"
-    rate_limit_per_second: 1.0
-
   - name: "BBC News World"
     url: "https://www.bbc.com/news/world"
     scraper_type: "web"
     domain: "world"
     rate_limit_per_second: 1.0
 
-  - name: "NPR World"
-    url: "https://www.npr.org/sections/world/"
-    scraper_type: "web"
-    domain: "world"
-    rate_limit_per_second: 1.0
+  # - name: "NPR World"
+  #   url: "https://www.npr.org/sections/world/"
+  #   scraper_type: "web"
+  #   domain: "world"
+  #   rate_limit_per_second: 1.0

@@ -1,5 +1,7 @@
+from typing import Optional
 from smolagents import ToolCallingAgent, LiteLLMModel
 from src.config import Config, get_config
+from src.utils.usage_tracking import UsageMetrics, extract_usage_from_agent
 
 class BaseAgent():
     """Base class for all agents in the SmolAgents framework."""
@@ -15,8 +17,33 @@ class BaseAgent():
             max_steps=max_steps,  # Configurable max steps
             stream_outputs=True
         )
-    
+        self._last_usage: Optional[UsageMetrics] = None
+
     def run(self, prompt: str) -> str:
-        """Run the agent with the given prompt."""
+        """Run the agent with the given prompt.
+
+        After execution, usage metrics are available via get_last_usage().
+
+        Args:
+            prompt: The prompt to run the agent with
+
+        Returns:
+            Agent response string
+        """
         response = self.agent.run(prompt)
+
+        # Extract and store usage metrics
+        self._last_usage = extract_usage_from_agent(
+            self.agent,
+            model_name=self.config.llm.model
+        )
+
         return response
+
+    def get_last_usage(self) -> Optional[UsageMetrics]:
+        """Get usage metrics from the last agent run.
+
+        Returns:
+            UsageMetrics from the last run, or None if no run has occurred
+        """
+        return self._last_usage

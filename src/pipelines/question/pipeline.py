@@ -24,6 +24,7 @@ from src.config.pipeline import QuestionPipelineConfig
 from src.config import DatabaseConfig
 from src.domain.models import Article, Event, Question
 from src.utils.logging import logger
+from src.utils.usage_tracking import UsageTracker
 
 
 class QuestionPipeline(Pipeline):
@@ -113,6 +114,9 @@ class QuestionPipeline(Pipeline):
         self.articles: List[Article] = []
         self.events: List[Event] = []
         self.questions: List[Question] = []
+
+        # Pipeline-level usage tracking
+        self.usage_tracker = UsageTracker()
     
     async def run(self) -> List[PipelineStageResult]:
         """Run the question generation pipeline.
@@ -177,14 +181,27 @@ class QuestionPipeline(Pipeline):
                 return self._results
             
             logger.info(f"Generated {len(self.questions)} questions")
-            
+
             # Persist questions if enabled
             if self.enable_persistence and self.questions:
                 persist_result = await self.question_persist.execute(self.questions)
                 self._results.append(persist_result)
-            
+
+            # Aggregate usage from all stages
+            self._aggregate_stage_usage()
+
+            # Log pipeline-level summary
+            logger.info("=" * 60)
+            logger.info("QUESTION PIPELINE SUMMARY")
+            logger.info("=" * 60)
+            logger.info(f"Articles collected: {len(self.articles)}")
+            logger.info(f"Events identified: {len(self.events)}")
+            logger.info(f"Questions generated: {len(self.questions)}")
+            self.usage_tracker.log_summary(context="QuestionPipeline TOTAL")
+            logger.info("=" * 60)
+
             logger.success("Pipeline completed successfully!")
-            
+
         except Exception as e:
             # Add error to last result if exists
             if self._results:
@@ -205,3 +222,18 @@ class QuestionPipeline(Pipeline):
     def get_questions(self) -> List[Question]:
         """Get generated questions."""
         return self.questions
+
+    def _aggregate_stage_usage(self) -> None:
+        """Aggregate token usage from all pipeline stages."""
+        # Collect usage from each stage that tracks it
+        if hasattr(self.article_stage, 'usage_tracker'):
+            for metrics in self.article_stage.usage_tracker.usage_records:
+                self.usage_tracker.add_usage(metrics)
+
+        if hasattr(self.event_stage, 'usage_tracker'):
+            for metrics in self.event_stage.usage_tracker.usage_records:
+                self.usage_tracker.add_usage(metrics)
+
+        if hasattr(self.question_stage, 'usage_tracker'):
+            for metrics in self.question_stage.usage_tracker.usage_records:
+                self.usage_tracker.add_usage(metrics)

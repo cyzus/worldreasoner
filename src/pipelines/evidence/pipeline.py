@@ -28,6 +28,7 @@ from src.config import DatabaseConfig
 from src.domain.models import Question, Article, CausalHypothesis, Event
 from src.core.database import GenericDatabase
 from src.utils.logging import logger
+from src.utils.usage_tracking import UsageTracker
 
 
 class EvidencePipeline(Pipeline):
@@ -121,11 +122,14 @@ class EvidencePipeline(Pipeline):
         self.resolved_questions: List[Question] = []
         self.evidence_articles: List[Article] = []
         self.causal_hypotheses: List[CausalHypothesis] = []
-        
+
         # DB stats captured during question loading (for summaries/logging)
         self.db_total_questions = 0
         self.db_resolved_questions = 0
         self.db_unprocessed_questions = 0
+
+        # Pipeline-level usage tracking
+        self.usage_tracker = UsageTracker()
 
     async def run(
         self,
@@ -206,6 +210,19 @@ class EvidencePipeline(Pipeline):
 
             saved_hypotheses = graph_result.outputs
             logger.info(f"Saved {len(saved_hypotheses)} causal hypotheses to graph")
+
+            # Aggregate usage from all stages
+            self._aggregate_stage_usage()
+
+            # Log pipeline-level summary
+            logger.info("=" * 60)
+            logger.info("EVIDENCE PIPELINE SUMMARY")
+            logger.info("=" * 60)
+            logger.info(f"Questions processed: {len(self.resolved_questions)}")
+            logger.info(f"Evidence articles collected: {len(self.evidence_articles)}")
+            logger.info(f"Causal hypotheses generated: {len(self.causal_hypotheses)}")
+            self.usage_tracker.log_summary(context="EvidencePipeline TOTAL")
+            logger.info("=" * 60)
 
             logger.info("Evidence Pipeline completed successfully!")
 
@@ -411,3 +428,14 @@ class EvidencePipeline(Pipeline):
             "db_resolved_questions": self.db_resolved_questions,
             "db_unprocessed_questions": self.db_unprocessed_questions,
         }
+
+    def _aggregate_stage_usage(self) -> None:
+        """Aggregate token usage from all pipeline stages."""
+        # Collect usage from each stage that tracks it
+        if hasattr(self.evidence_stage, 'usage_tracker'):
+            for metrics in self.evidence_stage.usage_tracker.usage_records:
+                self.usage_tracker.add_usage(metrics)
+
+        if hasattr(self.reasoning_stage, 'usage_tracker'):
+            for metrics in self.reasoning_stage.usage_tracker.usage_records:
+                self.usage_tracker.add_usage(metrics)

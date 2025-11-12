@@ -13,6 +13,7 @@ from .tools import ArticleCollectorTool, RssFetchTool
 from .collectors import ResultCollector
 from ..prompts import ArticleCollectionPrompts
 from src.utils.logging import logger
+from src.utils.usage_tracking import UsageTracker, log_usage
 
 
 class ArticleSource(BaseModel):
@@ -61,6 +62,9 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
 
         # Prompt generator
         self.prompts = ArticleCollectionPrompts()
+
+        # Usage tracking
+        self.usage_tracker = UsageTracker()
     
     async def _fetch_rss_item_async(self, item: dict, source_name: str) -> bool:
         """Fetch a single RSS item asynchronously.
@@ -191,7 +195,13 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
             # Run the agent with the instruction
             logger.info(f"[AGENT] Running agent for: {source.name}")
             result = self.web_agent.run(instruction)
-            
+
+            # Track token usage
+            usage_metrics = self.web_agent.get_last_usage()
+            if usage_metrics:
+                self.usage_tracker.add_usage(usage_metrics)
+                log_usage(usage_metrics, context=f"ArticleCollection - {source.name}")
+
             # Calculate articles collected
             articles_after = self.collector.count()
             collected_count = articles_after - articles_before
@@ -248,4 +258,9 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
         # Get all collected articles from the collector
         all_articles = self.collector.get_all()
         logger.info(f"ArticleCollectionStage collected {len(all_articles)} total articles ({total_collected} new)")
+
+        # Log usage summary for this stage
+        if self.usage_tracker.total_calls > 0:
+            self.usage_tracker.log_summary(context="ArticleCollection")
+
         return all_articles

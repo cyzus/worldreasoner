@@ -10,7 +10,7 @@ class ArticleCollectionPrompts(ContextualPromptGenerator[None]):
     
     # Template for the main collection instruction
     COLLECTION_TEMPLATE = PromptTemplate(
-        template="""Search for news articles about "{source_name}" from the past {days_back} days.
+        template="""Search for news articles through "{source_name}" from the past {days_back} days.
 Find up to {max_articles} relevant articles.{domain_context}
 
 For each article you find:

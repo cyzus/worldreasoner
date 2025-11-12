@@ -13,6 +13,7 @@ from .tools import QuestionGeneratorTool, EventDetailsTool, ArticleRetrievalTool
 from .collectors import ResultCollector
 from ..prompts import QuestionGenerationPrompts
 from src.utils.logging import logger
+from src.utils.usage_tracking import UsageTracker, log_usage
 
 
 class QuestionGenerationStage(PipelineStage[Event, Question]):
@@ -42,6 +43,9 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
         self.article_retrieval_tool = None
 
         self.base_agent = None
+
+        # Usage tracking
+        self.usage_tracker = UsageTracker()
         
     async def process(self, inputs: List[Event]) -> List[Question]:
         """Generate forecast questions from events using LLM agent.
@@ -86,17 +90,27 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
             
             # Run the agent with the instruction
             result = self.base_agent.run(instruction)
-            
+
+            # Track token usage
+            usage_metrics = self.base_agent.get_last_usage()
+            if usage_metrics:
+                self.usage_tracker.add_usage(usage_metrics)
+                log_usage(usage_metrics, context="QuestionGeneration")
+
             # Agent's response is just a summary for logging
             logger.debug(f"Agent response for question generation: {result[:200] if isinstance(result, str) else result}")
-            
+
             # Get generated questions from the collector
             questions = self.collector.get_all()
             
             # Apply max_questions limit from config if set
             if self.config.max_questions:
                 questions = questions[:self.config.max_questions]
-            
+
+            # Log usage summary for this stage
+            if self.usage_tracker.total_calls > 0:
+                self.usage_tracker.log_summary(context="QuestionGeneration")
+
             return questions
             
         except Exception as e:

@@ -12,6 +12,7 @@ from src.pipelines.stages.tools import ArticleCollectorTool, EventIdentifierTool
 from src.pipelines.stages.collectors import ResultCollector
 from src.pipelines.prompts import HindsightAnalysisPrompts
 from src.utils.logging import logger
+from src.utils.usage_tracking import UsageTracker, log_usage
 
 
 class EvidenceCollectionConfig(BaseModel):
@@ -95,6 +96,9 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
         # Prompt generators
         self.hindsight_prompts = HindsightAnalysisPrompts()
 
+        # Usage tracking (aggregates across all questions)
+        self.usage_tracker = UsageTracker()
+
     async def process(self, inputs: List[Question]) -> List[Article]:
         """Collect hindsight evidence for resolved questions.
 
@@ -138,6 +142,11 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
                 continue
 
         logger.info(f"Collected total of {len(all_articles)} evidence articles")
+
+        # Log usage summary for this stage
+        if self.usage_tracker.total_calls > 0:
+            self.usage_tracker.log_summary(context="HindsightEvidenceCollection")
+
         return all_articles
 
     async def _collect_evidence_for_question(self, question: Question) -> List[Article]:
@@ -179,6 +188,12 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
             # Run the agent in a thread pool to avoid blocking the event loop
             result = await asyncio.to_thread(web_agent.run, full_instruction)
             logger.debug(f"Agent completed: {result}")
+
+            # Track token usage
+            usage_metrics = web_agent.get_last_usage()
+            if usage_metrics:
+                self.usage_tracker.add_usage(usage_metrics)
+                log_usage(usage_metrics, context=f"EvidenceCollection - {question.id}")
         except Exception as e:
             logger.error(f"Agent error for {question.id}: {e}")
             # Continue anyway - may have collected some articles
@@ -282,6 +297,12 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
             # Run the agent in a thread pool to avoid blocking the event loop
             result = await asyncio.to_thread(event_agent.run, instruction)
             logger.debug(f"Event extraction agent completed: {result}")
+
+            # Track token usage
+            usage_metrics = event_agent.get_last_usage()
+            if usage_metrics:
+                self.usage_tracker.add_usage(usage_metrics)
+                log_usage(usage_metrics, context=f"EventExtraction - {question.id}")
         except Exception as e:
             logger.warning(f"Event extraction agent error: {e}")
             # Continue anyway - may have collected some events
