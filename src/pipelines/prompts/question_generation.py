@@ -17,10 +17,9 @@ Event {idx} (ID: {event_id}){status_note}:
 - Description: {description}
 - Date: {event_date}
 - Domain: {domain}
-- Location: {location}
 - Confidence: {confidence}
 """,
-        required_vars=["idx", "event_id", "title", "description", "event_date", "domain", "location", "confidence"],
+        required_vars=["idx", "event_id", "title", "description", "event_date", "domain", "confidence"],
         optional_vars={"status_note": ""}
     )
     
