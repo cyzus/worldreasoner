@@ -376,8 +376,8 @@ class EvidencePipeline(Pipeline):
             if min_resolution_date and q.resolution_date < min_resolution_date:
                 continue  # Too old
 
-            # Filter by domain if specified
-            if self.evidence_config.domain_filter and q.domain != self.evidence_config.domain_filter:
+            # Filter by domains if specified
+            if self.evidence_config.domains and q.domain not in self.evidence_config.domains:
                 continue
 
             # Skip if already processed by evidence pipeline (if configured)

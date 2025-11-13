@@ -20,7 +20,7 @@ Usage:
     python examples/run_evidence_pipeline.py --force-reprocess
 
     # Process questions from specific domain
-    python examples/run_evidence_pipeline.py --domain tech --max-questions 5
+    python examples/run_evidence_pipeline.py --domains tech --max-questions 5
 
     # Custom thresholds
     python examples/run_evidence_pipeline.py --confidence 0.7 --strength 0.4
@@ -45,12 +45,12 @@ def parse_args():
 
     # Question filtering
     parser.add_argument('--max-questions', type=int, default=10, help='Maximum questions to process (0 = unlimited, default: 2)')
-    parser.add_argument('--domain', type=str, default='', help='Filter to specific domain (e.g., tech, finance, politics)')
+    parser.add_argument('--domains', type=str, default='', help='Comma-separated list of domains (e.g., tech,finance,politics)')
     parser.add_argument('--force-reprocess', action='store_true', help='Re-process questions even if they already have hypotheses')
 
     # Evidence collection settings
-    parser.add_argument('--evidence-window', type=int, default=90, help='Days before resolution to collect evidence (default: 30)')
-    parser.add_argument('--min-resolution-age', type=int, default=0, help='Minimum days since resolution required to process (default: 1)')
+    parser.add_argument('--evidence-window', type=int, default=90, help='Days before resolution to collect evidence')
+    parser.add_argument('--min-resolution-age', type=int, default=0, help='Minimum days since resolution required to process (default: 0)')
     parser.add_argument('--min-articles', type=int, default=5, help='Minimum evidence articles per question (default: 5)')
 
     # Causal reasoning thresholds
@@ -77,6 +77,7 @@ async def run_pipeline(args):
 
     # Configure Evidence Pipeline
     max_questions = args.max_questions if args.max_questions > 0 else None
+    domains = [d.strip() for d in args.domains.split(',') if d.strip()] if args.domains else []
 
     evidence_config = EvidencePipelineConfig(
         # Evidence collection settings
@@ -101,7 +102,7 @@ async def run_pipeline(args):
         min_resolution_age_days=args.min_resolution_age,
         max_questions=max_questions,
         skip_already_processed=not args.force_reprocess,
-        domain_filter=args.domain,
+        domains=domains,
 
         # Batch processing
         question_batch_size=args.question_batch_size,
@@ -125,8 +126,8 @@ async def run_pipeline(args):
     logger.info(f"Strength threshold: {evidence_config.causal_strength_threshold}")
     logger.info(f"Max questions: {evidence_config.max_questions or 'unlimited'}")
     logger.info(f"Skip already processed: {evidence_config.skip_already_processed}")
-    if args.domain:
-        logger.info(f"Domain filter: {args.domain}")
+    if domains:
+        logger.info(f"Domain filter: {', '.join(domains)}")
     logger.info("")
 
     # Create pipeline
