@@ -37,6 +37,23 @@ python run_question_pipeline.py --sources config/sources.yaml --db worldreasoner
 uv run python tests/integration/test_agentic_pipeline.py
 ```
 
+### Running the MCP Server
+```bash
+# Standard stdio mode (for Claude Desktop)
+python -m src.mcp_forecasting_server
+
+# HTTP REST mode
+python -m src.mcp_forecasting_server --mode http --port 8100
+
+# Streaming mode (SSE)
+python -m src.mcp_forecasting_server --mode stream --port 8110
+
+# Interactive development mode
+uv run fastmcp dev src.mcp_forecasting_server
+```
+
+See [docs/MCP_SERVER.md](docs/MCP_SERVER.md) for detailed documentation on all modes and tools.
+
 ### Running the Graph Visualization System
 ```bash
 # Start backend API server (development mode with auto-reload)
