@@ -22,7 +22,7 @@ def parse_args():
     parser.add_argument('--end-date', type=str, help='End date (YYYY-MM-DD)')
     parser.add_argument('--domains', type=str, default='', help='Comma-separated list of domains (optional)')
     # If not specified, defer to config defaults by using None here
-    parser.add_argument('--max-questions', type=int, default=None, help='Maximum questions to generate (defaults to config)')
+    parser.add_argument('--max-questions', type=int, default=10, help='Maximum questions to generate (defaults to config)')
     parser.add_argument('--article-batch-size', type=int, default=None, help='Batch size for event identification (articles) (defaults to config)')
     parser.add_argument('--event-batch-size', type=int, default=None, help='Batch size for question generation (events) (defaults to config)')
     return parser.parse_args()

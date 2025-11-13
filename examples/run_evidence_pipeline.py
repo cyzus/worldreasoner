@@ -44,7 +44,7 @@ def parse_args():
     parser.add_argument('--db', type=str, default='worldreasoner.db', help='Path to database file (default: worldreasoner.db)')
 
     # Question filtering
-    parser.add_argument('--max-questions', type=int, default=2, help='Maximum questions to process (0 = unlimited, default: 2)')
+    parser.add_argument('--max-questions', type=int, default=10, help='Maximum questions to process (0 = unlimited, default: 2)')
     parser.add_argument('--domain', type=str, default='', help='Filter to specific domain (e.g., tech, finance, politics)')
     parser.add_argument('--force-reprocess', action='store_true', help='Re-process questions even if they already have hypotheses')
 
@@ -146,14 +146,24 @@ async def run_pipeline(args):
         logger.info("=" * 80)
         logger.info("PIPELINE COMPLETED")
         logger.info("=" * 80)
-        # Display DB-level question stats
+        # Display DB-level question stats (snapshot taken before this run)
         db_total = summary.get('db_total_questions')
         db_resolved = summary.get('db_resolved_questions')
         db_unprocessed = summary.get('db_unprocessed_questions')
         if isinstance(db_total, int) and isinstance(db_resolved, int) and isinstance(db_unprocessed, int):
-            logger.info(f"Questions in DB: total={db_total}, resolved={db_resolved}, unprocessed={db_unprocessed}")
+            logger.info(
+                f"DB snapshot (pre-run): total={db_total}, resolved={db_resolved}, unprocessed={db_unprocessed}"
+            )
 
-        logger.info(f"Questions processed: {summary['resolved_questions']}")
+        # Note: 'resolved_questions' is how many questions were attempted in THIS run
+        processed_this_run = summary['resolved_questions']
+        logger.info(f"Questions processed (this run, after filters/limits): {processed_this_run}")
+        # Provide an approximate remaining count for convenience
+        if isinstance(db_unprocessed, int):
+            remaining_est = max(db_unprocessed - processed_this_run, 0)
+            logger.info(f"Approx. remaining unprocessed after this run: {remaining_est}")
+            logger.info("Tip: use --max-questions 0 to process all matching questions in one run.")
+
         logger.info(f"Evidence articles: {summary['evidence_articles']}")
         logger.info(f"Causal hypotheses: {summary['causal_hypotheses']}")
         logger.info(f"Stage executions: {summary['stages_completed']} completed, {summary['stages_failed']} failed")
