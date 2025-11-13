@@ -4,20 +4,30 @@ This MCP server provides tools for LLMs to make forecasts while respecting
 temporal constraints. All search and fetch operations are filtered based on
 a cutoff date to simulate historical contexts.
 
+The forecasting context (question ID and knowledge cutoff) is provided via
+MCP connection metadata/headers when the client connects. This allows one
+server instance to handle multiple forecasting sessions.
+
+Exposed Tools (4 essential tools):
+    1. get_question - Get the current forecast question details
+    2. temporal_search_articles - Search articles before cutoff date
+    3. fetch_article - Fetch full article content (temporally filtered)
+    4. submit_forecast - Submit prediction for the question
+
 Server Modes:
     - stdio: MCP over stdin/stdout (default, for Claude Desktop)
     - http: REST-style HTTP endpoints
     - stream: Streamable HTTP with Server-Sent Events (SSE)
 
 Usage:
-    # Default stdio mode
+    # Start server (any mode)
     python -m src.mcp_forecasting_server
-    
-    # HTTP mode
     python -m src.mcp_forecasting_server --mode http --port 8100
-    
-    # Streaming mode
     python -m src.mcp_forecasting_server --mode stream --port 8110
+    
+    # Client provides context via connection metadata:
+    # X-Question-ID: q_123
+    # X-Knowledge-Cutoff: 2024-04-01T00:00:00Z
 
 Configuration:
     WORLDREASONER_DB: Path to database (default: worldreasoner.db)
@@ -28,8 +38,10 @@ import json
 import argparse
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
+from contextvars import ContextVar
 
 from fastmcp import FastMCP
+from fastmcp.server import Context
 
 # Import WorldReasoner components
 from src.core.database import GenericDatabase
@@ -45,32 +57,97 @@ mcp = FastMCP("worldreasoner-forecasting")
 DB_PATH = os.getenv("WORLDREASONER_DB", "worldreasoner.db")
 db = GenericDatabase(DB_PATH)
 
-# Session state for tracking current forecasting context
-# This is stored in module scope to persist across tool calls
-_current_context: Dict[str, Any] = {
-    "question_id": None,
-    "cutoff_date": None,
-    "forecast_session_id": None
-}
-
 
 # ============================================================================
 # Helper Functions
 # ============================================================================
 
-def _get_temporal_db() -> GenericDatabase:
+def _get_context_from_mcp(ctx: Context) -> Dict[str, Any]:
+    """Extract forecasting context from MCP request metadata/headers.
+    
+    Expects client to provide:
+        - X-Question-ID: Question identifier
+        - X-Knowledge-Cutoff: ISO format datetime (LLM's knowledge cutoff)
+    
+    Args:
+        ctx: MCP context object containing request metadata
+        
+    Returns:
+        Dict with question_id, cutoff_date, session_id, and question object
+        
+    Raises:
+        ValueError: If required headers missing or invalid
+    """
+    # Get metadata from context
+    # FastMCP provides metadata via ctx.meta or similar
+    # For HTTP: headers are in ctx.request.headers
+    # For stdio: metadata comes from initialization params
+    
+    metadata = getattr(ctx, 'meta', {})
+    
+    # Try to get from headers if HTTP mode
+    if hasattr(ctx, 'request') and hasattr(ctx.request, 'headers'):
+        headers = ctx.request.headers
+        question_id = headers.get('x-question-id') or headers.get('X-Question-ID')
+        knowledge_cutoff = headers.get('x-knowledge-cutoff') or headers.get('X-Knowledge-Cutoff')
+    else:
+        # Stdio mode: get from metadata
+        question_id = metadata.get('question_id')
+        knowledge_cutoff = metadata.get('knowledge_cutoff')
+    
+    if not question_id:
+        raise ValueError(
+            "Missing question_id in request. "
+            "Provide via X-Question-ID header (HTTP) or question_id metadata (stdio)"
+        )
+    
+    if not knowledge_cutoff:
+        raise ValueError(
+            "Missing knowledge_cutoff in request. "
+            "Provide via X-Knowledge-Cutoff header (HTTP) or knowledge_cutoff metadata (stdio)"
+        )
+    
+    # Parse cutoff date
+    try:
+        cutoff_date = datetime.fromisoformat(knowledge_cutoff.replace('Z', '+00:00'))
+        if cutoff_date.tzinfo is None:
+            cutoff_date = cutoff_date.replace(tzinfo=timezone.utc)
+    except ValueError as e:
+        raise ValueError(f"Invalid knowledge_cutoff date format: {e}")
+    
+    # Get question
+    question = db.get(Question, question_id)
+    if not question:
+        raise ValueError(f"Question not found: {question_id}")
+    
+    # Validate cutoff is before resolution
+    if cutoff_date >= question.resolution_date:
+        raise ValueError(
+            f"Knowledge cutoff ({cutoff_date.date()}) must be before "
+            f"resolution date ({question.resolution_date.date()})"
+        )
+    
+    # Create session ID
+    session_id = f"session_{question_id}_{int(datetime.now(timezone.utc).timestamp())}"
+    
+    return {
+        "question_id": question_id,
+        "cutoff_date": cutoff_date,
+        "session_id": session_id,
+        "question": question
+    }
+
+
+def _get_temporal_db(cutoff_date: datetime) -> GenericDatabase:
     """Get a database instance with temporal filtering applied.
     
-    Returns a database that automatically filters Articles and Events
-    based on the current session's cutoff date.
-    
+    Args:
+        cutoff_date: Cutoff date for temporal filtering
+        
     Returns:
-        GenericDatabase instance with temporal filtering (if cutoff set)
+        GenericDatabase instance with temporal filtering
     """
-    cutoff = _current_context.get("cutoff_date")
-    if cutoff:
-        return GenericDatabase(DB_PATH, cutoff_date=cutoff)
-    return db
+    return GenericDatabase(DB_PATH, cutoff_date=cutoff_date)
 
 
 # ============================================================================
@@ -79,129 +156,26 @@ def _get_temporal_db() -> GenericDatabase:
 
 
 @mcp.tool()
-def list_questions(
-    domain: Optional[str] = None,
-    difficulty: Optional[int] = None,
-    limit: int = 20
-) -> str:
-    """List available forecast questions.
-
-    Args:
-        domain: Filter by domain (politics, tech, finance, etc.)
-        difficulty: Filter by difficulty (1-5)
-        limit: Maximum number of questions to return
-
-    Returns:
-        JSON string with list of questions
-    """
-    try:
-        logger.info(f"Listing questions: domain={domain}, difficulty={difficulty}, limit={limit}")
-
-        # Build filters
-        filters = {}
-        if domain:
-            try:
-                filters['domain'] = Domain(domain.lower())
-            except ValueError:
-                return json.dumps({
-                    "error": f"Invalid domain: {domain}",
-                    "valid_domains": [d.value for d in Domain]
-                })
-
-        if difficulty:
-            if not (1 <= difficulty <= 5):
-                return json.dumps({"error": "Difficulty must be between 1 and 5"})
-            filters['difficulty'] = difficulty
-
-        # Get questions
-        questions = db.get_many(Question, filters=filters if filters else None)
-        questions = questions[:limit]
-
-        # Format response
-        result = {
-            "count": len(questions),
-            "questions": [
-                {
-                    "id": q.id,
-                    "question_text": q.question_text,
-                    "question_type": q.question_type.value,
-                    "domain": q.domain.value if hasattr(q.domain, 'value') else q.domain,
-                    "difficulty": q.difficulty,
-                    "resolution_date": q.resolution_date.isoformat(),
-                    "is_resolved": q.ground_truth is not None,
-                    "created_at": q.created_at.isoformat()
-                }
-                for q in questions
-            ]
-        }
-
-        return json.dumps(result, indent=2)
-
-    except Exception as e:
-        logger.error(f"Error listing questions: {e}")
-        return json.dumps({"error": str(e)})
-
-
-@mcp.tool()
-def start_forecast_session(
-    question_id: str,
-    knowledge_cutoff_date: Optional[str] = None
-) -> str:
-    """Start a new forecasting session for a specific question.
-
-    This sets the temporal context based on the LLM's knowledge cutoff date.
-    The LLM will only have access to information from before its knowledge cutoff,
-    and must forecast events that happen AFTER this cutoff.
-
-    Args:
-        question_id: ID of the question to forecast
-        knowledge_cutoff_date: LLM's knowledge cutoff date (ISO format).
-                              This represents what the LLM knows from training.
-                              If not provided, uses question creation date.
+def get_question(ctx: Context) -> str:
+    """Get details about the current forecasting question.
+    
+    This returns the question you need to forecast, along with temporal context
+    showing your knowledge cutoff date and how far into the future you're forecasting.
+    
+    The question ID and knowledge cutoff are provided via MCP connection metadata:
+        - X-Question-ID header (HTTP mode)
+        - question_id metadata (stdio mode)
 
     Returns:
         JSON string with question details and temporal context
     """
     try:
-        logger.info(f"Starting forecast session for question: {question_id}")
-
-        # Get question
-        question = db.get(Question, question_id)
-        if not question:
-            return json.dumps({"error": f"Question not found: {question_id}"})
-
-        # Determine knowledge cutoff date
-        if knowledge_cutoff_date:
-            try:
-                cutoff_date = datetime.fromisoformat(knowledge_cutoff_date.replace('Z', '+00:00'))
-                if cutoff_date.tzinfo is None:
-                    cutoff_date = cutoff_date.replace(tzinfo=timezone.utc)
-            except ValueError as e:
-                return json.dumps({"error": f"Invalid date format: {e}"})
-        else:
-            # Use question creation date as default cutoff
-            cutoff_date = question.created_at
-
-        # Validate cutoff is before resolution (LLM must forecast the future!)
-        if cutoff_date >= question.resolution_date:
-            return json.dumps({
-                "error": "Knowledge cutoff must be before resolution date (can't forecast the past!)",
-                "knowledge_cutoff": cutoff_date.isoformat(),
-                "resolution": question.resolution_date.isoformat(),
-                "note": "The LLM must forecast events that happen AFTER its knowledge cutoff"
-            })
-
-        # Set session context
-        session_id = f"session_{question_id}_{int(datetime.now(timezone.utc).timestamp())}"
-        _current_context["question_id"] = question_id
-        _current_context["cutoff_date"] = cutoff_date
-        _current_context["forecast_session_id"] = session_id
-
-        logger.info(f"Session started: {session_id} with cutoff {cutoff_date.isoformat()}")
-
-        # Return question details
+        # Get context from MCP request
+        forecast_ctx = _get_context_from_mcp(ctx)
+        question = forecast_ctx["question"]
+        cutoff = forecast_ctx["cutoff_date"]
+        
         result = {
-            "session_id": session_id,
             "question": {
                 "id": question.id,
                 "question_text": question.question_text,
@@ -215,34 +189,38 @@ def start_forecast_session(
                 "target_event_id": question.target_event_id
             },
             "temporal_context": {
-                "knowledge_cutoff_date": cutoff_date.isoformat(),
+                "knowledge_cutoff_date": cutoff.isoformat(),
                 "resolution_date": question.resolution_date.isoformat(),
-                "days_to_forecast": (question.resolution_date - cutoff_date).days,
+                "days_to_forecast": (question.resolution_date - cutoff).days,
                 "explanation": (
-                    f"Your knowledge cutoff is {cutoff_date.date()}. "
+                    f"Your knowledge cutoff is {cutoff.date()}. "
                     f"You must forecast an event that resolves on {question.resolution_date.date()} "
-                    f"({(question.resolution_date - cutoff_date).days} days in the future)."
+                    f"({(question.resolution_date - cutoff).days} days in the future)."
                 )
             },
             "instructions": (
                 f"FORECASTING SCENARIO:\n"
-                f"- Your training data includes information up to: {cutoff_date.date()}\n"
+                f"- Your training data includes information up to: {cutoff.date()}\n"
                 f"- Event resolution date: {question.resolution_date.date()}\n"
-                f"- You must forecast: {(question.resolution_date - cutoff_date).days} days into the future\n"
+                f"- You must forecast: {(question.resolution_date - cutoff).days} days into the future\n"
                 f"- All article searches will only return information from BEFORE your knowledge cutoff\n"
                 f"- This tests your ability to make genuine predictions about future events"
             )
         }
-
+        
         return json.dumps(result, indent=2)
-
+        
+    except ValueError as e:
+        logger.error(f"Context error: {e}")
+        return json.dumps({"error": str(e)})
     except Exception as e:
-        logger.error(f"Error starting session: {e}")
+        logger.error(f"Error getting question: {e}")
         return json.dumps({"error": str(e)})
 
 
 @mcp.tool()
 def temporal_search_articles(
+    ctx: Context,
     query: str,
     domain: Optional[str] = None,
     max_results: int = 10
@@ -251,8 +229,6 @@ def temporal_search_articles(
 
     Only returns articles published BEFORE the LLM's knowledge cutoff date.
     This simulates searching through the LLM's training data.
-
-    You must call start_forecast_session first to set the knowledge cutoff.
 
     Args:
         query: Search query string
@@ -263,17 +239,14 @@ def temporal_search_articles(
         JSON string with article summaries (only from before knowledge cutoff)
     """
     try:
-        # Check session context
-        if not _current_context.get("cutoff_date"):
-            return json.dumps({
-                "error": "No active forecast session. Call start_forecast_session first."
-            })
-
-        cutoff = _current_context["cutoff_date"]
+        # Get context from MCP request
+        forecast_ctx = _get_context_from_mcp(ctx)
+        cutoff = forecast_ctx["cutoff_date"]
+        
         logger.info(f"Searching articles with query='{query}', cutoff={cutoff.isoformat()}")
 
         # Get temporal database
-        temporal_db = _get_temporal_db()
+        temporal_db = _get_temporal_db(cutoff)
 
         # Build filters
         filters = {}
@@ -320,19 +293,20 @@ def temporal_search_articles(
 
         return json.dumps(result, indent=2)
 
+    except ValueError as e:
+        logger.error(f"Context error: {e}")
+        return json.dumps({"error": str(e)})
     except Exception as e:
         logger.error(f"Error searching articles: {e}")
         return json.dumps({"error": str(e)})
 
 
 @mcp.tool()
-def fetch_article(article_id: str) -> str:
+def fetch_article(ctx: Context, article_id: str) -> str:
     """Fetch full article content with temporal validation.
 
     Only returns the article if it was published before the LLM's knowledge cutoff.
     This simulates accessing information from the LLM's training data.
-
-    You must call start_forecast_session first.
 
     Args:
         article_id: ID of the article to fetch
@@ -341,17 +315,14 @@ def fetch_article(article_id: str) -> str:
         JSON string with full article content (only if before knowledge cutoff)
     """
     try:
-        # Check session context
-        if not _current_context.get("cutoff_date"):
-            return json.dumps({
-                "error": "No active forecast session. Call start_forecast_session first."
-            })
-
-        cutoff = _current_context["cutoff_date"]
+        # Get context from MCP request
+        forecast_ctx = _get_context_from_mcp(ctx)
+        cutoff = forecast_ctx["cutoff_date"]
+        
         logger.info(f"Fetching article {article_id} with cutoff {cutoff.isoformat()}")
 
         # Get article from temporal database
-        temporal_db = _get_temporal_db()
+        temporal_db = _get_temporal_db(cutoff)
         article = temporal_db.get(Article, article_id)
 
         if not article:
@@ -386,6 +357,9 @@ def fetch_article(article_id: str) -> str:
 
         return json.dumps(result, indent=2)
 
+    except ValueError as e:
+        logger.error(f"Context error: {e}")
+        return json.dumps({"error": str(e)})
     except Exception as e:
         logger.error(f"Error fetching article: {e}")
         return json.dumps({"error": str(e)})
@@ -393,6 +367,7 @@ def fetch_article(article_id: str) -> str:
 
 @mcp.tool()
 def submit_forecast(
+    ctx: Context,
     prediction: str,
     confidence: float,
     reasoning: str,
@@ -418,22 +393,14 @@ def submit_forecast(
         JSON string with forecast ID and confirmation
     """
     try:
-        # Check session context
-        if not _current_context.get("question_id"):
-            return json.dumps({
-                "error": "No active forecast session. Call start_forecast_session first."
-            })
-
-        question_id = _current_context["question_id"]
-        session_id = _current_context["forecast_session_id"]
-        cutoff_date = _current_context["cutoff_date"]
+        # Get context from MCP request
+        forecast_ctx = _get_context_from_mcp(ctx)
+        question_id = forecast_ctx["question_id"]
+        session_id = forecast_ctx["session_id"]
+        cutoff_date = forecast_ctx["cutoff_date"]
+        question = forecast_ctx["question"]
 
         logger.info(f"Submitting forecast for question {question_id}")
-
-        # Get question to validate prediction
-        question = db.get(Question, question_id)
-        if not question:
-            return json.dumps({"error": "Question not found"})
 
         # Parse prediction based on question type
         from src.domain.models.question import QuestionType
@@ -506,34 +473,12 @@ def submit_forecast(
 
         return json.dumps(result, indent=2)
 
+    except ValueError as e:
+        logger.error(f"Context error: {e}")
+        return json.dumps({"error": str(e)})
     except Exception as e:
         logger.error(f"Error submitting forecast: {e}")
         return json.dumps({"error": str(e)})
-
-
-@mcp.tool()
-def get_session_info() -> str:
-    """Get information about the current forecast session.
-
-    Returns:
-        JSON string with session details including knowledge cutoff
-    """
-    if not _current_context.get("question_id"):
-        return json.dumps({
-            "active": False,
-            "message": "No active forecast session. Call start_forecast_session to begin."
-        })
-
-    cutoff = _current_context.get("cutoff_date")
-    result = {
-        "active": True,
-        "session_id": _current_context.get("forecast_session_id"),
-        "question_id": _current_context.get("question_id"),
-        "knowledge_cutoff_date": cutoff.isoformat() if cutoff else None,
-        "note": f"All information is filtered to BEFORE {cutoff.date() if cutoff else 'N/A'}"
-    }
-
-    return json.dumps(result, indent=2)
 
 
 
@@ -545,13 +490,19 @@ def get_session_info() -> str:
 def main():
     """CLI entry point that supports stdio, basic HTTP, and streamable HTTP modes.
 
+    The server accepts forecasting context (question_id and knowledge_cutoff) 
+    from the MCP client via connection metadata/headers, not from CLI args.
+
     Modes:
         stdio   - (default) MCP over stdio (ideal for local tool integration)
         http    - REST-style MCP HTTP endpoints (FastAPI app)
         stream  - Streamable HTTP (Server-Sent Events) for incremental tool output
 
     Example:
-        python -m src.mcp_forecasting_server --mode stream --host 0.0.0.0 --port 8110
+        # Start server (context comes from client)
+        python -m src.mcp_forecasting_server
+        python -m src.mcp_forecasting_server --mode http --port 8100
+        python -m src.mcp_forecasting_server --mode stream --port 8110
     """
     parser = argparse.ArgumentParser(
         description="WorldReasoner Forecasting MCP Server",
@@ -569,6 +520,10 @@ Examples:
   
   # Custom host and log level
   python -m src.mcp_forecasting_server --mode http --host 0.0.0.0 --port 8100 --log-level debug
+
+Connection Metadata (provided by MCP client):
+  X-Question-ID: Question identifier to forecast
+  X-Knowledge-Cutoff: LLM's knowledge cutoff date (ISO format)
         """
     )
     parser.add_argument(
@@ -596,11 +551,13 @@ Examples:
     args = parser.parse_args()
 
     logger.info(f"Launching MCP server mode={args.mode} db={DB_PATH}")
+    logger.info("Forecasting context (question_id, knowledge_cutoff) will be provided by MCP client")
 
     # Adjust logging level if provided
     try:
         from loguru import logger as _lg
         _lg.remove()
+        import sys
         _lg.add(sys.stderr, level=args.log_level.upper())
     except Exception:
         pass
