@@ -552,38 +552,33 @@ def submit_forecast(
 # ============================================================================
 
 def main():
-    """CLI entry point that supports stdio, basic HTTP, and streamable HTTP modes.
+    """CLI entry point for streamable HTTP MCP server.
 
-    The server accepts forecasting context (question_id and knowledge_cutoff) 
+    The server accepts forecasting context (question_id and knowledge_cutoff)
     from the MCP client via connection metadata/headers, not from CLI args.
 
-    Modes:
-        stdio   - (default) MCP over stdio (ideal for local tool integration)
-        http    - REST-style MCP HTTP endpoints (FastAPI app)
+    Mode:
         stream  - Streamable HTTP (Server-Sent Events) for incremental tool output
 
     Example:
         # Start server (context comes from client)
         python -m src.mcp_forecasting_server
-        python -m src.mcp_forecasting_server --mode http --port 8100
-        python -m src.mcp_forecasting_server --mode stream --port 8110
+        python -m src.mcp_forecasting_server --port 8110
+        python -m src.mcp_forecasting_server --host 0.0.0.0 --port 8110 --log-level info
     """
     parser = argparse.ArgumentParser(
-        description="WorldReasoner Forecasting MCP Server",
+        description="WorldReasoner Forecasting MCP Server (Streamable HTTP)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Standard stdio mode (for Claude Desktop)
+  # Start server with default settings
   python -m src.mcp_forecasting_server
-  
-  # HTTP REST mode
-  python -m src.mcp_forecasting_server --mode http --port 8100
-  
-  # Streaming mode with SSE
-  python -m src.mcp_forecasting_server --mode stream --port 8110
-  
+
+  # Custom port
+  python -m src.mcp_forecasting_server --port 8110
+
   # Custom host and log level
-  python -m src.mcp_forecasting_server --mode http --host 0.0.0.0 --port 8100 --log-level debug
+  python -m src.mcp_forecasting_server --host 0.0.0.0 --port 8110 --log-level info
 
 Connection Metadata (provided by MCP client):
   X-Question-ID: Question identifier to forecast
@@ -591,30 +586,24 @@ Connection Metadata (provided by MCP client):
         """
     )
     parser.add_argument(
-        "--mode", 
-        choices=["stdio", "http", "stream"], 
-        default="stdio",
-        help="Run mode: stdio | http | stream (streamable HTTP/SSE)"
+        "--host",
+        default="0.0.0.0",
+        help="Bind host (default: 0.0.0.0)"
     )
     parser.add_argument(
-        "--host", 
-        default="0.0.0.0", 
-        help="Bind host for HTTP/stream modes (default: 0.0.0.0)"
+        "--port",
+        type=int,
+        default=8110,
+        help="Port (default: 8110)"
     )
     parser.add_argument(
-        "--port", 
-        type=int, 
-        default=8100, 
-        help="Port for HTTP/stream modes (default: 8100)"
-    )
-    parser.add_argument(
-        "--log-level", 
-        default="debug",  # Changed to debug for troubleshooting
+        "--log-level",
+        default="debug",
         help="Logging level: debug|info|warning|error (default: debug)"
     )
     args = parser.parse_args()
 
-    logger.info(f"Launching MCP server mode={args.mode} db={DB_PATH}")
+    logger.info(f"Launching MCP server (stream mode) db={DB_PATH}")
     logger.info("Forecasting context (question_id, knowledge_cutoff) will be provided by MCP client")
 
     # Adjust logging level if provided
@@ -626,20 +615,11 @@ Connection Metadata (provided by MCP client):
     except Exception:
         pass
 
-    if args.mode == "stdio":
-        logger.info("Starting MCP server (stdio mode)")
-        mcp.run()
-    elif args.mode == "http":
-        logger.info(f"Starting MCP HTTP server on http://{args.host}:{args.port}")
-        logger.info("API docs available at /docs")
-        import uvicorn
-        uvicorn.run(mcp.http_app, host=args.host, port=args.port)
-    else:  # stream
-        logger.info(f"Starting MCP STREAMABLE HTTP server on http://{args.host}:{args.port}")
-        logger.info("Endpoints: /mcp/tools, /mcp/prompts, SSE streaming available")
-        logger.info("Context will be captured from X-Question-ID and X-Knowledge-Cutoff headers")
-        import uvicorn
-        uvicorn.run(mcp.streamable_http_app, host=args.host, port=args.port)
+    logger.info(f"Starting MCP STREAMABLE HTTP server on http://{args.host}:{args.port}")
+    logger.info("Endpoints: /mcp/tools, /mcp/prompts, SSE streaming available")
+    logger.info("Context will be captured from X-Question-ID and X-Knowledge-Cutoff headers")
+    import uvicorn
+    uvicorn.run(mcp.streamable_http_app, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":
