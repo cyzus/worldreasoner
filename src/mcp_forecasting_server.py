@@ -14,17 +14,15 @@ Exposed Tools (4 essential tools):
     3. fetch_article - Fetch full article content (temporally filtered)
     4. submit_forecast - Submit prediction for the question
 
-Server Modes:
-    - stdio: MCP over stdin/stdout (default, for Claude Desktop)
-    - http: REST-style HTTP endpoints
+Server Mode:
     - stream: Streamable HTTP with Server-Sent Events (SSE)
 
 Usage:
-    # Start server (any mode)
+    # Start server
     python -m src.mcp_forecasting_server
-    python -m src.mcp_forecasting_server --mode http --port 8100
-    python -m src.mcp_forecasting_server --mode stream --port 8110
-    
+    python -m src.mcp_forecasting_server --port 8110
+    python -m src.mcp_forecasting_server --host 0.0.0.0 --port 8110
+
     # Client provides context via connection metadata:
     # X-Question-ID: q_123
     # X-Knowledge-Cutoff: 2024-04-01T00:00:00Z
@@ -37,11 +35,13 @@ import os
 import json
 import argparse
 from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
+from typing import List, Dict, Any
 from contextvars import ContextVar
 
+from pydantic import BaseModel, Field
 from fastmcp import FastMCP
 from fastmcp.server import Context
+from fastmcp.server.middleware import Middleware, MiddlewareContext
 
 # Import WorldReasoner components
 from src.core.database import GenericDatabase
@@ -57,6 +57,79 @@ mcp = FastMCP("worldreasoner-forecasting")
 DB_PATH = os.getenv("WORLDREASONER_DB", "worldreasoner.db")
 db = GenericDatabase(DB_PATH)
 
+# Connection-level context storage (populated from request headers)
+# Captured by middleware during any request with the headers
+_connection_context: Dict[str, Any] = {}
+
+
+# ============================================================================
+# Middleware to capture connection headers
+# ============================================================================
+
+class ForecastContextMiddleware(Middleware):
+    """Middleware to capture and store forecasting context from request headers.
+    
+    This captures X-Question-ID and X-Knowledge-Cutoff headers from any request
+    (tool listing, tool calls, etc.) and stores them globally for the session.
+    """
+    
+    async def on_message(self, context: MiddlewareContext, call_next):
+        """Called for all MCP messages to capture headers."""
+        logger.debug(f"Middleware triggered for method: {context.method}")
+        
+        # Try to extract headers from FastMCP context if available
+        if context.fastmcp_context:
+            try:
+                # Use get_http_request() method to access the HTTP request
+                request = context.fastmcp_context.get_http_request()
+                logger.debug(f"Got HTTP request: {request is not None}")
+                
+                if request and hasattr(request, 'headers'):
+                    headers = request.headers
+                    logger.debug(f"Available headers: {list(headers.keys())}")
+                    
+                    question_id = headers.get('x-question-id') or headers.get('X-Question-ID')
+                    knowledge_cutoff = headers.get('x-knowledge-cutoff') or headers.get('X-Knowledge-Cutoff')
+                    
+                    logger.debug(f"Extracted - question_id: {question_id}, knowledge_cutoff: {knowledge_cutoff}")
+                    
+                    # If headers are present, store them globally
+                    if question_id and knowledge_cutoff:
+                        try:
+                            # Parse cutoff date
+                            if 'T' in knowledge_cutoff:
+                                cutoff_date = datetime.fromisoformat(knowledge_cutoff.replace('Z', '+00:00'))
+                            else:
+                                cutoff_date = datetime.fromisoformat(f"{knowledge_cutoff}T00:00:00+00:00")
+                            
+                            if cutoff_date.tzinfo is None:
+                                cutoff_date = cutoff_date.replace(tzinfo=timezone.utc)
+                            
+                            # Validate question exists
+                            question = db.get(Question, question_id)
+                            if question:
+                                _connection_context['question_id'] = question_id
+                                _connection_context['knowledge_cutoff'] = cutoff_date.isoformat()
+                                _connection_context['cutoff_date_obj'] = cutoff_date
+                                _connection_context['question'] = question
+                                logger.info(f"✓ Context captured from headers: q={question_id}, cutoff={cutoff_date.date()}")
+                            else:
+                                logger.warning(f"Question {question_id} not found in database")
+                        except Exception as e:
+                            logger.error(f"Error parsing context headers: {e}", exc_info=True)
+                    else:
+                        logger.debug("No question_id or knowledge_cutoff in headers")
+                else:
+                    logger.debug("No HTTP request or headers available")
+            except Exception as e:
+                logger.debug(f"Could not get HTTP request: {e}")
+        
+        return await call_next(context)
+
+
+# Add middleware to capture headers
+mcp.add_middleware(ForecastContextMiddleware())
+
 
 # ============================================================================
 # Helper Functions
@@ -65,74 +138,43 @@ db = GenericDatabase(DB_PATH)
 def _get_context_from_mcp(ctx: Context) -> Dict[str, Any]:
     """Extract forecasting context from MCP request metadata/headers.
     
-    Expects client to provide:
-        - X-Question-ID: Question identifier
-        - X-Knowledge-Cutoff: ISO format datetime (LLM's knowledge cutoff)
+    The context is automatically captured by middleware from request headers
+    and stored in _connection_context. This function retrieves it.
     
     Args:
-        ctx: MCP context object containing request metadata
+        ctx: MCP context object (not used, kept for compatibility)
         
     Returns:
         Dict with question_id, cutoff_date, session_id, and question object
         
     Raises:
-        ValueError: If required headers missing or invalid
+        ValueError: If required context not found
     """
-    # Get metadata from context
-    # FastMCP provides metadata via ctx.meta or similar
-    # For HTTP: headers are in ctx.request.headers
-    # For stdio: metadata comes from initialization params
-    
-    metadata = getattr(ctx, 'meta', {})
-    
-    # Try to get from headers if HTTP mode
-    if hasattr(ctx, 'request') and hasattr(ctx.request, 'headers'):
-        headers = ctx.request.headers
-        question_id = headers.get('x-question-id') or headers.get('X-Question-ID')
-        knowledge_cutoff = headers.get('x-knowledge-cutoff') or headers.get('X-Knowledge-Cutoff')
-    else:
-        # Stdio mode: get from metadata
-        question_id = metadata.get('question_id')
-        knowledge_cutoff = metadata.get('knowledge_cutoff')
+    question_id = _connection_context.get('question_id')
+    cutoff_date_obj = _connection_context.get('cutoff_date_obj')
+    question = _connection_context.get('question')
     
     if not question_id:
         raise ValueError(
-            "Missing question_id in request. "
-            "Provide via X-Question-ID header (HTTP) or question_id metadata (stdio)"
+            "Forecasting context not initialized. "
+            "Client must provide X-Question-ID and X-Knowledge-Cutoff headers when connecting."
         )
     
-    if not knowledge_cutoff:
+    if not cutoff_date_obj:
         raise ValueError(
-            "Missing knowledge_cutoff in request. "
-            "Provide via X-Knowledge-Cutoff header (HTTP) or knowledge_cutoff metadata (stdio)"
+            "Knowledge cutoff date not initialized. "
+            "Client must provide X-Knowledge-Cutoff header when connecting."
         )
     
-    # Parse cutoff date
-    try:
-        cutoff_date = datetime.fromisoformat(knowledge_cutoff.replace('Z', '+00:00'))
-        if cutoff_date.tzinfo is None:
-            cutoff_date = cutoff_date.replace(tzinfo=timezone.utc)
-    except ValueError as e:
-        raise ValueError(f"Invalid knowledge_cutoff date format: {e}")
-    
-    # Get question
-    question = db.get(Question, question_id)
     if not question:
         raise ValueError(f"Question not found: {question_id}")
-    
-    # Validate cutoff is before resolution
-    if cutoff_date >= question.resolution_date:
-        raise ValueError(
-            f"Knowledge cutoff ({cutoff_date.date()}) must be before "
-            f"resolution date ({question.resolution_date.date()})"
-        )
     
     # Create session ID
     session_id = f"session_{question_id}_{int(datetime.now(timezone.utc).timestamp())}"
     
     return {
         "question_id": question_id,
-        "cutoff_date": cutoff_date,
+        "cutoff_date": cutoff_date_obj,
         "session_id": session_id,
         "question": question
     }
@@ -148,6 +190,50 @@ def _get_temporal_db(cutoff_date: datetime) -> GenericDatabase:
         GenericDatabase instance with temporal filtering
     """
     return GenericDatabase(DB_PATH, cutoff_date=cutoff_date)
+
+
+# ============================================================================
+# Pydantic Models for Parameters
+# ============================================================================
+
+class SearchQuery(BaseModel):
+    """Search query parameter."""
+    value: str = Field(..., description="Search query string")
+
+
+class DomainFilter(BaseModel):
+    """Domain filter parameter."""
+    value: str | None = Field(None, description="Optional domain filter (e.g., 'technology', 'politics')")
+
+
+class MaxResults(BaseModel):
+    """Maximum results parameter."""
+    value: int = Field(10, description="Maximum number of results to return", ge=1, le=100)
+
+
+class ArticleId(BaseModel):
+    """Article ID parameter."""
+    value: str = Field(..., description="ID of the article to fetch")
+
+
+class Prediction(BaseModel):
+    """Prediction parameter."""
+    value: str = Field(..., description="Your prediction (Boolean: 'true'/'false', MCQ: option text, Quantity: numeric value, Timeframe: date/range)")
+
+
+class Confidence(BaseModel):
+    """Confidence parameter."""
+    value: float = Field(..., description="Confidence level (0.0 to 1.0)", ge=0.0, le=1.0)
+
+
+class Reasoning(BaseModel):
+    """Reasoning parameter."""
+    value: str = Field(..., description="Detailed explanation of your reasoning", min_length=50)
+
+
+class ArticlesAccessed(BaseModel):
+    """Articles accessed parameter."""
+    value: List[str] | None = Field(None, description="Optional list of article IDs you reviewed")
 
 
 # ============================================================================
@@ -221,19 +307,14 @@ def get_question(ctx: Context) -> str:
 @mcp.tool()
 def temporal_search_articles(
     ctx: Context,
-    query: str,
-    domain: Optional[str] = None,
-    max_results: int = 10
+    query: SearchQuery,
+    domain: DomainFilter = DomainFilter(),
+    max_results: MaxResults = MaxResults()
 ) -> str:
     """Search for articles with temporal filtering.
 
     Only returns articles published BEFORE the LLM's knowledge cutoff date.
     This simulates searching through the LLM's training data.
-
-    Args:
-        query: Search query string
-        domain: Optional domain filter
-        max_results: Maximum number of results
 
     Returns:
         JSON string with article summaries (only from before knowledge cutoff)
@@ -242,17 +323,17 @@ def temporal_search_articles(
         # Get context from MCP request
         forecast_ctx = _get_context_from_mcp(ctx)
         cutoff = forecast_ctx["cutoff_date"]
-        
-        logger.info(f"Searching articles with query='{query}', cutoff={cutoff.isoformat()}")
+
+        logger.info(f"Searching articles with query='{query.value}', cutoff={cutoff.isoformat()}")
 
         # Get temporal database
         temporal_db = _get_temporal_db(cutoff)
 
         # Build filters
         filters = {}
-        if domain:
+        if domain.value:
             try:
-                filters['domain'] = Domain(domain.lower())
+                filters['domain'] = Domain(domain.value.lower())
             except ValueError:
                 pass
 
@@ -260,7 +341,7 @@ def temporal_search_articles(
         all_articles = temporal_db.get_many(Article, filters=filters if filters else None)
 
         # Simple text search (you could enhance this with embeddings/FTS)
-        query_lower = query.lower()
+        query_lower = query.value.lower()
         matches = [
             article for article in all_articles
             if query_lower in article.title.lower() or query_lower in article.content.lower()
@@ -268,11 +349,11 @@ def temporal_search_articles(
 
         # Sort by published date (most recent first)
         matches.sort(key=lambda a: a.published_date, reverse=True)
-        matches = matches[:max_results]
+        matches = matches[:max_results.value]
 
         # Format response
         result = {
-            "query": query,
+            "query": query.value,
             "knowledge_cutoff_date": cutoff.isoformat(),
             "note": f"Only showing articles from BEFORE knowledge cutoff ({cutoff.date()})",
             "count": len(matches),
@@ -302,14 +383,14 @@ def temporal_search_articles(
 
 
 @mcp.tool()
-def fetch_article(ctx: Context, article_id: str) -> str:
+def fetch_article(
+    ctx: Context,
+    article_id: ArticleId
+) -> str:
     """Fetch full article content with temporal validation.
 
     Only returns the article if it was published before the LLM's knowledge cutoff.
     This simulates accessing information from the LLM's training data.
-
-    Args:
-        article_id: ID of the article to fetch
 
     Returns:
         JSON string with full article content (only if before knowledge cutoff)
@@ -318,23 +399,23 @@ def fetch_article(ctx: Context, article_id: str) -> str:
         # Get context from MCP request
         forecast_ctx = _get_context_from_mcp(ctx)
         cutoff = forecast_ctx["cutoff_date"]
-        
-        logger.info(f"Fetching article {article_id} with cutoff {cutoff.isoformat()}")
+
+        logger.info(f"Fetching article {article_id.value} with cutoff {cutoff.isoformat()}")
 
         # Get article from temporal database
         temporal_db = _get_temporal_db(cutoff)
-        article = temporal_db.get(Article, article_id)
+        article = temporal_db.get(Article, article_id.value)
 
         if not article:
             return json.dumps({
-                "error": f"Article {article_id} not found or published after cutoff date"
+                "error": f"Article {article_id.value} not found or published after cutoff date"
             })
 
         # Validate temporal access
         gateway = TemporalGateway(cutoff)
         if not gateway.is_article_accessible(article):
             return json.dumps({
-                "error": f"Article {article_id} was published after your knowledge cutoff",
+                "error": f"Article {article_id.value} was published after your knowledge cutoff",
                 "published": article.published_date.isoformat(),
                 "knowledge_cutoff": cutoff.isoformat(),
                 "note": "You can only access articles from your training data (before knowledge cutoff)"
@@ -368,26 +449,15 @@ def fetch_article(ctx: Context, article_id: str) -> str:
 @mcp.tool()
 def submit_forecast(
     ctx: Context,
-    prediction: str,
-    confidence: float,
-    reasoning: str,
-    articles_accessed: Optional[List[str]] = None
+    prediction: Prediction,
+    confidence: Confidence,
+    reasoning: Reasoning,
+    articles_accessed: ArticlesAccessed = ArticlesAccessed()
 ) -> str:
     """Submit a forecast for the current question.
 
     This records your prediction about a future event, based only on information
     available before your knowledge cutoff date.
-
-    Args:
-        prediction: Your prediction (format depends on question type)
-                   - Boolean: "true" or "false"
-                   - MCQ: One of the question's options
-                   - Quantity: Numeric value
-                   - Timeframe: Date or date range
-        confidence: Confidence level (0.0 to 1.0)
-        reasoning: Detailed explanation of your reasoning (min 50 chars)
-                  Should explain how you used pre-cutoff information to forecast
-        articles_accessed: Optional list of article IDs you reviewed
 
     Returns:
         JSON string with forecast ID and confirmation
@@ -407,13 +477,13 @@ def submit_forecast(
 
         try:
             if question.question_type == QuestionType.BOOLEAN:
-                parsed_prediction = prediction.lower() in ['true', 'yes', '1']
+                parsed_prediction = prediction.value.lower() in ['true', 'yes', '1']
             elif question.question_type == QuestionType.MCQ:
-                parsed_prediction = prediction
+                parsed_prediction = prediction.value
             elif question.question_type == QuestionType.QUANTITY:
-                parsed_prediction = float(prediction)
+                parsed_prediction = float(prediction.value)
             else:
-                parsed_prediction = prediction
+                parsed_prediction = prediction.value
         except ValueError as e:
             return json.dumps({
                 "error": f"Invalid prediction format for {question.question_type.value}: {e}"
@@ -426,13 +496,7 @@ def submit_forecast(
                 "expected_format": question.question_type.value
             })
 
-        # Validate confidence
-        if not (0.0 <= confidence <= 1.0):
-            return json.dumps({"error": "Confidence must be between 0.0 and 1.0"})
-
-        # Validate reasoning length
-        if len(reasoning) < 50:
-            return json.dumps({"error": "Reasoning must be at least 50 characters"})
+        # Note: Confidence and reasoning validation is handled by Pydantic BaseModel
 
         # Create forecast
         forecast_id = f"fcst_{question_id}_{int(datetime.now(timezone.utc).timestamp())}"
@@ -443,11 +507,11 @@ def submit_forecast(
             question_id=question_id,
             target_event_id=question.target_event_id,
             prediction=parsed_prediction,
-            confidence=confidence,
-            reasoning=reasoning,
+            confidence=confidence.value,
+            reasoning=reasoning.value,
             timestamp=datetime.now(timezone.utc),
             simulated_date=cutoff_date,
-            articles_accessed=articles_accessed or [],
+            articles_accessed=articles_accessed.value or [],
             searches_performed=[],  # Could track this if needed
             model_name="mcp_client",  # Will be updated by client
         )
@@ -461,7 +525,7 @@ def submit_forecast(
             "forecast_id": forecast_id,
             "question_id": question_id,
             "prediction": parsed_prediction,
-            "confidence": confidence,
+            "confidence": confidence.value,
             "knowledge_cutoff_date": cutoff_date.isoformat(),
             "submitted_at": forecast.timestamp.isoformat(),
             "status": "submitted",
@@ -545,8 +609,8 @@ Connection Metadata (provided by MCP client):
     )
     parser.add_argument(
         "--log-level", 
-        default="info", 
-        help="Logging level: debug|info|warning|error (default: info)"
+        default="debug",  # Changed to debug for troubleshooting
+        help="Logging level: debug|info|warning|error (default: debug)"
     )
     args = parser.parse_args()
 
@@ -573,6 +637,7 @@ Connection Metadata (provided by MCP client):
     else:  # stream
         logger.info(f"Starting MCP STREAMABLE HTTP server on http://{args.host}:{args.port}")
         logger.info("Endpoints: /mcp/tools, /mcp/prompts, SSE streaming available")
+        logger.info("Context will be captured from X-Question-ID and X-Knowledge-Cutoff headers")
         import uvicorn
         uvicorn.run(mcp.streamable_http_app, host=args.host, port=args.port)
 
