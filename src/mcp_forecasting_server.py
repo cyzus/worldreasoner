@@ -2,15 +2,39 @@
 
 This MCP server provides tools for LLMs to make forecasts while respecting
 temporal constraints. All search and fetch operations are filtered based on
-a cutoff date to simulate historical contexts.
+a simulated date to create realistic forecasting scenarios.
 
-The forecasting context (question ID and knowledge cutoff) is provided via
-MCP connection metadata/headers when the client connects. This allows one
-server instance to handle multiple forecasting sessions.
+FORECASTING SIMULATION CONCEPT:
+    The server uses TWO important dates to simulate realistic forecasting:
+
+    1. X-Knowledge-Cutoff: The LLM's training data cutoff date
+       - Represents when the LLM's training data ends
+       - Example: 2024-01-01 for models trained in early 2024
+
+    2. X-Simulated-Date: The simulated "today" date for the forecast
+       - This is the date we're pretending "today" is
+       - Must be AFTER the knowledge cutoff (LLM has been "deployed")
+       - Must be BEFORE the question's resolution date
+       - The LLM can access articles from before this date
+
+    Timeline:
+        Knowledge Cutoff → Simulated Date → Resolution Date
+        (training ends)    (forecast "today") (answer known)
+
+Example Scenario:
+    - LLM's knowledge cutoff: 2024-01-01 (training data ends)
+    - Simulated date: 2024-04-01 (we're pretending today is April 1st)
+    - Question resolves on: 2024-06-01
+    - LLM can access articles from: before 2024-04-01
+    - LLM must forecast: 61 days into the future
+
+The forecasting context is provided via MCP connection metadata/headers
+when the client connects. This allows one server instance to handle
+multiple forecasting sessions.
 
 Exposed Tools (4 essential tools):
     1. get_question - Get the current forecast question details
-    2. temporal_search_articles - Search articles before cutoff date
+    2. temporal_search_articles - Search articles before simulated date
     3. fetch_article - Fetch full article content (temporally filtered)
     4. submit_forecast - Submit prediction for the question
 
@@ -25,7 +49,8 @@ Usage:
 
     # Client provides context via connection metadata:
     # X-Question-ID: q_123
-    # X-Knowledge-Cutoff: 2024-04-01T00:00:00Z
+    # X-Knowledge-Cutoff: 2024-01-01T00:00:00Z  (LLM's training cutoff)
+    # X-Simulated-Date: 2024-04-01T00:00:00Z   (simulated "today")
 
 Configuration:
     WORLDREASONER_DB: Path to database (default: worldreasoner.db)
@@ -71,9 +96,13 @@ _connection_context: Dict[str, Any] = {}
 
 class ForecastContextMiddleware(Middleware):
     """Middleware to capture and store forecasting context from request headers.
-    
-    This captures X-Question-ID and X-Knowledge-Cutoff headers from any request
-    (tool listing, tool calls, etc.) and stores them globally for the session.
+
+    This captures forecasting context headers from any request:
+        - X-Question-ID: Question to forecast
+        - X-Knowledge-Cutoff: LLM's training data cutoff date
+        - X-Simulated-Date: Simulated "today" date for forecasting
+
+    Stores them globally for the session.
     """
     
     async def on_message(self, context: MiddlewareContext, call_next):
@@ -90,38 +119,82 @@ class ForecastContextMiddleware(Middleware):
                 if request and hasattr(request, 'headers'):
                     headers = request.headers
                     logger.debug(f"Available headers: {list(headers.keys())}")
-                    
+
                     question_id = headers.get('x-question-id') or headers.get('X-Question-ID')
                     knowledge_cutoff = headers.get('x-knowledge-cutoff') or headers.get('X-Knowledge-Cutoff')
-                    
-                    logger.debug(f"Extracted - question_id: {question_id}, knowledge_cutoff: {knowledge_cutoff}")
-                    
+                    simulated_date = headers.get('x-simulated-date') or headers.get('X-Simulated-Date')
+
+                    logger.debug(f"Extracted - question_id: {question_id}, knowledge_cutoff: {knowledge_cutoff}, simulated_date: {simulated_date}")
+
                     # If headers are present, store them globally
-                    if question_id and knowledge_cutoff:
+                    if question_id and simulated_date:
                         try:
-                            # Parse cutoff date
-                            if 'T' in knowledge_cutoff:
-                                cutoff_date = datetime.fromisoformat(knowledge_cutoff.replace('Z', '+00:00'))
+                            # Parse simulated date
+                            if 'T' in simulated_date:
+                                simulated_date_obj = datetime.fromisoformat(simulated_date.replace('Z', '+00:00'))
                             else:
-                                cutoff_date = datetime.fromisoformat(f"{knowledge_cutoff}T00:00:00+00:00")
-                            
-                            if cutoff_date.tzinfo is None:
-                                cutoff_date = cutoff_date.replace(tzinfo=timezone.utc)
-                            
+                                simulated_date_obj = datetime.fromisoformat(f"{simulated_date}T00:00:00+00:00")
+
+                            if simulated_date_obj.tzinfo is None:
+                                simulated_date_obj = simulated_date_obj.replace(tzinfo=timezone.utc)
+
+                            # Parse knowledge cutoff (optional, but recommended)
+                            knowledge_cutoff_obj = None
+                            if knowledge_cutoff:
+                                if 'T' in knowledge_cutoff:
+                                    knowledge_cutoff_obj = datetime.fromisoformat(knowledge_cutoff.replace('Z', '+00:00'))
+                                else:
+                                    knowledge_cutoff_obj = datetime.fromisoformat(f"{knowledge_cutoff}T00:00:00+00:00")
+
+                                if knowledge_cutoff_obj.tzinfo is None:
+                                    knowledge_cutoff_obj = knowledge_cutoff_obj.replace(tzinfo=timezone.utc)
+
                             # Validate question exists
                             question = db.get(Question, question_id)
                             if question:
+                                # Validate temporal constraints
+                                if simulated_date_obj >= question.resolution_date:
+                                    logger.error(
+                                        f"Invalid simulated date: {simulated_date_obj.date()} is not before "
+                                        f"resolution date {question.resolution_date.date()}"
+                                    )
+                                    raise ValueError(
+                                        f"Simulated date ({simulated_date_obj.date()}) must be BEFORE "
+                                        f"the question's resolution date ({question.resolution_date.date()}). "
+                                        f"The simulated date represents 'today' in the forecasting scenario."
+                                    )
+
+                                # Validate knowledge cutoff < simulated date if provided
+                                if knowledge_cutoff_obj and knowledge_cutoff_obj >= simulated_date_obj:
+                                    logger.error(
+                                        f"Invalid dates: knowledge_cutoff {knowledge_cutoff_obj.date()} "
+                                        f"must be before simulated_date {simulated_date_obj.date()}"
+                                    )
+                                    raise ValueError(
+                                        f"Knowledge cutoff ({knowledge_cutoff_obj.date()}) must be BEFORE "
+                                        f"simulated date ({simulated_date_obj.date()}). "
+                                        f"The LLM must be 'deployed' after its training ends."
+                                    )
+
                                 _connection_context['question_id'] = question_id
-                                _connection_context['knowledge_cutoff'] = cutoff_date.isoformat()
-                                _connection_context['cutoff_date_obj'] = cutoff_date
+                                _connection_context['knowledge_cutoff'] = knowledge_cutoff_obj.isoformat() if knowledge_cutoff_obj else None
+                                _connection_context['knowledge_cutoff_obj'] = knowledge_cutoff_obj
+                                _connection_context['simulated_date'] = simulated_date_obj.isoformat()
+                                _connection_context['simulated_date_obj'] = simulated_date_obj
                                 _connection_context['question'] = question
-                                logger.info(f"✓ Context captured from headers: q={question_id}, cutoff={cutoff_date.date()}")
+                                logger.info(
+                                    f"✓ Context captured from headers: q={question_id}, "
+                                    f"knowledge_cutoff={knowledge_cutoff_obj.date() if knowledge_cutoff_obj else 'N/A'}, "
+                                    f"simulated_date={simulated_date_obj.date()}, "
+                                    f"resolution_date={question.resolution_date.date()}, "
+                                    f"forecast_horizon={(question.resolution_date - simulated_date_obj).days} days"
+                                )
                             else:
                                 logger.warning(f"Question {question_id} not found in database")
                         except Exception as e:
                             logger.error(f"Error parsing context headers: {e}", exc_info=True)
                     else:
-                        logger.debug("No question_id or knowledge_cutoff in headers")
+                        logger.debug("No question_id or simulated_date in headers")
                 else:
                     logger.debug("No HTTP request or headers available")
             except Exception as e:
@@ -140,44 +213,56 @@ mcp.add_middleware(ForecastContextMiddleware())
 
 def _get_context_from_mcp(ctx: Context) -> Dict[str, Any]:
     """Extract forecasting context from MCP request metadata/headers.
-    
+
     The context is automatically captured by middleware from request headers
     and stored in _connection_context. This function retrieves it.
-    
+
+    Returns TWO important dates:
+        - knowledge_cutoff: The LLM's training data cutoff (optional)
+        - simulated_date: The simulated "today" for forecasting (required)
+
     Args:
         ctx: MCP context object (not used, kept for compatibility)
-        
+
     Returns:
-        Dict with question_id, cutoff_date, session_id, and question object
-        
+        Dict with:
+            - question_id: The question to forecast
+            - knowledge_cutoff: The LLM's training data cutoff (optional)
+            - simulated_date: The simulated "today" (must be before resolution_date)
+            - session_id: Unique session identifier
+            - question: Full Question object
+
     Raises:
-        ValueError: If required context not found
+        ValueError: If required context not found or invalid
     """
     question_id = _connection_context.get('question_id')
-    cutoff_date_obj = _connection_context.get('cutoff_date_obj')
+    knowledge_cutoff_obj = _connection_context.get('knowledge_cutoff_obj')
+    simulated_date_obj = _connection_context.get('simulated_date_obj')
     question = _connection_context.get('question')
-    
+
     if not question_id:
         raise ValueError(
             "Forecasting context not initialized. "
-            "Client must provide X-Question-ID and X-Knowledge-Cutoff headers when connecting."
+            "Client must provide X-Question-ID and X-Simulated-Date headers when connecting."
         )
-    
-    if not cutoff_date_obj:
+
+    if not simulated_date_obj:
         raise ValueError(
-            "Knowledge cutoff date not initialized. "
-            "Client must provide X-Knowledge-Cutoff header when connecting."
+            "Simulated date not initialized. "
+            "Client must provide X-Simulated-Date header when connecting. "
+            "This header represents the simulated 'today' date (must be before the question's resolution date)."
         )
-    
+
     if not question:
         raise ValueError(f"Question not found: {question_id}")
-    
+
     # Create session ID
     session_id = f"session_{question_id}_{int(datetime.now(timezone.utc).timestamp())}"
-    
+
     return {
         "question_id": question_id,
-        "cutoff_date": cutoff_date_obj,
+        "knowledge_cutoff": knowledge_cutoff_obj,
+        "simulated_date": simulated_date_obj,
         "session_id": session_id,
         "question": question
     }
@@ -247,13 +332,13 @@ class ArticlesAccessed(BaseModel):
 @mcp.tool()
 def get_question(ctx: Context) -> str:
     """Get details about the current forecasting question.
-    
+
     This returns the question you need to forecast, along with temporal context
-    showing your knowledge cutoff date and how far into the future you're forecasting.
-    
-    The question ID and knowledge cutoff are provided via MCP connection metadata:
-        - X-Question-ID header (HTTP mode)
-        - question_id metadata (stdio mode)
+    showing your knowledge cutoff date, the simulated "today" date, and how far
+    into the future you're forecasting.
+
+    The question ID, knowledge cutoff, and simulated date are provided via MCP
+    connection metadata headers.
 
     Returns:
         JSON string with question details and temporal context
@@ -262,8 +347,9 @@ def get_question(ctx: Context) -> str:
         # Get context from MCP request
         forecast_ctx = _get_context_from_mcp(ctx)
         question = forecast_ctx["question"]
-        cutoff = forecast_ctx["cutoff_date"]
-        
+        knowledge_cutoff = forecast_ctx["knowledge_cutoff"]
+        simulated_date = forecast_ctx["simulated_date"]
+
         result = {
             "question": {
                 "id": question.id,
@@ -278,25 +364,26 @@ def get_question(ctx: Context) -> str:
                 "target_event_id": question.target_event_id
             },
             "temporal_context": {
-                "knowledge_cutoff_date": cutoff.isoformat(),
+                "knowledge_cutoff_date": knowledge_cutoff.isoformat() if knowledge_cutoff else None,
+                "simulated_date": simulated_date.isoformat(),
                 "resolution_date": question.resolution_date.isoformat(),
-                "days_to_forecast": (question.resolution_date - cutoff).days,
+                "days_to_forecast": (question.resolution_date - simulated_date).days,
                 "explanation": (
-                    f"Your knowledge cutoff is {cutoff.date()}. "
-                    f"You must forecast an event that resolves on {question.resolution_date.date()} "
-                    f"({(question.resolution_date - cutoff).days} days in the future)."
+                    f"Simulated 'today' is {simulated_date.date()}. "
+                    + (f"Your training data cutoff is {knowledge_cutoff.date()}. " if knowledge_cutoff else "")
                 )
             },
             "instructions": (
                 f"FORECASTING SCENARIO:\n"
-                f"- Your training data includes information up to: {cutoff.date()}\n"
+                + (f"- Your training data includes information up to: {knowledge_cutoff.date()}\n" if knowledge_cutoff else "")
+                + f"- Simulated 'today' date: {simulated_date.date()}\n"
                 f"- Event resolution date: {question.resolution_date.date()}\n"
-                f"- You must forecast: {(question.resolution_date - cutoff).days} days into the future\n"
-                f"- All article searches will only return information from BEFORE your knowledge cutoff\n"
+                f"- You must forecast: {(question.resolution_date - simulated_date).days} days into the future\n"
+                f"- All article searches will only return information from BEFORE the simulated date\n"
                 f"- This tests your ability to make genuine predictions about future events"
             )
         }
-        
+
         return json.dumps(result, indent=2)
         
     except ValueError as e:
@@ -318,7 +405,7 @@ async def temporal_search_articles(
 
     Uses a combination of keyword search (FTS5/BM25) and semantic search
     (embeddings) to find the most relevant articles published BEFORE the
-    LLM's knowledge cutoff date.
+    simulated date.
 
     The hybrid approach provides:
     - Fast keyword matching for exact terms
@@ -326,21 +413,21 @@ async def temporal_search_articles(
     - BM25 + embedding fusion for best relevance
 
     Returns:
-        JSON string with article summaries (only from before knowledge cutoff)
+        JSON string with article summaries (only from before simulated date)
     """
     try:
         # Get context from MCP request
         forecast_ctx = _get_context_from_mcp(ctx)
-        cutoff = forecast_ctx["cutoff_date"]
+        simulated_date = forecast_ctx["simulated_date"]
 
-        logger.info(f"Hybrid search: query='{query.value}', cutoff={cutoff.isoformat()}")
+        logger.info(f"Hybrid search: query='{query.value}', simulated_date={simulated_date.isoformat()}")
 
         # Perform hybrid search with temporal filtering
         # Returns article IDs ranked by hybrid score (FTS5 + embeddings)
         article_ids = await hybrid_search.search(
             query=query.value,
             max_results=max_results.value,
-            cutoff_date=cutoff,
+            cutoff_date=simulated_date,
             method="hybrid",
             alpha=0.5  # Equal weight to keyword and semantic search
         )
@@ -348,7 +435,7 @@ async def temporal_search_articles(
         logger.info(f"Hybrid search found {len(article_ids)} results")
 
         # Get temporal database for fetching full articles
-        temporal_db = _get_temporal_db(cutoff)
+        temporal_db = _get_temporal_db(simulated_date)
 
         # Fetch full article objects
         # Note: temporal_db.get() already applies temporal filtering
@@ -373,8 +460,8 @@ async def temporal_search_articles(
         result = {
             "query": query.value,
             "search_method": "hybrid (FTS5 + embeddings)",
-            "knowledge_cutoff_date": cutoff.isoformat(),
-            "note": f"Only showing articles from BEFORE knowledge cutoff ({cutoff.date()})",
+            "simulated_date": simulated_date.isoformat(),
+            "note": f"Only showing articles from BEFORE the simulated date ({simulated_date.date()})",
             "count": len(matches),
             "articles": [
                 {
@@ -408,36 +495,36 @@ def fetch_article(
 ) -> str:
     """Fetch full article content with temporal validation.
 
-    Only returns the article if it was published before the LLM's knowledge cutoff.
-    This simulates accessing information from the LLM's training data.
+    Only returns the article if it was published before the simulated date.
+    This simulates accessing information available at the simulated "today" date.
 
     Returns:
-        JSON string with full article content (only if before knowledge cutoff)
+        JSON string with full article content (only if before simulated date)
     """
     try:
         # Get context from MCP request
         forecast_ctx = _get_context_from_mcp(ctx)
-        cutoff = forecast_ctx["cutoff_date"]
+        simulated_date = forecast_ctx["simulated_date"]
 
-        logger.info(f"Fetching article {article_id.value} with cutoff {cutoff.isoformat()}")
+        logger.info(f"Fetching article {article_id.value} with simulated_date {simulated_date.isoformat()}")
 
         # Get article from temporal database
-        temporal_db = _get_temporal_db(cutoff)
+        temporal_db = _get_temporal_db(simulated_date)
         article = temporal_db.get(Article, article_id.value)
 
         if not article:
             return json.dumps({
-                "error": f"Article {article_id.value} not found or published after cutoff date"
+                "error": f"Article {article_id.value} not found or published after simulated date"
             })
 
         # Validate temporal access
-        gateway = TemporalGateway(cutoff)
+        gateway = TemporalGateway(simulated_date)
         if not gateway.is_article_accessible(article):
             return json.dumps({
-                "error": f"Article {article_id.value} was published after your knowledge cutoff",
+                "error": f"Article {article_id.value} was published after the simulated date",
                 "published": article.published_date.isoformat(),
-                "knowledge_cutoff": cutoff.isoformat(),
-                "note": "You can only access articles from your training data (before knowledge cutoff)"
+                "simulated_date": simulated_date.isoformat(),
+                "note": "You can only access articles from before the simulated 'today' date"
             })
 
         # Return full article
@@ -476,7 +563,7 @@ def submit_forecast(
     """Submit a forecast for the current question.
 
     This records your prediction about a future event, based only on information
-    available before your knowledge cutoff date.
+    available before the simulated date.
 
     Returns:
         JSON string with forecast ID and confirmation
@@ -486,7 +573,7 @@ def submit_forecast(
         forecast_ctx = _get_context_from_mcp(ctx)
         question_id = forecast_ctx["question_id"]
         session_id = forecast_ctx["session_id"]
-        cutoff_date = forecast_ctx["cutoff_date"]
+        simulated_date = forecast_ctx["simulated_date"]
         question = forecast_ctx["question"]
 
         logger.info(f"Submitting forecast for question {question_id}")
@@ -529,7 +616,7 @@ def submit_forecast(
             confidence=confidence.value,
             reasoning=reasoning.value,
             timestamp=datetime.now(timezone.utc),
-            simulated_date=cutoff_date,
+            simulated_date=simulated_date,
             articles_accessed=articles_accessed.value or [],
             searches_performed=[],  # Could track this if needed
             model_name="mcp_client",  # Will be updated by client
@@ -545,11 +632,11 @@ def submit_forecast(
             "question_id": question_id,
             "prediction": parsed_prediction,
             "confidence": confidence.value,
-            "knowledge_cutoff_date": cutoff_date.isoformat(),
+            "simulated_date": simulated_date.isoformat(),
             "submitted_at": forecast.timestamp.isoformat(),
             "status": "submitted",
             "note": (
-                f"Forecast submitted! You predicted based on information from before {cutoff_date.date()}. "
+                f"Forecast submitted! You predicted based on information from before the simulated date ({simulated_date.date()}). "
                 f"The actual outcome will be known on {question.resolution_date.date()}."
             )
         }
@@ -573,8 +660,11 @@ def submit_forecast(
 def main():
     """CLI entry point for streamable HTTP MCP server.
 
-    The server accepts forecasting context (question_id and knowledge_cutoff)
-    from the MCP client via connection metadata/headers, not from CLI args.
+    The server accepts forecasting context from the MCP client via connection
+    metadata/headers, not from CLI args:
+        - question_id: The question to forecast
+        - knowledge_cutoff: The LLM's training data cutoff (optional)
+        - simulated_date: The simulated "today" date (required)
 
     Mode:
         stream  - Streamable HTTP (Server-Sent Events) for incremental tool output
@@ -601,7 +691,9 @@ Examples:
 
 Connection Metadata (provided by MCP client):
   X-Question-ID: Question identifier to forecast
-  X-Knowledge-Cutoff: LLM's knowledge cutoff date (ISO format)
+  X-Knowledge-Cutoff: LLM's training data cutoff date (ISO format, optional)
+  X-Simulated-Date: Simulated "today" date (ISO format, required)
+                    Must be AFTER knowledge cutoff and BEFORE resolution date
         """
     )
     parser.add_argument(
@@ -623,7 +715,10 @@ Connection Metadata (provided by MCP client):
     args = parser.parse_args()
 
     logger.info(f"Launching MCP server (stream mode) db={DB_PATH}")
-    logger.info("Forecasting context (question_id, knowledge_cutoff) will be provided by MCP client")
+    logger.info("Forecasting context will be provided by MCP client via headers:")
+    logger.info("  - X-Question-ID (required)")
+    logger.info("  - X-Knowledge-Cutoff (optional)")
+    logger.info("  - X-Simulated-Date (required)")
 
     # Adjust logging level if provided
     try:
@@ -636,7 +731,7 @@ Connection Metadata (provided by MCP client):
 
     logger.info(f"Starting MCP STREAMABLE HTTP server on http://{args.host}:{args.port}")
     logger.info("Endpoints: /mcp/tools, /mcp/prompts, SSE streaming available")
-    logger.info("Context will be captured from X-Question-ID and X-Knowledge-Cutoff headers")
+    logger.info("Context headers: X-Question-ID, X-Knowledge-Cutoff (optional), X-Simulated-Date (required)")
     import uvicorn
     uvicorn.run(mcp.streamable_http_app, host=args.host, port=args.port)
 
