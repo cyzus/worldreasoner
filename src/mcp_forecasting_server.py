@@ -46,6 +46,7 @@ from fastmcp.server.middleware import Middleware, MiddlewareContext
 # Import WorldReasoner components
 from src.core.database import GenericDatabase
 from src.core.temporal_gateway import TemporalGateway, TemporalContext
+from src.core.hybrid_search import HybridSearch
 from src.domain.models import Article, Question, Forecast, Event
 from src.domain.models.domain import Domain
 from src.utils.logging import logger
@@ -53,9 +54,11 @@ from src.utils.logging import logger
 # Initialize MCP server
 mcp = FastMCP("worldreasoner-forecasting")
 
-# Global database connection
+# Global database connection and search engine
 DB_PATH = os.getenv("WORLDREASONER_DB", "worldreasoner.db")
 db = GenericDatabase(DB_PATH)
+# HybridSearch loads embedding_model from config.yaml by default
+hybrid_search = HybridSearch(DB_PATH)
 
 # Connection-level context storage (populated from request headers)
 # Captured by middleware during any request with the headers
@@ -305,16 +308,22 @@ def get_question(ctx: Context) -> str:
 
 
 @mcp.tool()
-def temporal_search_articles(
+async def temporal_search_articles(
     ctx: Context,
     query: SearchQuery,
     domain: DomainFilter = DomainFilter(),
     max_results: MaxResults = MaxResults()
 ) -> str:
-    """Search for articles with temporal filtering.
+    """Search for articles with temporal filtering using hybrid search.
 
-    Only returns articles published BEFORE the LLM's knowledge cutoff date.
-    This simulates searching through the LLM's training data.
+    Uses a combination of keyword search (FTS5/BM25) and semantic search
+    (embeddings) to find the most relevant articles published BEFORE the
+    LLM's knowledge cutoff date.
+
+    The hybrid approach provides:
+    - Fast keyword matching for exact terms
+    - Semantic understanding for related concepts
+    - BM25 + embedding fusion for best relevance
 
     Returns:
         JSON string with article summaries (only from before knowledge cutoff)
@@ -324,36 +333,46 @@ def temporal_search_articles(
         forecast_ctx = _get_context_from_mcp(ctx)
         cutoff = forecast_ctx["cutoff_date"]
 
-        logger.info(f"Searching articles with query='{query.value}', cutoff={cutoff.isoformat()}")
+        logger.info(f"Hybrid search: query='{query.value}', cutoff={cutoff.isoformat()}")
 
-        # Get temporal database
+        # Perform hybrid search with temporal filtering
+        # Returns article IDs ranked by hybrid score (FTS5 + embeddings)
+        article_ids = await hybrid_search.search(
+            query=query.value,
+            max_results=max_results.value,
+            cutoff_date=cutoff,
+            method="hybrid",
+            alpha=0.5  # Equal weight to keyword and semantic search
+        )
+
+        logger.info(f"Hybrid search found {len(article_ids)} results")
+
+        # Get temporal database for fetching full articles
         temporal_db = _get_temporal_db(cutoff)
 
-        # Build filters
-        filters = {}
-        if domain.value:
-            try:
-                filters['domain'] = Domain(domain.value.lower())
-            except ValueError:
-                pass
+        # Fetch full article objects
+        # Note: temporal_db.get() already applies temporal filtering
+        matches = []
+        for article_id in article_ids:
+            article = temporal_db.get(Article, article_id)
+            if article:
+                # Apply domain filter if specified
+                if domain.value:
+                    try:
+                        domain_filter = Domain(domain.value.lower())
+                        if article.domain != domain_filter:
+                            continue
+                    except ValueError:
+                        pass
+                matches.append(article)
 
-        # Get all articles (temporal filtering applied automatically)
-        all_articles = temporal_db.get_many(Article, filters=filters if filters else None)
-
-        # Simple text search (you could enhance this with embeddings/FTS)
-        query_lower = query.value.lower()
-        matches = [
-            article for article in all_articles
-            if query_lower in article.title.lower() or query_lower in article.content.lower()
-        ]
-
-        # Sort by published date (most recent first)
-        matches.sort(key=lambda a: a.published_date, reverse=True)
+        # Limit results after domain filtering
         matches = matches[:max_results.value]
 
         # Format response
         result = {
             "query": query.value,
+            "search_method": "hybrid (FTS5 + embeddings)",
             "knowledge_cutoff_date": cutoff.isoformat(),
             "note": f"Only showing articles from BEFORE knowledge cutoff ({cutoff.date()})",
             "count": len(matches),

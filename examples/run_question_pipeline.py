@@ -3,6 +3,10 @@ CLI script to run the configurable QuestionPipeline.
 
 Usage:
     python run_question_pipeline.py --sources config/sources.yaml --db output.db --start-date YYYY-MM-DD --end-date YYYY-MM-DD --domains tech,finance --max-questions 10 --article-batch-size 50 --event-batch-size 20
+
+Note:
+    Articles are automatically indexed for hybrid search after pipeline completion.
+    Use --skip-indexing to disable this behavior.
 """
 import argparse
 from datetime import datetime
@@ -12,6 +16,7 @@ from src.pipelines.question.pipeline import QuestionPipeline
 from src.config.pipeline import QuestionPipelineConfig
 from src.config.database import DatabaseConfig
 from src.pipelines.stages.article_collection import ArticleSource
+from src.utils.search_indexing import auto_index_articles, should_auto_index
 
 
 def parse_args():
@@ -25,6 +30,7 @@ def parse_args():
     parser.add_argument('--max-questions', type=int, default=10, help='Maximum questions to generate (defaults to config)')
     parser.add_argument('--article-batch-size', type=int, default=None, help='Batch size for event identification (articles) (defaults to config)')
     parser.add_argument('--event-batch-size', type=int, default=None, help='Batch size for question generation (events) (defaults to config)')
+    parser.add_argument('--skip-indexing', action='store_true', help='Skip automatic search indexing after pipeline completion')
     return parser.parse_args()
 
 
@@ -83,6 +89,20 @@ async def run_pipeline(args):
         if result.error_message:
             print(f"  Error: {result.error_message}")
         print(f"  Outputs: {len(result.outputs)}")
+
+    # Auto-index articles for search if not skipped
+    if should_auto_index(args.skip_indexing):
+        print("\nIndexing articles for hybrid search...")
+        index_stats = await auto_index_articles(db_path=args.db)
+        if index_stats['status'] == 'success':
+            print(f"✓ Indexed {index_stats['newly_indexed']} new articles")
+            print(f"  Total indexed: {index_stats['final_indexed']}")
+        elif index_stats['status'] == 'up_to_date':
+            print("✓ Search index is up to date")
+        elif index_stats['status'] == 'no_articles':
+            print("⚠ No articles to index")
+        else:
+            print(f"✗ Indexing failed: {index_stats.get('error', 'Unknown error')}")
 
 
 def main():

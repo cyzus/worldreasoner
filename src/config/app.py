@@ -15,10 +15,14 @@ class ServerConfig(BaseModel):
 
 class LLMConfig(BaseModel):
     """LLM configuration for agent interactions."""
-    
+
     model: str = Field(
         default="gemini/gemini-2.5-flash",
         description="LiteLLM model identifier"
+    )
+    embedding_model: str = Field(
+        default="gemini/gemini-embedding-001",
+        description="LiteLLM embedding model identifier"
     )
     temperature: float = Field(
         default=1.0,

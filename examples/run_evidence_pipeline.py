@@ -24,6 +24,10 @@ Usage:
 
     # Custom thresholds
     python examples/run_evidence_pipeline.py --confidence 0.7 --strength 0.4
+
+Note:
+    Articles are automatically indexed for hybrid search after pipeline completion.
+    Use --skip-indexing to disable this behavior.
 """
 
 import argparse
@@ -32,6 +36,7 @@ from src.pipelines.evidence import EvidencePipeline
 from src.config.pipeline import EvidencePipelineConfig
 from src.config import DatabaseConfig, get_config
 from src.utils.logging import logger
+from src.utils.search_indexing import auto_index_articles, should_auto_index
 
 
 def parse_args():
@@ -60,8 +65,10 @@ def parse_args():
     # Processing settings
     parser.add_argument('--question-batch-size', type=int, default=10, help='Batch size for evidence collection (default: 10)')
     parser.add_argument('--reasoning-batch-size', type=int, default=20, help='Batch size for causal reasoning (default: 20)')
+
     # Output control
     parser.add_argument('--verbose', action='store_true', help='Show detailed output with sample results')
+    parser.add_argument('--skip-indexing', action='store_true', help='Skip automatic search indexing after pipeline completion')
 
     return parser.parse_args()
 
@@ -189,6 +196,21 @@ async def run_pipeline(args):
                     logger.info(f"     {hyp.relation_type.value} (strength: {hyp.strength:.2f}, confidence: {hyp.confidence:.2f})")
                     logger.info(f"     Evidence: {len(hyp.evidence_article_ids)} articles")
                     logger.info(f"     Discovered by: {len(hyp.discovered_by_question_ids)} question(s)")
+
+        # Auto-index articles for search if not skipped
+        if should_auto_index(args.skip_indexing):
+            logger.info("")
+            logger.info("Indexing articles for hybrid search...")
+            index_stats = await auto_index_articles(db_path=args.db)
+            if index_stats['status'] == 'success':
+                logger.info(f"✓ Indexed {index_stats['newly_indexed']} new articles")
+                logger.info(f"  Total indexed: {index_stats['final_indexed']}")
+            elif index_stats['status'] == 'up_to_date':
+                logger.info("✓ Search index is up to date")
+            elif index_stats['status'] == 'no_articles':
+                logger.warning("⚠ No articles to index")
+            else:
+                logger.error(f"✗ Indexing failed: {index_stats.get('error', 'Unknown error')}")
 
         logger.info("=" * 80)
 
