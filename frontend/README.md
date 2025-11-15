@@ -32,7 +32,7 @@ npm run dev
 
 The frontend will be available at http://localhost:3000
 
-**Note**: Make sure the backend API is running on port 8000:
+**Note**: Make sure the backend API is running on port 8018:
 
 ```bash
 # In the project root

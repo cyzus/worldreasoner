@@ -66,7 +66,7 @@ npm run dev
 
 # Access at:
 # - Frontend: http://localhost:3000
-# - API docs: http://localhost:8000/docs
+# - API docs: http://localhost:8018/docs
 ```
 
 See `GRAPH_VISUALIZATION.md` for detailed documentation.

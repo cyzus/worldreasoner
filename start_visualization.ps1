@@ -39,8 +39,8 @@ Start-Process powershell -ArgumentList "-NoExit", "-Command", "npm run dev"
 Set-Location ..
 
 Write-Host "`n=== WorldReasoner Graph Visualization Started ===" -ForegroundColor Green
-Write-Host "Backend API: http://localhost:8000" -ForegroundColor Cyan
-Write-Host "API Docs:    http://localhost:8000/docs" -ForegroundColor Cyan
+Write-Host "Backend API: http://localhost:8018" -ForegroundColor Cyan
+Write-Host "API Docs:    http://localhost:8018/docs" -ForegroundColor Cyan
 Write-Host "Frontend:    http://localhost:3000" -ForegroundColor Cyan
 Write-Host "`nTwo terminal windows have been opened." -ForegroundColor Yellow
 Write-Host "Close them to stop the servers." -ForegroundColor Yellow

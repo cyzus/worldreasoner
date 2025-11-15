@@ -8,7 +8,7 @@ class ServerConfig(BaseModel):
     """MCP server configuration."""
     
     host: str = Field(default="localhost", description="Server host")
-    port: int = Field(default=8000, description="Server port")
+    port: int = Field(default=8018, description="Server port")
     reload: bool = Field(default=False, description="Auto-reload on code changes")
     log_level: str = Field(default="info", description="Logging level")
 

@@ -42,8 +42,8 @@ cd ..
 
 # Print info
 echo -e "\n\033[32m=== WorldReasoner Graph Visualization Started ===\033[0m"
-echo -e "\033[36mBackend API: http://localhost:8000\033[0m"
-echo -e "\033[36mAPI Docs:    http://localhost:8000/docs\033[0m"
+echo -e "\033[36mBackend API: http://localhost:8018\033[0m"
+echo -e "\033[36mAPI Docs:    http://localhost:8018/docs\033[0m"
 echo -e "\033[36mFrontend:    http://localhost:3000\033[0m"
 echo -e "\n\033[33mPress Ctrl+C to stop both servers\033[0m"
 
