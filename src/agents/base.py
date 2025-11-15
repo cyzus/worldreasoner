@@ -9,7 +9,7 @@ class BaseAgent():
         self.config = config or get_config()
         self.llm_model = LiteLLMModel(
             model_id=self.config.llm.model,
-            **self.config.llm.model_dump(exclude={"model"})
+            **self.config.llm.model_dump(exclude={"model", "embedding_model"})
         )
         self.agent = ToolCallingAgent(
             model=self.llm_model,

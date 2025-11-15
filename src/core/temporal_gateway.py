@@ -143,11 +143,14 @@ class TemporalGateway:
             logger.warning(f"Article {article.id} has None published_date - rejecting")
             return False
 
-        if article.published_date.tzinfo is None:
-            logger.error(f"Article {article.id} has naive datetime - rejecting")
-            return False
+        # Handle naive datetimes by treating them as UTC
+        published_date = article.published_date
+        if published_date.tzinfo is None:
+            logger.debug(f"Article {article.id} has naive datetime - treating as UTC")
+            from datetime import timezone
+            published_date = published_date.replace(tzinfo=timezone.utc)
 
-        return article.published_date < self.cutoff_date
+        return published_date < self.cutoff_date
 
     def is_event_accessible(self, event: "Event") -> bool:
         """Check if a single event is accessible.
@@ -163,11 +166,14 @@ class TemporalGateway:
             # Conservative: reject events without occurred_date
             return False
 
-        if event.occurred_date.tzinfo is None:
-            logger.error(f"Event {event.id} has naive datetime - rejecting")
-            return False
+        # Handle naive datetimes by treating them as UTC
+        occurred_date = event.occurred_date
+        if occurred_date.tzinfo is None:
+            logger.debug(f"Event {event.id} has naive datetime - treating as UTC")
+            from datetime import timezone
+            occurred_date = occurred_date.replace(tzinfo=timezone.utc)
 
-        return event.occurred_date < self.cutoff_date
+        return occurred_date < self.cutoff_date
 
     def validate_forecast(
         self,
