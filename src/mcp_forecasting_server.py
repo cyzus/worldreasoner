@@ -294,11 +294,6 @@ class MaxResults(BaseModel):
     value: int = Field(10, description="Maximum number of results to return", ge=1, le=100)
 
 
-class Prediction(BaseModel):
-    """Prediction parameter."""
-    value: str = Field(..., description="Your prediction (Boolean: 'true'/'false', MCQ: option text, Quantity: numeric value, Timeframe: date/range)")
-
-
 class Confidence(BaseModel):
     """Confidence parameter."""
     value: float = Field(..., description="Confidence level (0.0 to 1.0)", ge=0.0, le=1.0)
@@ -540,7 +535,7 @@ def fetch_article(
 @mcp.tool()
 def submit_forecast(
     ctx: Context,
-    prediction: Prediction,
+    prediction: str,
     confidence: Confidence,
     reasoning: str,
     articles_accessed: ArticlesAccessed = ArticlesAccessed()
@@ -568,13 +563,13 @@ def submit_forecast(
 
         try:
             if question.question_type == QuestionType.BOOLEAN:
-                parsed_prediction = prediction.value.lower() in ['true', 'yes', '1']
+                parsed_prediction = prediction.lower() in ['true', 'yes', '1']
             elif question.question_type == QuestionType.MCQ:
-                parsed_prediction = prediction.value
+                parsed_prediction = prediction
             elif question.question_type == QuestionType.QUANTITY:
-                parsed_prediction = float(prediction.value)
+                parsed_prediction = float(prediction)
             else:
-                parsed_prediction = prediction.value
+                parsed_prediction = prediction
         except ValueError as e:
             return json.dumps({
                 "error": f"Invalid prediction format for {question.question_type.value}: {e}"
