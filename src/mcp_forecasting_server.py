@@ -284,11 +284,6 @@ def _get_temporal_db(cutoff_date: datetime) -> GenericDatabase:
 # Pydantic Models for Parameters
 # ============================================================================
 
-class SearchQuery(BaseModel):
-    """Search query parameter."""
-    value: str = Field(..., description="Search query string")
-
-
 class DomainFilter(BaseModel):
     """Domain filter parameter."""
     value: str | None = Field(None, description="Optional domain filter (e.g., 'technology', 'politics')")
@@ -299,11 +294,6 @@ class MaxResults(BaseModel):
     value: int = Field(10, description="Maximum number of results to return", ge=1, le=100)
 
 
-class ArticleId(BaseModel):
-    """Article ID parameter."""
-    value: str = Field(..., description="ID of the article to fetch")
-
-
 class Prediction(BaseModel):
     """Prediction parameter."""
     value: str = Field(..., description="Your prediction (Boolean: 'true'/'false', MCQ: option text, Quantity: numeric value, Timeframe: date/range)")
@@ -312,11 +302,6 @@ class Prediction(BaseModel):
 class Confidence(BaseModel):
     """Confidence parameter."""
     value: float = Field(..., description="Confidence level (0.0 to 1.0)", ge=0.0, le=1.0)
-
-
-class Reasoning(BaseModel):
-    """Reasoning parameter."""
-    value: str = Field(..., description="Detailed explanation of your reasoning", min_length=50)
 
 
 class ArticlesAccessed(BaseModel):
@@ -397,7 +382,7 @@ def get_question(ctx: Context) -> str:
 @mcp.tool()
 async def temporal_search_articles(
     ctx: Context,
-    query: SearchQuery,
+    query: str,
     domain: DomainFilter = DomainFilter(),
     max_results: MaxResults = MaxResults()
 ) -> str:
@@ -420,12 +405,12 @@ async def temporal_search_articles(
         forecast_ctx = _get_context_from_mcp(ctx)
         simulated_date = forecast_ctx["simulated_date"]
 
-        logger.info(f"Hybrid search: query='{query.value}', simulated_date={simulated_date.isoformat()}")
+        logger.info(f"Hybrid search: query='{query}', simulated_date={simulated_date.isoformat()}")
 
         # Perform hybrid search with temporal filtering
         # Returns article IDs ranked by hybrid score (FTS5 + embeddings)
         article_ids = await hybrid_search.search(
-            query=query.value,
+            query=query,
             max_results=max_results.value,
             cutoff_date=simulated_date,
             method="hybrid",
@@ -458,7 +443,7 @@ async def temporal_search_articles(
 
         # Format response
         result = {
-            "query": query.value,
+            "query": query,
             "search_method": "hybrid (FTS5 + embeddings)",
             "simulated_date": simulated_date.isoformat(),
             "note": f"Only showing articles from BEFORE the simulated date ({simulated_date.date()})",
@@ -491,7 +476,7 @@ async def temporal_search_articles(
 @mcp.tool()
 def fetch_article(
     ctx: Context,
-    article_id: ArticleId
+    article_id: str
 ) -> str:
     """Fetch full article content with temporal validation.
 
@@ -506,22 +491,22 @@ def fetch_article(
         forecast_ctx = _get_context_from_mcp(ctx)
         simulated_date = forecast_ctx["simulated_date"]
 
-        logger.info(f"Fetching article {article_id.value} with simulated_date {simulated_date.isoformat()}")
+        logger.info(f"Fetching article {article_id} with simulated_date {simulated_date.isoformat()}")
 
         # Get article from temporal database
         temporal_db = _get_temporal_db(simulated_date)
-        article = temporal_db.get(Article, article_id.value)
+        article = temporal_db.get(Article, article_id)
 
         if not article:
             return json.dumps({
-                "error": f"Article {article_id.value} not found or published after simulated date"
+                "error": f"Article {article_id} not found or published after simulated date"
             })
 
         # Validate temporal access
         gateway = TemporalGateway(simulated_date)
         if not gateway.is_article_accessible(article):
             return json.dumps({
-                "error": f"Article {article_id.value} was published after the simulated date",
+                "error": f"Article {article_id} was published after the simulated date",
                 "published": article.published_date.isoformat(),
                 "simulated_date": simulated_date.isoformat(),
                 "note": "You can only access articles from before the simulated 'today' date"
@@ -557,7 +542,7 @@ def submit_forecast(
     ctx: Context,
     prediction: Prediction,
     confidence: Confidence,
-    reasoning: Reasoning,
+    reasoning: str,
     articles_accessed: ArticlesAccessed = ArticlesAccessed()
 ) -> str:
     """Submit a forecast for the current question.
@@ -614,7 +599,7 @@ def submit_forecast(
             target_event_id=question.target_event_id,
             prediction=parsed_prediction,
             confidence=confidence.value,
-            reasoning=reasoning.value,
+            reasoning=reasoning,
             timestamp=datetime.now(timezone.utc),
             simulated_date=simulated_date,
             articles_accessed=articles_accessed.value or [],
