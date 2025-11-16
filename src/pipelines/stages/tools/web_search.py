@@ -1,3 +1,4 @@
+from dotenv import load_dotenv
 import os
 import json
 from typing import Optional
@@ -6,6 +7,9 @@ from smolagents.tools import Tool
 from smolagents import WebSearchTool as SmolWebSearchTool
 
 from src.utils.logging import logger
+
+load_dotenv()
+
 
 class WebSearchTool(Tool):
     """

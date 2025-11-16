@@ -23,90 +23,111 @@ Event {idx} (ID: {event_id}){status_note}:
         optional_vars={"status_note": ""}
     )
     
-    # Template for the main generation instruction
-    GENERATION_TEMPLATE = PromptTemplate(
-        template="""Generate forecast questions based on the following {num_events} events.
+    # Template for GROUND TRUTH mode (past events only)
+    GENERATION_TEMPLATE_GROUND_TRUTH = PromptTemplate(
+        template="""Generate {max_questions} forecast questions from PAST events.{domain_filter}
 
 {events_text}
 
-Create up to {max_questions} high-quality forecast questions.{domain_filter}
+═══════════════════════════════════════════════════════════════════════
+GROUND TRUTH MODE - Past Events with Known Outcomes
+═══════════════════════════════════════════════════════════════════════
 
-STRATEGY:
-1. Review event summaries below (descriptions are truncated)
-2. For events that seem interesting, use tool to get full details
-3. Read the complete article content to understand nuances
-4. Generate deep, insightful questions that go beyond surface-level facts
-5. Store questions using {tool_name} tool
+CRITICAL RULES:
+1. Today: {current_date} → resolution_date MUST be ≤ {current_date}
+2. ONLY use WELL-ESTABLISHED events marked "(PAST EVENT)"
+3. Questions use FUTURE TENSE: "Will X happen by DATE?" (NOT "Did X happen?")
+4. ground_truth = VERIFIED FACT from the past (NEVER a future date or speculation)
+5. Use natural deadlines: "by end of Q4 2024" NOT "by Oct 27, 2024"
 
-IMPORTANT - Resolution Date Requirements:
-- Today's date: {current_date}
-- Resolution dates MUST be within this range: {min_resolution_date} to {max_resolution_date}
+⚠️ GROUND TRUTH VALIDATION:
+- ground_truth must be a DEFINITIVE PAST OUTCOME (e.g., "YES", "NO", "Apple", "500000")
+- ground_truth CANNOT be a future date (e.g., "November 17 2025" is INVALID)
+- If outcome is unknown/unverified, SKIP this event
 
-For PAST EVENTS (already occurred):
-  * resolution_date: Use the event date OR shortly after (when outcome became verifiable)
-  * Example: Event on 2024-11-09 → resolution_date could be 2024-11-09 or 2024-11-10
-  * MUST include ground_truth with the known outcome
+DISTRIBUTION TRACKER (Track as you generate):
+Generate EXACTLY in this order:
+1. Boolean #1 (answer: YES/TRUE)
+2. Boolean #2 (answer: NO/FALSE)
+3. MCQ #1
+4. MCQ #2
+5. Quantity #1
+6. Quantity #2
+7. Timeframe #1
+8. Timeframe #2
+... continue pattern to {max_questions} questions
 
-For FUTURE EVENTS (not yet occurred):
-  * resolution_date: Set between today and {max_resolution_date}
-  * Should be realistic (days to months in the future, not years)
-  * Example: For event predicted on 2026-01-15, resolution_date could be 2026-01-20
-  * PRIORITIZE FUTURE EVENTS - aim for at least 40% of questions about future outcomes
+⚠️ CRITICAL: Alternate Boolean answers YES/NO/YES/NO to avoid bias!
 
-For each question you create:
-1. Write the question text (clear, specific, resolvable)
-2. Verify resolution_date is within the allowed range
-3. Call {tool_name} tool to store the generated questions
-4. {ground_truth_instruction}
+QUESTION TYPES & EXAMPLES:
 
-REQUIRED DIVERSITY (aim for these proportions):
-Question Types:
-- 1/4 boolean (yes/no questions)
-- 1/4 quantity (numerical forecasts)
-- 1/4 mcq (multiple choice)
-- 1/4 timeframe (when will X happen)
+Boolean: "Will Bitcoin exceed $100K by Dec 31, 2024?" (specific threshold + deadline)
+MCQ: "Who will win 2024 election: Trump, Harris, or Other?" (3-5 options + "Other")
+Quantity: "Will Tesla deliver over 500K vehicles in Q4 2024?" (numerical threshold)
+Timeframe: "When will Apple announce iPhone 15: Q3 2024, Q4 2024, or 2025+?" (date ranges)
 
-Difficulty Distribution:
-- 1/5 difficulty 1 (very easy, obvious from articles)
-- 1/5 difficulty 2 (easy, requires basic reasoning)
-- 1/5 difficulty 3 (moderate, requires synthesis)
-- 1/5 difficulty 4 (hard, requires deeper analysis)
-- 1/5 difficulty 5 (very hard, requires expert knowledge or multi-step reasoning)
+QUALITY STANDARDS:
+✓ Specific, measurable criteria  ✗ Vague ("Will AI improve?")
+✓ Clear resolution source         ✗ Subjective ("Will movie be good?")
+✓ Natural deadlines (end of Q4)   ✗ Arbitrary dates (Oct 27 at 3pm)
+✓ Verifiable outcomes              ✗ Unprovable claims
 
-Question Variety Examples:
-✓ Direct: "Will Company X's acquisition of Y be completed by DATE?"
-✓ Conditional: "If X's stock price reaches $Y by DATE1, will Z happen by DATE2?"
-✓ Comparative: "Will Company X or Company Y announce their product first by DATE?"
-✓ Threshold: "Will metric X exceed Y units by DATE?"
-✓ Causal: "Will the cancellation of event X lead to Y by DATE?"
-✓ Time-ranged: "Will X happen between DATE1 and DATE2?" (use timeframe type)
-✓ Multi-factor: "Will at least 2 of the following happen by DATE: A, B, C?" (mcq)
-
-Using Time Frames (Recommended):
-- Instead of: "Will X open on 2025-11-01?"
-  Consider: "Will X open in November, 2025?" (provides tolerance)
-- For timeframe questions: "When will X reach Y users: (A) Before Dec 2025, (B) Jan-Mar 2026, (C) Apr-Jun 2026, (D) After Jun 2026"
-- Set resolution_date to the END of the time range
-
-Speculative/Future Event Questions:
-- Use trends to predict: "Given X's current trajectory, will Y happen by DATE?"
-- Industry patterns: "Based on similar acquisitions, will Z be completed within 6 months?"
-- Policy implications: "Will the regulation mentioned in event X affect Y by DATE?"
-- Technology adoption: "Will technology X achieve Y% adoption by DATE?"
-
-Guidelines:
-- Questions should be specific and unambiguous
-- Questions should be independently verifiable
-- Focus on questions that test real forecasting ability, not just information retrieval
-- Use time ranges in question text for more realistic forecasting
-- Stay within the specified date range!
-
-Return a summary when done.""",
-        required_vars=["num_events", "events_text", "max_questions", "current_date", "min_resolution_date", "max_resolution_date"],
+Use {tool_name} to save each question. Return brief summary when done.""",
+        required_vars=["num_events", "events_text", "max_questions", "current_date", "min_resolution_date"],
         optional_vars={
             "domain_filter": "",
-            "tool_name": "question_generator",
-            "ground_truth_instruction": "IMPORTANT: If the event already occurred (marked as PAST EVENT), include ground_truth with the known outcome"
+            "tool_name": "question_generator"
+        }
+    )
+
+    # Template for FUTURE events mode (predictions only)
+    GENERATION_TEMPLATE_FUTURE = PromptTemplate(
+        template="""Generate {max_questions} forecast questions about FUTURE events.{domain_filter}
+
+{events_text}
+
+═══════════════════════════════════════════════════════════════════════
+FUTURE PREDICTION MODE - Unknown Outcomes
+═══════════════════════════════════════════════════════════════════════
+
+CRITICAL RULES:
+1. Today: {current_date} → resolution_date MUST be > {current_date}
+2. SKIP events marked "(PAST EVENT)"
+3. NO ground_truth (outcomes unknown)
+4. Resolution dates: 1-12 months in future
+
+DISTRIBUTION TRACKER (Track as you generate):
+Generate EXACTLY in this order:
+1. Boolean #1 (predict: likely YES)
+2. Boolean #2 (predict: likely NO)
+3. MCQ #1
+4. MCQ #2
+5. Quantity #1
+6. Quantity #2
+7. Timeframe #1
+8. Timeframe #2
+... continue pattern to {max_questions} questions
+
+⚠️ BALANCE: Make ~50% Boolean likely YES, ~50% likely NO (avoid all-positive bias)
+
+QUESTION TYPES & EXAMPLES:
+
+Boolean: "Will Bitcoin exceed $150K by Dec 31, 2025?" (specific threshold + future deadline)
+MCQ: "Which company will IPO first: Stripe, SpaceX, Databricks, or Other?" (3-5 options + "Other")
+Quantity: "Will ChatGPT reach 500M users by June 2025?" (numerical threshold)
+Timeframe: "When will Apple announce iPhone 17: Q1, Q2, Q3, Q4 2025, or 2026+?" (date ranges)
+
+QUALITY STANDARDS:
+✓ Specific, measurable criteria  ✗ Vague ("Will crypto improve?")
+✓ Clear resolution source         ✗ Subjective ("Will product succeed?")
+✓ Natural deadlines (end of Q2)   ✗ Arbitrary dates (June 17 at 2pm)
+✓ Verifiable outcomes              ✗ Unprovable claims
+
+Use {tool_name} to save each question. Return brief summary when done.""",
+        required_vars=["num_events", "events_text", "max_questions", "current_date", "max_resolution_date"],
+        optional_vars={
+            "domain_filter": "",
+            "tool_name": "question_generator"
         }
     )
     
@@ -167,10 +188,10 @@ Return a summary when done.""",
         domains: Optional[List[str]] = None,
         description_preview_length: int = 200,
         tool_name: str = "question_generator",
-        include_ground_truth_instruction: bool = True
+        require_ground_truth: bool = True
     ) -> str:
         """Generate instruction for question generation.
-        
+
         Args:
             current_date: Current datetime
             events: List of events to generate questions from
@@ -178,64 +199,77 @@ Return a summary when done.""",
             domains: Optional list of domains to focus on
             description_preview_length: Length of description preview (default: 200)
             tool_name: Name of the tool to call (default: question_generator)
-            include_ground_truth_instruction: Whether to include ground truth instruction
-            
+            require_ground_truth: If True, only generate questions about past events with known outcomes.
+                                 If False, only generate questions about future predictions.
+
         Returns:
             Formatted instruction string
         """
         from datetime import timedelta
-        
+
         date_str = self.format_datetime(current_date)
-        
-        # Calculate resolution date range
-        # Min: earliest event date (or current_date - 1 year if no events)
-        # Max: current_date + 1 year (reasonable forecasting horizon)
-        event_dates = []
-        for event in events:
-            event_date = event.occurred_date or event.predicted_date
-            if event_date:
-                event_dates.append(event_date)
-        
-        if event_dates:
-            min_resolution_date = min(event_dates)
+
+        # Calculate resolution date range based on mode
+        if require_ground_truth:
+            # Ground truth mode: Use past events only
+            # Min: earliest event date (or 1 year ago)
+            # Max: current_date (only events that already occurred)
+            event_dates = []
+            for event in events:
+                event_date = event.occurred_date or event.predicted_date
+                if event_date and event_date < current_date:
+                    event_dates.append(event_date)
+
+            if event_dates:
+                min_resolution_date = min(event_dates)
+            else:
+                min_resolution_date = current_date - timedelta(days=365)
+
+            max_resolution_date = current_date
         else:
-            min_resolution_date = current_date - timedelta(days=365)
-        
-        max_resolution_date = current_date + timedelta(days=365)
-        
+            # Future prediction mode: Use future dates only
+            # Min: current_date (tomorrow onwards)
+            # Max: current_date + 1 year (reasonable forecasting horizon)
+            min_resolution_date = current_date
+            max_resolution_date = current_date + timedelta(days=365)
+
         min_res_str = self.format_datetime(min_resolution_date)
         max_res_str = self.format_datetime(max_resolution_date)
-        
+
         # Format all events
         events_text = self.format_items(
             events,
             current_date=current_date,
             description_preview_length=description_preview_length
         )
-        
+
         # Build domain filter
         domain_filter = ""
         if domains:
             domain_filter = f" Focus on domains: {self.format_list(domains)}."
-        
-        # Build ground truth instruction
-        ground_truth_instruction = (
-            "IMPORTANT: If the event already occurred (marked as PAST EVENT), include ground_truth with the known outcome"
-            if include_ground_truth_instruction
-            else "Include ground_truth if the outcome is already known"
-        )
-        
-        # Format the instruction body
-        instruction_body = self.GENERATION_TEMPLATE.format(
-            num_events=len(events),
-            events_text=events_text,
-            max_questions=max_questions,
-            current_date=date_str,
-            min_resolution_date=min_res_str,
-            max_resolution_date=max_res_str,
-            domain_filter=domain_filter,
-            tool_name=tool_name,
-            ground_truth_instruction=ground_truth_instruction
-        )
-        
+
+        # Select appropriate template based on mode
+        if require_ground_truth:
+            template = self.GENERATION_TEMPLATE_GROUND_TRUTH
+            instruction_body = template.format(
+                num_events=len(events),
+                events_text=events_text,
+                max_questions=max_questions,
+                current_date=date_str,
+                min_resolution_date=min_res_str,
+                domain_filter=domain_filter,
+                tool_name=tool_name
+            )
+        else:
+            template = self.GENERATION_TEMPLATE_FUTURE
+            instruction_body = template.format(
+                num_events=len(events),
+                events_text=events_text,
+                max_questions=max_questions,
+                current_date=date_str,
+                max_resolution_date=max_res_str,
+                domain_filter=domain_filter,
+                tool_name=tool_name
+            )
+
         return f"Today's date is {date_str}.\n\n{instruction_body}"

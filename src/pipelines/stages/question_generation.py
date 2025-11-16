@@ -67,25 +67,46 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
         try:
             # Get current date for context
             current_date = datetime.now(timezone.utc)
-            
+
+            # CRITICAL: Filter events based on mode
+            filtered_events = inputs
+            if self.config.require_ground_truth:
+                # Ground truth mode: Only use events at least 7 days old
+                # This ensures outcomes are well-established and verifiable
+                from datetime import timedelta
+                min_event_date = current_date - timedelta(days=7)
+
+                filtered_events = [
+                    e for e in inputs
+                    if (e.occurred_date and e.occurred_date < min_event_date)
+                    or (e.predicted_date and e.predicted_date < min_event_date)
+                ]
+
+                logger.info(f"Ground truth mode: Filtered {len(inputs)} events → {len(filtered_events)} events (≥7 days old)")
+
+                if not filtered_events:
+                    logger.warning("No events ≥7 days old found for ground truth questions")
+                    return []
+
             # Create tools with database access
             self.event_details_tool = EventDetailsTool(db_path=self.db_path)
             self.article_retrieval_tool = ArticleRetrievalTool(db_path=self.db_path)
-            
+
             # Create agent using factory
             self.base_agent = AgentFactory.create_base_agent(
                 tools=[self.event_details_tool, self.question_tool, self.article_retrieval_tool]
             )
-            
+
             # Determine max questions
             max_questions = self.config.max_questions or 10
-            
+
             # Get instruction from prompts module
             instruction = self.prompts.get_instruction(
                 current_date=current_date,
-                events=inputs,
+                events=filtered_events,  # Use filtered events
                 max_questions=max_questions,
-                domains=self.config.domains
+                domains=self.config.domains,
+                require_ground_truth=self.config.require_ground_truth
             )
             
             # Run the agent with the instruction

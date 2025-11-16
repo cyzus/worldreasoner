@@ -2,7 +2,15 @@
 CLI script to run the configurable QuestionPipeline.
 
 Usage:
-    python run_question_pipeline.py --sources config/sources.yaml --db output.db --start-date YYYY-MM-DD --end-date YYYY-MM-DD --domains tech,finance --max-questions 10 --article-batch-size 50 --event-batch-size 20
+    # Generate FUTURE prediction questions (default - resolution dates in the future)
+    python run_question_pipeline.py --sources config/sources.yaml --db output.db --start-date YYYY-MM-DD --end-date YYYY-MM-DD --domains tech,finance --max-questions 10
+
+    # Generate PAST event questions with ground truth (for benchmarking)
+    python run_question_pipeline.py --sources config/sources.yaml --db output.db --start-date YYYY-MM-DD --end-date YYYY-MM-DD --domains tech,finance --max-questions 10 --require-ground-truth
+
+Question Modes:
+    - Default (no flag): Generates questions about FUTURE outcomes with resolution dates after today
+    - --require-ground-truth: Generates questions about PAST events with known outcomes (ground_truth field populated)
 
 Note:
     Articles are automatically indexed for hybrid search after pipeline completion.
@@ -30,6 +38,7 @@ def parse_args():
     parser.add_argument('--max-questions', type=int, default=10, help='Maximum questions to generate (defaults to config)')
     parser.add_argument('--article-batch-size', type=int, default=None, help='Batch size for event identification (articles) (defaults to config)')
     parser.add_argument('--event-batch-size', type=int, default=None, help='Batch size for question generation (events) (defaults to config)')
+    parser.add_argument('--generate-future-questions', action='store_true', help='Generate questions about FUTURE events with unknown outcomes (default: False for past events with ground truth)')
     parser.add_argument('--skip-indexing', action='store_true', help='Skip automatic search indexing after pipeline completion')
     return parser.parse_args()
 
@@ -73,6 +82,9 @@ async def run_pipeline(args):
         config_kwargs["event_batch_size"] = args.event_batch_size
     if domains:
         config_kwargs["domains"] = domains
+
+    # Set require_ground_truth based on flag (default=False for future predictions)
+    config_kwargs["require_ground_truth"] = not args.generate_future_questions
 
     question_config = QuestionPipelineConfig(**config_kwargs)
     db_config = DatabaseConfig(db_path=args.db)

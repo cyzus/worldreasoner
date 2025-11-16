@@ -8,8 +8,8 @@ mcp_server_parameters = [
         "url": "http://127.0.0.1:8110/mcp",
         "transport": "streamable-http",
         "headers": {
-            "X-Question-ID": "q_tech_20251103_002_75688b26",
-            "X-Knowledge-Cutoff": "2023-11-03",
+            "X-Question-ID": "q_tech_20251115_005_7d86e1aa",
+            "X-Knowledge-Cutoff": "2024-05-01",
             "X-Simulated-Date": "2025-09-01"
         }
     }

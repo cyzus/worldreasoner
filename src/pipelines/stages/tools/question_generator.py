@@ -56,7 +56,7 @@ class QuestionGeneratorTool(Tool):
     
     def __init__(self, require_ground_truth, collector=None):
         """Initialize the question generator.
-        
+
         Args:
             collector: Optional ResultCollector[Question] for storing results.
                       If provided, questions are added to the collector instead of internal storage.
@@ -65,6 +65,8 @@ class QuestionGeneratorTool(Tool):
         # Result storage - use collector if provided, otherwise internal list
         self.collector = collector
         self.require_ground_truth = require_ground_truth
+        # Backward compatibility: internal storage when no collector provided
+        self.generated_questions = []
     
     def forward(
         self,
@@ -106,7 +108,38 @@ class QuestionGeneratorTool(Tool):
                 res_date = res_date.replace(tzinfo=timezone.utc)
         except:
             res_date = datetime.now(timezone.utc) + timedelta(days=30)
-                
+
+        # CRITICAL VALIDATION: Ground truth questions must have past/present resolution dates
+        current_time = datetime.now(timezone.utc)
+        if self.require_ground_truth and res_date > current_time:
+            error_msg = (
+                f"REJECTED: Ground truth mode requires resolution_date <= TODAY ({current_time.date()}).\n"
+                f"You provided: {res_date.date()} (FUTURE DATE)\n"
+                f"This question is about a PAST event - the resolution date must be when the outcome became known (in the past).\n"
+                f"Please regenerate with resolution_date on or before {current_time.date()}."
+            )
+            return json.dumps({"error": error_msg, "status": "rejected"})
+
+        # CRITICAL VALIDATION: Ground truth cannot contain future dates
+        if self.require_ground_truth and ground_truth:
+            # Check if ground_truth contains year 2025/2026/2027 etc that's in the future
+            import re
+            future_date_pattern = r'(202[5-9]|20[3-9][0-9])'  # Matches 2025 onwards
+            if re.search(future_date_pattern, str(ground_truth)):
+                # Check if it's actually a future date
+                current_year = current_time.year
+                matched_years = re.findall(r'20\d{2}', str(ground_truth))
+                for year_str in matched_years:
+                    year = int(year_str)
+                    if year > current_year:
+                        error_msg = (
+                            f"REJECTED: ground_truth contains FUTURE DATE (year {year}).\n"
+                            f"You provided: '{ground_truth}'\n"
+                            f"Ground truth must be a VERIFIED PAST OUTCOME (e.g., 'YES', 'NO', '500000', 'Apple').\n"
+                            f"NEVER put future dates in ground_truth. If outcome is unknown, don't create this question."
+                        )
+                        return json.dumps({"error": error_msg, "status": "rejected"})
+
         # Parse event IDs
         event_ids = []
         if related_event_ids:

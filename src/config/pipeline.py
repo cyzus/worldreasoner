@@ -49,7 +49,7 @@ class QuestionPipelineConfig(BaseModel):
            
     require_ground_truth: bool = Field(
         default=True,
-        description="Only generate questions with verifiable outcomes"
+        description="If True, generate questions about past events with ground truth. If False, generate future prediction questions."
     )
     
     # Batch processing settings (for handling large datasets)
