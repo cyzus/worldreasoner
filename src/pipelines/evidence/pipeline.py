@@ -48,7 +48,7 @@ class EvidencePipeline(Pipeline):
         evidence_config: EvidencePipelineConfig,
         database_config: DatabaseConfig,
         enable_persistence: bool = True,
-        max_concurrent_questions: int = 3,
+        max_concurrent_questions: int = 1,
     ):
         """Initialize the evidence pipeline.
 
