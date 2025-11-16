@@ -94,13 +94,19 @@ class EventIdentificationStage(PipelineStage[Article, Event]):
             # Get identified events from the collector
             events = self.collector.get_all()
             
-            # Update article.event_ids to link articles to events
-            for article in inputs:
-                # Find events that mention this article's topics
-                for event in events:
-                    if event.domain == article.domain:
+            # Update article.event_ids to create bidirectional links
+            # Events already have article_ids set by the agent via EventIdentifierTool
+            # Now we update the reverse direction: articles pointing to events
+            article_map = {article.id: article for article in inputs}
+
+            for event in events:
+                # For each article referenced by this event, add the event ID to that article
+                for article_id in event.article_ids:
+                    if article_id in article_map:
+                        article = article_map[article_id]
                         if event.id not in article.event_ids:
                             article.event_ids.append(event.id)
+                            logger.debug(f"Linked article {article_id} to event {event.id}")
 
             # Log usage summary for this stage
             if self.usage_tracker.total_calls > 0:

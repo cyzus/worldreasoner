@@ -160,10 +160,17 @@ class QuestionPipeline(Pipeline):
                 return self._results
             
             logger.info(f"Identified {len(self.events)} events")
-            
+
             # Persist events if enabled
             if self.enable_persistence and self.events:
                 persist_result = await self.event_persist.execute(self.events)
+                self._results.append(persist_result)
+
+            # Re-persist articles to save updated event_ids (bidirectional links)
+            # Event identification stage updates article.event_ids in memory
+            if self.enable_persistence and self.articles:
+                logger.info("Updating articles with event links...")
+                persist_result = await self.article_persist.execute(self.articles)
                 self._results.append(persist_result)
             
             # Stage 3: Generate Questions (with batching for large event sets)
@@ -185,6 +192,28 @@ class QuestionPipeline(Pipeline):
             # Persist questions if enabled
             if self.enable_persistence and self.questions:
                 persist_result = await self.question_persist.execute(self.questions)
+                self._results.append(persist_result)
+
+            # Update events with question links (bidirectional relationship)
+            # Questions already have target_event_id and related_event_ids
+            # Now add the reverse direction: events pointing to questions
+            event_map = {event.id: event for event in self.events}
+
+            for question in self.questions:
+                # Add this question to all related events
+                for event_id in question.related_event_ids:
+                    if event_id in event_map:
+                        event = event_map[event_id]
+                        if 'related_question_ids' not in event.metadata:
+                            event.metadata['related_question_ids'] = []
+                        if question.id not in event.metadata['related_question_ids']:
+                            event.metadata['related_question_ids'].append(question.id)
+                            logger.debug(f"Linked event {event_id} to question {question.id}")
+
+            # Re-persist events to save updated question links
+            if self.enable_persistence and self.events:
+                logger.info("Updating events with question links...")
+                persist_result = await self.event_persist.execute(self.events)
                 self._results.append(persist_result)
 
             # Aggregate usage from all stages
