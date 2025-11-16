@@ -154,51 +154,85 @@ class HybridSearch:
             articles: List of articles to index
             batch_size: Number of articles to process at once for embeddings
         """
-        logger.info(f"Indexing {len(articles)} articles...")
+        logger.info(f"Checking {len(articles)} articles for indexing...")
 
-        # Prepare FTS5 data
-        fts_data = [(a.id, a.title, a.content) for a in articles]
-
-        # Generate embeddings in batches
-        texts = [f"{a.title}\n\n{a.content}" for a in articles]
-        all_embeddings = []
-
-        # Process in batches to avoid API limits
-        for i in range(0, len(texts), batch_size):
-            batch_texts = texts[i:i + batch_size]
-            logger.info(f"Generating embeddings for batch {i//batch_size + 1}/{(len(texts)-1)//batch_size + 1}")
-
-            batch_embeddings = await self.llm_client.aembedding(
-                inputs=batch_texts,
-                model=self.embedding_model
-            )
-            all_embeddings.extend(batch_embeddings)
-
-        # Convert to numpy and prepare for storage
-        embedding_data = [
-            (a.id, np.array(emb, dtype=np.float32).tobytes(), self.embedding_model)
-            for a, emb in zip(articles, all_embeddings)
-        ]
-
-        # Bulk insert
+        # Filter out articles that already have embeddings for this model
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
-            # Insert FTS5
+            # Get article IDs that already have embeddings for current model
+            article_ids = [a.id for a in articles]
+            placeholders = ','.join(['?'] * len(article_ids))
+            cursor.execute(f"""
+                SELECT article_id FROM article_embeddings
+                WHERE model_name = ? AND article_id IN ({placeholders})
+            """, [self.embedding_model] + article_ids)
+
+            already_indexed = {row['article_id'] for row in cursor.fetchall()}
+
+        # Filter to only articles that need indexing
+        articles_to_index = [a for a in articles if a.id not in already_indexed]
+
+        if already_indexed:
+            logger.info(f"Skipping {len(already_indexed)} articles that are already indexed")
+
+        if not articles_to_index:
+            logger.info("All articles are already indexed. Nothing to do!")
+            return
+
+        logger.info(f"Indexing {len(articles_to_index)} new articles...")
+
+        # Prepare FTS5 data for new articles
+        fts_data = [(a.id, a.title, a.content) for a in articles_to_index]
+
+        # Insert FTS5 data upfront (lightweight operation)
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
             cursor.executemany("""
                 INSERT OR REPLACE INTO articles_fts (article_id, title, content)
                 VALUES (?, ?, ?)
             """, fts_data)
-
-            # Insert embeddings
-            cursor.executemany("""
-                INSERT OR REPLACE INTO article_embeddings (article_id, embedding, model_name)
-                VALUES (?, ?, ?)
-            """, embedding_data)
-
             conn.commit()
 
-        logger.info(f"Successfully indexed {len(articles)} articles")
+        # Generate embeddings in batches and persist immediately
+        total_batches = (len(articles_to_index) - 1) // batch_size + 1
+
+        for batch_idx in range(0, len(articles_to_index), batch_size):
+            batch_articles = articles_to_index[batch_idx:batch_idx + batch_size]
+            batch_num = batch_idx // batch_size + 1
+
+            logger.info(f"Processing batch {batch_num}/{total_batches} ({len(batch_articles)} articles)...")
+
+            # Generate embeddings for this batch
+            batch_texts = [f"{a.title}\n\n{a.content}" for a in batch_articles]
+
+            try:
+                batch_embeddings = await self.llm_client.aembedding(
+                    inputs=batch_texts,
+                    model=self.embedding_model
+                )
+            except Exception as e:
+                logger.error(f"Failed to generate embeddings for batch {batch_num}: {e}")
+                raise
+
+            # Convert to numpy and prepare for storage
+            embedding_data = [
+                (a.id, np.array(emb, dtype=np.float32).tobytes(), self.embedding_model)
+                for a, emb in zip(batch_articles, batch_embeddings)
+            ]
+
+            # Persist this batch immediately
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.executemany("""
+                    INSERT OR REPLACE INTO article_embeddings (article_id, embedding, model_name)
+                    VALUES (?, ?, ?)
+                """, embedding_data)
+                conn.commit()
+
+            logger.info(f"Batch {batch_num}/{total_batches} saved successfully ({len(batch_articles)} embeddings)")
+
+        logger.info(f"Successfully indexed {len(articles_to_index)} new articles")
 
     def _fts_search(
         self,
