@@ -45,7 +45,7 @@ class QuestionGeneratorTool(Tool):
         },
         "difficulty": {"type": "integer", "description": "Difficulty level 1-5"},
         "resolution_date": {"type": "string", "description": "When question can be resolved (ISO format)"},
-        "resolution_criteria": {"type": "string", "description": "How to resolve the question"},
+        "resolution_criteria": {"type": "string", "description": "How to resolve the question or what makes the provided answer correct"},
         "related_event_ids": {"type": "string", "description": "Comma-separated event IDs", "nullable": True},
         "ground_truth": {"type": "string", "description": "Answer if already resolved", "nullable": True},
         "options": {"type": "string", "description": "For MCQ: comma-separated answer choices", "nullable": True},
@@ -192,11 +192,10 @@ class QuestionGeneratorTool(Tool):
             domain=domain_enum,
             difficulty=min(5, max(1, difficulty)),
             resolution_date=res_date,
-            resolution_criteria=resolution_criteria,
             ground_truth=ground_truth,
             target_event_id=event_ids[0] if event_ids else None,
             related_event_ids=event_ids,
-            context=resolution_criteria[:300],  # Use criteria as context
+            context=resolution_criteria,  # Use criteria as context
             is_synthetic=False,
             options=options_list,  # For MCQ questions
             quantity_unit=quantity_unit,  # For quantity questions
