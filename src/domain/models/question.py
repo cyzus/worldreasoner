@@ -149,3 +149,65 @@ class Question(BaseModel):
         """
         self.cutoff_date = cutoff_date
         return self
+
+    def get_forecast_context_window(self, db=None, min_context_items: int = 3):
+        """Get the valid temporal window for forecasting this question.
+
+        Returns the date range during which a forecast can be made:
+        - Start: When sufficient context becomes available (Nth earliest context item)
+        - End: When the answer becomes known (resolution_date)
+
+        Args:
+            db: Database instance for fetching related events/articles
+            min_context_items: Minimum number of context items needed (default: 3)
+
+        Returns:
+            (window_start, window_end) datetime tuple
+
+        Example:
+            >>> # Opens when 3rd context item available (default)
+            >>> start, end = question.get_forecast_context_window(db)
+            >>> # Opens when 5th context item available
+            >>> start, end = question.get_forecast_context_window(db, min_context_items=5)
+        """
+        from .question_helpers import calculate_forecast_context_window
+        return calculate_forecast_context_window(self, db=db, min_context_items=min_context_items)
+
+    def validate_simulated_date(self, simulated_date: datetime, db=None, min_context_items: int = 3):
+        """Check if a simulated date is valid for forecasting this question.
+
+        Args:
+            simulated_date: The proposed simulation date
+            db: Database instance for fetching context
+            min_context_items: Minimum number of context items needed (default: 3)
+
+        Returns:
+            (is_valid, error_message) tuple
+
+        Example:
+            >>> valid, error = question.validate_simulated_date(datetime(2025, 11, 3), db)
+            >>> if not valid:
+            >>>     raise ValueError(error)
+        """
+        from .question_helpers import validate_simulated_date
+        return validate_simulated_date(self, simulated_date, db, min_context_items)
+
+    def suggest_simulated_date(self, db=None, offset_days_before_resolution: int = 7, min_context_items: int = 3):
+        """Get a suggested simulated date for forecasting this question.
+
+        Args:
+            db: Database instance for fetching context
+            offset_days_before_resolution: How many days before resolution to suggest
+            min_context_items: Minimum number of context items needed (default: 3)
+
+        Returns:
+            Suggested datetime for simulation
+
+        Example:
+            >>> # Suggest date with 3 context items (default)
+            >>> simulated_date = question.suggest_simulated_date(db, offset_days_before_resolution=14)
+            >>> # More aggressive: need only 1 context item
+            >>> simulated_date = question.suggest_simulated_date(db, min_context_items=1)
+        """
+        from .question_helpers import suggest_simulated_date
+        return suggest_simulated_date(self, db, offset_days_before_resolution, min_context_items)

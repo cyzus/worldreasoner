@@ -54,7 +54,7 @@ def parse_args():
     parser.add_argument('--force-reprocess', action='store_true', help='Re-process questions even if they already have hypotheses')
 
     # Evidence collection settings
-    parser.add_argument('--evidence-window', type=int, default=90, help='Days before resolution to collect evidence')
+    parser.add_argument('--evidence-window', type=int, default=365, help='Days before resolution to collect evidence')
     parser.add_argument('--min-resolution-age', type=int, default=0, help='Minimum days since resolution required to process (default: 0)')
     parser.add_argument('--min-articles', type=int, default=5, help='Minimum evidence articles per question (default: 5)')
 
