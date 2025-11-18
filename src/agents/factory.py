@@ -9,6 +9,7 @@ from smolagents import Tool
 from src.agents.base import BaseAgent
 from src.agents.web_agent import WebAgent
 from src.config import Config, get_config
+from src.domain.models.question import Question
 
 
 class AgentFactory:
@@ -81,34 +82,98 @@ class AgentFactory:
         """
         app_config = config or get_config()
         return BaseAgent(config=app_config, tools=tools, max_steps=max_steps)
-    
+
+    @staticmethod
+    def create_forecast_agent(
+        question: Question,
+        simulated_date: str,
+        knowledge_cutoff: str,
+        tools: Optional[List[Tool]] = None,
+        config: Optional[Config] = None,
+        max_steps: int = 15
+    ):
+        """Create a ForecastAgent with standard configuration.
+
+        ForecastAgents are specialized for forecasting tasks and require
+        question context, simulated date, and knowledge cutoff information.
+        They connect to MCP servers with custom headers for context.
+
+        Args:
+            question: The Question object containing forecast question details
+            simulated_date: The simulated date for the forecast (ISO format)
+            knowledge_cutoff: The knowledge cutoff date (ISO format)
+            tools: Optional list of custom tools to add to the agent.
+                   MCP tools are added automatically based on question context.
+            config: Optional custom configuration. If not provided, uses global config.
+            max_steps: Maximum number of steps the agent can take (default: 15)
+
+        Returns:
+            Configured ForecastAgent instance
+
+        Example:
+            >>> question = Question(id="q1", title="Will X happen?", ...)
+            >>> agent = AgentFactory.create_forecast_agent(
+            ...     question=question,
+            ...     simulated_date="2024-01-01",
+            ...     knowledge_cutoff="2023-12-31",
+            ...     tools=[custom_tool]
+            ... )
+            >>> result = agent.run("Make a forecast")
+        """
+        from src.agents.forecast_agent import ForecastAgent
+
+        app_config = config or get_config()
+        return ForecastAgent(
+            question=question,
+            simulated_date=simulated_date,
+            knowledge_cutoff=knowledge_cutoff,
+            config=app_config,
+            tools=tools,
+            max_steps=max_steps
+        )
+
     @staticmethod
     def create_agent_with_config(
         agent_type: str,
         tools: Optional[List[Tool]] = None,
         config: Optional[Config] = None,
-        max_steps: Optional[int] = None
+        max_steps: Optional[int] = None,
+        # Forecast-specific parameters
+        question: Optional[Question] = None,
+        simulated_date: Optional[str] = None,
+        knowledge_cutoff: Optional[str] = None
     ):
         """Create an agent based on string type identifier.
-        
+
         Convenience method for dynamic agent creation based on configuration.
-        
+
         Args:
-            agent_type: Type of agent to create ("web" or "base")
+            agent_type: Type of agent to create ("web", "base", or "forecast")
             tools: Optional list of tools
             config: Optional custom configuration
             max_steps: Optional max steps (uses defaults if not provided)
-        
+            question: Required for forecast agents - the Question object
+            simulated_date: Required for forecast agents - simulated date (ISO format)
+            knowledge_cutoff: Required for forecast agents - knowledge cutoff date (ISO format)
+
         Returns:
             Configured agent instance
-        
+
         Raises:
-            ValueError: If agent_type is not recognized
-        
+            ValueError: If agent_type is not recognized or required parameters are missing
+
         Example:
+            >>> # Create a web agent
             >>> agent = AgentFactory.create_agent_with_config(
             ...     agent_type="web",
             ...     tools=[my_tool]
+            ... )
+            >>> # Create a forecast agent
+            >>> agent = AgentFactory.create_agent_with_config(
+            ...     agent_type="forecast",
+            ...     question=my_question,
+            ...     simulated_date="2024-01-01",
+            ...     knowledge_cutoff="2023-12-31"
             ... )
         """
         if agent_type == "web":
@@ -121,8 +186,33 @@ class AgentFactory:
             if max_steps is not None:
                 kwargs["max_steps"] = max_steps
             return AgentFactory.create_base_agent(**kwargs)
+        elif agent_type == "forecast":
+            # Validate required forecast parameters
+            if question is None:
+                raise ValueError(
+                    "ForecastAgent requires 'question' parameter"
+                )
+            if simulated_date is None:
+                raise ValueError(
+                    "ForecastAgent requires 'simulated_date' parameter"
+                )
+            if knowledge_cutoff is None:
+                raise ValueError(
+                    "ForecastAgent requires 'knowledge_cutoff' parameter"
+                )
+
+            kwargs = {
+                "question": question,
+                "simulated_date": simulated_date,
+                "knowledge_cutoff": knowledge_cutoff,
+                "tools": tools,
+                "config": config
+            }
+            if max_steps is not None:
+                kwargs["max_steps"] = max_steps
+            return AgentFactory.create_forecast_agent(**kwargs)
         else:
             raise ValueError(
                 f"Unknown agent type: {agent_type}. "
-                f"Must be 'web' or 'base'."
+                f"Must be 'web', 'base', or 'forecast'."
             )
