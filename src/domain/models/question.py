@@ -173,41 +173,77 @@ class Question(BaseModel):
         from .question_helpers import calculate_forecast_context_window
         return calculate_forecast_context_window(self, db=db, min_context_items=min_context_items)
 
-    def validate_simulated_date(self, simulated_date: datetime, db=None, min_context_items: int = 3):
+    def validate_simulated_date(self, simulated_date: datetime, window_start: datetime, window_end: datetime):
         """Check if a simulated date is valid for forecasting this question.
+
+        Note: Use prepare_forecast() for the complete workflow. This is a lightweight helper.
 
         Args:
             simulated_date: The proposed simulation date
-            db: Database instance for fetching context
-            min_context_items: Minimum number of context items needed (default: 3)
+            window_start: Start of valid forecast window
+            window_end: End of valid forecast window
 
         Returns:
             (is_valid, error_message) tuple
 
         Example:
-            >>> valid, error = question.validate_simulated_date(datetime(2025, 11, 3), db)
+            >>> window_start, window_end = question.get_forecast_context_window(db)
+            >>> valid, error = question.validate_simulated_date(datetime(2025, 11, 3), window_start, window_end)
             >>> if not valid:
             >>>     raise ValueError(error)
         """
         from .question_helpers import validate_simulated_date
-        return validate_simulated_date(self, simulated_date, db, min_context_items)
+        return validate_simulated_date(self, simulated_date, window_start, window_end)
 
-    def suggest_simulated_date(self, db=None, offset_days_before_resolution: int = 7, min_context_items: int = 3):
+    def suggest_simulated_date(self, window_start: datetime, window_end: datetime, offset_days_before_resolution: int = 7):
         """Get a suggested simulated date for forecasting this question.
 
+        Note: Use prepare_forecast() for the complete workflow. This is a lightweight helper.
+
         Args:
-            db: Database instance for fetching context
+            window_start: Start of valid forecast window
+            window_end: End of valid forecast window
             offset_days_before_resolution: How many days before resolution to suggest
-            min_context_items: Minimum number of context items needed (default: 3)
 
         Returns:
             Suggested datetime for simulation
 
         Example:
-            >>> # Suggest date with 3 context items (default)
-            >>> simulated_date = question.suggest_simulated_date(db, offset_days_before_resolution=14)
-            >>> # More aggressive: need only 1 context item
-            >>> simulated_date = question.suggest_simulated_date(db, min_context_items=1)
+            >>> window_start, window_end = question.get_forecast_context_window(db)
+            >>> simulated_date = question.suggest_simulated_date(window_start, window_end, offset_days_before_resolution=14)
         """
         from .question_helpers import suggest_simulated_date
-        return suggest_simulated_date(self, db, offset_days_before_resolution, min_context_items)
+        return suggest_simulated_date(self, window_start, window_end, offset_days_before_resolution)
+
+    def prepare_forecast(self, db=None, offset_days_before_resolution: int = 0, min_context_items: int = 3):
+        """Get all information needed to forecast this question (hides complexity).
+
+        This single method handles all the setup in one pass:
+        - Calculates valid forecast window
+        - Suggests appropriate simulated date
+        - Validates the setup
+        - Returns everything needed
+
+        No redundant calculations - everything happens in a single pass.
+
+        Args:
+            db: Database instance for fetching context
+            offset_days_before_resolution: How many days before resolution to simulate (default: 0)
+            min_context_items: Minimum number of context items needed (default: 3)
+
+        Returns:
+            dict with keys:
+                - window_start: When forecasting window opens
+                - window_end: When forecasting window closes
+                - simulated_date: Suggested date to use for forecast
+                - days_available: Number of days in forecast window
+
+        Raises:
+            ValueError: If insufficient context or invalid configuration
+
+        Example:
+            >>> setup = question.prepare_forecast(db, offset_days_before_resolution=7)
+            >>> agent = ForecastAgent(question, simulated_date=setup['simulated_date'])
+        """
+        from .question_helpers import prepare_forecast_context
+        return prepare_forecast_context(self, db, offset_days_before_resolution, min_context_items)

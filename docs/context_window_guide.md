@@ -53,49 +53,64 @@ Longer window, but may lack sufficient information.
 
 ## Implementation
 
-### New Functions
+### Main Function (Recommended)
+
+**In `src/domain/models/question.py`:**
+
+```python
+def prepare_forecast(question, db=None, offset_days_before_resolution=0, min_context_items=3)
+    """Get all forecast setup information in one call (hides complexity).
+
+    Returns:
+        dict with:
+            - window_start: When forecasting window opens
+            - window_end: When forecasting window closes
+            - simulated_date: Suggested date to use
+            - days_available: Number of days in forecast window
+    """
+```
+
+**Recommended usage:**
+
+```python
+# Simple - everything in one call
+setup = question.prepare_forecast(db=db, offset_days_before_resolution=7)
+agent = ForecastAgent(question, simulated_date=setup['simulated_date'])
+```
+
+### Individual Helper Functions (Advanced)
+
+For advanced users who need fine-grained control:
 
 **In `src/domain/models/question_helpers.py`:**
 
 ```python
-def calculate_forecast_context_window(question, events=None, articles=None, db=None)
-    """Calculate valid temporal window for forecasting.
+def calculate_forecast_context_window(question, db=None, min_context_items=3)
+    """Calculate valid temporal window for forecasting."""
 
-    Returns:
-        (window_start, window_end) - Valid forecast period
-    """
+def validate_simulated_date(question, simulated_date, window_start, window_end)
+    """Check if a date is within forecast window."""
 
-def validate_simulated_date(question, simulated_date, db=None)
-    """Check if a date is valid for forecasting.
-
-    Returns:
-        (is_valid, error_message)
-    """
-
-def suggest_simulated_date(question, db=None, offset_days_before_resolution=7)
-    """Suggest an appropriate simulated date.
-
-    Returns:
-        datetime - Suggested date within valid window
-    """
+def suggest_simulated_date(question, window_start, window_end, offset_days_before_resolution=7)
+    """Suggest an appropriate simulated date within window."""
 ```
 
-**New methods on `Question` model:**
+**Advanced usage (if you need manual control):**
 
 ```python
-# Get valid forecast window
-window_start, window_end = question.get_forecast_context_window(db=db)
+# Get valid forecast window manually
+window_start, window_end = question.get_forecast_context_window(db=db, min_context_items=3)
 
 # Validate a specific date
-valid, error = question.validate_simulated_date(simulated_date, db=db)
+valid, error = question.validate_simulated_date(candidate_date, window_start, window_end)
 
-# Get suggested date (7 days before resolution by default)
-simulated_date = question.suggest_simulated_date(db=db)
+# Get suggested date
+simulated_date = question.suggest_simulated_date(window_start, window_end, offset_days_before_resolution=7)
 ```
 
 ## Usage Examples
 
-### Example 1: Automatic Date Selection (Default Threshold)
+### Example 1: Simple Automatic Setup (Recommended)
 
 ```python
 from src.core.database import GenericDatabase
@@ -104,18 +119,24 @@ from src.domain.models import Question
 db = GenericDatabase("worldreasoner.db")
 question = db.get(Question, "q_tech_20251115_001_33f3eedc")
 
-# Automatically get a good simulated date (uses min_context_items=3 by default)
-simulated_date = question.suggest_simulated_date(
+# Get everything in one call - no complexity!
+setup = question.prepare_forecast(
     db=db,
-    offset_days_before_resolution=7  # 7 days before resolution
+    offset_days_before_resolution=7,  # 7 days before resolution
+    min_context_items=3  # Default: need 3 context items
 )
+
+# Use the simulated date
+print(f"Forecast window: {setup['window_start'].date()} to {setup['window_end'].date()}")
+print(f"Using simulated date: {setup['simulated_date'].date()}")
+print(f"Available: {setup['days_available']} days")
 
 # Use in smolagents
 mcp_server_parameters = [{
     "url": "http://127.0.0.1:8110/mcp",
     "headers": {
         "X-Question-ID": question.id,
-        "X-Simulated-Date": simulated_date.isoformat(),
+        "X-Simulated-Date": setup['simulated_date'].isoformat(),
     }
 }]
 ```
@@ -124,31 +145,28 @@ mcp_server_parameters = [{
 
 ```python
 # Conservative: Wait for 5 context items
-simulated_date_conservative = question.suggest_simulated_date(
-    db=db,
-    min_context_items=5
-)
+setup_conservative = question.prepare_forecast(db=db, min_context_items=5)
 
 # Aggressive: Start with just 1 context item
-simulated_date_aggressive = question.suggest_simulated_date(
-    db=db,
-    min_context_items=1
-)
+setup_aggressive = question.prepare_forecast(db=db, min_context_items=1)
 
-# Default: Balanced approach with 3 items
-simulated_date_balanced = question.suggest_simulated_date(db=db)  # min_context_items=3
+# Balanced: Default 3 items
+setup_balanced = question.prepare_forecast(db=db)  # min_context_items=3 by default
 ```
 
-### Example 2: Manual Validation
+### Example 2: Manual Control (Advanced)
 
 ```python
 from datetime import datetime, timezone
+
+# Get forecast window manually
+window_start, window_end = question.get_forecast_context_window(db=db, min_context_items=3)
 
 # Propose a specific date
 candidate_date = datetime(2025, 11, 3, tzinfo=timezone.utc)
 
 # Validate it
-valid, error = question.validate_simulated_date(candidate_date, db=db)
+valid, error = question.validate_simulated_date(candidate_date, window_start, window_end)
 
 if not valid:
     print(f"Invalid date: {error}")

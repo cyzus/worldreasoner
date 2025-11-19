@@ -232,28 +232,23 @@ def run_forecast(args):
         # Randomly select a question with sufficient context
         question = select_random_question(db, min_context_items=args.min_context_items)
 
-    # Calculate valid forecast window
+    # Prepare forecast - this handles all the complexity internally
     try:
-        window_start, window_end = question.get_forecast_context_window(
-            db=db,
-            min_context_items=args.min_context_items
-        )
-
-        # Get suggested simulated date
-        simulated_date = question.suggest_simulated_date(
+        forecast_setup = question.prepare_forecast(
             db=db,
             offset_days_before_resolution=args.offset_days,
             min_context_items=args.min_context_items
         )
 
-        # Validate the date
-        valid, error = question.validate_simulated_date(simulated_date, db=db)
-        if not valid:
-            raise ValueError(f"Invalid simulated date: {error}")
-
         # Print setup information
         if args.verbose:
-            print_forecast_setup(question, window_start, window_end, simulated_date, args)
+            print_forecast_setup(
+                question, 
+                forecast_setup['window_start'], 
+                forecast_setup['window_end'], 
+                forecast_setup['simulated_date'], 
+                args
+            )
 
     except ValueError as e:
         print(f"\n❌ Error: {e}")
@@ -269,7 +264,7 @@ def run_forecast(args):
     # Create agent using factory
     agent = AgentFactory.create_forecast_agent(
         question=question,
-        simulated_date=simulated_date.isoformat(),
+        simulated_date=forecast_setup['simulated_date'].isoformat(),
         knowledge_cutoff=args.knowledge_cutoff,
         config=config,
         max_steps=args.max_steps
@@ -281,7 +276,7 @@ def run_forecast(args):
     # - All tools automatically respect these temporal constraints
 
     print(f"\nKnowledge cutoff: {args.knowledge_cutoff}")
-    print(f"Simulated date: {simulated_date.date()}")
+    print(f"Simulated date: {forecast_setup['simulated_date'].date()}")
     print(f"Max steps: {args.max_steps}\n")
 
     # Run the agent

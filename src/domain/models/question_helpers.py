@@ -130,15 +130,19 @@ def calculate_forecast_context_window(
 def validate_simulated_date(
     question: Question,
     simulated_date: datetime,
-    db=None,
-    min_context_items: int = 3
+    window_start: datetime,
+    window_end: datetime
 ) -> Tuple[bool, Optional[str]]:
-    """Validate if a simulated date is appropriate for forecasting this question.
+    """Validate if a simulated date is within a forecast window.
+
+    This is a lightweight validation helper that just checks bounds.
+    Use prepare_forecast_context() for the full setup workflow.
 
     Args:
         question: The forecast question
         simulated_date: The proposed simulation date
-        db: Database instance for fetching context
+        window_start: Start of valid forecast window
+        window_end: End of valid forecast window
 
     Returns:
         (is_valid, error_message) tuple
@@ -146,17 +150,11 @@ def validate_simulated_date(
         - error_message: None if valid, otherwise explanation string
 
     Example:
-        >>> valid, error = validate_simulated_date(question, datetime(2025, 11, 3), db)
+        >>> window_start, window_end = calculate_forecast_context_window(question, db)
+        >>> valid, error = validate_simulated_date(question, datetime(2025, 11, 3), window_start, window_end)
         >>> if not valid:
         >>>     print(f"Invalid simulated date: {error}")
     """
-    try:
-        window_start, window_end = calculate_forecast_context_window(
-            question, db=db, min_context_items=min_context_items
-        )
-    except ValueError as e:
-        return False, str(e)
-
     # Check if simulated date is within window
     if simulated_date < window_start:
         return False, (
@@ -177,11 +175,14 @@ def validate_simulated_date(
 
 def suggest_simulated_date(
     question: Question,
-    db=None,
-    offset_days_before_resolution: int = 7,
-    min_context_items: int = 3
+    window_start: datetime,
+    window_end: datetime,
+    offset_days_before_resolution: int = 7
 ) -> datetime:
-    """Suggest an appropriate simulated date for forecasting this question.
+    """Suggest an appropriate simulated date within a forecast window.
+
+    This is a lightweight helper that picks a good date within bounds.
+    Use prepare_forecast_context() for the full setup workflow.
 
     Picks a date that:
     - Is after all context is available
@@ -190,19 +191,17 @@ def suggest_simulated_date(
 
     Args:
         question: The forecast question
-        db: Database instance for fetching context
+        window_start: Start of valid forecast window
+        window_end: End of valid forecast window
         offset_days_before_resolution: How many days before resolution to suggest (default: 7)
 
     Returns:
         Suggested simulated datetime
 
     Example:
-        >>> simulated_date = suggest_simulated_date(question, db=db, offset_days_before_resolution=14)
+        >>> window_start, window_end = calculate_forecast_context_window(question, db)
+        >>> simulated_date = suggest_simulated_date(question, window_start, window_end, offset_days_before_resolution=14)
     """
-    window_start, window_end = calculate_forecast_context_window(
-        question, db=db, min_context_items=min_context_items
-    )
-
     # Try to suggest offset_days before resolution
     suggested = window_end - timedelta(days=offset_days_before_resolution)
 
@@ -217,3 +216,62 @@ def suggest_simulated_date(
         suggested = window_start + (window_end - window_start) / 2
 
     return suggested
+
+
+def prepare_forecast_context(
+    question: Question,
+    db=None,
+    offset_days_before_resolution: int = 0,
+    min_context_items: int = 3
+) -> dict:
+    """Get all information needed to forecast a question (hides complexity).
+
+    This single function handles all the setup with a single pass:
+    - Calculates valid forecast window
+    - Suggests appropriate simulated date
+    - Validates the setup
+    - Returns everything needed
+
+    This eliminates redundant calls to calculate_forecast_context_window.
+
+    Args:
+        question: The forecast question
+        db: Database instance for fetching context
+        offset_days_before_resolution: How many days before resolution to simulate (default: 0)
+        min_context_items: Minimum number of context items needed (default: 3)
+
+    Returns:
+        dict with keys:
+            - window_start: When forecasting window opens
+            - window_end: When forecasting window closes
+            - simulated_date: Suggested date to use for forecast
+            - days_available: Number of days in forecast window
+
+    Raises:
+        ValueError: If insufficient context or invalid configuration
+
+    Example:
+        >>> setup = prepare_forecast_context(question, db, offset_days_before_resolution=7)
+        >>> agent = ForecastAgent(question, simulated_date=setup['simulated_date'])
+    """
+    # Calculate forecast window (single pass)
+    window_start, window_end = calculate_forecast_context_window(
+        question, db=db, min_context_items=min_context_items
+    )
+
+    # Suggest simulated date based on window
+    simulated_date = suggest_simulated_date(
+        question, window_start, window_end, offset_days_before_resolution
+    )
+
+    # Validate the setup
+    valid, error = validate_simulated_date(question, simulated_date, window_start, window_end)
+    if not valid:
+        raise ValueError(f"Invalid forecast setup: {error}")
+
+    return {
+        'window_start': window_start,
+        'window_end': window_end,
+        'simulated_date': simulated_date,
+        'days_available': (window_end - window_start).days
+    }
