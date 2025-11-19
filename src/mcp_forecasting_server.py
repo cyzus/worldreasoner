@@ -338,7 +338,7 @@ def get_question(ctx: Context) -> str:
                 "domain": question.domain.value if hasattr(question.domain, 'value') else question.domain,
                 "difficulty": question.difficulty,
                 "resolution_date": question.resolution_date.isoformat(),
-                "context": question.context,
+                # "context": question.context, # The context might leak the answer
                 "options": question.options,
                 "quantity_unit": question.quantity_unit,
                 "target_event_id": question.target_event_id
@@ -518,7 +518,7 @@ def fetch_article(
             "author": article.author,
             "word_count": article.word_count,
             "tags": article.tags,
-            "content": article.content,
+            "content": article.content[:2000] + "..." if len(article.content) > 2000 else article.content,
             "event_ids": article.event_ids
         }
 

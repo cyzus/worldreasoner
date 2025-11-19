@@ -1,100 +1,309 @@
-from smolagents import ToolCallingAgent, MCPClient, LiteLLMModel
+"""
+CLI script to run forecasting with ForecastAgent.
+
+This script demonstrates how to run the ForecastAgent to make predictions
+about future outcomes with temporally-constrained context.
+
+Prerequisites:
+1. Set up config/local.yaml with LLM API keys
+2. Have questions in the database (from Question Pipeline)
+3. MCP server running (default: http://127.0.0.1:8110/mcp)
+
+Usage:
+    # Run with randomly selected question
+    python examples/run_forecast_smolagents.py
+
+    # Run with specific question ID
+    python examples/run_forecast_smolagents.py --question-id q_tech_20251117_003_5c55a8f1
+
+    # Specify custom database
+    python examples/run_forecast_smolagents.py --db custom.db
+
+    # Custom context thresholds
+    python examples/run_forecast_smolagents.py --min-context-items 5 --offset-days 7
+
+    # Custom knowledge cutoff date and verbose output
+    python examples/run_forecast_smolagents.py --knowledge-cutoff 2024-05-01 --verbose
+
+The agent automatically calculates valid forecast windows based on context availability
+and ensures temporal consistency with knowledge cutoffs.
+"""
+
+import argparse
 from src.core.database import GenericDatabase
 from src.domain.models import Question
+from src.agents.factory import AgentFactory
+from src.config import get_config
 
-# ============================================================================
-# CONFIGURATION
-# ============================================================================
-QUESTION_ID = "q_tech_20251117_003_5c55a8f1"  # Change this to your question
-MODEL_ID = "litellm_proxy/claude-sonnet-4-5"
-MCP_SERVER_URL = "http://127.0.0.1:8110/mcp"
-KNOWLEDGE_CUTOFF = "2024-05-01"  # LLM training cutoff
 
-# Threshold configuration
-MIN_CONTEXT_ITEMS = 3  # Default: Need 3 context items before forecasting
-OFFSET_DAYS_BEFORE_RESOLUTION = 0  # Forecast 0 days before resolution
-    
-# ============================================================================
-# AUTOMATIC CONTEXT WINDOW CALCULATION
-# ============================================================================
-print("="*80)
-print("FORECAST SETUP - AUTOMATIC CONTEXT WINDOW CALCULATION")
-print("="*80)
-
-# Load question from database
-db = GenericDatabase("worldreasoner.db")
-question = db.get(Question, QUESTION_ID)
-
-if not question:
-    raise ValueError(f"Question {QUESTION_ID} not found in database")
-
-print(f"\nQuestion: {question.question_text}")
-print(f"Resolution date: {question.resolution_date.date()}")
-
-# Calculate valid forecast window
-try:
-    window_start, window_end = question.get_forecast_context_window(
-        db=db,
-        min_context_items=MIN_CONTEXT_ITEMS
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Run ForecastAgent for making temporally-aware predictions."
     )
+
+    # Question selection
+    parser.add_argument(
+        '--question-id',
+        type=str,
+        default=None,
+        help='Question ID to forecast (optional, randomly selects one if not provided)'
+    )
+
+    # Database configuration
+    parser.add_argument(
+        '--db',
+        type=str,
+        default='worldreasoner.db',
+        help='Path to database file (default: worldreasoner.db)'
+    )
+
+    # Temporal configuration
+    parser.add_argument(
+        '--knowledge-cutoff',
+        type=str,
+        default='2024-05-01',
+        help='LLM training cutoff date (YYYY-MM-DD, default: 2024-05-01)'
+    )
+
+    # Context window configuration
+    parser.add_argument(
+        '--min-context-items',
+        type=int,
+        default=3,
+        help='Minimum context items needed before forecasting (default: 3)'
+    )
+
+    parser.add_argument(
+        '--offset-days',
+        type=int,
+        default=0,
+        help='Days before resolution to simulate forecast (default: 0)'
+    )
+
+    # Agent configuration
+    parser.add_argument(
+        '--max-steps',
+        type=int,
+        default=15,
+        help='Maximum agent steps (default: 15)'
+    )
+
+    # Output control
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        help='Show detailed output'
+    )
+
+    return parser.parse_args()
+
+
+def select_random_question(db: GenericDatabase, min_context_items: int = 3) -> Question:
+    """Randomly select a question with sufficient context for forecasting.
+
+    Args:
+        db: Database instance
+        min_context_items: Minimum number of context items required
+
+    Returns:
+        Randomly selected Question
+
+    Raises:
+        ValueError: If no suitable questions found
+    """
+    import random
+
+    # Get all questions
+    all_questions = db.get_many(Question)
+
+    if not all_questions:
+        raise ValueError("No questions found in database")
+
+    # Filter questions that have enough context
+    suitable_questions = []
+    for question in all_questions:
+        try:
+            # Try to get forecast window - will fail if insufficient context
+            window_start, window_end = question.get_forecast_context_window(
+                db=db,
+                min_context_items=min_context_items
+            )
+            # If we got here, question has enough context
+            suitable_questions.append(question)
+        except ValueError:
+            # Question doesn't have enough context, skip it
+            continue
+
+    if not suitable_questions:
+        raise ValueError(
+            f"No questions found with at least {min_context_items} context items. "
+            f"Total questions in database: {len(all_questions)}"
+        )
+
+    selected = random.choice(suitable_questions)
+    print(f"\n📋 Randomly selected question: {selected.id}")
+    print(f"   Found {len(suitable_questions)} suitable questions out of {len(all_questions)} total\n")
+
+    return selected
+
+
+def print_header(title: str, width: int = 80):
+    """Print a formatted header."""
+    print("=" * width)
+    print(title)
+    print("=" * width)
+
+
+def print_forecast_setup(question: Question, window_start, window_end, simulated_date, args):
+    """Print forecast setup information."""
+    print_header("FORECAST SETUP - AUTOMATIC CONTEXT WINDOW CALCULATION")
+
+    print(f"\nQuestion: {question.question_text}")
+    print(f"Resolution date: {question.resolution_date.date()}")
 
     days_available = (window_end - window_start).days
 
     print(f"\nValid Forecast Window:")
-    print(f"  Opens:      {window_start.date()} (after {MIN_CONTEXT_ITEMS} context items)")
+    print(f"  Opens:      {window_start.date()} (after {args.min_context_items} context items)")
     print(f"  Closes:     {window_end.date()} (before resolution)")
     print(f"  Duration:   {days_available} days")
 
-    # Get suggested simulated date
-    simulated_date = question.suggest_simulated_date(
-        db=db,
-        offset_days_before_resolution=OFFSET_DAYS_BEFORE_RESOLUTION,
-        min_context_items=MIN_CONTEXT_ITEMS
-    )
-
     print(f"\nSimulated Date (auto-calculated):")
     print(f"  Using:      {simulated_date.date()}")
-    print(f"  Strategy:   {OFFSET_DAYS_BEFORE_RESOLUTION} days before resolution")
-
-    # Validate the date
-    valid, error = question.validate_simulated_date(simulated_date, db=db)
-    if not valid:
-        raise ValueError(f"Invalid simulated date: {error}")
-
+    print(f"  Strategy:   {args.offset_days} days before resolution")
     print(f"  Status:     VALID ✓")
 
-except ValueError as e:
-    print(f"\n❌ Error: {e}")
-    print("\nThis may indicate:")
-    print("  - Not enough context items in database")
-    print("  - Evidence collected after resolution (data quality issue)")
-    print("  - Question has no related events/articles")
-    raise
 
-print(f"\n{'='*80}")
-print("STARTING FORECAST AGENT")
-print(f"{'='*80}\n")
+def print_ground_truth(question: Question):
+    """Print ground truth information if available.
 
-# MCP server connection with automatically derived temporal context
-mcp_server_parameters = [
-    {
-        "url": MCP_SERVER_URL,
-        "transport": "streamable-http",
-        "headers": {
-            "X-Question-ID": question.id,
-            "X-Knowledge-Cutoff": KNOWLEDGE_CUTOFF,
-            "X-Simulated-Date": simulated_date.isoformat()  # ✨ Auto-calculated!
-        }
-    }
-]
+    Args:
+        question: Question object to display ground truth for
+    """
+    print("\n" + "=" * 80)
+    print("GROUND TRUTH (Actual Outcome)")
+    print("=" * 80)
 
-mcp_client = MCPClient(server_parameters=mcp_server_parameters)
-tools = mcp_client.get_tools()
-model = LiteLLMModel(model_id=MODEL_ID)
-agent = ToolCallingAgent(tools=tools, model=model, stream_outputs=True)
+    if question.ground_truth is None:
+        print("\n⚠ Ground truth not available (question may not be resolved yet)")
+        print(f"Resolution date: {question.resolution_date.date()}")
+        return
 
-# The agent now works in a temporally-constrained environment
-# - Knowledge cutoff: No info after LLM training date
-# - Simulated date: "Current time" for the forecast (auto-calculated)
-# - All tools automatically respect these temporal constraints
-agent.run("Use the get_question tool to see what you need to forecast, then try to answer it.")
+    # Display ground truth
+    outcome = "YES" if question.ground_truth else "NO"
+    print(f"\nActual Outcome: {outcome}")
+
+    if question.context:
+        print(f"\nReason:")
+        # Word wrap the reason for better readability
+        import textwrap
+        wrapped_reason = textwrap.fill(
+            question.context,
+            width=78,
+            initial_indent="  ",
+            subsequent_indent="  "
+        )
+        print(wrapped_reason)
+    else:
+        print("\nReason: Not provided")
+
+    print("\n" + "=" * 80)
+
+
+def run_forecast(args):
+    """Run the forecast agent with provided arguments.
+
+    Args:
+        args: Parsed command line arguments
+    """
+    # Load configuration
+    config = get_config()
+
+    # Load question from database
+    db = GenericDatabase(args.db)
+
+    # Get question - either by ID or random selection
+    if args.question_id:
+        question = db.get(Question, args.question_id)
+        if not question:
+            raise ValueError(f"Question {args.question_id} not found in database")
+    else:
+        # Randomly select a question with sufficient context
+        question = select_random_question(db, min_context_items=args.min_context_items)
+
+    # Calculate valid forecast window
+    try:
+        window_start, window_end = question.get_forecast_context_window(
+            db=db,
+            min_context_items=args.min_context_items
+        )
+
+        # Get suggested simulated date
+        simulated_date = question.suggest_simulated_date(
+            db=db,
+            offset_days_before_resolution=args.offset_days,
+            min_context_items=args.min_context_items
+        )
+
+        # Validate the date
+        valid, error = question.validate_simulated_date(simulated_date, db=db)
+        if not valid:
+            raise ValueError(f"Invalid simulated date: {error}")
+
+        # Print setup information
+        if args.verbose:
+            print_forecast_setup(question, window_start, window_end, simulated_date, args)
+
+    except ValueError as e:
+        print(f"\n❌ Error: {e}")
+        print("\nThis may indicate:")
+        print("  - Not enough context items in database")
+        print("  - Evidence collected after resolution (data quality issue)")
+        print("  - Question has no related events/articles")
+        raise
+
+    # Start forecast agent
+    print_header("STARTING FORECAST AGENT")
+
+    # Create agent using factory
+    agent = AgentFactory.create_forecast_agent(
+        question=question,
+        simulated_date=simulated_date.isoformat(),
+        knowledge_cutoff=args.knowledge_cutoff,
+        config=config,
+        max_steps=args.max_steps
+    )
+
+    # The agent now works in a temporally-constrained environment
+    # - Knowledge cutoff: No info after LLM training date
+    # - Simulated date: "Current time" for the forecast (auto-calculated)
+    # - All tools automatically respect these temporal constraints
+
+    print(f"\nKnowledge cutoff: {args.knowledge_cutoff}")
+    print(f"Simulated date: {simulated_date.date()}")
+    print(f"Max steps: {args.max_steps}\n")
+
+    # Run the agent
+    result = agent.run(
+        "Use the get_question tool to see what you need to forecast, then try to answer it."
+    )
+
+    if args.verbose:
+        print("\n" + "=" * 80)
+        print("FORECAST RESULT")
+        print("=" * 80)
+        print(result)
+
+    # Display ground truth if available
+    print_ground_truth(question)
+
+
+def main():
+    """Main entry point."""
+    args = parse_args()
+    run_forecast(args)
+
+
+if __name__ == "__main__":
+    main()
