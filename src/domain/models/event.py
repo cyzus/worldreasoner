@@ -6,6 +6,7 @@ from typing import List, Optional, Dict, Any
 
 from pydantic import BaseModel, Field, ConfigDict
 from ...core.database import register_model
+from .domain import Domain
 
 
 class EventType(str, Enum):
@@ -53,10 +54,7 @@ class Event(BaseModel):
     
     # Classification
     event_type: EventType = Field(..., description="Type of event")
-    domain: str = Field(
-        ..., 
-        description="Primary domain: finance|politics|tech|health|climate"
-    )
+    domain: Domain = Field(..., description="Primary domain")
     tags: List[str] = Field(default_factory=list, description="Topic tags")
     
     # Temporal information

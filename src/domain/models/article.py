@@ -5,6 +5,7 @@ from typing import List, Optional, Dict, Any
 
 from pydantic import BaseModel, Field, ConfigDict
 from ...core.database import register_model
+from .domain import Domain
 
 
 @register_model('articles', indexes=['domain', 'source', 'published_date'])
@@ -28,10 +29,7 @@ class Article(BaseModel):
     published_date: datetime = Field(..., description="Publication timestamp")
     
     # Classification
-    domain: str = Field(
-        ..., 
-        description="Primary domain: finance|politics|tech|health|climate"
-    )
+    domain: Domain = Field(..., description="Primary domain")
     tags: List[str] = Field(default_factory=list, description="Topic tags")
     
     # Metadata
