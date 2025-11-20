@@ -38,6 +38,9 @@ dependencies = [
     "websockets>=14.0",
     "fastmcp>=2.13.0.2",
     "numpy>=1.24.0",
+    "matplotlib>=3.7.0",
+    "pandas>=2.0.0",
+    "pytest-asyncio>=1.2.0",
 ]
 
 
@@ -57,11 +60,6 @@ packages = ["src", "backend"]
 [tool.uv]
 # Use copy mode instead of hardlinks (fixes Windows/cross-filesystem issues)
 link-mode = "copy"
-
-[dependency-groups]
-dev = [
-    "pytest-asyncio>=1.2.0",
-]
 
 [tool.pytest.ini_options]
 markers = [

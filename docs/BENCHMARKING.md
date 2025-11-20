@@ -4,12 +4,34 @@ This guide explains how to run comprehensive benchmark evaluations on WorldReaso
 
 ## Overview
 
-WorldReasoner provides two evaluation modes:
+WorldReasoner provides comprehensive benchmarking and evaluation tools:
 
 | Script | Purpose | When to Use |
 |--------|---------|-------------|
 | `evaluate_forecasts.py` | Evaluate existing forecasts | After manual forecasting sessions |
 | **`run_benchmark_evaluation.py`** | Run forecasts on all questions + evaluate | **Automated benchmarking of LLM models** |
+| **`visualize_benchmarks.py`** | Generate comparative charts from results | **After running benchmarks** |
+
+## Quick Start
+
+Complete workflow for benchmarking and comparing models:
+
+```bash
+# 1. Run benchmarks for different models
+python examples/run_benchmark_evaluation.py --model gpt-4
+python examples/run_benchmark_evaluation.py --model claude-sonnet-4
+python examples/run_benchmark_evaluation.py --model gemini/gemini-2.0-flash-exp
+
+# 2. Test knowledge-only mode (no research)
+python examples/run_benchmark_evaluation.py --model gpt-4 --knowledge-only
+
+# 3. Visualize all results
+python examples/visualize_benchmarks.py
+
+# Results are saved to:
+# - benchmarks/benchmark_*.json (raw data)
+# - benchmarks/figures/*.png (visualizations)
+```
 
 ## Benchmark Evaluation Script
 
@@ -221,6 +243,95 @@ print(f"GPT-4 Knowledge-Only:    {knowledge_only['results']['overall_accuracy']:
 print(f"Research Improvement:    {(full_mode['results']['overall_accuracy'] - knowledge_only['results']['overall_accuracy']):.2%}")
 ```
 
+## Visualizing Benchmark Results
+
+After running benchmarks, use the visualization script to generate comparative charts:
+
+```bash
+# Generate all visualizations
+python examples/visualize_benchmarks.py
+
+# Save to custom directory
+python examples/visualize_benchmarks.py --output-dir my_figures/
+
+# Generate specific plots only
+python examples/visualize_benchmarks.py --plots accuracy brier mode_comparison
+
+# Show interactive plots instead of saving
+python examples/visualize_benchmarks.py --show
+```
+
+**Prerequisites:**
+```bash
+# Install visualization dependencies
+uv sync --group viz
+
+# Or using pip
+pip install matplotlib pandas
+```
+
+**Generated Visualizations:**
+
+1. **Accuracy Comparison** (`accuracy_comparison.png`)
+   - Bar chart comparing accuracy across all models
+   - Color-coded by mode (Full vs Knowledge-Only)
+   - Shows most recent run for each model
+
+2. **Brier Score Comparison** (`brier_score_comparison.png`)
+   - Compares calibration quality across models
+   - Lower is better (0 = perfect)
+
+3. **Log Score Comparison** (`log_score_comparison.png`)
+   - Compares probabilistic scoring
+   - Higher is better (closer to 0)
+
+4. **Mode Comparison** (`mode_comparison.png`)
+   - Side-by-side comparison of Full vs Knowledge-Only
+   - Shows research impact for each model
+   - Annotates performance differences
+
+5. **Performance Timeline** (`performance_timeline.png`)
+   - Tracks accuracy and Brier score over time
+   - Useful for monitoring improvements
+
+**Example Output:**
+
+The visualization script automatically:
+- Loads all JSON files from `benchmarks/`
+- Extracts key metrics (accuracy, Brier score, log score)
+- Generates publication-quality figures
+- Prints summary statistics to console
+
+```
+BENCHMARK SUMMARY STATISTICS
+================================================================================
+
+Total benchmark runs: 12
+Unique models: 4
+Date range: 2025-11-15 to 2025-11-20
+
+Overall Statistics:
+  Mean Accuracy: 68.42%
+  Std Accuracy:  12.31%
+  Mean Brier:    0.2341
+  Std Brier:     0.0823
+
+By Mode:
+  Full:
+    Runs: 8
+    Mean Accuracy: 72.15%
+    Mean Brier: 0.2123
+  Knowledge-Only:
+    Runs: 4
+    Mean Accuracy: 60.95%
+    Mean Brier: 0.2777
+
+Top 3 Best Performing (by accuracy):
+  1. gpt-4 (Full): 75.43%
+  2. claude-sonnet-4 (Full): 71.82%
+  3. gemini-2.0-flash-exp (Full): 69.21%
+```
+
 ## Model Comparison Benchmarks
 
 To compare different models, run separate benchmarks (results automatically saved with model name):
@@ -236,7 +347,14 @@ python examples/run_benchmark_evaluation.py --model claude-sonnet-4
 python examples/run_benchmark_evaluation.py --model gemini/gemini-2.0-flash-exp
 ```
 
-Then compare results:
+Then visualize results:
+
+```bash
+# Automatically generates comparative figures for all models
+python examples/visualize_benchmarks.py
+```
+
+Or compare programmatically:
 
 ```python
 import json
