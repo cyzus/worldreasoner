@@ -5,9 +5,11 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, ConfigDict
 
+from ...core.database import register_model
 from .causal_hypothesis import CausalHypothesis
 
 
+@register_model('forecasts', indexes=['question_id', 'session_id'])
 class Forecast(BaseModel):
     """LLM forecast submission.
     

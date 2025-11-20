@@ -168,6 +168,11 @@ class QuestionGeneratorTool(Tool):
         qtype_enum = QuestionType(question_type)
         domain_enum = Domain(domain)
 
+        # Normalize ground_truth to proper type based on question_type
+        normalized_ground_truth = None
+        if ground_truth:
+            normalized_ground_truth = self._normalize_ground_truth(ground_truth, qtype_enum)
+
         # Generate unique question ID (use collector count as counter if available, otherwise generated_questions)
         counter = len(self.collector) if self.collector is not None else len(self.generated_questions)
         question_id = self._generate_question_id(domain_enum, res_date, counter)
@@ -192,7 +197,7 @@ class QuestionGeneratorTool(Tool):
             domain=domain_enum,
             difficulty=min(5, max(1, difficulty)),
             resolution_date=res_date,
-            ground_truth=ground_truth,
+            ground_truth=normalized_ground_truth,  # Use normalized value
             target_event_id=event_ids[0] if event_ids else None,
             related_event_ids=event_ids,
             context=resolution_criteria,  # Use criteria as context
@@ -230,4 +235,58 @@ class QuestionGeneratorTool(Tool):
         suffix = uuid.uuid4().hex[:8]
         # Domain is a str enum, so it works directly in f-strings
         return f"q_{domain.value}_{date_str}_{counter+1:03d}_{suffix}"
+
+    def _normalize_ground_truth(self, ground_truth: str, question_type: QuestionType):
+        """Normalize ground_truth string to proper type based on question_type.
+
+        Args:
+            ground_truth: String representation of ground truth
+            question_type: Type of question
+
+        Returns:
+            Normalized ground truth in the correct type (bool, str, float, etc.)
+        """
+        if not ground_truth:
+            return None
+
+        ground_truth_str = str(ground_truth).strip()
+
+        if question_type == QuestionType.BOOLEAN:
+            # Convert to boolean
+            # Accept: YES, yes, Yes, TRUE, true, True, 1, etc.
+            positive_values = {'yes', 'true', '1', 'y', 't'}
+            negative_values = {'no', 'false', '0', 'n', 'f'}
+
+            lower = ground_truth_str.lower()
+            if lower in positive_values:
+                return True
+            elif lower in negative_values:
+                return False
+            else:
+                print(f"Warning: Could not parse boolean ground_truth '{ground_truth}', expected YES/NO, TRUE/FALSE, etc. Storing as None.")
+                return None
+
+        elif question_type == QuestionType.QUANTITY:
+            # Convert to number
+            try:
+                # Try int first, then float
+                if '.' in ground_truth_str:
+                    return float(ground_truth_str)
+                else:
+                    return int(ground_truth_str)
+            except ValueError:
+                print(f"Warning: Could not parse quantity ground_truth '{ground_truth}' as number. Storing as None.")
+                return None
+
+        elif question_type == QuestionType.MCQ:
+            # Keep as string (should match one of the options)
+            return ground_truth_str
+
+        elif question_type == QuestionType.TIMEFRAME:
+            # Keep as string (ISO datetime or range)
+            return ground_truth_str
+
+        else:
+            # Default: keep as string
+            return ground_truth_str
 

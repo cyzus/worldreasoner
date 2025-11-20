@@ -25,15 +25,22 @@ Usage:
     # Custom knowledge cutoff date and verbose output
     python examples/run_forecast_smolagents.py --knowledge-cutoff 2024-05-01 --verbose
 
+    # Skip immediate evaluation for resolved questions
+    python examples/run_forecast_smolagents.py --no-evaluate
+
 The agent automatically calculates valid forecast windows based on context availability
 and ensures temporal consistency with knowledge cutoffs.
+
+If the question is already resolved (has ground truth), the forecast will be
+automatically evaluated and results displayed immediately.
 """
 
 import argparse
 from src.core.database import GenericDatabase
-from src.domain.models import Question
+from src.domain.models import Question, Forecast
 from src.agents.factory import AgentFactory
 from src.config import get_config
+from src.domain.evaluation import ForecastEvaluator
 
 
 def parse_args():
@@ -94,6 +101,13 @@ def parse_args():
         '--verbose',
         action='store_true',
         help='Show detailed output'
+    )
+
+    # Evaluation control
+    parser.add_argument(
+        '--no-evaluate',
+        action='store_true',
+        help='Skip immediate evaluation even if question is resolved'
     )
 
     return parser.parse_args()
@@ -172,7 +186,7 @@ def print_forecast_setup(question: Question, window_start, window_end, simulated
     print(f"\nSimulated Date (auto-calculated):")
     print(f"  Using:      {simulated_date.date()}")
     print(f"  Strategy:   {args.offset_days} days before resolution")
-    print(f"  Status:     VALID ✓")
+    print(f"  Status:     VALID")
 
 
 def print_ground_truth(question: Question):
@@ -186,7 +200,7 @@ def print_ground_truth(question: Question):
     print("=" * 80)
 
     if question.ground_truth is None:
-        print("\n⚠ Ground truth not available (question may not be resolved yet)")
+        print("\nWARNING: Ground truth not available (question may not be resolved yet)")
         print(f"Resolution date: {question.resolution_date.date()}")
         return
 
@@ -209,6 +223,78 @@ def print_ground_truth(question: Question):
         print("\nReason: Not provided")
 
     print("\n" + "=" * 80)
+
+
+def get_latest_forecast(db: GenericDatabase, question_id: str) -> Forecast | None:
+    """Get the most recently submitted forecast for a question.
+
+    Args:
+        db: Database instance
+        question_id: Question ID to find forecast for
+
+    Returns:
+        Most recent Forecast or None if not found
+    """
+    all_forecasts = db.get_many(Forecast, filters={'question_id': question_id})
+    if not all_forecasts:
+        return None
+
+    # Sort by timestamp descending
+    all_forecasts.sort(key=lambda f: f.timestamp, reverse=True)
+    return all_forecasts[0]
+
+
+def evaluate_and_display_forecast(
+    forecast: Forecast,
+    question: Question,
+    evaluator: ForecastEvaluator,
+    update_db: bool = True
+):
+    """Evaluate a forecast and display the results.
+
+    Args:
+        forecast: Forecast to evaluate
+        question: Question with ground truth
+        evaluator: ForecastEvaluator instance
+        update_db: Whether to update the forecast in the database
+    """
+    print("\n" + "=" * 80)
+    print("IMMEDIATE EVALUATION (Question Already Resolved)")
+    print("=" * 80)
+
+    try:
+        # Evaluate the forecast
+        evaluation = evaluator.evaluate_forecast(forecast, question)
+
+        # Display results
+        status = "CORRECT" if evaluation.is_correct else "INCORRECT"
+        print(f"\n{status}")
+        print(f"\nYour Prediction: {evaluation.prediction} (confidence: {evaluation.confidence:.1%})")
+        print(f"Actual Outcome:  {evaluation.ground_truth}")
+        print(f"\nAccuracy: {evaluation.accuracy:.1%}")
+
+        if evaluation.brier_score is not None:
+            print(f"Brier Score: {evaluation.brier_score:.4f} (0=perfect, 1=worst)")
+
+        if evaluation.log_score is not None:
+            print(f"Log Score:   {evaluation.log_score:.4f} (higher is better)")
+
+        # Show forecast horizon
+        if evaluation.evaluation_metadata.get('forecast_horizon_days'):
+            horizon = evaluation.evaluation_metadata['forecast_horizon_days']
+            print(f"\nForecast Horizon: {horizon} days ahead")
+
+        # Update database if requested
+        if update_db:
+            evaluator.update_forecast_with_evaluation(forecast, evaluation)
+            print(f"\nEvaluation saved to database")
+
+        print("\n" + "=" * 80)
+
+    except Exception as e:
+        print(f"\nERROR: Error evaluating forecast: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def run_forecast(args):
@@ -251,7 +337,7 @@ def run_forecast(args):
             )
 
     except ValueError as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\nERROR: {e}")
         print("\nThis may indicate:")
         print("  - Not enough context items in database")
         print("  - Evidence collected after resolution (data quality issue)")
@@ -290,8 +376,30 @@ def run_forecast(args):
         print("=" * 80)
         print(result)
 
-    # Display ground truth if available
-    print_ground_truth(question)
+    # Check if question is resolved and evaluate immediately if requested
+    if question.ground_truth is not None and not args.no_evaluate:
+        print("\nQuestion is already resolved - evaluating forecast immediately...")
+
+        # Get the forecast that was just submitted
+        forecast = get_latest_forecast(db, question.id)
+
+        if forecast:
+            # Initialize evaluator
+            evaluator = ForecastEvaluator(db_path=args.db)
+
+            # Evaluate and display results
+            evaluate_and_display_forecast(
+                forecast=forecast,
+                question=question,
+                evaluator=evaluator,
+                update_db=True
+            )
+        else:
+            print("WARNING: Could not find submitted forecast for evaluation")
+
+    # Display ground truth if available (even if we already evaluated)
+    if question.ground_truth is not None:
+        print_ground_truth(question)
 
 
 def main():

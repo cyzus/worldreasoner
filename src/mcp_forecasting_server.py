@@ -82,6 +82,10 @@ mcp = FastMCP("worldreasoner-forecasting")
 # Global database connection and search engine
 DB_PATH = os.getenv("WORLDREASONER_DB", "worldreasoner.db")
 db = GenericDatabase(DB_PATH)
+
+# Ensure forecasts table exists (idempotent)
+db.create_table(Forecast)
+
 # HybridSearch loads embedding_model from config.yaml by default
 hybrid_search = HybridSearch(DB_PATH)
 
@@ -602,10 +606,9 @@ def submit_forecast(
             model_name="mcp_client",  # Will be updated by client
         )
 
-        # TODO: Save forecast to database (need to register Forecast model)
-        # For now, just return confirmation
-
-        logger.info(f"Forecast submitted: {forecast_id}")
+        # Save forecast to database
+        db.save(Forecast, forecast)
+        logger.info(f"Forecast saved to database: {forecast_id}")
 
         result = {
             "forecast_id": forecast_id,
