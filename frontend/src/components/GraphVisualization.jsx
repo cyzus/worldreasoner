@@ -15,7 +15,7 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
   const [forceSettings, setForceSettings] = useState({
     linkDistance: 40,        // Shorter distance = tighter layout (was 70)
     linkStrength: 1,         // Normal spring strength
-    chargeStrength: -150,    // Less repulsion = closer nodes (was -200)
+    chargeStrength: -200,    // Less repulsion = closer nodes (was -200)
     centerStrength: 0.05     // Very gentle center force (like in examples)
   })
 
@@ -113,7 +113,7 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
     )
 
     // Add collision force to prevent overlap (D3 best practice)
-    fg.d3Force('collide', window.d3?.forceCollide?.(12)) // Smaller radius for tighter layout (was 15)
+    fg.d3Force('collide', window.d3?.forceCollide?.(15)) // Smaller radius for tighter layout (was 15)
 
     // Add very gentle containment force with buffer zone
     fg.d3Force('contain', () => {
@@ -336,8 +336,8 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
         linkDirectionalArrowRelPos={1}
         cooldownTicks={200}
         warmupTicks={0}
-        d3AlphaDecay={0.04}
-        d3VelocityDecay={0.8}
+        d3AlphaDecay={0.0228} // Default d3 value for smoother decay
+        d3VelocityDecay={0.6} // Increased friction to reduce jitter
         d3AlphaMin={0.001}
         onEngineStop={() => {
           // Let simulation rest when not interacting

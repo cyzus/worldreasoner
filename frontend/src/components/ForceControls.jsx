@@ -77,7 +77,7 @@ const ForceControls = ({ forceSettings, onForceChange }) => {
         onClick={() => onForceChange({
           linkDistance: 40,
           linkStrength: 1,
-          chargeStrength: -150,
+          chargeStrength: -200,
           centerStrength: 0.05
         })}
       >
