@@ -98,7 +98,37 @@ python examples/run_benchmark_evaluation.py --max-steps 20
 
 # Faster evaluation with fewer steps
 python examples/run_benchmark_evaluation.py --max-steps 10
+
+# Knowledge-only mode (disable research tools)
+# Tests LLM's inherent knowledge without external information access
+python examples/run_benchmark_evaluation.py --knowledge-only
 ```
+
+**Knowledge-Only Mode:**
+
+The `--knowledge-only` flag is crucial for understanding what the LLM actually knows vs. what it can learn through research:
+
+```bash
+# Full mode (default): LLM can search articles and fetch information
+python examples/run_benchmark_evaluation.py --model gpt-4
+
+# Knowledge-only mode: LLM can only use get_question and submit_forecast
+# Tests pure inherent knowledge from training data
+python examples/run_benchmark_evaluation.py --model gpt-4 --knowledge-only
+```
+
+**Available tools by mode:**
+
+| Mode | Tools Available | Use Case |
+|------|----------------|----------|
+| **Full** (default) | `get_question`, `temporal_search_articles`, `fetch_article`, `submit_forecast` | Test LLM's research + reasoning ability |
+| **Knowledge-Only** | `get_question`, `submit_forecast` only | Test LLM's inherent knowledge without external info |
+
+This is particularly useful for:
+- **Comparing inherent knowledge vs. research ability**: Run same questions in both modes
+- **Testing knowledge cutoff effectiveness**: Verify the LLM truly doesn't know future events
+- **Baseline measurements**: Establish accuracy floor without any external help
+- **Cost analysis**: Knowledge-only runs are faster and cheaper (fewer API calls)
 
 #### Execution Control
 
@@ -148,6 +178,47 @@ Results:
 
 Benchmark complete!
 Successfully evaluated 7/7 questions
+```
+
+## Comparing Knowledge vs. Research Ability
+
+One of the most valuable comparisons is testing the same model with and without research tools:
+
+```bash
+# Test GPT-4 with full research capability
+python examples/run_benchmark_evaluation.py --model gpt-4
+
+# Test GPT-4 with only inherent knowledge (no research)
+python examples/run_benchmark_evaluation.py --model gpt-4 --knowledge-only
+```
+
+**Expected results:**
+- **Full mode**: Higher accuracy (can research and verify facts)
+- **Knowledge-only mode**: Lower accuracy (only pre-trained knowledge)
+- **Difference**: Shows how much research helps vs. pure knowledge
+
+This reveals:
+1. **Knowledge gaps**: What the LLM doesn't know from training
+2. **Research effectiveness**: How much accuracy improves with information access
+3. **Knowledge cutoff validity**: Whether the LLM truly doesn't know future events
+
+**Example comparison:**
+
+```python
+import json
+from pathlib import Path
+
+# Load results
+with open('benchmarks/benchmark_20251120_193045_gpt-4.json') as f:
+    full_mode = json.load(f)
+
+with open('benchmarks/benchmark_20251120_194530_gpt-4.json') as f:
+    knowledge_only = json.load(f)
+
+# Compare
+print(f"GPT-4 Full Mode:         {full_mode['results']['overall_accuracy']:.2%}")
+print(f"GPT-4 Knowledge-Only:    {knowledge_only['results']['overall_accuracy']:.2%}")
+print(f"Research Improvement:    {(full_mode['results']['overall_accuracy'] - knowledge_only['results']['overall_accuracy']):.2%}")
 ```
 
 ## Model Comparison Benchmarks

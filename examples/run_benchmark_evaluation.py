@@ -101,6 +101,12 @@ def parse_args():
         help='Override LLM model (e.g., gpt-4, claude-sonnet-4, gemini-pro)'
     )
 
+    parser.add_argument(
+        '--knowledge-only',
+        action='store_true',
+        help='Disable research tools (only allow get_question and submit_forecast). Tests inherent LLM knowledge without external information.'
+    )
+
     # Execution control
     parser.add_argument(
         '--max-questions',
@@ -231,7 +237,8 @@ def run_single_forecast(
             simulated_date=forecast_setup['simulated_date'].isoformat(),
             knowledge_cutoff=args.knowledge_cutoff,
             config=config,
-            max_steps=args.max_steps
+            max_steps=args.max_steps,
+            knowledge_only=args.knowledge_only
         )
 
         # Run agent
@@ -346,7 +353,8 @@ def generate_benchmark_report(
         'max_steps': args.max_steps,
         'knowledge_cutoff': args.knowledge_cutoff,
         'offset_days': args.offset_days,
-        'min_context_items': args.min_context_items
+        'min_context_items': args.min_context_items,
+        'knowledge_only': args.knowledge_only
     }
 
     # Execution info
@@ -390,6 +398,12 @@ def print_benchmark_report(report: Dict[str, Any]):
     print(f"  Knowledge Cutoff: {model_info['knowledge_cutoff']}")
     print(f"  Forecast Offset: {model_info['offset_days']} days before resolution")
     print(f"  Min Context Items: {model_info['min_context_items']}")
+
+    # Knowledge-only mode indicator
+    if model_info.get('knowledge_only'):
+        print(f"  Mode: KNOWLEDGE-ONLY (no research tools - testing inherent knowledge)")
+    else:
+        print(f"  Mode: FULL (with research tools - temporal_search_articles, fetch_article)")
 
     # Execution info
     print("\nExecution Info:")

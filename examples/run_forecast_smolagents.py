@@ -96,6 +96,12 @@ def parse_args():
         help='Maximum agent steps (default: 15)'
     )
 
+    parser.add_argument(
+        '--knowledge-only',
+        action='store_true',
+        help='Disable research tools (only allow get_question and submit_forecast). Tests inherent LLM knowledge without external information.'
+    )
+
     # Output control
     parser.add_argument(
         '--verbose',
