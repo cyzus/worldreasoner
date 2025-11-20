@@ -174,6 +174,8 @@ class GenericDatabase(Generic[T]):
     
     def _get_python_type(self, field_info) -> str:
         """Map Pydantic field to Python type string."""
+        from enum import Enum
+        
         annotation = field_info.annotation
         
         # Handle Optional types
@@ -191,6 +193,8 @@ class GenericDatabase(Generic[T]):
             return 'datetime'
         elif isinstance(annotation, type) and issubclass(annotation, BaseModel):
             return 'model'
+        elif isinstance(annotation, type) and issubclass(annotation, Enum):
+            return 'enum'
         else:
             # Complex types: list, dict, etc. -> JSON
             return 'json'
@@ -270,6 +274,8 @@ class GenericDatabase(Generic[T]):
     
     def _serialize_value(self, value: Any, python_type: str) -> Any:
         """Serialize Python value for database storage."""
+        from enum import Enum
+        
         if value is None:
             return None
         
@@ -277,6 +283,9 @@ class GenericDatabase(Generic[T]):
             return value.isoformat()
         elif python_type == 'bool':
             return 1 if value else 0
+        elif python_type == 'enum':
+            # For Enums, store the value (not JSON-encoded)
+            return value.value if isinstance(value, Enum) else value
         elif python_type in ('json', 'model'):
             # Handle Pydantic models and complex types
             if isinstance(value, BaseModel):
@@ -298,6 +307,18 @@ class GenericDatabase(Generic[T]):
             return datetime.fromisoformat(value)
         elif python_type == 'bool':
             return bool(value)
+        elif python_type == 'enum':
+            # For Enums, get the enum class and construct from value
+            annotation = field_info.annotation
+            # Handle Optional
+            origin = get_origin(annotation)
+            if origin is not None:
+                args = get_args(annotation)
+                annotation = next(arg for arg in args if arg is not type(None))
+            # Handle both plain string values and JSON-encoded values from old data
+            if isinstance(value, str) and value.startswith('"') and value.endswith('"'):
+                value = json.loads(value)
+            return annotation(value)
         elif python_type == 'json':
             return json.loads(value) if value else None
         elif python_type == 'model':
