@@ -95,6 +95,90 @@ This will run test queries comparing:
 - Keyword-only search (FTS5)
 - Semantic-only search (embeddings)
 
+## Evaluation & Benchmarking
+
+WorldReasoner provides comprehensive evaluation tools for analyzing forecast performance.
+
+### Scripts Overview
+
+| Script | Purpose | Key Use Case |
+|--------|---------|--------------|
+| `run_forecast_smolagents.py` | Single forecast with evaluation | Test a forecast on one question |
+| `run_benchmark_evaluation.py` | Bulk forecasting on all questions | Compare model performance |
+| `visualize_benchmarks.py` | Generate charts from benchmarks | Visualize model comparisons |
+| `run_temporal_forecast_analysis.py` | Temporal progression analysis | Understand context impact |
+| `evaluate_forecasts.py` | Evaluate existing forecasts | Post-hoc analysis |
+
+### Single Question Forecast
+
+```bash
+# Run forecast on a specific question
+python examples/run_forecast_smolagents.py --question-id q_tech_20251117_003
+
+# With specific model
+python examples/run_forecast_smolagents.py \
+  --question-id q_tech_20251117_003 \
+  --model gpt-4
+
+# Knowledge-only mode (no research)
+python examples/run_forecast_smolagents.py \
+  --question-id q_tech_20251117_003 \
+  --knowledge-only
+```
+
+### Full Benchmark Suite
+
+```bash
+# Run benchmarks on all resolved questions
+python examples/run_benchmark_evaluation.py
+
+# Compare different models
+python examples/run_benchmark_evaluation.py --model gpt-4
+python examples/run_benchmark_evaluation.py --model claude-sonnet-4
+
+# Test knowledge-only mode
+python examples/run_benchmark_evaluation.py --model gpt-4 --knowledge-only
+
+# Visualize results
+python examples/visualize_benchmarks.py
+```
+
+### Temporal Analysis
+
+Understand how forecast quality changes as more context becomes available:
+
+```bash
+# Analyze temporal progression
+python examples/run_temporal_forecast_analysis.py \
+  --question-id q_politics_20251115_004_8352cfe8 \
+  --num-points 5
+```
+
+**Output**: Shows how accuracy, confidence, and Brier score evolve over time as more articles/events become available.
+
+### Visualization
+
+Generate publication-quality comparative charts:
+
+```bash
+# Install visualization dependencies
+uv sync --group viz
+
+# Generate all visualizations
+python examples/visualize_benchmarks.py
+
+# Show interactive plots
+python examples/visualize_benchmarks.py --show
+```
+
+**Generates:**
+- Accuracy comparison across models
+- Brier score comparison
+- Full vs Knowledge-Only mode comparison
+- Performance timeline
+
+See [BENCHMARKING.md](../docs/BENCHMARKING.md) for complete documentation.
+
 ### Available Embedding Models
 
 All models via [LiteLLM](https://docs.litellm.ai/docs/embedding/supported_embedding):

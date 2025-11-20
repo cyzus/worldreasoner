@@ -215,6 +215,9 @@ config/config.yaml
 # Benchmark results
 benchmarks/
 
+# Temporal analysis results
+temporal_analysis/
+
 # Test artifacts
 test-dbs/
 test-output/

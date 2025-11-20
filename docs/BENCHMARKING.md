@@ -11,6 +11,7 @@ WorldReasoner provides comprehensive benchmarking and evaluation tools:
 | `evaluate_forecasts.py` | Evaluate existing forecasts | After manual forecasting sessions |
 | **`run_benchmark_evaluation.py`** | Run forecasts on all questions + evaluate | **Automated benchmarking of LLM models** |
 | **`visualize_benchmarks.py`** | Generate comparative charts from results | **After running benchmarks** |
+| **`run_temporal_forecast_analysis.py`** | Analyze single question over time | **Understanding context impact on forecasts** |
 
 ## Quick Start
 
@@ -28,9 +29,13 @@ python examples/run_benchmark_evaluation.py --model gpt-4 --knowledge-only
 # 3. Visualize all results
 python examples/visualize_benchmarks.py
 
+# 4. Deep dive: analyze how context affects a single question
+python examples/run_temporal_forecast_analysis.py --question-id q_tech_20251117_003
+
 # Results are saved to:
 # - benchmarks/benchmark_*.json (raw data)
 # - benchmarks/figures/*.png (visualizations)
+# - temporal_analysis/*.json and *.png (single-question analysis)
 ```
 
 ## Benchmark Evaluation Script
@@ -621,6 +626,180 @@ jobs:
           path: benchmark_results.json
 ```
 
+## Temporal Forecast Analysis
+
+The temporal forecast analysis script helps you understand how forecast quality changes as more context becomes available over time.
+
+### Overview
+
+For a single question, this script:
+1. Identifies all context items (articles/events) and when they became available
+2. Calculates multiple forecast points along the timeline
+3. Runs the forecast agent at each point with progressively more context
+4. Shows how accuracy, confidence, and Brier score evolve
+
+**This answers critical questions:**
+- How much does additional context improve forecasts?
+- At what point does the LLM have "enough" information?
+- How does confidence change over time?
+- When does the model "figure out" the answer?
+
+### Basic Usage
+
+```bash
+# Analyze temporal progression for a specific question
+python examples/run_temporal_forecast_analysis.py --question-id q_tech_20251117_003
+
+# Use specific model
+python examples/run_temporal_forecast_analysis.py --question-id q_tech_20251117_003 --model gpt-4
+
+# Customize number of forecast points (default: 5)
+python examples/run_temporal_forecast_analysis.py --question-id q_tech_20251117_003 --num-points 10
+
+# Save results and visualization
+python examples/run_temporal_forecast_analysis.py --question-id q_tech_20251117_003 --output results.json
+```
+
+### Output
+
+The script generates:
+
+1. **Console Summary**:
+   ```
+   TEMPORAL FORECAST ANALYSIS RESULTS
+   ================================================================================
+
+   Total Forecast Points: 5
+   Successful: 5
+   Failed: 0
+
+   --------------------------------------------------------------------------------
+   Date         Context    Days Left    Correct    Confidence   Brier
+   --------------------------------------------------------------------------------
+   2024-06-15   2 items    153 days     NO         55.0%        0.3025
+   2024-08-01   5 items    106 days     NO         60.0%        0.3600
+   2024-09-15   8 items     61 days     YES        75.0%        0.0625
+   2024-10-15   12 items    31 days     YES        85.0%        0.0225
+   2024-11-05   15 items    10 days     YES        95.0%        0.0025
+   --------------------------------------------------------------------------------
+
+   Progression Analysis:
+     Context Growth: 2 -> 15 items
+     Confidence Change: 55.0% -> 95.0%
+     Brier Score Change: -0.2775 (improved)
+   ```
+
+2. **JSON Report** (`temporal_analysis/<question_id>.json`):
+   - Detailed results for each forecast point
+   - Context counts and dates
+   - Evaluation metrics
+   - Model information
+
+3. **Visualization** (`temporal_analysis/<question_id>.png`):
+   - 3-panel timeline chart showing:
+     - Context availability over time
+     - Forecast confidence (color-coded by correctness)
+     - Brier score evolution
+
+### Example Visualization
+
+The generated visualization shows three key metrics over time:
+
+**Panel 1: Context Growth**
+- Shows when new articles/events became available
+- Helps understand information accumulation
+
+**Panel 2: Forecast Confidence**
+- Green dots = correct prediction
+- Red dots = incorrect prediction
+- Shows when the model becomes confident (and whether justified)
+
+**Panel 3: Brier Score**
+- Shows calibration quality improving over time
+- Lower scores indicate better probabilistic forecasting
+
+### Advanced Options
+
+```bash
+# Knowledge-only mode (test without research tools)
+python examples/run_temporal_forecast_analysis.py \
+  --question-id q_tech_20251117_003 \
+  --knowledge-only
+
+# More granular analysis (10 points)
+python examples/run_temporal_forecast_analysis.py \
+  --question-id q_tech_20251117_003 \
+  --num-points 10
+
+# Lower minimum context threshold
+python examples/run_temporal_forecast_analysis.py \
+  --question-id q_tech_20251117_003 \
+  --min-context-items 1
+
+# Skip visualization generation
+python examples/run_temporal_forecast_analysis.py \
+  --question-id q_tech_20251117_003 \
+  --no-viz
+```
+
+### Use Cases
+
+**1. Understanding Context Requirements**
+```bash
+# Run analysis with few points to find inflection point
+python examples/run_temporal_forecast_analysis.py \
+  --question-id q_tech_20251117_003 \
+  --num-points 3
+```
+
+**2. Model Comparison**
+```bash
+# Compare how different models utilize growing context
+python examples/run_temporal_forecast_analysis.py \
+  --question-id q_tech_20251117_003 \
+  --model gpt-4 \
+  --output temporal_gpt4.json
+
+python examples/run_temporal_forecast_analysis.py \
+  --question-id q_tech_20251117_003 \
+  --model claude-sonnet-4 \
+  --output temporal_claude.json
+```
+
+**3. Knowledge vs Research Comparison**
+```bash
+# Full mode (with research)
+python examples/run_temporal_forecast_analysis.py \
+  --question-id q_tech_20251117_003 \
+  --output temporal_full.json
+
+# Knowledge-only mode
+python examples/run_temporal_forecast_analysis.py \
+  --question-id q_tech_20251117_003 \
+  --knowledge-only \
+  --output temporal_knowledge.json
+```
+
+### Requirements
+
+- Question must be resolved (have ground_truth)
+- Question must have at least `--min-context-items` context items before resolution
+- Visualization requires matplotlib: `uv sync --group viz`
+
+### Interpreting Results
+
+**Good Progression Pattern:**
+- Confidence increases monotonically
+- Brier score decreases monotonically
+- Model becomes correct and stays correct
+- Final confidence high (>80%) for correct prediction
+
+**Warning Signs:**
+- Confidence high but prediction wrong (overconfident)
+- Brier score increasing over time (getting worse)
+- Oscillating between correct/incorrect (unstable)
+- Low confidence even with lots of context (uncertain)
+
 ## Future Enhancements
 
 Potential improvements to benchmarking:
@@ -629,8 +808,8 @@ Potential improvements to benchmarking:
 2. **Ensemble methods** - Combine predictions from multiple models
 3. **Active learning** - Identify questions where models are uncertain
 4. **Cost tracking** - Monitor API costs per benchmark run
-5. **Temporal trends** - Track how accuracy changes with forecast horizon
-6. **Domain-specific analysis** - Compare performance across different domains
+5. **Domain-specific analysis** - Compare performance across different domains
+6. **Multi-question temporal analysis** - Aggregate temporal patterns across questions
 
 ## References
 
