@@ -305,7 +305,6 @@ def run_forecast(args):
     """
     # Load configuration
     config = get_config()
-
     # Load question from database
     db = GenericDatabase(args.db)
 

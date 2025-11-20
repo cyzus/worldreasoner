@@ -212,6 +212,9 @@ __marimo__/
 # Configuration (actual config with secrets, not the example template)
 config/config.yaml
 
+# Benchmark results
+benchmarks/
+
 # Test artifacts
 test-dbs/
 test-output/

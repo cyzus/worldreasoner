@@ -127,8 +127,9 @@ class ForecastContextMiddleware(Middleware):
                     question_id = headers.get('x-question-id') or headers.get('X-Question-ID')
                     knowledge_cutoff = headers.get('x-knowledge-cutoff') or headers.get('X-Knowledge-Cutoff')
                     simulated_date = headers.get('x-simulated-date') or headers.get('X-Simulated-Date')
+                    model_name = headers.get('x-model-name') or headers.get('X-Model-Name')
 
-                    logger.debug(f"Extracted - question_id: {question_id}, knowledge_cutoff: {knowledge_cutoff}, simulated_date: {simulated_date}")
+                    logger.debug(f"Extracted - question_id: {question_id}, knowledge_cutoff: {knowledge_cutoff}, simulated_date: {simulated_date}, model: {model_name}")
 
                     # If headers are present, store them globally
                     if question_id and simulated_date:
@@ -185,9 +186,11 @@ class ForecastContextMiddleware(Middleware):
                                 _connection_context['knowledge_cutoff_obj'] = knowledge_cutoff_obj
                                 _connection_context['simulated_date'] = simulated_date_obj.isoformat()
                                 _connection_context['simulated_date_obj'] = simulated_date_obj
+                                _connection_context['model_name'] = model_name or 'unknown'
                                 _connection_context['question'] = question
                                 logger.info(
-                                    f"✓ Context captured from headers: q={question_id}, "
+                                    f"Context captured from headers: q={question_id}, "
+                                    f"model={model_name or 'unknown'}, "
                                     f"knowledge_cutoff={knowledge_cutoff_obj.date() if knowledge_cutoff_obj else 'N/A'}, "
                                     f"simulated_date={simulated_date_obj.date()}, "
                                     f"resolution_date={question.resolution_date.date()}, "
@@ -591,6 +594,9 @@ def submit_forecast(
         # Create forecast
         forecast_id = f"fcst_{question_id}_{int(datetime.now(timezone.utc).timestamp())}"
 
+        # Get model name from context
+        model_name = _connection_context.get('model_name', 'unknown')
+
         forecast = Forecast(
             id=forecast_id,
             session_id=session_id,
@@ -603,7 +609,7 @@ def submit_forecast(
             simulated_date=simulated_date,
             articles_accessed=articles_accessed.value or [],
             searches_performed=[],  # Could track this if needed
-            model_name="mcp_client",  # Will be updated by client
+            model_name=model_name,
         )
 
         # Save forecast to database

@@ -23,7 +23,8 @@ class ForecastAgent(BaseAgent):
                 "headers": {
                     "X-Question-ID": question.id,
                     "X-Knowledge-Cutoff": knowledge_cutoff,
-                    "X-Simulated-Date": simulated_date 
+                    "X-Simulated-Date": simulated_date,
+                    "X-Model-Name": config.llm.model  # Include model name for tracking
                 }
             }
         ]

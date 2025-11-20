@@ -377,6 +377,9 @@ class ForecastEvaluator:
             confidences = [r.confidence for r in boolean_results]
             calibration = calculate_calibration_metrics(predictions, ground_truths, confidences)
 
+        # Collect model information from forecasts
+        model_info = self._collect_model_info(results)
+
         return {
             'total_forecasts': total,
             'overall_accuracy': accuracy_rate,
@@ -384,5 +387,51 @@ class ForecastEvaluator:
             'avg_log_score': avg_log,
             'by_question_type': type_summary,
             'calibration': calibration,
+            'model_info': model_info,
             'evaluation_timestamp': datetime.now(timezone.utc).isoformat()
+        }
+
+    def _collect_model_info(self, results: List[EvaluationResult]) -> Dict[str, Any]:
+        """Collect model information from evaluation results.
+
+        Args:
+            results: List of evaluation results
+
+        Returns:
+            Dict with model statistics
+        """
+        # Get unique models from evaluation metadata
+        models = {}
+
+        for result in results:
+            # Try to get model name from forecast
+            # We need to fetch the forecast to get model info
+            try:
+                forecast = self.db.get(Forecast, result.forecast_id)
+                if forecast and forecast.model_name:
+                    model_name = forecast.model_name
+                    if model_name not in models:
+                        models[model_name] = {
+                            'count': 0,
+                            'correct': 0,
+                            'version': forecast.model_version
+                        }
+                    models[model_name]['count'] += 1
+                    if result.is_correct:
+                        models[model_name]['correct'] += 1
+            except Exception:
+                continue
+
+        # Calculate accuracy per model
+        model_summary = {}
+        for model_name, stats in models.items():
+            model_summary[model_name] = {
+                'count': stats['count'],
+                'accuracy': stats['correct'] / stats['count'] if stats['count'] > 0 else 0.0,
+                'version': stats['version']
+            }
+
+        return {
+            'models': model_summary,
+            'total_unique_models': len(models)
         }

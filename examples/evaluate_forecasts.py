@@ -141,6 +141,20 @@ def print_summary_report(report: dict):
             if stats.get('avg_log_score') is not None:
                 print(f"  Avg Log Score: {stats['avg_log_score']:.4f}")
 
+    # Model information
+    if report.get('model_info'):
+        model_info = report['model_info']
+        if model_info.get('models'):
+            print("\nModel Performance:")
+            print("-" * 60)
+            print(f"Total Unique Models: {model_info['total_unique_models']}")
+            print()
+            for model_name, stats in model_info['models'].items():
+                version_str = f" (v{stats['version']})" if stats.get('version') else ""
+                print(f"{model_name}{version_str}:")
+                print(f"  Forecasts: {stats['count']}")
+                print(f"  Accuracy: {stats['accuracy']:.2%}")
+
     # Calibration
     if report.get('calibration'):
         cal = report['calibration']
