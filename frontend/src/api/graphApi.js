@@ -107,3 +107,19 @@ export async function fetchQuestionEvents(questionId) {
   const response = await axios.get(`${API_BASE_URL}/questions/${questionId}/events`)
   return response.data
 }
+
+/**
+ * Fetch all articles related to an event
+ */
+export async function fetchEventArticles(eventId) {
+  const response = await axios.get(`${API_BASE_URL}/events/${eventId}/articles`)
+  return response.data
+}
+
+/**
+ * Fetch all questions related to an event
+ */
+export async function fetchEventQuestions(eventId) {
+  const response = await axios.get(`${API_BASE_URL}/events/${eventId}/questions`)
+  return response.data
+}

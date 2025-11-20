@@ -141,6 +141,29 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
 
   }, [graphData, forceSettings])
 
+  // Trigger continuous repainting for pulsing animation on outcome nodes
+  useEffect(() => {
+    const hasOutcomeNode = graphData.nodes.some(node => node.isOutcome)
+    if (!hasOutcomeNode) return
+
+    const animate = () => {
+      if (graphRef.current) {
+        // Force a redraw by slightly updating the graph reference
+        // This triggers the canvas to repaint and show the pulsing animation
+        graphRef.current.refresh()
+      }
+      animationFrameRef.current = requestAnimationFrame(animate)
+    }
+
+    animationFrameRef.current = requestAnimationFrame(animate)
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+      }
+    }
+  }, [graphData.nodes])
+
 
   // Node canvas rendering with glow effect
   const paintNode = (node, ctx, globalScale) => {
@@ -153,10 +176,24 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
     const fontSize = 11 / globalScale
     const nodeSize = Math.max(4, node.size * 4)
     const isSelected = selectedNode && selectedNode.id === node.id
+    const isOutcome = node.isOutcome
 
     // Calculate label opacity based on zoom level for smooth fade
     // Labels fully visible at zoom >= 1.0, fade out smoothly as zoom decreases
     const labelOpacity = Math.min(1, Math.max(0, (globalScale - 0.3) / 0.7))
+
+    // Draw pulsing glow for outcome node
+    if (isOutcome) {
+      const time = Date.now() / 1000
+      const pulse = 0.7 + Math.sin(time * 2) * 0.3 // Pulsing between 0.4 and 1.0
+      ctx.beginPath()
+      ctx.arc(node.x, node.y, nodeSize + 12 / globalScale, 0, 2 * Math.PI, false)
+      const outcomeGradient = ctx.createRadialGradient(node.x, node.y, nodeSize, node.x, node.y, nodeSize + 12 / globalScale)
+      outcomeGradient.addColorStop(0, `rgba(255, 193, 7, ${0.4 * pulse})`) // Gold glow
+      outcomeGradient.addColorStop(1, 'rgba(255, 193, 7, 0)')
+      ctx.fillStyle = outcomeGradient
+      ctx.fill()
+    }
 
     // Draw glow for selected node
     if (isSelected) {
@@ -182,10 +219,27 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
     ctx.fillStyle = nodeGradient
     ctx.fill()
 
-    // Add border
-    ctx.strokeStyle = isSelected ? '#212529' : 'rgba(0, 0, 0, 0.2)'
-    ctx.lineWidth = (isSelected ? 3 : 1.5) / globalScale
+    // Add border (gold for outcome, dark for selected, light for others)
+    if (isOutcome) {
+      ctx.strokeStyle = '#FFC107' // Gold
+      ctx.lineWidth = 3 / globalScale
+    } else if (isSelected) {
+      ctx.strokeStyle = '#212529'
+      ctx.lineWidth = 3 / globalScale
+    } else {
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)'
+      ctx.lineWidth = 1.5 / globalScale
+    }
     ctx.stroke()
+
+    // Add outer ring for outcome node
+    if (isOutcome) {
+      ctx.beginPath()
+      ctx.arc(node.x, node.y, nodeSize + 4 / globalScale, 0, 2 * Math.PI, false)
+      ctx.strokeStyle = '#FFC107'
+      ctx.lineWidth = 2 / globalScale
+      ctx.stroke()
+    }
 
     // Only draw label if opacity is significant (performance optimization)
     if (labelOpacity > 0.05) {
@@ -199,12 +253,29 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
       ctx.shadowOffsetY = 0
 
       // Apply opacity to text color
-      const textColor = isSelected ? '#212529' : '#495057'
-      const rgb = textColor === '#212529'
-        ? [33, 37, 41]
-        : [73, 80, 87]
+      const textColor = isOutcome ? '#FFC107' : (isSelected ? '#212529' : '#495057')
+      let rgb
+      if (textColor === '#FFC107') {
+        rgb = [255, 193, 7]
+      } else if (textColor === '#212529') {
+        rgb = [33, 37, 41]
+      } else {
+        rgb = [73, 80, 87]
+      }
       ctx.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${labelOpacity})`
-      ctx.fillText(label, node.x, node.y + nodeSize + fontSize + 4 / globalScale)
+
+      // Add "OUTCOME" badge above the label for outcome nodes
+      let labelY = node.y + nodeSize + fontSize + 4 / globalScale
+      if (isOutcome) {
+        const badgeY = node.y + nodeSize + fontSize / 2 + 2 / globalScale
+        ctx.font = `700 ${fontSize * 0.7}px Inter, sans-serif`
+        ctx.fillStyle = `rgba(255, 193, 7, ${labelOpacity})`
+        ctx.fillText('⭐ OUTCOME', node.x, badgeY)
+        labelY += fontSize * 0.8
+        ctx.font = `600 ${fontSize}px Inter, sans-serif`
+      }
+
+      ctx.fillText(label, node.x, labelY)
 
       // Reset shadow
       ctx.shadowColor = 'transparent'
@@ -236,10 +307,15 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
       return
     }
 
-    // Color based on edge weight/strength
-    const alpha = Math.min(0.6, Math.max(0.25, link.weight))
-    const color = `rgba(108, 117, 125, ${alpha})`
-    const lineWidth = Math.max(1.5, link.weight * 2) / globalScale
+    // Color and style based on edge type
+    const isSynthetic = link.isSynthetic || link.type === 'potentially_relevant'
+    const alpha = isSynthetic ? 0.4 : Math.min(0.6, Math.max(0.25, link.weight))
+    const color = isSynthetic
+      ? `rgba(156, 39, 176, ${alpha})`  // Purple for synthetic links
+      : `rgba(108, 117, 125, ${alpha})`  // Gray for regular links
+    const lineWidth = isSynthetic
+      ? 1 / globalScale  // Thinner for synthetic
+      : Math.max(1.5, link.weight * 2) / globalScale
 
     // Calculate the angle and distance
     const dx = end.x - start.x
@@ -263,13 +339,22 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
     const endX = end.x - ((endNodeSize + arrowLength) * Math.cos(angle))
     const endY = end.y - ((endNodeSize + arrowLength) * Math.sin(angle))
 
-    // Draw main line
+    // Draw main line (dashed for synthetic edges)
     ctx.beginPath()
     ctx.moveTo(startX, startY)
     ctx.lineTo(endX, endY)
     ctx.strokeStyle = color
     ctx.lineWidth = lineWidth
+
+    // Set dash pattern for synthetic edges
+    if (isSynthetic) {
+      ctx.setLineDash([5 / globalScale, 5 / globalScale])
+    } else {
+      ctx.setLineDash([])
+    }
+
     ctx.stroke()
+    ctx.setLineDash([]) // Reset dash pattern
 
     // Draw arrowhead at the adjusted end position
     const arrowTipX = end.x - (endNodeSize * Math.cos(angle))

@@ -15,7 +15,6 @@ const ControlPanel = ({ filters, onFilterChange, onRefresh, loading, questions, 
 
   const handleReset = () => {
     const defaultFilters = {
-      nodeTypes: [],
       maxNodes: 100,
       maxEdges: 500,
       minEdgeWeight: 0,
@@ -148,26 +147,6 @@ const ControlPanel = ({ filters, onFilterChange, onRefresh, loading, questions, 
                 ? 'Showing all extracted events + causal neighborhood (depth 2)'
                 : 'Search and select a question to filter the graph'}
             </small>
-          </div>
-
-          <div className="filter-section">
-            <label>Node Types</label>
-            <select
-              multiple
-              value={localFilters.nodeTypes}
-              onChange={(e) => {
-                const selected = Array.from(e.target.selectedOptions, option => option.value)
-                setLocalFilters({ ...localFilters, nodeTypes: selected })
-              }}
-            >
-              <option value="politics">Politics</option>
-              <option value="economics">Economics</option>
-              <option value="technology">Technology</option>
-              <option value="science">Science</option>
-              <option value="climate">Climate</option>
-              <option value="health">Health</option>
-            </select>
-            <small>Hold Ctrl/Cmd to select multiple</small>
           </div>
 
           <div className="filter-section">

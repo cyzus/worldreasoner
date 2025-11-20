@@ -54,8 +54,23 @@ function App() {
       }
 
       console.log('Formatted graph data:', graphFormatted)
-      setFullGraphData(graphFormatted)
-      setGraphData(graphFormatted) // Initially show all
+
+      // Ensure no synthetic links in the full dataset
+      const cleanLinks = graphFormatted.links.filter(link =>
+        !link.isSynthetic && link.type !== 'potentially_relevant'
+      )
+      const cleanNodes = graphFormatted.nodes.map(node => ({
+        ...node,
+        isOutcome: false
+      }))
+
+      const cleanGraphData = {
+        nodes: cleanNodes,
+        links: cleanLinks
+      }
+
+      setFullGraphData(cleanGraphData)
+      setGraphData(cleanGraphData) // Initially show all
     } catch (err) {
       setError(`Failed to load graph: ${err.message}`)
       console.error('Graph load error:', err)
@@ -67,31 +82,53 @@ function App() {
   // Client-side temporal filtering
   const applyTimeFilter = useCallback((startDate, endDate) => {
     if (!startDate || !endDate) {
-      // No filter, show all data
-      setGraphData(fullGraphData)
+      // No filter, show all data and clear outcome markers
+      const resetNodes = fullGraphData.nodes.map(node => ({
+        ...node,
+        isOutcome: false
+      }))
+
+      // Filter out synthetic links
+      const resetLinks = fullGraphData.links
+        .filter(link => !link.isSynthetic && link.type !== 'potentially_relevant')
+        .map(link => ({...link}))
+
+      setGraphData({
+        nodes: resetNodes,
+        links: resetLinks
+      })
       setTimeFilter(null)
+      setSelectedQuestionId(null)
       return
     }
 
     setTimeFilter({ start: startDate, end: endDate })
 
-    // Filter nodes by date
-    const filteredNodes = fullGraphData.nodes.filter(node => {
-      const eventDate = node.properties?.occurred_date || node.properties?.predicted_date
-      if (!eventDate) return false
+    // Filter nodes by date, clear outcome markers
+    const filteredNodes = fullGraphData.nodes
+      .filter(node => {
+        const eventDate = node.properties?.occurred_date || node.properties?.predicted_date
+        if (!eventDate) return false
 
-      const date = new Date(eventDate)
-      return date >= startDate && date <= endDate
-    })
+        const date = new Date(eventDate)
+        return date >= startDate && date <= endDate
+      })
+      .map(node => ({
+        ...node,
+        isOutcome: false
+      }))
 
     const nodeIds = new Set(filteredNodes.map(n => n.id))
 
-    // Filter links to only include those between visible nodes
-    const filteredLinks = fullGraphData.links.filter(link => {
-      const sourceId = typeof link.source === 'object' ? link.source.id : link.source
-      const targetId = typeof link.target === 'object' ? link.target.id : link.target
-      return nodeIds.has(sourceId) && nodeIds.has(targetId)
-    })
+    // Filter links to only include those between visible nodes (exclude synthetic)
+    const filteredLinks = fullGraphData.links
+      .filter(link => !link.isSynthetic && link.type !== 'potentially_relevant')
+      .filter(link => {
+        const sourceId = typeof link.source === 'object' ? link.source.id : link.source
+        const targetId = typeof link.target === 'object' ? link.target.id : link.target
+        return nodeIds.has(sourceId) && nodeIds.has(targetId)
+      })
+      .map(link => ({...link}))
 
     // Update with new filtered data
     setGraphData(prev => {
@@ -105,6 +142,9 @@ function App() {
         links: filteredLinks,
       }
     })
+
+    // Clear question filter when using time filter
+    setSelectedQuestionId(null)
   }, [fullGraphData])
 
   // Load statistics
@@ -157,13 +197,16 @@ function App() {
     const visited = new Set([nodeId])
     const queue = [{ id: nodeId, depth: 0 }]
 
+    // Only use real links, not synthetic ones
+    const realLinks = fullGraphData.links.filter(link => !link.isSynthetic && link.type !== 'potentially_relevant')
+
     while (queue.length > 0) {
       const { id: currentId, depth: currentDepth } = queue.shift()
 
       if (currentDepth >= depth) continue
 
       // Find outgoing links
-      fullGraphData.links.forEach(link => {
+      realLinks.forEach(link => {
         const sourceId = typeof link.source === 'object' ? link.source.id : link.source
         const targetId = typeof link.target === 'object' ? link.target.id : link.target
 
@@ -180,21 +223,28 @@ function App() {
       })
     }
 
-    // Filter nodes and links
-    const neighborhoodNodes = fullGraphData.nodes.filter(n => visited.has(n.id))
-    const neighborhoodLinks = fullGraphData.links.filter(link => {
+    // Filter nodes and links, clear outcome markers
+    const neighborhoodNodes = fullGraphData.nodes
+      .filter(n => visited.has(n.id))
+      .map(node => ({
+        ...node,
+        isOutcome: false
+      }))
+
+    const neighborhoodLinks = realLinks.filter(link => {
       const sourceId = typeof link.source === 'object' ? link.source.id : link.source
       const targetId = typeof link.target === 'object' ? link.target.id : link.target
       return visited.has(sourceId) && visited.has(targetId)
-    })
+    }).map(link => ({...link}))
 
     setGraphData({
       nodes: neighborhoodNodes,
       links: neighborhoodLinks,
     })
 
-    // Clear time filter when showing neighborhood
+    // Clear time filter and question filter when showing neighborhood
     setTimeFilter(null)
+    setSelectedQuestionId(null)
   }
 
   // Handle time range change from timeline (client-side filtering)
@@ -205,8 +255,25 @@ function App() {
   // Handle question filter
   const handleQuestionFilter = useCallback(async (questionId, depth = 2) => {
     if (!questionId) {
-      // No filter, show all data
-      setGraphData(fullGraphData)
+      console.log('Clearing question filter - resetting to full graph')
+      // No filter, show all data and clear outcome markers
+      // Create fresh copies to ensure synthetic edges are removed
+      const resetNodes = fullGraphData.nodes.map(node => ({
+        ...node,
+        isOutcome: false
+      }))
+
+      // Filter out any synthetic links and create fresh copies
+      const resetLinks = fullGraphData.links
+        .filter(link => !link.isSynthetic && link.type !== 'potentially_relevant')
+        .map(link => ({...link}))
+
+      console.log(`Resetting graph: ${resetNodes.length} nodes, ${resetLinks.length} links (filtered from ${fullGraphData.links.length})`)
+
+      setGraphData({
+        nodes: resetNodes,
+        links: resetLinks
+      })
       setSelectedQuestionId(null)
       setTimeFilter(null)
       return
@@ -277,12 +344,56 @@ function App() {
         return visited.has(sourceId) && visited.has(targetId)
       })
 
-      console.log(`Final result: ${filteredNodes.length} nodes, ${filteredLinks.length} links`)
+      // Mark the outcome node (target_event_id)
+      const outcomeNodeId = question.target_event_id
+      if (outcomeNodeId) {
+        filteredNodes.forEach(node => {
+          if (node.id === outcomeNodeId) {
+            node.isOutcome = true
+          } else {
+            node.isOutcome = false
+          }
+        })
+      }
 
-      // Update with new filtered data
+      // Find orphaned nodes (nodes with no causal connections to other nodes)
+      const connectedNodeIds = new Set()
+      filteredLinks.forEach(link => {
+        const sourceId = typeof link.source === 'object' ? link.source.id : link.source
+        const targetId = typeof link.target === 'object' ? link.target.id : link.target
+        connectedNodeIds.add(sourceId)
+        connectedNodeIds.add(targetId)
+      })
+
+      // Identify orphaned nodes and create synthetic edges to outcome
+      const syntheticLinks = []
+      if (outcomeNodeId) {
+        filteredNodes.forEach(node => {
+          // Node is orphaned if it's not connected AND it's not the outcome itself
+          if (!connectedNodeIds.has(node.id) && node.id !== outcomeNodeId) {
+            console.log(`Creating synthetic edge from orphaned node ${node.id} to outcome ${outcomeNodeId}`)
+            syntheticLinks.push({
+              source: node.id,
+              target: outcomeNodeId,
+              type: 'potentially_relevant',
+              weight: 0.3,
+              label: 'potentially relevant',
+              properties: { synthetic: true },
+              isSynthetic: true
+            })
+          }
+        })
+      }
+
+      console.log(`Final result: ${filteredNodes.length} nodes, ${filteredLinks.length} real links, ${syntheticLinks.length} synthetic links`)
+
+      // Update with new filtered data including synthetic links
+      const combinedLinks = [...filteredLinks, ...syntheticLinks]
+      console.log('Setting graph data with links:', combinedLinks.length, 'total (', filteredLinks.length, 'real +', syntheticLinks.length, 'synthetic)')
+
       setGraphData({
         nodes: filteredNodes,
-        links: filteredLinks,
+        links: combinedLinks,
       })
 
       // Clear time filter when filtering by question
@@ -297,6 +408,15 @@ function App() {
       question.related_event_ids.forEach(id => seedEventIds.add(id))
 
       const filteredNodes = fullGraphData.nodes.filter(node => seedEventIds.has(node.id))
+
+      // Mark outcome node
+      const outcomeNodeId = question.target_event_id
+      if (outcomeNodeId) {
+        filteredNodes.forEach(node => {
+          node.isOutcome = node.id === outcomeNodeId
+        })
+      }
+
       const nodeIds = new Set(filteredNodes.map(n => n.id))
       const filteredLinks = fullGraphData.links.filter(link => {
         const sourceId = typeof link.source === 'object' ? link.source.id : link.source
@@ -304,7 +424,33 @@ function App() {
         return nodeIds.has(sourceId) && nodeIds.has(targetId)
       })
 
-      setGraphData({ nodes: filteredNodes, links: filteredLinks })
+      // Find orphaned nodes and create synthetic links
+      const connectedNodeIds = new Set()
+      filteredLinks.forEach(link => {
+        const sourceId = typeof link.source === 'object' ? link.source.id : link.source
+        const targetId = typeof link.target === 'object' ? link.target.id : link.target
+        connectedNodeIds.add(sourceId)
+        connectedNodeIds.add(targetId)
+      })
+
+      const syntheticLinks = []
+      if (outcomeNodeId) {
+        filteredNodes.forEach(node => {
+          if (!connectedNodeIds.has(node.id) && node.id !== outcomeNodeId) {
+            syntheticLinks.push({
+              source: node.id,
+              target: outcomeNodeId,
+              type: 'potentially_relevant',
+              weight: 0.3,
+              label: 'potentially relevant',
+              properties: { synthetic: true },
+              isSynthetic: true
+            })
+          }
+        })
+      }
+
+      setGraphData({ nodes: filteredNodes, links: [...filteredLinks, ...syntheticLinks] })
       setTimeFilter(null)
     }
   }, [fullGraphData, questions])
