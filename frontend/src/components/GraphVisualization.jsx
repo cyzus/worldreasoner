@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react'
 import ForceGraph2D from 'react-force-graph-2d'
+import * as d3 from 'd3'
 import ForceControls from './ForceControls'
 import './GraphVisualization.css'
 
@@ -83,16 +84,15 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
     // Charge force (electrostatic repulsion between all nodes)
     fg.d3Force('charge')
       ?.strength(forceSettings.chargeStrength)
-      ?.distanceMax(400) // Limit repulsion range
+      ?.distanceMax(600) // Increased range for better spacing
 
-    // Center force (strong pull toward center to prevent boundary clustering)
-    if (!fg.d3Force('center')) {
-      fg.d3Force('center', window.d3?.forceCenter?.(0, 0))
-    }
-    fg.d3Force('center')
-      ?.x(0)
-      ?.y(0)
-      ?.strength(forceSettings.centerStrength)
+    // Center force (keeps the graph centered in the view)
+    // We use a standard center force for viewport centering
+    fg.d3Force('center', d3.forceCenter(0, 0))
+
+    // Radial gravity (pulls nodes toward center)
+    // This is the "Center Gravity" control - using forceRadial for true gravity
+    fg.d3Force('gravity', d3.forceRadial(0, 0, 0).strength(forceSettings.centerStrength))
 
     // Wake up simulation to apply new force settings
     if (fg.d3ReheatSimulation) {
@@ -113,7 +113,8 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
     )
 
     // Add collision force to prevent overlap (D3 best practice)
-    fg.d3Force('collide', window.d3?.forceCollide?.(15)) // Smaller radius for tighter layout (was 15)
+    // Use dynamic radius based on node size + padding
+    fg.d3Force('collide', d3.forceCollide(node => Math.max(4, (node.size || 1) * 4) + 5).strength(0.7))
 
     // Add very gentle containment force with buffer zone
     fg.d3Force('contain', () => {
@@ -206,7 +207,15 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
       ctx.fill()
     }
 
-    // Draw node circle with gradient
+    // Draw node circle with gradient and shadow
+    ctx.save()
+    
+    // Add subtle shadow for depth
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.2)'
+    ctx.shadowBlur = 6 / globalScale
+    ctx.shadowOffsetX = 2 / globalScale
+    ctx.shadowOffsetY = 2 / globalScale
+
     ctx.beginPath()
     ctx.arc(node.x, node.y, nodeSize, 0, 2 * Math.PI, false)
 
@@ -214,21 +223,24 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
       node.x - nodeSize / 3, node.y - nodeSize / 3, 0,
       node.x, node.y, nodeSize
     )
-    nodeGradient.addColorStop(0, lightenColor(node.color || '#888', 20))
+    nodeGradient.addColorStop(0, lightenColor(node.color || '#888', 30))
     nodeGradient.addColorStop(1, node.color || '#888')
     ctx.fillStyle = nodeGradient
     ctx.fill()
+    
+    // Restore context to remove shadow for subsequent drawing
+    ctx.restore()
 
     // Add border (gold for outcome, dark for selected, light for others)
     if (isOutcome) {
       ctx.strokeStyle = '#FFC107' // Gold
       ctx.lineWidth = 3 / globalScale
     } else if (isSelected) {
-      ctx.strokeStyle = '#212529'
+      ctx.strokeStyle = '#0f172a' // Darker slate
       ctx.lineWidth = 3 / globalScale
     } else {
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)'
-      ctx.lineWidth = 1.5 / globalScale
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)' // White border for better contrast
+      ctx.lineWidth = 2 / globalScale
     }
     ctx.stroke()
 
@@ -421,8 +433,8 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
         linkDirectionalArrowRelPos={1}
         cooldownTicks={200}
         warmupTicks={0}
-        d3AlphaDecay={0.0228} // Default d3 value for smoother decay
-        d3VelocityDecay={0.6} // Increased friction to reduce jitter
+        d3AlphaDecay={0.01} // Slower decay for longer settling
+        d3VelocityDecay={0.3} // Lower friction for more fluid movement
         d3AlphaMin={0.001}
         onEngineStop={() => {
           // Let simulation rest when not interacting

@@ -2,59 +2,79 @@
   position: absolute;
   top: 20px;
   right: 20px;
-  background: #ffffff;
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
-  padding: 1rem;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 12px;
+  padding: 1.25rem;
   width: 280px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
   z-index: 10;
+  transition: all 0.3s ease;
+}
+
+.force-controls:hover {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
 }
 
 .force-controls-header {
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid #e9ecef;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .force-controls-header h3 {
   margin: 0;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: #212529;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .force-control-group {
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.force-control-group:last-child {
+  margin-bottom: 0;
 }
 
 .force-control-group label {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.6rem;
 }
 
 .control-label {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.8125rem;
-  color: #495057;
-  font-weight: 500;
+  font-size: 0.8rem;
+  color: #4a4a4a;
+  font-weight: 600;
 }
 
 .control-value {
-  color: #6c757d;
+  color: #2563eb;
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 700;
+  background: rgba(37, 99, 235, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
   min-width: 40px;
-  text-align: right;
+  text-align: center;
 }
 
 .force-control-group input[type="range"] {
   width: 100%;
   height: 4px;
-  background: #e9ecef;
+  background: #e2e8f0;
   border-radius: 2px;
   outline: none;
   -webkit-appearance: none;
@@ -64,40 +84,57 @@
 .force-control-group input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 16px;
-  height: 16px;
-  background: #495057;
+  width: 14px;
+  height: 14px;
+  background: #2563eb;
+  border: 2px solid #ffffff;
   border-radius: 50%;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.3);
 }
 
 .force-control-group input[type="range"]::-webkit-slider-thumb:hover {
-  background: #343a40;
-  transform: scale(1.1);
+  transform: scale(1.2);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
 }
 
 .force-control-group input[type="range"]::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  background: #495057;
+  width: 14px;
+  height: 14px;
+  background: #2563eb;
+  border: 2px solid #ffffff;
   border-radius: 50%;
   cursor: pointer;
   border: none;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.3);
 }
 
 .force-control-group input[type="range"]::-moz-range-thumb:hover {
-  background: #343a40;
-  transform: scale(1.1);
+  transform: scale(1.2);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
 }
 
 .reset-button {
   width: 100%;
-  padding: 0.5rem;
-  background: #f1f3f5;
-  border: 1px solid #dee2e6;
-  border-radius: 6px;
+  padding: 0.6rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  color: #64748b;
+  font-weight: 600;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 0.5rem;
+}
+
+.reset-button:hover {
+  background: #f1f5f9;
+  color: #334155;
+  border-color: #cbd5e1;
+}
   color: #495057;
   font-size: 0.8125rem;
   font-weight: 600;
