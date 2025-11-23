@@ -464,7 +464,6 @@ function App() {
     <div className="app">
       <header className="app-header">
         <h1>WorldReasoner</h1>
-        <p>Causal Graph Visualization</p>
         {statistics && (
           <div className="stats-bar">
             <span>{statistics.total_nodes} events</span>

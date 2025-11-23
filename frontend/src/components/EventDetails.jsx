@@ -78,75 +78,56 @@ const EventDetails = ({ node, onClose, onShowNeighborhood }) => {
   return (
     <div className="event-details">
       <div className="details-header">
+        <div className="header-top">
+          <span className={`node-type-badge ${node.type.toLowerCase()}`}>{node.type}</span>
+          <button className="close-btn" onClick={onClose} aria-label="Close details">
+            ×
+          </button>
+        </div>
         <h3>{node.name}</h3>
-        <button className="close-btn" onClick={onClose}>
-          ×
-        </button>
       </div>
 
       <div className="details-content">
-        <div className="detail-row">
-          <span className="label">Type:</span>
-          <span className="value">{node.type}</span>
-        </div>
+        <div className="metrics-grid">
+          <div className="metric-item">
+            <span className="metric-label">Importance</span>
+            <span className="metric-value">{node.properties?.importance?.toFixed(2) || 'N/A'}</span>
+          </div>
+          
+          {(node.properties?.occurred_date || node.properties?.predicted_date) && (
+            <div className="metric-item">
+              <span className="metric-label">Date</span>
+              <span className="metric-value">
+                {formatDate(node.properties?.occurred_date || node.properties?.predicted_date)}
+              </span>
+            </div>
+          )}
 
-        <div className="detail-row">
-          <span className="label">Importance:</span>
-          <span className="value">{node.properties?.importance?.toFixed(2) || 'N/A'}</span>
+          {node.properties?.status && (
+            <div className="metric-item">
+              <span className="metric-label">Status</span>
+              <span className="metric-value status-value">{node.properties.status}</span>
+            </div>
+          )}
         </div>
 
         {node.properties?.description && (
-          <div className="detail-row">
-            <span className="label">Description:</span>
-            <span className="value">{node.properties.description}</span>
+          <div className="description-block">
+            <h4>Description</h4>
+            <p>{node.properties.description}</p>
           </div>
         )}
-
-        {node.properties?.occurred_date && (
-          <div className="detail-row">
-            <span className="label">Occurred:</span>
-            <span className="value">{formatDate(node.properties.occurred_date)}</span>
-          </div>
-        )}
-
-        {node.properties?.predicted_date && (
-          <div className="detail-row">
-            <span className="label">Predicted:</span>
-            <span className="value">{formatDate(node.properties.predicted_date)}</span>
-          </div>
-        )}
-
-        {node.properties?.event_type && (
-          <div className="detail-row">
-            <span className="label">Event Type:</span>
-            <span className="value">{node.properties.event_type}</span>
-          </div>
-        )}
-
-        {node.properties?.status && (
-          <div className="detail-row">
-            <span className="label">Status:</span>
-            <span className="value">{node.properties.status}</span>
-          </div>
-        )}
-
-        <div className="detail-row">
-          <span className="label">Causes:</span>
-          <span className="value">{node.properties?.num_causes || 0} events</span>
-        </div>
-
-        <div className="detail-row">
-          <span className="label">Caused by:</span>
-          <span className="value">{node.properties?.num_caused_by || 0} events</span>
-        </div>
 
         <div className="expandable-section">
           <button
-            className="section-toggle"
+            className={`section-toggle ${showArticles ? 'active' : ''}`}
             onClick={() => setShowArticles(!showArticles)}
           >
-            <span className="toggle-icon">{showArticles ? '▼' : '▶'}</span>
-            Related Articles {articlesLoaded ? `(${articles.length})` : ''}
+            <span className="toggle-text">Related Articles</span>
+            <span className="toggle-meta">
+              {articlesLoaded ? articles.length : ''}
+              <span className="toggle-icon">{showArticles ? '−' : '+'}</span>
+            </span>
           </button>
 
           {showArticles && (
@@ -158,13 +139,13 @@ const EventDetails = ({ node, onClose, onShowNeighborhood }) => {
               ) : (
                 <div className="articles-list">
                   {articles.map(article => (
-                    <div key={article.id} className="article-item">
+                    <div key={article.id} className="article-card">
                       <div className="article-header">
                         <h4 className="article-title">{article.title}</h4>
                         <span className="article-date">{formatDate(article.published_date)}</span>
                       </div>
-                      <div className="article-source">{article.source}</div>
-                      <div className="article-content">{truncateText(article.content)}</div>
+                      <div className="article-source-badge">{article.source}</div>
+                      <p className="article-excerpt">{truncateText(article.content)}</p>
                       {article.url && (
                         <a
                           href={article.url}
@@ -172,7 +153,7 @@ const EventDetails = ({ node, onClose, onShowNeighborhood }) => {
                           rel="noopener noreferrer"
                           className="article-link"
                         >
-                          Read more →
+                          Read Source ↗
                         </a>
                       )}
                     </div>
@@ -185,11 +166,14 @@ const EventDetails = ({ node, onClose, onShowNeighborhood }) => {
 
         <div className="expandable-section">
           <button
-            className="section-toggle"
+            className={`section-toggle ${showQuestions ? 'active' : ''}`}
             onClick={() => setShowQuestions(!showQuestions)}
           >
-            <span className="toggle-icon">{showQuestions ? '▼' : '▶'}</span>
-            Related Questions {questionsLoaded ? `(${questions.length})` : ''}
+            <span className="toggle-text">Related Questions</span>
+            <span className="toggle-meta">
+              {questionsLoaded ? questions.length : ''}
+              <span className="toggle-icon">{showQuestions ? '−' : '+'}</span>
+            </span>
           </button>
 
           {showQuestions && (
@@ -201,15 +185,14 @@ const EventDetails = ({ node, onClose, onShowNeighborhood }) => {
               ) : (
                 <div className="questions-list">
                   {questions.map(question => (
-                    <div key={question.id} className="question-item">
+                    <div key={question.id} className="question-card">
                       <div className="question-text">{question.question_text}</div>
-                      <div className="question-meta">
-                        <span className="question-domain">{question.domain}</span>
-                        <span className="question-type">{question.question_type}</span>
-                        <span className="question-difficulty">Difficulty: {question.difficulty}/5</span>
+                      <div className="question-tags">
+                        <span className="tag domain">{question.domain}</span>
+                        <span className="tag difficulty">Diff: {question.difficulty}/5</span>
                       </div>
                       {question.resolution_date && (
-                        <div className="question-resolution">
+                        <div className="question-footer">
                           Resolution: {formatDate(question.resolution_date)}
                         </div>
                       )}
@@ -221,13 +204,16 @@ const EventDetails = ({ node, onClose, onShowNeighborhood }) => {
           )}
         </div>
 
-        <div className="button-group">
-          <button onClick={() => onShowNeighborhood(node.id, 1)}>
-            Show Immediate Links
-          </button>
-          <button onClick={() => onShowNeighborhood(node.id, 2)}>
-            Show 2-Hop Neighborhood
-          </button>
+        <div className="actions-footer">
+          <h4>Explore Neighborhood</h4>
+          <div className="button-group">
+            <button className="action-btn primary" onClick={() => onShowNeighborhood(node.id, 1)}>
+              Immediate Links
+            </button>
+            <button className="action-btn secondary" onClick={() => onShowNeighborhood(node.id, 2)}>
+              2-Hop Network
+            </button>
+          </div>
         </div>
       </div>
     </div>
