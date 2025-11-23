@@ -236,7 +236,11 @@ function App() {
       const sourceId = typeof link.source === 'object' ? link.source.id : link.source
       const targetId = typeof link.target === 'object' ? link.target.id : link.target
       return visited.has(sourceId) && visited.has(targetId)
-    }).map(link => ({...link}))
+    }).map(link => ({
+      ...link,
+      source: typeof link.source === 'object' ? link.source.id : link.source,
+      target: typeof link.target === 'object' ? link.target.id : link.target
+    }))
 
     setGraphData({
       nodes: neighborhoodNodes,
