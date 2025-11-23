@@ -23,34 +23,35 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
 
   // Preserve node positions when filtering to prevent jarring movements
   useEffect(() => {
+    // Restore positions for new nodes from the ref
     if (graphData.nodes.length > 0) {
-      // Save positions of current nodes
       graphData.nodes.forEach(node => {
         if (previousNodesRef.current.has(node.id)) {
-          // Restore previous position if this node existed before
           const prevNode = previousNodesRef.current.get(node.id)
-          node.x = prevNode.x
-          node.y = prevNode.y
-          node.vx = prevNode.vx || 0
-          node.vy = prevNode.vy || 0
+          // Only restore if valid
+          if (Number.isFinite(prevNode.x) && Number.isFinite(prevNode.y)) {
+            node.x = prevNode.x
+            node.y = prevNode.y
+            node.vx = prevNode.vx || 0
+            node.vy = prevNode.vy || 0
+          }
         }
-        // IMPORTANT: Never save or restore fx/fy - they should only be set during active drag
-        // Update the map with current position (only x, y, vx, vy - NOT fx/fy)
-        previousNodesRef.current.set(node.id, {
-          x: node.x,
-          y: node.y,
-          vx: node.vx,
-          vy: node.vy
-        })
       })
+    }
 
-      // Clean up nodes that no longer exist
-      const currentIds = new Set(graphData.nodes.map(n => n.id))
-      for (const [id, _] of previousNodesRef.current) {
-        if (!currentIds.has(id)) {
-          previousNodesRef.current.delete(id)
+    // Save positions of the CURRENT nodes when this effect is cleaned up (i.e., before next update)
+    return () => {
+      graphData.nodes.forEach(node => {
+        // Only save if valid coordinates exist
+        if (Number.isFinite(node.x) && Number.isFinite(node.y)) {
+          previousNodesRef.current.set(node.id, {
+            x: node.x,
+            y: node.y,
+            vx: node.vx,
+            vy: node.vy
+          })
         }
-      }
+      })
     }
   }, [graphData])
 
