@@ -207,15 +207,7 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
       ctx.fill()
     }
 
-    // Draw node circle with gradient and shadow
-    ctx.save()
-    
-    // Add subtle shadow for depth
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.2)'
-    ctx.shadowBlur = 6 / globalScale
-    ctx.shadowOffsetX = 2 / globalScale
-    ctx.shadowOffsetY = 2 / globalScale
-
+    // Draw node circle with gradient
     ctx.beginPath()
     ctx.arc(node.x, node.y, nodeSize, 0, 2 * Math.PI, false)
 
@@ -223,24 +215,21 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
       node.x - nodeSize / 3, node.y - nodeSize / 3, 0,
       node.x, node.y, nodeSize
     )
-    nodeGradient.addColorStop(0, lightenColor(node.color || '#888', 30))
+    nodeGradient.addColorStop(0, lightenColor(node.color || '#888', 20))
     nodeGradient.addColorStop(1, node.color || '#888')
     ctx.fillStyle = nodeGradient
     ctx.fill()
-    
-    // Restore context to remove shadow for subsequent drawing
-    ctx.restore()
 
     // Add border (gold for outcome, dark for selected, light for others)
     if (isOutcome) {
       ctx.strokeStyle = '#FFC107' // Gold
       ctx.lineWidth = 3 / globalScale
     } else if (isSelected) {
-      ctx.strokeStyle = '#0f172a' // Darker slate
+      ctx.strokeStyle = '#212529'
       ctx.lineWidth = 3 / globalScale
     } else {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)' // White border for better contrast
-      ctx.lineWidth = 2 / globalScale
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)'
+      ctx.lineWidth = 1.5 / globalScale
     }
     ctx.stroke()
 
@@ -344,6 +333,17 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
     const clampedScale = Math.max(0.3, Math.min(0.8, globalScale))
     const arrowLength = 10 * clampedScale
     const arrowWidth = 6 * clampedScale
+
+    // Don't draw if nodes are too close (prevents glitches during initialization)
+    if (distance < startNodeSize + endNodeSize + arrowLength) {
+      return
+    }
+
+    // Don't draw if either node is effectively invisible (e.g. during transitions)
+    // This prevents "ghost edges" connecting to nodes that haven't faded in yet
+    if (start.opacity === 0 || end.opacity === 0) {
+      return
+    }
 
     // Adjust start and end points to account for node size and arrow
     const startX = start.x + (startNodeSize * Math.cos(angle))

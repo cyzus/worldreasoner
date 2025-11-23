@@ -128,19 +128,20 @@ function App() {
         const targetId = typeof link.target === 'object' ? link.target.id : link.target
         return nodeIds.has(sourceId) && nodeIds.has(targetId)
       })
-      .map(link => ({...link}))
+      .map(link => {
+        // Create a shallow copy to avoid mutating the original link object
+        // This forces react-force-graph to re-process the link
+        return {
+          ...link,
+          source: typeof link.source === 'object' ? link.source.id : link.source,
+          target: typeof link.target === 'object' ? link.target.id : link.target
+        }
+      })
 
     // Update with new filtered data
-    setGraphData(prev => {
-      // Check if data actually changed to avoid unnecessary updates
-      if (prev.nodes.length === filteredNodes.length &&
-          prev.links.length === filteredLinks.length) {
-        return prev // Return same reference if no change
-      }
-      return {
-        nodes: filteredNodes,
-        links: filteredLinks,
-      }
+    setGraphData({
+      nodes: filteredNodes,
+      links: filteredLinks,
     })
 
     // Clear question filter when using time filter

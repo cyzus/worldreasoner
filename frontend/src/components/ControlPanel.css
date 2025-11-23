@@ -1,122 +1,122 @@
 .control-panel {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(12px);
-  border-right: 1px solid rgba(0, 0, 0, 0.06);
+  background: #ffffff;
+  border-right: 1px solid #dee2e6;
   display: flex;
   flex-direction: column;
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.04);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
   position: relative;
-  z-index: 20;
+  z-index: 5;
+  overflow: hidden; /* Ensure content doesn't spill during transition */
 }
 
 .control-panel.expanded {
-  width: 320px;
+  width: 300px;
 }
 
 .control-panel.collapsed {
-  width: 64px;
+  width: 48px; /* Thinner collapsed state */
 }
 
 .panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.5rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  background: rgba(248, 250, 252, 0.5);
+  padding: 1.25rem;
+  border-bottom: 1px solid #dee2e6;
+  background: #f8f9fa;
+  min-height: 65px; /* Fixed height to prevent jumping */
+  box-sizing: border-box;
+  white-space: nowrap; /* Prevent text wrapping */
 }
 
 .panel-header h3 {
-  color: #0f172a;
-  font-size: 1rem;
-  font-weight: 700;
+  color: #212529;
+  font-size: 1.125rem;
+  font-weight: 600;
   margin: 0;
-  letter-spacing: -0.01em;
-  text-transform: uppercase;
+  letter-spacing: -0.3px;
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+.control-panel.collapsed .panel-header h3 {
+  opacity: 0;
+  width: 0;
+  margin: 0;
+  overflow: hidden;
 }
 
 .toggle-btn {
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  color: #64748b;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #495057;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
+  padding: 0;
 }
 
 .toggle-btn:hover {
-  background: #e2e8f0;
-  color: #334155;
-  transform: scale(1.05);
+  background: #e9ecef;
+  color: #212529;
+}
+
+.control-panel.collapsed .toggle-btn {
+  margin: 0 auto; /* Center button when collapsed */
+  width: 100%;
+  height: 100%;
 }
 
 .panel-content {
-  padding: 1.5rem;
+  padding: 1.25rem;
   overflow-y: auto;
   flex: 1;
+  overflow-x: hidden;
+  opacity: 1;
+  transition: opacity 0.2s ease;
 }
 
-/* Custom scrollbar */
-.panel-content::-webkit-scrollbar {
-  width: 6px;
-}
-
-.panel-content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.panel-content::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 3px;
+.control-panel.collapsed .panel-content {
+  display: none;
+  opacity: 0;
 }
 
 .filter-section {
-  margin-bottom: 2rem;
+  margin-bottom: 1.75rem;
 }
 
 .filter-section label {
   display: block;
-  color: #64748b;
-  font-size: 0.75rem;
-  margin-bottom: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
+  color: #495057;
+  font-size: 0.8125rem;
+  margin-bottom: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
   text-transform: uppercase;
 }
 
 .filter-section select {
   width: 100%;
   background: #ffffff;
-  border: 1px solid #e2e8f0;
-  color: #334155;
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
+  border: 1px solid #ced4da;
+  color: #212529;
+  padding: 0.625rem 0.75rem;
+  border-radius: 6px;
   font-size: 0.875rem;
-  font-weight: 500;
   transition: all 0.2s ease;
-  cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 1rem center;
-  background-size: 1rem;
-}
-
-.filter-section select:hover {
-  border-color: #cbd5e1;
 }
 
 .filter-section select:focus {
   outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: #495057;
+  box-shadow: 0 0 0 3px rgba(73, 80, 87, 0.1);
 }
 
 .filter-section select option {
