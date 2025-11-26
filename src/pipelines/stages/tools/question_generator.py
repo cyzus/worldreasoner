@@ -45,9 +45,11 @@ class QuestionGeneratorTool(Tool):
         },
         "difficulty": {"type": "integer", "description": "Difficulty level 1-5"},
         "resolution_date": {"type": "string", "description": "When question can be resolved (ISO format)"},
-        "resolution_criteria": {"type": "string", "description": "How to resolve the question or what makes the provided answer correct"},
+        "resolution_criteria": {"type": "string", "description": "Objective rules for how to verify/resolve this question"},
         "related_event_ids": {"type": "string", "description": "Comma-separated event IDs", "nullable": True},
         "ground_truth": {"type": "string", "description": "Answer if already resolved", "nullable": True},
+        "resolution_reasoning": {"type": "string", "description": "Evidence/explanation for why ground_truth is what it is (only if ground_truth is provided)", "nullable": True},
+        "context": {"type": "string", "description": "Optional background information to help understand the question", "nullable": True},
         "options": {"type": "string", "description": "For MCQ: comma-separated answer choices", "nullable": True},
         "quantity_unit": {"type": "string", "description": "For quantity: unit (e.g., USD, users, GW)", "nullable": True},
         "quantity_bounds": {"type": "string", "description": "For quantity: range as min:X,max:Y", "nullable": True},
@@ -78,6 +80,8 @@ class QuestionGeneratorTool(Tool):
         resolution_criteria: str,
         related_event_ids: str = None,
         ground_truth: str = None,
+        resolution_reasoning: str = None,
+        context: str = None,
         options: str = None,
         quantity_unit: str = None,
         quantity_bounds: str = None
@@ -90,9 +94,11 @@ class QuestionGeneratorTool(Tool):
             domain: Question domain (string, will be converted to enum)
             difficulty: Difficulty level
             resolution_date: When question can be resolved
-            resolution_criteria: How to resolve
+            resolution_criteria: Objective rules for how to verify/resolve this question
             related_event_ids: Optional comma-separated event IDs
             ground_truth: Optional answer if resolved
+            resolution_reasoning: Optional evidence/explanation for why ground_truth is what it is (only if ground_truth provided)
+            context: Optional background information to help understand the question
             options: Optional MCQ choices (comma-separated)
             quantity_unit: Optional unit for quantity questions
             quantity_bounds: Optional bounds for quantity questions
@@ -139,6 +145,25 @@ class QuestionGeneratorTool(Tool):
                             f"NEVER put future dates in ground_truth. If outcome is unknown, don't create this question."
                         )
                         return json.dumps({"error": error_msg, "status": "rejected"})
+
+        # CRITICAL VALIDATION: If ground_truth provided, resolution_reasoning must be provided
+        if ground_truth and not resolution_reasoning:
+            error_msg = (
+                f"REJECTED: ground_truth provided but resolution_reasoning is missing.\n"
+                f"When a question has a known answer (ground_truth), you MUST provide resolution_reasoning.\n"
+                f"The resolution_reasoning should explain the evidence/sources that confirm this answer.\n"
+                f"Example: 'Based on CoinMarketCap data showing BTC closed at $95,431 on Dec 31, 2024'"
+            )
+            return json.dumps({"error": error_msg, "status": "rejected"})
+
+        # VALIDATION: If resolution_reasoning provided without ground_truth, reject
+        if resolution_reasoning and not ground_truth:
+            error_msg = (
+                f"REJECTED: resolution_reasoning provided but ground_truth is missing.\n"
+                f"You can only provide resolution_reasoning for questions that have been resolved (have ground_truth).\n"
+                f"For unresolved questions, omit resolution_reasoning."
+            )
+            return json.dumps({"error": error_msg, "status": "rejected"})
 
         # Parse event IDs
         event_ids = []
@@ -200,7 +225,9 @@ class QuestionGeneratorTool(Tool):
             ground_truth=normalized_ground_truth,  # Use normalized value
             target_event_id=event_ids[0] if event_ids else None,
             related_event_ids=event_ids,
-            context=resolution_criteria,  # Use criteria as context
+            context=context,  # Optional background information
+            resolution_criteria=resolution_criteria,  # How to verify/resolve
+            resolution_reasoning=resolution_reasoning,  # Why ground_truth is what it is (if resolved)
             is_synthetic=False,
             options=options_list,  # For MCQ questions
             quantity_unit=quantity_unit,  # For quantity questions

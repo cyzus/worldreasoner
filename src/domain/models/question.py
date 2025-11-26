@@ -67,6 +67,14 @@ class Question(BaseModel):
         None,
         description="Background information provided to forecaster"
     )
+    resolution_criteria: Optional[str] = Field(
+        None,
+        description="Objective rules for how to verify/resolve this question (e.g., 'Based on CoinMarketCap closing price on Dec 31, 2024')"
+    )
+    resolution_reasoning: Optional[str] = Field(
+        None,
+        description="Evidence and explanation for why the ground_truth is what it is (only for resolved questions)"
+    )
     options: Optional[List[str]] = Field(
         None,
         description="Options for MCQ questions"

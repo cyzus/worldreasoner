@@ -59,20 +59,42 @@ Generate EXACTLY in this order:
 
 ⚠️ CRITICAL: Alternate Boolean answers YES/NO/YES/NO to avoid bias!
 
-QUESTION TYPES & EXAMPLES:
+GOAL: Generate questions people would actually want to forecast on (like Polymarket)
 
-Boolean: "Will Bitcoin exceed $100K by Dec 31, 2024?" (specific threshold + deadline)
-MCQ: "Who will win 2024 election: Trump, Harris, or Other?" (3-5 options + "Other")
-Quantity: "Will Tesla deliver over 500K vehicles in Q4 2024?" (numerical threshold)
-Timeframe: "When will Apple announce iPhone 15: Q3 2024, Q4 2024, or 2025+?" (date ranges)
+EVENT SELECTION - What topics are interesting?
+Focus on: Elections, major companies (Apple/Tesla/Google), crypto milestones, policy changes, product launches, sports
+Skip: Niche legal disputes, corporate trivia, insider knowledge required, minor settlements
 
-QUALITY STANDARDS:
-✓ Specific, measurable criteria  ✗ Vague ("Will AI improve?")
-✓ Clear resolution source         ✗ Subjective ("Will movie be good?")
-✓ Natural deadlines (end of Q4)   ✗ Arbitrary dates (Oct 27 at 3pm)
-✓ Verifiable outcomes              ✗ Unprovable claims
+QUESTION FRAMING PRINCIPLES:
 
-Use {tool_name} to save each question. Return brief summary when done.""",
+1. Ask IF something will happen - don't assume outcomes
+   - Ask: "Will Bitcoin exceed $100K by year end?"
+   - NOT: "Which company will be ordered to pay X..." (assumes ordering happens)
+   - NOT: "Which person will Trump call a traitor..." (assumes negative event)
+
+2. MCQ options must be contextually relevant to the actual event
+   - If asking about Apple vs Masimo, don't list Samsung/Fitbit (they're not involved)
+   - Use actual competitors, candidates, or stakeholders from the event
+
+3. Use round milestone numbers that people track
+   - Use: $100K, $1M, $10M, $100M, $1B, 100K users, 1M vehicles
+   - NOT: $142M, $847K, 142,387 users (oddly specific)
+
+4. Questions should have broad appeal
+   - Would the average informed person care about this outcome?
+   - Is this something discussed in mainstream news/social media?
+
+QUALITY CHECKLIST:
+✓ Specific, measurable criteria
+✓ Clear, objective resolution source
+✓ Natural deadlines (end of quarter/year)
+✓ Verifiable outcomes
+✓ Round milestone numbers
+✓ Broad public interest
+
+Use {tool_name} to save each question.
+
+Call final_answer only after you finish the task.""",
         required_vars=["num_events", "events_text", "max_questions", "current_date", "min_resolution_date"],
         optional_vars={
             "domain_filter": "",
@@ -110,20 +132,42 @@ Generate EXACTLY in this order:
 
 ⚠️ BALANCE: Make ~50% Boolean likely YES, ~50% likely NO (avoid all-positive bias)
 
-QUESTION TYPES & EXAMPLES:
+GOAL: Generate questions people would actually want to forecast on (like Polymarket)
 
-Boolean: "Will Bitcoin exceed $150K by Dec 31, 2025?" (specific threshold + future deadline)
-MCQ: "Which company will IPO first: Stripe, SpaceX, Databricks, or Other?" (3-5 options + "Other")
-Quantity: "Will ChatGPT reach 500M users by June 2025?" (numerical threshold)
-Timeframe: "When will Apple announce iPhone 17: Q1, Q2, Q3, Q4 2025, or 2026+?" (date ranges)
+EVENT SELECTION - What topics are interesting?
+Focus on: Elections, major companies (Apple/Tesla/Google), crypto milestones, policy changes, product launches, sports
+Skip: Niche legal disputes, corporate trivia, insider knowledge required, minor settlements
 
-QUALITY STANDARDS:
-✓ Specific, measurable criteria  ✗ Vague ("Will crypto improve?")
-✓ Clear resolution source         ✗ Subjective ("Will product succeed?")
-✓ Natural deadlines (end of Q2)   ✗ Arbitrary dates (June 17 at 2pm)
-✓ Verifiable outcomes              ✗ Unprovable claims
+QUESTION FRAMING PRINCIPLES:
 
-Use {tool_name} to save each question. Return brief summary when done.""",
+1. Ask IF something will happen - don't assume outcomes
+   - Ask: "Will Bitcoin exceed $150K by year end?"
+   - NOT: "Which company will be ordered to pay X..." (assumes ordering happens)
+   - NOT: "Which person will [negative action]..." (assumes negative event)
+
+2. MCQ options must be contextually relevant to the actual event
+   - Use actual competitors, candidates, or stakeholders from the event
+   - Don't list random companies/people not involved in the event
+
+3. Use round milestone numbers that people track
+   - Use: $100K, $1M, $10M, $100M, $1B, 100K users, 1M vehicles
+   - NOT: $142M, $847K, 142,387 users (oddly specific)
+
+4. Questions should have broad appeal
+   - Would the average informed person care about this outcome?
+   - Is this something discussed in mainstream news/social media?
+
+QUALITY CHECKLIST:
+✓ Specific, measurable criteria
+✓ Clear, objective resolution source
+✓ Natural deadlines (end of quarter/year)
+✓ Verifiable outcomes
+✓ Round milestone numbers
+✓ Broad public interest
+
+Use {tool_name} to save each question. 
+
+Call final_answer only after you finish the task.""",
         required_vars=["num_events", "events_text", "max_questions", "current_date", "max_resolution_date"],
         optional_vars={
             "domain_filter": "",

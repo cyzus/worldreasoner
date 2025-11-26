@@ -24,9 +24,14 @@ Article {idx} (ID: {article_id}):
     
     # Template for the main identification instruction
     IDENTIFICATION_TEMPLATE = PromptTemplate(
-        template="""Analyze the following {num_articles} articles and identify significant events mentioned.
+        template="""Analyze the following {num_articles} articles and identify events that would make good forecast questions.
 
 {articles_text}
+
+FOCUS ON events about:
+- Elections, major companies (Apple/Tesla/Google), crypto/stock milestones, product launches, sports
+SKIP:
+- Niche legal disputes, minor corporate changes, insider-knowledge topics
 
 For each event you identify:
 1. Retrieve associated article details if helpful.
@@ -35,7 +40,8 @@ For each event you identify:
 4. Include the article ID in source_article_ids
 
 Only include events with confidence >= {confidence_threshold}.
-Return a summary when done.""",
+
+Call final_answer only after you finish the task.""",
         required_vars=["num_articles", "articles_text", "confidence_threshold"],
         optional_vars={"tool_name": "event_identifier"}
     )
