@@ -316,6 +316,7 @@ class PolymarketRunner(QuestionSourceRunner):
                     skipped_future_close = 0  # Markets with closedTime in the future
                     skipped_no_close_time = 0  # Markets without closedTime/umaEndDate
                     skipped_volume = 0
+                    skipped_scalar = 0  # Scalar markets (price predictions)
                     failed_parse = 0
 
                     for market in market_list:
@@ -432,9 +433,34 @@ class PolymarketRunner(QuestionSourceRunner):
                             # Use description as resolution criteria, with fallback
                             resolution_criteria = description if description else f"See https://polymarket.com/event/{market.get('slug', '')}"
 
-                            # Gamma API doesn't provide outcomes directly - assume binary for now
-                            # More complex markets would need additional API calls
-                            question_type = "boolean"
+                            # Parse actual outcomes from the API
+                            try:
+                                outcomes_str = market.get("outcomes", '["Yes", "No"]')
+                                outcomes = json.loads(outcomes_str)
+                                if not isinstance(outcomes, list) or len(outcomes) == 0:
+                                    outcomes = ["Yes", "No"]  # Fallback
+                            except Exception as e:
+                                logger.debug(f"Failed to parse outcomes for market {market.get('question', 'unknown')}: {e}")
+                                outcomes = ["Yes", "No"]  # Fallback
+
+                            # Determine question type based on market type and outcomes content
+                            market_type = market.get("marketType", "normal")
+                            if market_type == "normal":
+                                # Check if it's a true boolean (Yes/No) or binary MCQ
+                                if outcomes == ["Yes", "No"]:
+                                    question_type = "boolean"
+                                else:
+                                    question_type = "multiple_choice"
+                            elif market_type == "scalar":
+                                # Skip scalar markets (price predictions) - not suitable for forecasting questions
+                                skipped_scalar += 1
+                                continue
+                            else:
+                                # Unknown market type, check outcomes as fallback
+                                if outcomes == ["Yes", "No"]:
+                                    question_type = "boolean"
+                                else:
+                                    question_type = "multiple_choice"
 
                             # Extract ground truth for resolved markets
                             ground_truth = None
@@ -475,7 +501,7 @@ class PolymarketRunner(QuestionSourceRunner):
                                 volume_usd=volume if volume > 0 else None,
                                 liquidity_usd=market.get("liquidityNum"),
                                 category=market.get("category"),  # Gamma provides category directly
-                                options=["Yes", "No"],  # Default for binary markets
+                                options=outcomes,  # Use actual outcomes from API
                                 metadata={
                                     "market_slug": market.get("slug"),
                                     "tags": market.get("tags", []),
@@ -498,13 +524,13 @@ class PolymarketRunner(QuestionSourceRunner):
                             f"Polymarket parsing: {parsed_count} markets parsed, "
                             f"{skipped_not_closed} not closed/resolved, {skipped_no_close_time} no resolution time, "
                             f"{skipped_past} too old, {skipped_future_close} future closedTime, "
-                            f"{skipped_volume} low volume, {failed_parse} failed"
+                            f"{skipped_volume} low volume, {skipped_scalar} scalar markets, {failed_parse} failed"
                         )
                     else:
                         logger.info(
                             f"Polymarket parsing: {parsed_count} markets parsed, "
                             f"{skipped_closed} already closed, {skipped_past} wrong date, "
-                            f"{skipped_volume} low volume, {failed_parse} failed"
+                            f"{skipped_volume} low volume, {skipped_scalar} scalar markets, {failed_parse} failed"
                         )
 
         except Exception as e:
