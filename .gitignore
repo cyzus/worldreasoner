@@ -221,3 +221,4 @@ temporal_analysis/
 # Test artifacts
 test-dbs/
 test-output/
+config/collection_goal.yaml
