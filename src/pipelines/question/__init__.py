@@ -5,7 +5,6 @@ from .sources import (
     QuestionSourceRunner,
     CollectionResult,
     PolymarketRunner,
-    MetaculusRunner,
     NewsBasedRunner,
 )
 
@@ -15,6 +14,5 @@ __all__ = [
     "QuestionSourceRunner",
     "CollectionResult",
     "PolymarketRunner",
-    "MetaculusRunner",
     "NewsBasedRunner",
 ]

@@ -11,6 +11,8 @@ from pydantic import BaseModel
 
 from .base import QuestionSourceRunner, CollectionResult
 from src.domain.models import Question
+from src.domain.models.domain import Domain
+from src.domain.models.question import QuestionType
 from src.config.collection_goal import QualityRequirements
 from src.utils.logging import logger
 
@@ -39,11 +41,31 @@ class PolymarketRunner(QuestionSourceRunner):
     # Use Gamma API as per official documentation
     API_BASE = "https://gamma-api.polymarket.com"
 
+    # Default type mapping (maps market types to QuestionType enum values)
+    DEFAULT_TYPE_MAP = {
+        "boolean": QuestionType.BOOLEAN,
+        "binary": QuestionType.BOOLEAN,
+        "multiple_choice": QuestionType.MCQ,
+    }
+
+    # Default category to domain mapping
+    DEFAULT_CATEGORY_MAP = {
+        "finance": Domain.FINANCE,
+        "technology": Domain.TECH,
+        "tech": Domain.TECH,
+        "politics": Domain.POLITICS,
+        "science": Domain.HEALTH,  # Map science to health for now
+        "sports": Domain.SPORTS,
+        "other": Domain.GENERAL,
+    }
+
     def __init__(
         self,
         min_volume_usd: float = 0.0,  # Relaxed - many markets lack volume data
         use_agent_enhancement: bool = True,
         require_ground_truth: bool = True,
+        type_map: Optional[Dict[str, QuestionType]] = None,
+        category_map: Optional[Dict[str, Domain]] = None,
     ):
         """Initialize Polymarket runner.
 
@@ -51,11 +73,15 @@ class PolymarketRunner(QuestionSourceRunner):
             min_volume_usd: Minimum trading volume filter (0 = no filter)
             use_agent_enhancement: Use LLM agent to categorize and enhance questions
             require_ground_truth: If True, fetch resolved markets with outcomes. If False, fetch active future markets.
+            type_map: Custom mapping from market question types to QuestionType enum values (uses DEFAULT_TYPE_MAP if not provided)
+            category_map: Custom mapping from market categories to Domain enum values (uses DEFAULT_CATEGORY_MAP if not provided)
         """
         super().__init__(source_name="polymarket")
         self.min_volume_usd = min_volume_usd
         self.use_agent_enhancement = use_agent_enhancement
         self.require_ground_truth = require_ground_truth
+        self.type_map = type_map or self.DEFAULT_TYPE_MAP
+        self.category_map = category_map or self.DEFAULT_CATEGORY_MAP
 
     async def collect(
         self,
@@ -269,6 +295,11 @@ class PolymarketRunner(QuestionSourceRunner):
 
                     logger.info(f"Polymarket Gamma API returned {len(market_list)} markets")
 
+                    # Sort by volume (descending) to prioritize high-quality, liquid markets
+                    # Volume is in volumeNum field
+                    market_list.sort(key=lambda m: float(m.get('volumeNum', 0) or 0), reverse=True)
+                    logger.info(f"Sorted markets by volume (highest first)")
+
                     # Log filtering criteria for ground truth
                     if self.require_ground_truth:
                         from datetime import timedelta
@@ -459,27 +490,8 @@ class PolymarketRunner(QuestionSourceRunner):
         Returns:
             Question instance
         """
-        from src.domain.models.domain import Domain
-
-        # Map question types
-        type_map = {
-            "boolean": "boolean",
-            "binary": "boolean",
-            "multiple_choice": "multiple_choice",
-        }
-
-        # Map category to Domain enum (will be enhanced by agent later)
-        category_to_domain = {
-            "finance": Domain.FINANCE,
-            "technology": Domain.TECH,
-            "tech": Domain.TECH,
-            "politics": Domain.POLITICS,
-            "science": Domain.HEALTH,  # Map science to health for now
-            "sports": Domain.SPORTS,
-            "other": Domain.GENERAL,
-        }
-
-        domain = category_to_domain.get(mq.category, Domain.GENERAL) if mq.category else Domain.GENERAL
+        # Use configured mappings
+        domain = self.category_map.get(mq.category, Domain.GENERAL) if mq.category else Domain.GENERAL
 
         # Extract ground truth from metadata if available
         ground_truth = mq.metadata.get("ground_truth") if mq.metadata else None
@@ -488,7 +500,7 @@ class PolymarketRunner(QuestionSourceRunner):
         return Question(
             id=f"polymarket_{mq.market_id}",
             question_text=mq.question_text,
-            question_type=type_map.get(mq.question_type, "boolean"),
+            question_type=self.type_map.get(mq.question_type, QuestionType.BOOLEAN),
             domain=domain,
             difficulty=self._estimate_difficulty(mq),
             resolution_date=mq.resolution_time or mq.close_time,
@@ -554,263 +566,4 @@ class PolymarketRunner(QuestionSourceRunner):
         # Polymarket primarily has boolean and multiple choice
         if question_type:
             return question_type in ["boolean", "multiple_choice"]
-        return True
-
-
-class MetaculusRunner(QuestionSourceRunner):
-    """Question source from Metaculus prediction platform."""
-
-    API_BASE = "https://www.metaculus.com/api2"
-
-    def __init__(
-        self,
-        min_predictions: int = 10,
-        use_agent_enhancement: bool = True,
-    ):
-        """Initialize Metaculus runner.
-
-        Args:
-            min_predictions: Minimum number of predictions (quality filter)
-            use_agent_enhancement: Use LLM agent to categorize questions
-        """
-        super().__init__(source_name="metaculus")
-        self.min_predictions = min_predictions
-        self.use_agent_enhancement = use_agent_enhancement
-
-    async def collect(
-        self,
-        count: int,
-        type_filter: Optional[List[str]] = None,
-        category_filter: Optional[List[str]] = None,
-        quality_requirements: Optional[QualityRequirements] = None,
-        existing_question_ids: Optional[set] = None,
-    ) -> CollectionResult:
-        """Collect questions from Metaculus.
-
-        Args:
-            count: Target number of questions
-            type_filter: Only collect these question types
-            category_filter: Only collect these categories
-            quality_requirements: Quality constraints
-            existing_question_ids: Set of existing IDs to skip
-
-        Returns:
-            CollectionResult with Metaculus questions
-        """
-        try:
-            logger.info(f"MetaculusRunner: Fetching up to {count} questions")
-
-            # Fetch questions
-            market_questions = await self._fetch_questions(limit=count * 2)
-
-            # Map to Question model
-            questions = []
-            for mq in market_questions:
-                try:
-                    question = self._map_to_question(mq)
-                    questions.append(question)
-                except Exception as e:
-                    logger.warning(f"Failed to map question {mq.market_id}: {e}")
-
-            # Tag with source
-            self._tag_questions_with_source(questions)
-
-            # Agent enhancement (categorization, quality improvement)
-            if self.use_agent_enhancement and questions:
-                try:
-                    questions = await self._enhance_with_agent(questions)
-                except Exception as e:
-                    logger.warning(f"Agent enhancement failed: {e}, using questions as-is")
-
-            # Apply filters
-            filtered = self._filter_questions(
-                questions,
-                type_filter=type_filter,
-                category_filter=category_filter,
-                quality_requirements=quality_requirements,
-            )
-
-            # Return up to count
-            final = filtered[:count]
-
-            logger.info(
-                f"Metaculus: {len(final)}/{count} questions collected "
-                f"({len(questions)} fetched, {len(filtered)} after filter)"
-            )
-
-            return CollectionResult(
-                source_name=self.source_name,
-                questions=final,
-                requested_count=count,
-                actual_count=len(final),
-                success=True,
-                metadata={
-                    "questions_fetched": len(market_questions),
-                    "questions_mapped": len(questions),
-                    "questions_filtered": len(filtered),
-                },
-            )
-
-        except Exception as e:
-            logger.error(f"MetaculusRunner error: {e}")
-            return CollectionResult(
-                source_name=self.source_name,
-                questions=[],
-                requested_count=count,
-                actual_count=0,
-                success=False,
-                error_message=str(e),
-            )
-
-    async def _fetch_questions(self, limit: int = 100) -> List[MarketQuestion]:
-        """Fetch questions from Metaculus API.
-
-        Args:
-            limit: Maximum questions to fetch
-
-        Returns:
-            List of MarketQuestion objects
-        """
-        questions = []
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                url = f"{self.API_BASE}/questions/"
-                params = {
-                    "status": "open",
-                    "order_by": "-activity",
-                    "limit": limit,
-                }
-
-                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
-                    if response.status != 200:
-                        logger.error(f"Metaculus API returned {response.status}")
-                        return []
-
-                    data = await response.json()
-                    metaculus_questions = data.get("results", [])
-
-                    for q in metaculus_questions:
-                        # Filter by prediction count
-                        num_predictions = q.get("number_of_predictions", 0)
-                        if num_predictions < self.min_predictions:
-                            continue
-
-                        # Determine type
-                        q_type = q.get("possibilities", {}).get("type", "binary")
-                        type_map = {
-                            "binary": "boolean",
-                            "continuous": "quantity",
-                            "date": "timeframe",
-                            "multiple_choice": "multiple_choice",
-                        }
-
-                        try:
-                            close_time = datetime.fromisoformat(
-                                q["close_time"].replace("Z", "+00:00")
-                            )
-                            resolve_time = None
-                            if q.get("resolve_time"):
-                                resolve_time = datetime.fromisoformat(
-                                    q["resolve_time"].replace("Z", "+00:00")
-                                )
-
-                            mq = MarketQuestion(
-                                market_id=str(q["id"]),
-                                market_source="metaculus",
-                                question_text=q["title"],
-                                question_type=type_map.get(q_type, "boolean"),
-                                resolution_criteria=q.get("resolution_criteria", ""),
-                                close_time=close_time,
-                                resolution_time=resolve_time,
-                                current_probability=q.get("community_prediction", {}).get("q2"),
-                                category=q.get("category", "other"),
-                                options=q.get("possibilities", {}).get("choices"),
-                                metadata={
-                                    "question_url": f"https://www.metaculus.com/questions/{q['id']}",
-                                    "num_predictions": num_predictions,
-                                    "publish_time": q.get("publish_time"),
-                                },
-                            )
-                            questions.append(mq)
-                        except Exception as e:
-                            logger.debug(f"Failed to parse question: {e}")
-
-        except Exception as e:
-            logger.error(f"Error fetching Metaculus questions: {e}")
-
-        return questions
-
-    def _map_to_question(self, mq: MarketQuestion) -> Question:
-        """Map MarketQuestion to Question model.
-
-        Args:
-            mq: Market question
-
-        Returns:
-            Question instance
-        """
-        from src.domain.models.domain import Domain
-
-        type_map = {
-            "boolean": "boolean",
-            "quantity": "quantity",
-            "timeframe": "timeframe",
-            "multiple_choice": "multiple_choice",
-        }
-
-        # Map category to Domain enum (will be enhanced by agent later)
-        category_to_domain = {
-            "finance": Domain.FINANCE,
-            "technology": Domain.TECH,
-            "tech": Domain.TECH,
-            "politics": Domain.POLITICS,
-            "science": Domain.HEALTH,
-            "health": Domain.HEALTH,
-            "sports": Domain.SPORTS,
-            "culture": Domain.CULTURE,
-            "business": Domain.BUSINESS,
-            "other": Domain.GENERAL,
-        }
-
-        domain = category_to_domain.get(mq.category, Domain.GENERAL) if mq.category else Domain.GENERAL
-
-        return Question(
-            id=f"metaculus_{mq.market_id}",
-            question_text=mq.question_text,
-            question_type=type_map.get(mq.question_type, "boolean"),
-            domain=domain,
-            difficulty=3,  # Default medium difficulty
-            resolution_date=mq.resolution_time or mq.close_time,
-            cutoff_date=mq.close_time,
-            created_at=datetime.now(timezone.utc),
-            ground_truth=None,
-            resolution_criteria=mq.resolution_criteria,
-            target_event_id=None,
-            related_event_ids=[],
-            metadata={
-                "source": "metaculus",
-                "market_id": mq.market_id,
-                "current_probability": mq.current_probability,
-                "category": mq.category,
-                "options": mq.options,
-                **mq.metadata,
-            },
-        )
-
-    async def can_provide(
-        self,
-        question_type: Optional[str] = None,
-        category: Optional[str] = None,
-    ) -> bool:
-        """Check if Metaculus can provide questions of given type/category.
-
-        Args:
-            question_type: Question type to check
-            category: Category to check
-
-        Returns:
-            True if type/category is supported
-        """
-        # Metaculus supports all question types
         return True

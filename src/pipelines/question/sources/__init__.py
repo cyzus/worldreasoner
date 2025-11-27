@@ -7,13 +7,12 @@ Provides abstraction for collecting questions from various sources:
 """
 
 from .base import QuestionSourceRunner, CollectionResult
-from .markets import PolymarketRunner, MetaculusRunner
+from .markets import PolymarketRunner
 from .news import NewsBasedRunner
 
 __all__ = [
     "QuestionSourceRunner",
     "CollectionResult",
     "PolymarketRunner",
-    "MetaculusRunner",
     "NewsBasedRunner",
 ]
