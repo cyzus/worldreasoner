@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from ..base import PipelineStage
 from src.domain.models import Article, Event
 from src.agents.factory import AgentFactory
-from .tools import EventIdentifierTool, ArticleRetrievalTool
+from .tools import BatchEventIdentifierTool, ArticleRetrievalTool
 from .collectors import ResultCollector
 from ..prompts import EventIdentificationPrompts
 from src.utils.logging import logger
@@ -40,11 +40,11 @@ class EventIdentificationStage(PipelineStage[Article, Event]):
         
         # Create result collector for events
         self.collector = ResultCollector[Event]()
-        
+
         # Create tools
-        self.event_tool = EventIdentifierTool(collector=self.collector)
+        self.event_tool = BatchEventIdentifierTool(collector=self.collector)
         self.article_retrieval_tool = ArticleRetrievalTool(db_path=db_path)
-        
+
         # Create BaseAgent using factory
         self.base_agent = AgentFactory.create_base_agent(
             tools=[self.event_tool, self.article_retrieval_tool]

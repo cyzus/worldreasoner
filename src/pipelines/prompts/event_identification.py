@@ -35,15 +35,22 @@ SKIP:
 
 For each event you identify:
 1. Retrieve associated article details if helpful.
-2. Extract event attributes
-3. Call {tool_name} tool to store the events
-4. Include the article ID in source_article_ids
+2. Extract event attributes (title, description, domain, occurred_date, event_type, source_article_ids)
+
+After analyzing all articles, call {tool_name} tool ONCE with a JSON array containing ALL events.
+Each event should have:
+- title: Short event title
+- description: Detailed description
+- domain: One of (finance, politics, tech, health, climate, general)
+- occurred_date: ISO date format (YYYY-MM-DD)
+- event_type: One of (decision, outcome, indicator, milestone, external_shock)
+- source_article_ids: Comma-separated article IDs
 
 Only include events with confidence >= {confidence_threshold}.
 
 Call final_answer only after you finish the task.""",
         required_vars=["num_articles", "articles_text", "confidence_threshold"],
-        optional_vars={"tool_name": "event_identifier"}
+        optional_vars={"tool_name": "batch_event_identifier"}
     )
     
     def format_item(
@@ -86,17 +93,17 @@ Call final_answer only after you finish the task.""",
         articles: List[Article],
         confidence_threshold: float,
         content_preview_length: int = 300,
-        tool_name: str = "event_identifier"
+        tool_name: str = "batch_event_identifier"
     ) -> str:
         """Generate instruction for event identification.
-        
+
         Args:
             current_date: Current datetime
             articles: List of articles to analyze
             confidence_threshold: Minimum confidence threshold
             content_preview_length: Length of content preview (default: 300)
-            tool_name: Name of the tool to call (default: event_identifier)
-            
+            tool_name: Name of the tool to call (default: batch_event_identifier)
+
         Returns:
             Formatted instruction string
         """

@@ -11,4 +11,7 @@ class Domain(str, Enum):
     TECH = "tech"
     HEALTH = "health"
     CLIMATE = "climate"
+    CULTURE = "culture"
+    BUSINESS = "business"
+    SPORTS = "sports"
     GENERAL = "general"

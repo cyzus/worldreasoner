@@ -1,0 +1,41 @@
+# Collection Goal Configuration
+# Defines targets for goal-oriented question collection
+
+# Total number of questions to collect
+total_questions: 10
+
+# Distribution by question type (must sum to total_questions)
+type_distribution:
+  boolean: 2          # Binary yes/no questions
+  multiple_choice: 2  # Multiple choice questions
+  quantity: 2         # Numeric/quantity questions
+  timeframe: 2        # Date/timeframe questions
+
+# Distribution by category (must sum to total_questions)
+category_distribution:
+  finance: 1          # Financial markets, earnings, IPOs
+  technology: 1       # Tech products, launches, AI developments
+  politics: 1         # Elections, policy changes, legislation
+  science: 1          # Research, clinical trials, discoveries
+  sports: 1           # Major sports events, tournaments
+  culture: 1           # Arts, entertainment, lifestyle
+  business: 1          # Corporate news, market trends
+  other: 1             # Miscellaneous topics
+
+# Quality requirements for collected questions
+quality:
+  min_difficulty: 2              # Minimum difficulty (1-5 scale)
+  max_difficulty: 5              # Maximum difficulty
+  min_resolution_days: 7         # At least 7 days in future (ensures forecasting value)
+  max_resolution_days: 365       # Not more than 1 year out
+  require_resolution_criteria: true  # Must have clear resolution criteria
+  min_confidence_score: 0.7      # Minimum confidence for validated questions
+
+# Tolerance for distribution matching (0.9 = accept 90% of target)
+distribution_tolerance: 0.9
+
+# Source quotas (maximum questions from each source)
+source_quotas:
+  polymarket: 5    # Polymarket prediction market
+  metaculus: 5     # Metaculus forecasting platform
+  news: 5          # News-based pipeline (RSS + web scraping)
