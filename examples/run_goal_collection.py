@@ -30,6 +30,7 @@ from src.config import get_config
 from src.utils.logging import logger
 from src.core.database import GenericDatabase
 from src.domain.models import Question
+from src.utils.search_indexing import auto_index_articles, should_auto_index
 
 
 async def run_goal_collection(
@@ -39,6 +40,7 @@ async def run_goal_collection(
     enable_polymarket: bool = True,
     enable_news: bool = True,
     parallel_sources: bool = True,
+    skip_indexing: bool = False,
 ) -> None:
     """Run goal-oriented question collection.
 
@@ -49,6 +51,7 @@ async def run_goal_collection(
         enable_polymarket: Enable Polymarket source
         enable_news: Enable news-based source
         parallel_sources: Run sources in parallel
+        skip_indexing: Skip automatic search indexing after completion
     """
     # Load collection goal
     logger.info(f"Loading collection goal from {goal_path}")
@@ -186,6 +189,20 @@ async def run_goal_collection(
             logger.info(f"   Category: {q.metadata.get('category', 'other')}")
             logger.info(f"   Resolution: {q.resolution_date.strftime('%Y-%m-%d') if q.resolution_date else 'N/A'}")
 
+    # Auto-index articles for search if not skipped
+    if should_auto_index(skip_indexing):
+        logger.info("\nIndexing articles for hybrid search...")
+        index_stats = await auto_index_articles(db_path=db_path)
+        if index_stats['status'] == 'success':
+            logger.info(f"✓ Indexed {index_stats['newly_indexed']} new articles")
+            logger.info(f"  Total indexed: {index_stats['final_indexed']}")
+        elif index_stats['status'] == 'up_to_date':
+            logger.info("✓ Search index is up to date")
+        elif index_stats['status'] == 'no_articles':
+            logger.info("⚠ No articles to index")
+        else:
+            logger.info(f"✗ Indexing failed: {index_stats.get('error', 'Unknown error')}")
+
     logger.success("\nCollection complete!")
 
 
@@ -234,6 +251,12 @@ def main():
         help="Run sources sequentially instead of in parallel",
     )
 
+    parser.add_argument(
+        "--skip-indexing",
+        action="store_true",
+        help="Skip automatic search indexing after pipeline completion",
+    )
+
     args = parser.parse_args()
 
     # Validate goal file exists
@@ -252,6 +275,7 @@ def main():
             enable_polymarket=not args.no_polymarket,
             enable_news=not args.no_news,
             parallel_sources=not args.sequential,
+            skip_indexing=args.skip_indexing,
         )
     )
 
