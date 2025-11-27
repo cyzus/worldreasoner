@@ -62,6 +62,7 @@ class NewsBasedRunner(QuestionSourceRunner):
         type_filter: Optional[List[str]] = None,
         category_filter: Optional[List[str]] = None,
         quality_requirements: Optional[QualityRequirements] = None,
+        existing_question_ids: Optional[set] = None,
     ) -> CollectionResult:
         """Collect questions from news sources.
 
@@ -72,6 +73,7 @@ class NewsBasedRunner(QuestionSourceRunner):
             type_filter: Only collect these question types
             category_filter: Only collect these categories
             quality_requirements: Quality constraints
+            existing_question_ids: Set of existing IDs to skip
 
         Returns:
             CollectionResult with questions from news sources

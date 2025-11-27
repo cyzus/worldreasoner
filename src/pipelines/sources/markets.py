@@ -63,6 +63,7 @@ class PolymarketRunner(QuestionSourceRunner):
         type_filter: Optional[List[str]] = None,
         category_filter: Optional[List[str]] = None,
         quality_requirements: Optional[QualityRequirements] = None,
+        existing_question_ids: Optional[set] = None,
     ) -> CollectionResult:
         """Collect questions from Polymarket.
 
@@ -71,6 +72,7 @@ class PolymarketRunner(QuestionSourceRunner):
             type_filter: Only collect these question types
             category_filter: Only collect these categories
             quality_requirements: Quality constraints
+            existing_question_ids: Set of existing IDs to skip
 
         Returns:
             CollectionResult with Polymarket questions
@@ -96,6 +98,29 @@ class PolymarketRunner(QuestionSourceRunner):
 
             # Tag with source
             self._tag_questions_with_source(questions)
+
+            # Early deduplication (before expensive categorization!)
+            if existing_question_ids is not None:
+                before_dedup = len(questions)
+                questions = [q for q in questions if q.id not in existing_question_ids]
+
+                if before_dedup != len(questions):
+                    logger.info(f"Filtered out {before_dedup - len(questions)} duplicates before categorization")
+                    logger.debug(f"Remaining: {len(questions)} unique questions")
+
+                # Note: Don't add to existing_question_ids here - let orchestrator do it
+                # after confirming questions are actually being collected
+
+            if not questions:
+                logger.warning("No questions remaining after deduplication")
+                return CollectionResult(
+                    source_name=self.source_name,
+                    questions=[],
+                    requested_count=count,
+                    actual_count=0,
+                    success=True,
+                    metadata={"all_duplicates": True},
+                )
 
             # Iterative enhancement: enhance in small batches, only as needed
             enhanced_questions = []
@@ -142,8 +167,27 @@ class PolymarketRunner(QuestionSourceRunner):
                 quality_requirements=quality_requirements,
             )
 
-            # Return up to count
-            final = filtered[:count]
+            # Smart sampling by type if type_filter specified
+            if type_filter and len(filtered) > count:
+                # Try to get diverse types
+                final = []
+                by_type = {}
+                for q in filtered:
+                    if q.question_type not in by_type:
+                        by_type[q.question_type] = []
+                    by_type[q.question_type].append(q)
+
+                # Sample evenly from available types
+                available_types = list(by_type.keys())
+                type_idx = 0
+                while len(final) < count and any(by_type.values()):
+                    qtype = available_types[type_idx % len(available_types)]
+                    if by_type[qtype]:
+                        final.append(by_type[qtype].pop(0))
+                    type_idx += 1
+            else:
+                # Return up to count
+                final = filtered[:count]
 
             logger.info(
                 f"Polymarket: {len(final)}/{count} questions collected "
@@ -274,20 +318,21 @@ class PolymarketRunner(QuestionSourceRunner):
                                 skipped_not_closed += 1
                                 continue
 
-                            # Check 3: endDate should not be too old (but can be in future for early resolutions)
+                            # Check 3: endDate should not be too old
+                            # Note: We accept future endDates for early-resolved markets
                             from datetime import timedelta
+                            now = datetime.now(timezone.utc)
+
                             lookback_days = 180  # Default to last 6 months
                             if quality_requirements and quality_requirements.min_resolution_days < 0:
                                 lookback_days = abs(quality_requirements.min_resolution_days)
 
-                            min_date = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+                            min_date = now - timedelta(days=lookback_days)
 
-                            # Skip markets that are too old
+                            # Only skip if endDate is TOO old (before min_date)
                             if end_date < min_date:
                                 skipped_past += 1
                                 continue
-
-                            # Note: endDate can be in the future for markets that resolved early
                         else:
                             # For predictions: need open markets with future resolution
                             # Skip closed markets
@@ -538,6 +583,7 @@ class MetaculusRunner(QuestionSourceRunner):
         type_filter: Optional[List[str]] = None,
         category_filter: Optional[List[str]] = None,
         quality_requirements: Optional[QualityRequirements] = None,
+        existing_question_ids: Optional[set] = None,
     ) -> CollectionResult:
         """Collect questions from Metaculus.
 
@@ -546,6 +592,7 @@ class MetaculusRunner(QuestionSourceRunner):
             type_filter: Only collect these question types
             category_filter: Only collect these categories
             quality_requirements: Quality constraints
+            existing_question_ids: Set of existing IDs to skip
 
         Returns:
             CollectionResult with Metaculus questions

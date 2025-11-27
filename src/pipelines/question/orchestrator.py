@@ -47,6 +47,9 @@ class OrchestrationResult(BaseModel):
     errors: List[str] = Field(default_factory=list)
     started_at: datetime
     completed_at: datetime
+    duplicates_skipped: int = 0
+    missing_types: Dict[str, int] = Field(default_factory=dict)
+    missing_categories: Dict[str, int] = Field(default_factory=dict)
 
     def duration_seconds(self) -> float:
         """Calculate execution duration."""
@@ -90,19 +93,29 @@ class QuestionCollectionOrchestrator:
         # Initialize DB if path provided
         self.db = GenericDatabase(db_path) if db_path else None
 
+        # Track existing question IDs for deduplication
+        self.existing_question_ids: set = set()
+        self.duplicates_skipped: int = 0
+
     async def collect_until_goal_met(self) -> OrchestrationResult:
         """Run collection until goal is met or max iterations reached.
 
         This is the main orchestration loop:
-        1. Collect from all sources in priority order
-        2. Check if goal is met
-        3. If not, identify gaps and do targeted collection
-        4. Repeat until goal is met or max iterations
+        1. Load existing questions for deduplication
+        2. Collect from all sources in priority order
+        3. Check if goal is met
+        4. If not, identify gaps and do targeted collection
+        5. Repeat until goal is met or max iterations
 
         Returns:
             OrchestrationResult with collected questions and metadata
         """
         started_at = datetime.now(timezone.utc)
+
+        # Load existing questions for deduplication
+        if self.db:
+            await self._load_existing_questions()
+
         logger.info("=" * 60)
         logger.info("STARTING GOAL-ORIENTED QUESTION COLLECTION")
         logger.info("=" * 60)
@@ -155,11 +168,16 @@ class QuestionCollectionOrchestrator:
 
             completed_at = datetime.now(timezone.utc)
 
+            # Report missing items
+            missing = self._report_missing_items()
+
             logger.info("\n" + "=" * 60)
             logger.info("COLLECTION COMPLETE")
             logger.info("=" * 60)
             self.progress.log_summary(self.goal)
             logger.info(f"Duration: {(completed_at - started_at).total_seconds():.1f}s")
+            if self.duplicates_skipped > 0:
+                logger.info(f"Duplicates skipped: {self.duplicates_skipped}")
             logger.info("=" * 60)
 
             return OrchestrationResult(
@@ -171,6 +189,9 @@ class QuestionCollectionOrchestrator:
                 errors=self.errors,
                 started_at=started_at,
                 completed_at=completed_at,
+                duplicates_skipped=self.duplicates_skipped,
+                missing_types=missing.get("types", {}),
+                missing_categories=missing.get("categories", {}),
             )
 
         except Exception as e:
@@ -233,23 +254,33 @@ class QuestionCollectionOrchestrator:
         logger.info(f"\nCollecting from '{source_name}': {needed} questions...")
 
         try:
-            # Collect with filters
+            # Calculate which types we need most
+            needed_types = self._get_needed_types()
+
+            # Collect with type hints and existing IDs for early deduplication
             result = await runner.collect(
                 count=needed,
-                type_filter=None,  # Don't filter here, let source decide
+                type_filter=needed_types if needed_types else None,  # Hint which types we need
                 category_filter=None,
                 quality_requirements=self.goal.quality,
+                existing_question_ids=self.existing_question_ids,  # Skip duplicates early
             )
 
             # Store result
             self.source_results[source_name].append(result)
 
-            # Add questions to progress
+            # Add questions to progress (after deduplication)
             if result.success and result.questions:
-                self.progress.add_questions(result.questions)
-                logger.info(
-                    f"✓ '{source_name}': collected {len(result.questions)} questions"
-                )
+                # Filter out duplicates
+                unique_questions = self._filter_duplicates(result.questions)
+
+                if unique_questions:
+                    self.progress.add_questions(unique_questions)
+                    logger.info(
+                        f"✓ '{source_name}': collected {len(unique_questions)} questions"
+                    )
+                else:
+                    logger.warning(f"✗ '{source_name}': all questions were duplicates")
             else:
                 if result.error_message:
                     self.errors.append(f"{source_name}: {result.error_message}")
@@ -259,6 +290,22 @@ class QuestionCollectionOrchestrator:
             error_msg = f"Error collecting from '{source_name}': {e}"
             logger.error(error_msg)
             self.errors.append(error_msg)
+
+    def _get_needed_types(self) -> Optional[List[str]]:
+        """Get list of question types we need most.
+
+        Returns:
+            List of needed types, or None if all types equally needed
+        """
+        type_gaps = self.progress.get_type_gaps(self.goal)
+
+        if not type_gaps:
+            return None
+
+        # Sort by gap size (descending) and return types with positive gaps
+        needed = [qtype for qtype, gap in type_gaps.items() if gap > 0]
+
+        return needed if needed else None
 
     def _calculate_needed_from_source(
         self,
@@ -333,13 +380,18 @@ class QuestionCollectionOrchestrator:
                         count=count,
                         type_filter=[qtype],
                         quality_requirements=self.goal.quality,
+                        existing_question_ids=self.existing_question_ids,
                     )
 
                     if result.success and result.questions:
-                        self.progress.add_questions(result.questions)
-                        self.source_results[source_name].append(result)
-                        count -= len(result.questions)
-                        logger.info(f"    ✓ Got {len(result.questions)} '{qtype}' questions")
+                        # Filter duplicates
+                        unique_questions = self._filter_duplicates(result.questions)
+
+                        if unique_questions:
+                            self.progress.add_questions(unique_questions)
+                            self.source_results[source_name].append(result)
+                            count -= len(unique_questions)
+                            logger.info(f"    ✓ Got {len(unique_questions)} '{qtype}' questions")
 
                 except Exception as e:
                     logger.warning(f"    ✗ Error: {e}")
@@ -347,16 +399,106 @@ class QuestionCollectionOrchestrator:
     def _save_to_database(self) -> None:
         """Save collected questions to database."""
         if not self.db:
+            logger.debug("No database configured, skipping save")
             return
 
         questions = self.progress.get_questions()
         if not questions:
+            logger.debug("No questions to save")
             return
 
         try:
+            saved_count = 0
             for question in questions:
                 self.db.save(Question, question)
-            logger.debug(f"Saved {len(questions)} questions to database")
+                saved_count += 1
+            logger.info(f"Saved {saved_count} questions to database ({self.db_path})")
+            logger.debug(f"Sample saved IDs: {[q.id for q in questions[:3]]}")
         except Exception as e:
             logger.error(f"Error saving to database: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             self.errors.append(f"Database save error: {e}")
+
+    async def _load_existing_questions(self) -> None:
+        """Load existing question IDs from database for deduplication."""
+        if not self.db:
+            logger.info("No database configured, skipping deduplication")
+            return
+
+        try:
+            # Use get_many() to retrieve all questions
+            existing = self.db.get_many(Question, ids=None, filters=None)
+            self.existing_question_ids = {q.id for q in existing}
+            if self.existing_question_ids:
+                logger.info(f"Loaded {len(self.existing_question_ids)} existing questions for deduplication")
+                logger.debug(f"Sample existing IDs: {list(self.existing_question_ids)[:3]}")
+            else:
+                logger.info("No existing questions found in database")
+        except Exception as e:
+            logger.warning(f"Could not load existing questions: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
+
+    def _filter_duplicates(self, questions: List[Question]) -> List[Question]:
+        """Filter out questions that already exist in database.
+
+        Args:
+            questions: Questions to filter
+
+        Returns:
+            Non-duplicate questions only
+        """
+        if not self.existing_question_ids:
+            return questions
+
+        filtered = []
+        for q in questions:
+            if q.id in self.existing_question_ids:
+                self.duplicates_skipped += 1
+                logger.debug(f"Skipping duplicate: {q.id}")
+            else:
+                filtered.append(q)
+                # Add to existing set to avoid duplicates within same run
+                self.existing_question_ids.add(q.id)
+
+        if len(questions) != len(filtered):
+            logger.info(f"Filtered out {len(questions) - len(filtered)} duplicate questions")
+
+        return filtered
+
+    def _report_missing_items(self) -> Dict[str, any]:
+        """Generate report of missing types and categories.
+
+        Returns:
+            Dict with missing types and categories
+        """
+        gaps = self.progress.get_gaps(self.goal)
+
+        missing = {
+            "types": {k: v for k, v in gaps["types"].items() if v > 0},
+            "categories": {k: v for k, v in gaps["categories"].items() if v > 0},
+        }
+
+        if missing["types"] or missing["categories"]:
+            logger.info("\n" + "=" * 60)
+            logger.info("MISSING ITEMS REPORT")
+            logger.info("=" * 60)
+
+            if missing["types"]:
+                logger.info("Missing question types:")
+                for qtype, count in missing["types"].items():
+                    target = self.goal.type_distribution.get(qtype, 0)
+                    collected = target - count
+                    logger.info(f"  {qtype:15} {collected:3}/{target:3} ({count} short)")
+
+            if missing["categories"]:
+                logger.info("\nMissing categories:")
+                for cat, count in missing["categories"].items():
+                    target = self.goal.category_distribution.get(cat, 0)
+                    collected = target - count
+                    logger.info(f"  {cat:15} {collected:3}/{target:3} ({count} short)")
+
+            logger.info("=" * 60)
+
+        return missing

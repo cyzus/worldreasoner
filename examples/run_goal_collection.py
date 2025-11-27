@@ -146,11 +146,11 @@ async def run_goal_collection(
     )
 
     # Run collection
-    logger.info("\nStarting collection orchestration...")
+    logger.info("Starting collection orchestration...")
     result = await orchestrator.collect_until_goal_met()
 
     # Display results
-    logger.info("\n" + "=" * 60)
+    logger.info("" + "=" * 60)
     logger.info("COLLECTION RESULTS")
     logger.info("=" * 60)
     logger.info(f"Goal met: {result.goal_met}")
@@ -159,21 +159,21 @@ async def run_goal_collection(
     logger.info(f"Duration: {result.duration_seconds():.1f}s")
 
     if result.errors:
-        logger.warning(f"\nErrors encountered: {len(result.errors)}")
+        logger.warning(f"Errors encountered: {len(result.errors)}")
         for error in result.errors[:5]:  # Show first 5
             logger.warning(f"  - {error}")
 
     # Show source breakdown
-    logger.info("\nBy Source:")
+    logger.info("By Source:")
     for source, count in result.progress.by_source.items():
         logger.info(f"  {source:15} {count:3}")
 
-    logger.info("\nBy Type:")
+    logger.info("By Type:")
     for qtype, count in result.progress.by_type.items():
         target = goal.type_distribution.get(qtype, 0)
         logger.info(f"  {qtype:15} {count:3}/{target:3}")
 
-    logger.info("\nBy Category:")
+    logger.info("By Category:")
     for category, count in result.progress.by_category.items():
         target = goal.category_distribution.get(category, 0)
         logger.info(f"  {category:15} {count:3}/{target:3}")
@@ -182,16 +182,16 @@ async def run_goal_collection(
 
     # Show sample questions
     if result.questions:
-        logger.info("\nSample questions collected:")
+        logger.info("Sample questions collected:")
         for i, q in enumerate(result.questions[:3], 1):
-            logger.info(f"\n{i}. [{q.question_type}] {q.question_text}")
+            logger.info(f"{i}. [{q.question_type}] {q.question_text}")
             logger.info(f"   Source: {q.metadata.get('source', 'unknown')}")
             logger.info(f"   Category: {q.metadata.get('category', 'other')}")
             logger.info(f"   Resolution: {q.resolution_date.strftime('%Y-%m-%d') if q.resolution_date else 'N/A'}")
 
     # Auto-index articles for search if not skipped
     if should_auto_index(skip_indexing):
-        logger.info("\nIndexing articles for hybrid search...")
+        logger.info("Indexing articles for hybrid search...")
         index_stats = await auto_index_articles(db_path=db_path)
         if index_stats['status'] == 'success':
             logger.info(f"✓ Indexed {index_stats['newly_indexed']} new articles")
@@ -203,7 +203,7 @@ async def run_goal_collection(
         else:
             logger.info(f"✗ Indexing failed: {index_stats.get('error', 'Unknown error')}")
 
-    logger.success("\nCollection complete!")
+    logger.success("Collection complete!")
 
 
 def main():

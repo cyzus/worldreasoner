@@ -52,6 +52,7 @@ class QuestionSourceRunner(ABC):
         type_filter: Optional[List[str]] = None,
         category_filter: Optional[List[str]] = None,
         quality_requirements: Optional[QualityRequirements] = None,
+        existing_question_ids: Optional[set] = None,
     ) -> CollectionResult:
         """Collect questions from this source.
 
@@ -60,6 +61,7 @@ class QuestionSourceRunner(ABC):
             type_filter: Only collect these question types (e.g., ["boolean", "mcq"])
             category_filter: Only collect these categories (e.g., ["finance", "tech"])
             quality_requirements: Quality constraints for collected questions
+            existing_question_ids: Set of existing IDs to skip (for deduplication)
 
         Returns:
             CollectionResult with collected questions and metadata
@@ -159,7 +161,7 @@ class QuestionSourceRunner(ABC):
                     continue
 
             # Check resolution date range
-            # Skip date filtering for questions that already have ground truth (resolved markets)
+            # Skip date filtering for questions with ground truth (already resolved)
             has_ground_truth = question.ground_truth is not None
             if question.resolution_date and not has_ground_truth:
                 days_until_resolution = (question.resolution_date - now).days
