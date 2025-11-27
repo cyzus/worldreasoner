@@ -268,18 +268,18 @@ class PolymarketRunner(QuestionSourceRunner):
                     "offset": 0,  # Start from beginning
                 }
 
-                # Note: The 'closed' API parameter doesn't reliably filter markets
-                # We filter by the 'closed' field in the response data instead
-
-                # For ground truth, filter by API to get markets with recent endDate
+                # For ground truth, query closed markets sorted by actual resolution time
                 if self.require_ground_truth:
                     from datetime import timedelta
                     lookback_days = 180
                     if quality_requirements and quality_requirements.min_resolution_days < 0:
                         lookback_days = abs(quality_requirements.min_resolution_days)
-                    min_date = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
-                    params["end_date_min"] = min_date
-                    logger.info(f"API filtering for markets with endDate >= {min_date}")
+
+                    # Query only closed markets, sorted by closedTime (most recent first)
+                    params["closed"] = "true"
+                    params["order"] = "closedTime"
+                    params["ascending"] = "false"
+                    logger.info(f"API filtering for closed markets sorted by closedTime (most recent first)")
 
                 async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
                     if response.status != 200:
@@ -295,11 +295,6 @@ class PolymarketRunner(QuestionSourceRunner):
 
                     logger.info(f"Polymarket Gamma API returned {len(market_list)} markets")
 
-                    # Sort by volume (descending) to prioritize high-quality, liquid markets
-                    # Volume is in volumeNum field
-                    market_list.sort(key=lambda m: float(m.get('volumeNum', 0) or 0), reverse=True)
-                    logger.info(f"Sorted markets by volume (highest first)")
-
                     # Log filtering criteria for ground truth
                     if self.require_ground_truth:
                         from datetime import timedelta
@@ -307,17 +302,19 @@ class PolymarketRunner(QuestionSourceRunner):
                         if quality_requirements and quality_requirements.min_resolution_days < 0:
                             lookback_days = abs(quality_requirements.min_resolution_days)
                         min_date = datetime.now(timezone.utc) - timedelta(days=lookback_days)
-                        logger.info(f"Filtering for resolved markets with endDate >= {min_date.strftime('%Y-%m-%d')} (no upper limit)")
+                        logger.info(f"Client-side filter: {min_date.strftime('%Y-%m-%d')} <= closedTime <= now ({lookback_days} days)")
 
                     # Debug: Check sample market
                     if market_list:
                         sample = market_list[0]
-                        logger.info(f"Sample: closed={sample.get('closed')}, endDate={sample.get('endDate')}, question={sample.get('question', 'N/A')[:60]}")
+                        logger.info(f"Sample: closed={sample.get('closed')}, endDate={sample.get('endDate')}, umaEndDate={sample.get('umaEndDate')}, closedTime={sample.get('closedTime')}, question={sample.get('question', 'N/A')[:60]}")
 
                     parsed_count = 0
                     skipped_not_closed = 0  # For ground truth mode: markets not yet closed/resolved
                     skipped_closed = 0  # For prediction mode: markets already closed
                     skipped_past = 0  # Markets with dates outside target range
+                    skipped_future_close = 0  # Markets with closedTime in the future
+                    skipped_no_close_time = 0  # Markets without closedTime/umaEndDate
                     skipped_volume = 0
                     failed_parse = 0
 
@@ -335,6 +332,28 @@ class PolymarketRunner(QuestionSourceRunner):
                             logger.debug(f"Failed to parse endDate: {e}")
                             continue
 
+                        # Parse actual resolution date (try multiple fields for robustness)
+                        # Priority: umaEndDate (ISO format) > closedTime > endDate
+                        closed_time = None
+
+                        # Try umaEndDate first (newer markets, already ISO format)
+                        if market.get("umaEndDate"):
+                            try:
+                                closed_time = datetime.fromisoformat(market.get("umaEndDate").replace("Z", "+00:00"))
+                            except Exception as e:
+                                logger.debug(f"Failed to parse umaEndDate: {e}")
+
+                        # Fall back to closedTime (older markets)
+                        if not closed_time and market.get("closedTime"):
+                            try:
+                                closed_time_str = market.get("closedTime")
+                                # Handle format: "2020-11-02 16:31:01+00"
+                                if " " in closed_time_str and "+" in closed_time_str:
+                                    closed_time_str = closed_time_str.replace(" ", "T").replace("+00", "+00:00")
+                                closed_time = datetime.fromisoformat(closed_time_str)
+                            except Exception as e:
+                                logger.debug(f"Failed to parse closedTime: {e}")
+
                         # Filter based on mode (ground truth vs prediction)
                         if self.require_ground_truth:
                             # For ground truth: need closed markets with resolved outcomes
@@ -349,8 +368,15 @@ class PolymarketRunner(QuestionSourceRunner):
                                 skipped_not_closed += 1
                                 continue
 
-                            # Check 3: endDate should not be too old
-                            # Note: We accept future endDates for early-resolved markets
+                            # Check 3: Must have actual resolution time for accurate filtering
+                            # If no closedTime/umaEndDate, we can't determine when it actually resolved
+                            if not closed_time:
+                                skipped_no_close_time += 1
+                                logger.debug(f"Market closed but no resolution time: {market.get('question', 'unknown')[:50]}")
+                                continue
+
+                            # Check 4: closedTime must be within time window
+                            # (now - time_window) <= closedTime <= now
                             from datetime import timedelta
                             now = datetime.now(timezone.utc)
 
@@ -360,8 +386,11 @@ class PolymarketRunner(QuestionSourceRunner):
 
                             min_date = now - timedelta(days=lookback_days)
 
-                            # Only skip if endDate is TOO old (before min_date)
-                            if end_date < min_date:
+                            # Skip if resolution date is outside the time window
+                            if closed_time > now:
+                                skipped_future_close += 1
+                                continue
+                            if closed_time < min_date:
                                 skipped_past += 1
                                 continue
                         else:
@@ -440,7 +469,8 @@ class PolymarketRunner(QuestionSourceRunner):
                                 question_text=question_text,
                                 question_type=question_type,
                                 resolution_criteria=resolution_criteria,
-                                close_time=end_date,
+                                close_time=end_date,  # Expected resolution date
+                                resolution_time=closed_time,  # Actual resolution date
                                 current_probability=market.get("lastTradePrice"),  # Use last trade price as proxy
                                 volume_usd=volume if volume > 0 else None,
                                 liquidity_usd=market.get("liquidityNum"),
@@ -466,7 +496,8 @@ class PolymarketRunner(QuestionSourceRunner):
                     if self.require_ground_truth:
                         logger.info(
                             f"Polymarket parsing: {parsed_count} markets parsed, "
-                            f"{skipped_not_closed} not closed/resolved, {skipped_past} wrong date, "
+                            f"{skipped_not_closed} not closed/resolved, {skipped_no_close_time} no resolution time, "
+                            f"{skipped_past} too old, {skipped_future_close} future closedTime, "
                             f"{skipped_volume} low volume, {failed_parse} failed"
                         )
                     else:
