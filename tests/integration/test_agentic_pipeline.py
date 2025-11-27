@@ -1,26 +1,26 @@
-"""Test the agentic pipeline with WebAgent and BaseAgent orchestration."""
+"""Test the agentic pipeline with NewsBasedRunner."""
 
 import asyncio
 from datetime import datetime, timedelta
-from src.pipelines.question.pipeline import QuestionPipeline
+from src.pipelines.question.sources.news import NewsBasedRunner
 from src.pipelines.stages.article_collection import ArticleSource, ArticleCollectionConfig
 from src.config.pipeline import QuestionPipelineConfig
 from src.config import get_config, reset_config
 
 
 async def test_agentic_pipeline():
-    """Test the full agentic pipeline: ArticleCollection → EventIdentification → QuestionGeneration"""
-    
+    """Test the NewsBasedRunner: ArticleCollection → EventIdentification → QuestionGeneration"""
+
     print("=" * 80)
-    print("Testing Agentic Pipeline Integration")
+    print("Testing NewsBasedRunner Integration")
     print("=" * 80)
-    
+
     # Reset and load config
     reset_config()
     config = get_config()
-    
-    print("\n1. Setting up pipeline configuration...")
-    
+
+    print("\n1. Setting up runner configuration...")
+
     # Configure article collection
     article_sources = [
         ArticleSource(
@@ -30,11 +30,11 @@ async def test_agentic_pipeline():
         ),
         ArticleSource(
             name="artificial intelligence",
-            url="https://news.google.com", 
+            url="https://news.google.com",
             scraper_type="web"
         )
     ]
-    
+
     article_config = ArticleCollectionConfig(
         sources=article_sources,
         start_date=datetime.now() - timedelta(days=7),
@@ -42,54 +42,56 @@ async def test_agentic_pipeline():
         max_articles_per_source=3,
         domains=["technology", "environment"]
     )
-    
+
+    # Configure event identification
+    from src.pipelines.stages import EventIdentificationConfig
+    event_config = EventIdentificationConfig()
+
     # Configure question generation
     question_config = QuestionPipelineConfig(
         domains=["technology", "environment"],
         max_questions=5,
         difficulty_levels=[2, 3, 4]
     )
-    
-    # Get database config
-    database_config = config.database
-    
+
     print(f"   - Article sources: {len(article_sources)}")
     print(f"   - Domains: {article_config.domains}")
     print(f"   - Max questions: {question_config.max_questions}")
-    
-    # Create pipeline
-    print("\n2. Creating QuestionPipeline with agentic stages...")
-    pipeline = QuestionPipeline(
+
+    # Create runner
+    print("\n2. Creating NewsBasedRunner...")
+    runner = NewsBasedRunner(
+        article_config=article_config,
+        event_config=event_config,
         question_config=question_config,
-        database_config=database_config,
-        article_sources=article_sources,
-        enable_persistence=True  # Enable DB persistence
+        db_path=config.database.db_path
     )
-    
-    print("   [OK] Pipeline created with:")
+
+    print("   [OK] Runner created with:")
     print("     - ArticleCollectionStage (WebAgent + ArticleCollectorTool)")
     print("     - EventIdentificationStage (BaseAgent + EventIdentifierTool)")
     print("     - QuestionGenerationStage (BaseAgent + QuestionGeneratorTool)")
-    
-    # Run pipeline
-    print("\n3. Running pipeline...")
+
+    # Run collection
+    print("\n3. Running collection...")
     print("-" * 80)
-    
+
     try:
-        # Pipeline.run() returns List[PipelineStageResult], not questions
-        results = await pipeline.run()
-        
-        # Get questions from pipeline storage
-        questions = pipeline.questions
-        
+        # Collect questions
+        result = await runner.collect(count=5)
+
+        questions = result.questions
+
         print("-" * 80)
-        print(f"\n4. Pipeline completed successfully!")
+        print(f"\n4. Collection completed successfully!")
         print(f"   [OK] Generated {len(questions)} forecast questions")
-        
+        print(f"   [OK] Articles collected: {result.metadata.get('articles_collected', 0)}")
+        print(f"   [OK] Events identified: {result.metadata.get('events_identified', 0)}")
+
         # Display results
         print("\n5. Results:")
         print("=" * 80)
-        
+
         for idx, question in enumerate(questions, 1):
             print(f"\nQuestion {idx}:")
             print(f"   Text: {question.question_text}")
@@ -99,24 +101,24 @@ async def test_agentic_pipeline():
             print(f"   Resolution Date: {question.resolution_date}")
             if question.related_event_ids:
                 print(f"   Related Events: {len(question.related_event_ids)}")
-        
+
         print("\n" + "=" * 80)
-        print("[PASS] Agentic Pipeline Test PASSED")
+        print("[PASS] NewsBasedRunner Test PASSED")
         print("=" * 80)
-        
+
         return True
-        
+
     except Exception as e:
         print("-" * 80)
-        print(f"\n[ERROR] Pipeline failed with error:")
+        print(f"\n[ERROR] Collection failed with error:")
         print(f"   {type(e).__name__}: {e}")
         print("\n" + "=" * 80)
-        print("[FAIL] Agentic Pipeline Test FAILED")
+        print("[FAIL] NewsBasedRunner Test FAILED")
         print("=" * 80)
-        
+
         import traceback
         traceback.print_exc()
-        
+
         return False
 
 

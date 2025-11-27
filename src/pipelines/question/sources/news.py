@@ -15,6 +15,8 @@ from src.pipelines.stages import (
     EventIdentificationStage,
     EventIdentificationConfig,
     QuestionGenerationStage,
+    DatabasePersistenceStage,
+    DatabasePersistenceConfig,
 )
 from src.config.pipeline import QuestionPipelineConfig
 from src.utils.logging import logger
@@ -55,6 +57,14 @@ class NewsBasedRunner(QuestionSourceRunner):
         self.article_stage = ArticleCollectionStage(article_config, db_path=db_path)
         self.event_stage = EventIdentificationStage(event_config, db_path=db_path)
         self.question_stage = QuestionGenerationStage(question_config, db_path=db_path)
+
+        # Initialize persistence stages
+        persist_config = DatabasePersistenceConfig(
+            db_path=db_path,
+            batch_size=50
+        )
+        self.article_persist = DatabasePersistenceStage(persist_config, "article")
+        self.event_persist = DatabasePersistenceStage(persist_config, "event")
 
     async def collect(
         self,
@@ -104,9 +114,16 @@ class NewsBasedRunner(QuestionSourceRunner):
             articles = article_result.outputs
             logger.info(f"Collected {len(articles)} articles")
 
+            # Persist articles
+            if articles:
+                await self.article_persist.execute(articles)
+
             # Stage 2: Identify events
             logger.info("Stage 2: Identifying events from articles...")
-            event_result = await self.event_stage.execute(articles)
+            event_result = await self.event_stage.execute_batched(
+                articles,
+                batch_size=self.question_config.article_batch_size
+            )
 
             if not event_result.outputs:
                 logger.warning("No events identified from articles")
@@ -122,9 +139,20 @@ class NewsBasedRunner(QuestionSourceRunner):
             events = event_result.outputs
             logger.info(f"Identified {len(events)} events")
 
+            # Persist events
+            if events:
+                await self.event_persist.execute(events)
+
+            # Re-persist articles to save event links
+            if articles:
+                await self.article_persist.execute(articles)
+
             # Stage 3: Generate questions
             logger.info("Stage 3: Generating questions from events...")
-            question_result = await self.question_stage.execute(events)
+            question_result = await self.question_stage.execute_batched(
+                events,
+                batch_size=self.question_config.event_batch_size
+            )
 
             if not question_result.outputs:
                 logger.warning("No questions generated from events")
@@ -139,6 +167,26 @@ class NewsBasedRunner(QuestionSourceRunner):
 
             questions = question_result.outputs
             logger.info(f"Generated {len(questions)} questions")
+
+            # Update events with question links (bidirectional relationship)
+            # Questions already have target_event_id and related_event_ids
+            # Now add the reverse direction: events pointing to questions
+            event_map = {event.id: event for event in events}
+
+            for question in questions:
+                # Add this question to all related events
+                for event_id in question.related_event_ids:
+                    if event_id in event_map:
+                        event = event_map[event_id]
+                        if 'related_question_ids' not in event.metadata:
+                            event.metadata['related_question_ids'] = []
+                        if question.id not in event.metadata['related_question_ids']:
+                            event.metadata['related_question_ids'].append(question.id)
+                            logger.debug(f"Linked event {event_id} to question {question.id}")
+
+            # Re-persist events to save updated question links
+            if events:
+                await self.event_persist.execute(events)
 
             # Tag questions with source
             self._tag_questions_with_source(questions)

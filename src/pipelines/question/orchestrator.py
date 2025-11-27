@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 
 from src.config.collection_goal import CollectionGoal
-from src.pipelines.sources.base import QuestionSourceRunner, CollectionResult
+from src.pipelines.question.sources.base import QuestionSourceRunner, CollectionResult
 from .progress import CollectionProgress
 from src.domain.models import Question
 from src.core.database import GenericDatabase

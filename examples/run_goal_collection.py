@@ -22,8 +22,8 @@ from src.pipelines.question.orchestrator import (
     QuestionCollectionOrchestrator,
     OrchestratorConfig,
 )
-from src.pipelines.sources.markets import PolymarketRunner
-from src.pipelines.sources.news import NewsBasedRunner
+from src.pipelines.question.sources.markets import PolymarketRunner
+from src.pipelines.question.sources.news import NewsBasedRunner
 from src.pipelines.stages import ArticleCollectionConfig, EventIdentificationConfig, ArticleSource
 from src.config.pipeline import QuestionPipelineConfig
 from src.config import get_config
@@ -99,19 +99,16 @@ async def run_goal_collection(
 
         article_config = ArticleCollectionConfig(
             sources=article_sources,
-            start_date=datetime.now(timezone.utc) - timedelta(days=7),
+            start_date=datetime.now(timezone.utc) - timedelta(days=abs(goal.quality.min_resolution_days)),
             end_date=datetime.now(timezone.utc),
             domains=domains,
         )
 
-        event_config = EventIdentificationConfig(
-            min_articles_per_event=3,
-            confidence_threshold=0.7,
-        )
+        event_config = EventIdentificationConfig()
 
         # Derive question config from collection goal for consistency
         question_config = QuestionPipelineConfig(
-            max_questions=goal.total_questions * 2,  # Overproduce to allow filtering
+            max_questions=goal.total_questions,  # Overproduce to allow filtering
             domains=list(goal.category_distribution.keys()),
             question_types=list(goal.type_distribution.keys()),
             require_ground_truth=goal.require_ground_truth,  # Use same mode as goal
