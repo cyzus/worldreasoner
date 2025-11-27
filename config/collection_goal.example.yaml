@@ -6,36 +6,42 @@ total_questions: 10
 
 # Distribution by question type (must sum to total_questions)
 type_distribution:
-  boolean: 2          # Binary yes/no questions
-  multiple_choice: 2  # Multiple choice questions
+  boolean: 4          # Binary yes/no questions
+  mcq: 3  # Multiple choice questions
   quantity: 2         # Numeric/quantity questions
-  timeframe: 2        # Date/timeframe questions
+  timeframe: 1        # Date/timeframe questions
 
 # Distribution by category (must sum to total_questions)
 category_distribution:
   finance: 1          # Financial markets, earnings, IPOs
-  technology: 1       # Tech products, launches, AI developments
+  tech: 1             # Tech products, launches, AI developments
   politics: 1         # Elections, policy changes, legislation
+  health: 1           # Medical, healthcare, pandemics
+  climate: 1          # Environmental, climate change
+  culture: 1          # Entertainment, arts, media
   science: 1          # Research, clinical trials, discoveries
   sports: 1           # Major sports events, tournaments
-  culture: 1           # Arts, entertainment, lifestyle
-  business: 1          # Corporate news, market trends
-  other: 1             # Miscellaneous topics
+  business: 1         # Corporate news, market trends
+  general: 1          # Miscellaneous topics
 
 # Quality requirements for collected questions
 quality:
   min_difficulty: 2              # Minimum difficulty (1-5 scale)
   max_difficulty: 5              # Maximum difficulty
-  min_resolution_days: 7         # At least 7 days in future (ensures forecasting value)
-  max_resolution_days: 365       # Not more than 1 year out
+  min_resolution_days: -7       # Days from now: -90 = questions resolved within last 90 days
+  max_resolution_days: 0        # -1 = questions resolved at least 1 day ago
   require_resolution_criteria: true  # Must have clear resolution criteria
   min_confidence_score: 0.7      # Minimum confidence for validated questions
+
+# Ground truth requirement
+require_ground_truth: true      # If true, collect resolved questions with known outcomes. If false, collect future predictions.
+                                 # When true, use negative min/max_resolution_days (e.g., -90 to -1)
+                                 # When false, use positive min/max_resolution_days (e.g., 7 to 365)
 
 # Tolerance for distribution matching (0.9 = accept 90% of target)
 distribution_tolerance: 0.9
 
 # Source quotas (maximum questions from each source)
 source_quotas:
-  polymarket: 5    # Polymarket prediction market
-  metaculus: 5     # Metaculus forecasting platform
-  news: 5          # News-based pipeline (RSS + web scraping)
+  polymarket: 100    # Polymarket prediction market
+  news: 10          # News-based pipeline (RSS + web scraping)

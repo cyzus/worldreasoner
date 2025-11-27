@@ -30,8 +30,8 @@ cp config/config.example.yaml config/config.yaml
 
 ### Running the Pipeline
 ```bash
-# Run question pipeline with CLI tool
-python run_question_pipeline.py --sources config/sources.yaml --db worldreasoner.db --max-questions 10
+# Run goal-oriented question collection with CLI tool
+python examples/run_goal_collection.py --goal config/collection_goal.yaml --db worldreasoner.db
 
 # Run integration test (full pipeline)
 uv run python tests/integration/test_agentic_pipeline.py

@@ -140,27 +140,43 @@ class QuestionSourceRunner(ABC):
         filtered = []
         now = datetime.now(timezone.utc)
 
+        skip_difficulty = 0
+        skip_criteria = 0
+        skip_date_too_old = 0
+        skip_date_too_recent = 0
+
         for question in questions:
             # Check difficulty
             if question.difficulty:
                 if not (requirements.min_difficulty <= question.difficulty <= requirements.max_difficulty):
+                    skip_difficulty += 1
                     continue
 
             # Check resolution criteria
             if requirements.require_resolution_criteria:
                 if not question.resolution_criteria:
+                    skip_criteria += 1
                     continue
 
             # Check resolution date range
-            if question.resolution_date:
+            # Skip date filtering for questions that already have ground truth (resolved markets)
+            has_ground_truth = question.ground_truth is not None
+            if question.resolution_date and not has_ground_truth:
                 days_until_resolution = (question.resolution_date - now).days
 
                 if days_until_resolution < requirements.min_resolution_days:
+                    skip_date_too_old += 1
+                    logger.debug(f"Filtered {question.id}: too old ({days_until_resolution} days < {requirements.min_resolution_days})")
                     continue
                 if days_until_resolution > requirements.max_resolution_days:
+                    skip_date_too_recent += 1
+                    logger.debug(f"Filtered {question.id}: too recent ({days_until_resolution} days > {requirements.max_resolution_days})")
                     continue
 
             filtered.append(question)
+
+        if questions:
+            logger.info(f"Quality filter: {len(filtered)}/{len(questions)} kept, skipped: {skip_difficulty} difficulty, {skip_criteria} criteria, {skip_date_too_old} too old, {skip_date_too_recent} too recent")
 
         return filtered
 
@@ -179,10 +195,9 @@ class QuestionSourceRunner(ABC):
                 question.metadata["source"] = self.source_name
 
     async def _enhance_with_agent(self, questions: List[Question]) -> List[Question]:
-        """Use LLM agent to enhance questions with better categorization.
+        """Use LLM to enhance questions with better categorization.
 
-        This method is shared by market question sources (Polymarket, Metaculus, etc.)
-        to categorize questions using an agent with the MarketQuestionEnhancerTool.
+        Uses direct LLM with batching for speed.
 
         Args:
             questions: Questions to enhance
@@ -190,62 +205,84 @@ class QuestionSourceRunner(ABC):
         Returns:
             Enhanced questions with updated domain and category
         """
-        from src.agents.factory import AgentFactory
-        from src.pipelines.stages.tools.market_question_enhancer import MarketQuestionEnhancerTool
         from src.domain.models.domain import Domain
-        from datetime import datetime, timezone
+        from src.llm import LiteLLMClient
+        from src.config import get_config
         import json
 
         try:
-            # Create question lookup dict
-            question_dict = {q.id: q for q in questions}
+            # Get LLM config and create client
+            config = get_config()
+            llm_client = LiteLLMClient(config.llm.model_dump(exclude_none=True))
 
-            # Create enhancement tool
-            enhancer_tool = MarketQuestionEnhancerTool(questions=question_dict)
+            # Batch categorize - 10 questions at a time for speed
+            batch_size = 10
 
-            # Create agent using factory
-            agent = AgentFactory.create_base_agent(tools=[enhancer_tool])
+            for batch_idx in range(0, len(questions), batch_size):
+                batch = questions[batch_idx:batch_idx + batch_size]
 
-            current_date = datetime.now(timezone.utc)
+                # Build batch prompt
+                questions_text = []
+                for idx, q in enumerate(batch, 1):
+                    tags = q.metadata.get('tags', []) if hasattr(q, 'metadata') and q.metadata else []
+                    tags_list = tags[:3] if isinstance(tags, list) else []
+                    questions_text.append(
+                        f"{idx}. ID: {q.id}\n"
+                        f"   Q: {q.question_text}\n"
+                        f"   Tags: {', '.join(tags_list) if tags_list else 'none'}"
+                    )
 
-            # Process ONE question at a time to avoid JSON concatenation issues with Gemini
-            # Gemini concatenates multiple tool calls even when asked not to
-            for idx, q in enumerate(questions, 1):
-                # Initialize metadata if needed
-                if not hasattr(q, 'metadata') or q.metadata is None:
-                    q.metadata = {}
+                prompt = f"""Categorize these prediction market questions into domains.
 
-                # Safely handle tags that might be None
-                tags = q.metadata.get('tags') or []
-                tags_list = tags[:5] if isinstance(tags, list) else []
-
-                instruction = f"""Categorize this prediction market question using the market_question_enhancer tool.
-
-Question ID: {q.id}
-Question: {q.question_text}
-Criteria: {q.resolution_criteria[:100] if q.resolution_criteria else 'N/A'}...
-Tags: {', '.join(tags_list) if tags_list else 'none'}
+Questions:
+{chr(10).join(questions_text)}
 
 Available domains: finance, tech, politics, health, climate, culture, business, sports, general
 
-Analyze the question and call market_question_enhancer ONCE with:
-- question_id: "{q.id}"
-- domain: (choose the single best domain from list above)
-- reasoning: (brief explanation)"""
+Return JSON array with format:
+[{{"id": "question_id", "domain": "domain_name"}}, ...]
 
-                # Run agent on this single question
-                logger.info(f"Categorizing question {idx}/{len(questions)}: {q.question_text[:50]}...")
-                result = agent.run(instruction)
-                logger.debug(f"Result: {str(result)[:100]}")
+Only return the JSON array, nothing else."""
 
-            logger.info(f"Agent enhancement complete: {len(question_dict)} questions categorized")
+                logger.info(f"Categorizing batch {batch_idx//batch_size + 1} ({len(batch)} questions)...")
 
-            # Questions are modified in place via the tool
-            return list(question_dict.values())
+                # Call LLM
+                messages = [{"role": "user", "content": prompt}]
+                response_text = await llm_client.acomplete(messages)
+                response_text = response_text.strip()
+
+                # Parse response
+                # Remove markdown code blocks if present
+                if response_text.startswith("```"):
+                    response_text = response_text.split("```")[1]
+                    if response_text.startswith("json"):
+                        response_text = response_text[4:]
+                    response_text = response_text.strip()
+
+                categorizations = json.loads(response_text)
+
+                # Apply categorizations
+                cat_dict = {c['id']: c['domain'] for c in categorizations}
+
+                for q in batch:
+                    if q.id in cat_dict:
+                        domain_str = cat_dict[q.id]
+                        try:
+                            q.domain = Domain(domain_str)
+                            if not hasattr(q, 'metadata') or q.metadata is None:
+                                q.metadata = {}
+                            q.metadata["category"] = domain_str
+                        except ValueError:
+                            logger.warning(f"Invalid domain '{domain_str}' for {q.id}, using general")
+                            q.domain = Domain.GENERAL
+                            q.metadata["category"] = "general"
+
+            logger.info(f"Batch categorization complete: {len(questions)} questions")
+            return questions
 
         except Exception as e:
             import traceback
-            logger.error(f"Agent enhancement error: {e}")
+            logger.error(f"Categorization error: {e}")
             logger.error(f"Full traceback:\n{traceback.format_exc()}")
             # Return questions with default domain
             for question in questions:
@@ -254,5 +291,5 @@ Analyze the question and call market_question_enhancer ONCE with:
                 if not hasattr(question, 'metadata') or question.metadata is None:
                     question.metadata = {}
                 if "category" not in question.metadata:
-                    question.metadata["category"] = "other"
+                    question.metadata["category"] = "general"
             return questions

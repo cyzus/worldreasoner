@@ -76,11 +76,10 @@ class PolymarketRunner(QuestionSourceRunner):
             CollectionResult with Polymarket questions
         """
         try:
-            logger.info(f"PolymarketRunner: Fetching up to {count} questions")
+            logger.info(f"PolymarketRunner: Fetching up to {count} questions (require_ground_truth={self.require_ground_truth})")
 
-            # Fetch market questions
-            # Fetch extra to allow for filtering (API filters by date now for ground truth)
-            fetch_limit = count * 5
+            # Fetch market questions - fetch many to have options
+            fetch_limit = count * 20 if self.require_ground_truth else count * 5
             market_questions = await self._fetch_markets(
                 limit=fetch_limit,
                 quality_requirements=quality_requirements
@@ -98,15 +97,44 @@ class PolymarketRunner(QuestionSourceRunner):
             # Tag with source
             self._tag_questions_with_source(questions)
 
-            # Agent enhancement (categorization, quality improvement)
+            # Iterative enhancement: enhance in small batches, only as needed
+            enhanced_questions = []
+            remaining_questions = questions[:]
+
             if self.use_agent_enhancement and questions:
                 try:
-                    logger.info(f"Enhancing {len(questions)} Polymarket questions with agent...")
-                    questions = await self._enhance_with_agent(questions)
+                    batch_size = count * 2  # Enhance 2x what we need per batch
+
+                    while remaining_questions and len(enhanced_questions) < count * 3:
+                        # Take next batch
+                        batch = remaining_questions[:batch_size]
+                        remaining_questions = remaining_questions[batch_size:]
+
+                        logger.info(f"Enhancing batch of {len(batch)} questions ({len(enhanced_questions)} enhanced so far)...")
+                        batch_enhanced = await self._enhance_with_agent(batch)
+                        enhanced_questions.extend(batch_enhanced)
+
+                        # Try filtering with what we have so far
+                        filtered = self._filter_questions(
+                            enhanced_questions,
+                            type_filter=type_filter,
+                            category_filter=category_filter,
+                            quality_requirements=quality_requirements,
+                        )
+
+                        # If we have enough after filtering, stop enhancing
+                        if len(filtered) >= count:
+                            logger.info(f"Found {len(filtered)} matching questions after enhancing {len(enhanced_questions)}, stopping enhancement")
+                            break
+
+                    # Add any remaining unenhanced questions as fallback
+                    questions = enhanced_questions + remaining_questions
+
                 except Exception as e:
                     logger.warning(f"Agent enhancement failed: {e}, using questions as-is")
+                    questions = enhanced_questions + remaining_questions if enhanced_questions else questions
 
-            # Apply filters
+            # Final filtering
             filtered = self._filter_questions(
                 questions,
                 type_filter=type_filter,
@@ -167,21 +195,21 @@ class PolymarketRunner(QuestionSourceRunner):
                 url = f"{self.API_BASE}/markets"
                 params = {
                     "limit": limit,
-                    "closed": "true" if self.require_ground_truth else "false",  # Fetch closed markets for ground truth, open markets for predictions
                     "offset": 0,  # Start from beginning
                 }
 
-                # For ground truth, filter by date range from quality requirements
+                # Note: The 'closed' API parameter doesn't reliably filter markets
+                # We filter by the 'closed' field in the response data instead
+
+                # For ground truth, filter by API to get markets with recent endDate
                 if self.require_ground_truth:
                     from datetime import timedelta
-                    # Use quality requirements if available, otherwise default to last 90 days
-                    lookback_days = 90  # default
+                    lookback_days = 180
                     if quality_requirements and quality_requirements.min_resolution_days < 0:
-                        # min_resolution_days is negative (e.g., -90 means 90 days ago)
                         lookback_days = abs(quality_requirements.min_resolution_days)
-
                     min_date = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
                     params["end_date_min"] = min_date
+                    logger.info(f"API filtering for markets with endDate >= {min_date}")
 
                 async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
                     if response.status != 200:
@@ -197,39 +225,80 @@ class PolymarketRunner(QuestionSourceRunner):
 
                     logger.info(f"Polymarket Gamma API returned {len(market_list)} markets")
 
+                    # Log filtering criteria for ground truth
+                    if self.require_ground_truth:
+                        from datetime import timedelta
+                        lookback_days = 180
+                        if quality_requirements and quality_requirements.min_resolution_days < 0:
+                            lookback_days = abs(quality_requirements.min_resolution_days)
+                        min_date = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+                        logger.info(f"Filtering for resolved markets with endDate >= {min_date.strftime('%Y-%m-%d')} (no upper limit)")
+
+                    # Debug: Check sample market
+                    if market_list:
+                        sample = market_list[0]
+                        logger.info(f"Sample: closed={sample.get('closed')}, endDate={sample.get('endDate')}, question={sample.get('question', 'N/A')[:60]}")
+
                     parsed_count = 0
-                    skipped_closed = 0
-                    skipped_past = 0
+                    skipped_not_closed = 0  # For ground truth mode: markets not yet closed/resolved
+                    skipped_closed = 0  # For prediction mode: markets already closed
+                    skipped_past = 0  # Markets with dates outside target range
                     skipped_volume = 0
                     failed_parse = 0
 
                     for market in market_list:
-                        # Parse and check end date first to filter by date
+                        # Parse end date (needed for all markets)
                         try:
-                            end_date_str = market.get("endDate")  # camelCase
+                            end_date_str = market.get("endDate")
                             if not end_date_str:
                                 failed_parse += 1
                                 continue
 
-                            # Handle both ISO format with Z and with timezone
                             end_date = datetime.fromisoformat(end_date_str.replace("Z", "+00:00"))
-
-                            # Filter by date based on require_ground_truth
-                            if self.require_ground_truth:
-                                # For ground truth, skip markets that are still open (future)
-                                if end_date > datetime.now(timezone.utc):
-                                    skipped_past += 1
-                                    continue
-                            else:
-                                # For predictions, skip markets that ended in the past
-                                if end_date < datetime.now(timezone.utc):
-                                    skipped_past += 1
-                                    continue
-
                         except Exception as e:
                             failed_parse += 1
                             logger.debug(f"Failed to parse endDate: {e}")
                             continue
+
+                        # Filter based on mode (ground truth vs prediction)
+                        if self.require_ground_truth:
+                            # For ground truth: need closed markets with resolved outcomes
+                            # Check 1: Must be closed (resolved)
+                            if not market.get("closed"):
+                                skipped_not_closed += 1
+                                continue
+
+                            # Check 2: Must have outcome prices (indicates actual resolution)
+                            outcome_prices_str = market.get("outcomePrices", "")
+                            if not outcome_prices_str or outcome_prices_str == "[]":
+                                skipped_not_closed += 1
+                                continue
+
+                            # Check 3: endDate should not be too old (but can be in future for early resolutions)
+                            from datetime import timedelta
+                            lookback_days = 180  # Default to last 6 months
+                            if quality_requirements and quality_requirements.min_resolution_days < 0:
+                                lookback_days = abs(quality_requirements.min_resolution_days)
+
+                            min_date = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+
+                            # Skip markets that are too old
+                            if end_date < min_date:
+                                skipped_past += 1
+                                continue
+
+                            # Note: endDate can be in the future for markets that resolved early
+                        else:
+                            # For predictions: need open markets with future resolution
+                            # Skip closed markets
+                            if market.get("closed"):
+                                skipped_closed += 1
+                                continue
+
+                            # Skip markets that already ended
+                            if end_date < datetime.now(timezone.utc):
+                                skipped_past += 1
+                                continue
 
                         # Get volume (Gamma API provides volumeNum)
                         volume = market.get("volumeNum", 0.0) or 0.0
@@ -318,11 +387,18 @@ class PolymarketRunner(QuestionSourceRunner):
                             failed_parse += 1
                             logger.debug(f"Failed to parse market {market.get('question', 'unknown')}: {e}")
 
-                    logger.info(
-                        f"Polymarket parsing: {parsed_count} markets parsed, "
-                        f"{skipped_closed} closed, {skipped_past} past, "
-                        f"{skipped_volume} low volume, {failed_parse} failed"
-                    )
+                    if self.require_ground_truth:
+                        logger.info(
+                            f"Polymarket parsing: {parsed_count} markets parsed, "
+                            f"{skipped_not_closed} not closed/resolved, {skipped_past} wrong date, "
+                            f"{skipped_volume} low volume, {failed_parse} failed"
+                        )
+                    else:
+                        logger.info(
+                            f"Polymarket parsing: {parsed_count} markets parsed, "
+                            f"{skipped_closed} already closed, {skipped_past} wrong date, "
+                            f"{skipped_volume} low volume, {failed_parse} failed"
+                        )
 
         except Exception as e:
             logger.error(f"Error fetching Polymarket markets: {e}")
