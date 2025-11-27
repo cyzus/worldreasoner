@@ -7,7 +7,9 @@ from typing import List, Dict, Any
 
 from smolagents import Tool
 from src.domain.models import Event, EventType, EventStatus, Domain
-from src.utils.enums import enum_to_list
+from src.utils.enums import enum_to_list, parse_domain, parse_event_type
+from src.utils.id_generator import generate_event_id
+from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
 from src.utils.logging import logger
 
 
@@ -177,16 +179,8 @@ class BatchEventIdentifierTool(Tool):
             raise ValueError("Missing required field: domain")
 
         # Parse occurred date or use current time
-        occurred_date_str = event_data.get("occurred_date")
-        if occurred_date_str:
-            try:
-                event_date = datetime.fromisoformat(occurred_date_str.replace('Z', '+00:00'))
-                if event_date.tzinfo is None:
-                    event_date = event_date.replace(tzinfo=timezone.utc)
-            except:
-                event_date = datetime.now(timezone.utc)
-        else:
-            event_date = datetime.now(timezone.utc)
+        event_date = parse_iso_datetime(occurred_date_str)
+        event_date = ensure_timezone_aware(event_date)
 
         # Parse article IDs
         article_ids = []
@@ -195,25 +189,13 @@ class BatchEventIdentifierTool(Tool):
             article_ids = [aid.strip() for aid in source_article_ids.split(',')]
 
         # Validate and convert domain
-        try:
-            domain_enum = Domain(domain_str.lower())
-        except ValueError:
-            logger.warning(f"Invalid domain '{domain_str}', using 'general'")
-            domain_enum = Domain.GENERAL
+        domain_enum = parse_domain(domain_str)
 
         # Validate and convert event_type
-        event_type_str = event_data.get("event_type")
-        if event_type_str:
-            try:
-                event_type_enum = EventType(event_type_str.lower())
-            except ValueError:
-                logger.warning(f"Invalid event_type '{event_type_str}', using 'indicator'")
-                event_type_enum = EventType.INDICATOR
-        else:
-            event_type_enum = EventType.INDICATOR
+        event_type_enum = parse_event_type(event_data.get("event_type"))
 
         # Generate unique event ID
-        event_id = self._generate_event_id(domain_enum, event_date, self.event_counter + index)
+        event_id = generate_event_id(domain_enum, event_date, self.event_counter + index)
 
         # Determine status based on date
         status = EventStatus.OCCURRED if event_date <= datetime.now(timezone.utc) else EventStatus.PREDICTED
@@ -233,9 +215,3 @@ class BatchEventIdentifierTool(Tool):
         )
 
         return event
-
-    def _generate_event_id(self, domain: Domain, event_date: datetime, counter: int) -> str:
-        """Generate unique event ID."""
-        date_str = event_date.strftime('%Y%m%d')
-        suffix = uuid.uuid4().hex[:8]
-        return f"evt_{domain.value}_{date_str}_{counter+1:03d}_{suffix}"

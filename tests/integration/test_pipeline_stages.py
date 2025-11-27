@@ -230,7 +230,6 @@ async def test_question_generation_stage(test_db_path):
     
     # Create and run stage
     stage = QuestionGenerationStage(question_config)
-    stage.set_articles(articles)  # Provide articles for EventDetailsTool
     
     print("\n2. Generating forecast questions from events...")
     result = await stage.execute(events)
@@ -342,7 +341,6 @@ async def test_pipeline_stages_integration(test_db_path):
     )
     
     question_stage = QuestionGenerationStage(question_config)
-    question_stage.set_articles(articles)
     questions = await question_stage.process(events)
     print(f"   [OK] Generated {len(questions)} questions")
     

@@ -7,7 +7,9 @@ from typing import List
 
 from smolagents import Tool
 from src.domain.models import Article, Event, EventType, EventStatus, Domain
-from src.utils.enums import enum_to_list
+from src.utils.enums import enum_to_list, parse_domain, parse_event_type
+from src.utils.id_generator import generate_event_id
+from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
 
 
 class EventIdentifierTool(Tool):
@@ -97,17 +99,8 @@ class EventIdentifierTool(Tool):
             JSON string of Event object
         """
         # Parse occurred date or use current time
-        if occurred_date:
-            try:
-                # Parse the datetime string
-                event_date = datetime.fromisoformat(occurred_date.replace('Z', '+00:00'))
-                # Ensure timezone-aware (add UTC if naive)
-                if event_date.tzinfo is None:
-                    event_date = event_date.replace(tzinfo=timezone.utc)
-            except:
-                event_date = datetime.now(timezone.utc)
-        else:
-            event_date = datetime.now(timezone.utc)
+        event_date = parse_iso_datetime(occurred_date)
+        event_date = ensure_timezone_aware(event_date)
         
         # Parse article IDs
         article_ids = []
@@ -115,24 +108,13 @@ class EventIdentifierTool(Tool):
             article_ids = [aid.strip() for aid in source_article_ids.split(',')]
 
         # Validate and convert domain
-        try:
-            domain_enum = Domain(domain.lower() if domain else "general")
-        except ValueError:
-            # Fall back to general if invalid
-            print(f"Warning: Invalid domain '{domain}', using 'general'")
-            domain_enum = Domain.GENERAL
+        domain_enum = parse_domain(domain)
 
         # Validate and convert event_type
-        event_type_enum = EventType.INDICATOR  # Default
-        if event_type:
-            try:
-                event_type_enum = EventType(event_type.lower())
-            except ValueError:
-                print(f"Warning: Invalid event_type '{event_type}', using 'indicator'")
-                event_type_enum = EventType.INDICATOR
+        event_type_enum = parse_event_type(event_type)
 
         # Generate unique event ID (use count of identified_events as counter)
-        event_id = self._generate_event_id(domain_enum, event_date, len(self.identified_events))
+        event_id = generate_event_id(domain_enum, event_date, len(self.identified_events))
 
         # Determine status based on date
         status = EventStatus.OCCURRED if event_date <= datetime.now(timezone.utc) else EventStatus.PREDICTED
@@ -172,11 +154,4 @@ class EventIdentifierTool(Tool):
         }
         
         return json.dumps(summary, indent=2, default=str)
-    
-    def _generate_event_id(self, domain: Domain, event_date: datetime, counter: int) -> str:
-        """Generate unique event ID."""
-        date_str = event_date.strftime('%Y%m%d')
-        suffix = uuid.uuid4().hex[:8]
-        # Domain is a str enum, so it works directly in f-strings
-        return f"evt_{domain.value}_{date_str}_{counter+1:03d}_{suffix}"
 

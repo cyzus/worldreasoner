@@ -11,7 +11,9 @@ from smolagents import Tool
 from src.config import get_config
 from src.domain.models import Article, Domain
 from src.utils.logging import logger
-from src.utils.enums import enum_to_list
+from src.utils.enums import enum_to_list, parse_domain
+from src.utils.id_generator import generate_article_id
+from src.utils.date_utils import parse_iso_datetime
 from src.pipelines.stages.tools.web_fetch import WebFetchTool
 
 
@@ -171,13 +173,7 @@ class ArticleCollectorTool(Tool):
             return json.dumps({"error": f"Error fetching URL: {str(e)}", "url": url})
         
         # Parse published date or use current time
-        if published_date:
-            try:
-                pub_date = datetime.fromisoformat(published_date.replace('Z', '+00:00'))
-            except:
-                pub_date = datetime.now(timezone.utc)
-        else:
-            pub_date = datetime.now(timezone.utc)
+        pub_date = parse_iso_datetime(published_date)
         
         # STAGE 3: Content hash deduplication (catches syndicated/republished articles)
         # Check if we've already seen this content (in-memory for current run)
@@ -201,15 +197,10 @@ class ArticleCollectorTool(Tool):
         self.seen_hashes.add(content_hash)
 
         # Validate and convert domain
-        try:
-            domain_enum = Domain(domain.lower() if domain else "general")
-        except ValueError:
-            # Fall back to general if invalid
-            print(f"Warning: Invalid domain '{domain}', using 'general'")
-            domain_enum = Domain.GENERAL
+        domain_enum = parse_domain(domain)
 
         # Generate unique ID
-        article_id = self._generate_article_id(domain_enum, pub_date, len(self.seen_hashes))
+        article_id = generate_article_id(domain_enum, pub_date, len(self.seen_hashes))
 
         # Extract domain from URL if not provided
         parsed_url = urlparse(url)
@@ -265,13 +256,6 @@ class ArticleCollectorTool(Tool):
         }
         
         return json.dumps(summary, indent=2, default=str)
-    
-    def _generate_article_id(self, domain: Domain, published_date: datetime, counter: int) -> str:
-        """Generate unique article ID."""
-        date_str = published_date.strftime('%Y%m%d')
-        suffix = uuid.uuid4().hex[:8]
-        # Domain is a str enum, so it works directly in f-strings
-        return f"art_{domain.value}_{date_str}_{counter+1:03d}_{suffix}"
     
     def _normalize_url(self, url: str) -> str:
         """Normalize URL for consistent duplicate detection.
