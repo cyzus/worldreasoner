@@ -195,6 +195,10 @@ class QuestionSourceRunner(ABC):
 
             if "source" not in question.metadata:
                 question.metadata["source"] = self.source_name
+            
+            # Set category from domain for progress tracking
+            if "category" not in question.metadata:
+                question.metadata["category"] = question.domain.value
 
     async def _enhance_with_agent(self, questions: List[Question]) -> List[Question]:
         """Use LLM to enhance questions with better categorization.
