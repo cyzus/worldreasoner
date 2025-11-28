@@ -45,7 +45,9 @@ class CollectionProgress(BaseModel):
         self.by_type[question.question_type] += 1
 
         # Update category distribution
-        category = question.metadata.get("category", "other")
+        category = question.metadata.get("category") if question.metadata else None
+        if category is None:
+            category = "other"
         self.by_category[category] += 1
 
         # Update source distribution

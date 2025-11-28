@@ -574,7 +574,7 @@ class PolymarketRunner(QuestionSourceRunner):
                 "current_probability": mq.current_probability,
                 "volume_usd": mq.volume_usd,
                 "liquidity_usd": mq.liquidity_usd,
-                "category": mq.category,
+                "category": mq.category or "general",
                 "options": mq.options,
                 **mq.metadata,
             },
