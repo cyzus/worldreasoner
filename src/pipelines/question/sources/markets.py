@@ -84,6 +84,309 @@ class PolymarketRunner(QuestionSourceRunner):
         self.type_map = type_map or self.DEFAULT_TYPE_MAP
         self.category_map = category_map or self.DEFAULT_CATEGORY_MAP
 
+    def _get_lookback_days(self, quality_requirements: Optional[QualityRequirements]) -> int:
+        """Get lookback days from quality requirements.
+
+        Args:
+            quality_requirements: Quality constraints
+
+        Returns:
+            Number of days to look back for market data
+        """
+        lookback_days = 180  # Default to last 6 months
+        if quality_requirements and quality_requirements.min_resolution_days < 0:
+            lookback_days = abs(quality_requirements.min_resolution_days)
+        return lookback_days
+
+    def _parse_market_close_time(self, market: Dict[str, Any]) -> Optional[datetime]:
+        """Parse actual resolution date from market data.
+
+        Tries multiple fields in priority order:
+        1. umaEndDate (newer markets, ISO format)
+        2. closedTime (older markets)
+
+        Args:
+            market: Market data from API
+
+        Returns:
+            Parsed datetime or None if unable to parse
+        """
+        closed_time = None
+
+        # Try umaEndDate first (newer markets, already ISO format)
+        if market.get("umaEndDate"):
+            try:
+                closed_time = parse_iso_datetime(market.get("umaEndDate"))
+            except Exception as e:
+                logger.debug(f"Failed to parse umaEndDate: {e}")
+
+        # Fall back to closedTime (older markets)
+        if not closed_time and market.get("closedTime"):
+            try:
+                closed_time_str = market.get("closedTime")
+                # Handle format: "2020-11-02 16:31:01+00"
+                if " " in closed_time_str and "+" in closed_time_str:
+                    closed_time_str = closed_time_str.replace(" ", "T").replace("+00", "+00:00")
+                closed_time = datetime.fromisoformat(closed_time_str)
+            except Exception as e:
+                logger.debug(f"Failed to parse closedTime: {e}")
+
+        return closed_time
+
+    def _parse_market_outcomes(self, market: Dict[str, Any]) -> List[str]:
+        """Parse outcomes from market data.
+
+        Args:
+            market: Market data from API
+
+        Returns:
+            List of outcome strings
+        """
+        try:
+            outcomes_str = market.get("outcomes", '["Yes", "No"]')
+            outcomes = json.loads(outcomes_str)
+            if not isinstance(outcomes, list) or len(outcomes) == 0:
+                outcomes = ["Yes", "No"]  # Fallback
+            return outcomes
+        except Exception as e:
+            logger.debug(f"Failed to parse outcomes for market {market.get('question', 'unknown')}: {e}")
+            return ["Yes", "No"]  # Fallback
+
+    def _extract_ground_truth(self, market: Dict[str, Any], outcomes: List[str]) -> tuple[Optional[str], Optional[str]]:
+        """Extract ground truth and resolution reasoning from resolved market.
+
+        Args:
+            market: Market data from API
+            outcomes: List of possible outcomes
+
+        Returns:
+            Tuple of (ground_truth, resolution_reasoning)
+        """
+        ground_truth = None
+        resolution_reasoning = None
+
+        if not market.get("closed") or not self.require_ground_truth:
+            return ground_truth, resolution_reasoning
+
+        try:
+            outcome_prices_str = market.get("outcomePrices", "")
+            if outcome_prices_str:
+                outcome_prices = json.loads(outcome_prices_str)
+
+                # Find the winning outcome (price = "1" means it won)
+                for idx, price in enumerate(outcome_prices):
+                    if price == "1" and idx < len(outcomes):
+                        ground_truth = outcomes[idx]
+                        break
+
+                # Add resolution reasoning
+                if ground_truth:
+                    resolved_by = market.get("resolvedBy", "")
+                    auto_resolved = market.get("automaticallyResolved", False)
+                    resolution_method = "automatically" if auto_resolved else "manually"
+                    resolution_reasoning = f"Market resolved {resolution_method} to '{ground_truth}'"
+        except Exception as e:
+            logger.debug(f"Failed to parse ground truth for market {market.get('question', 'unknown')}: {e}")
+
+        return ground_truth, resolution_reasoning
+
+    def _should_skip_market(
+        self,
+        market: Dict[str, Any],
+        end_date: datetime,
+        closed_time: Optional[datetime],
+        quality_requirements: Optional[QualityRequirements]
+    ) -> tuple[bool, str]:
+        """Check if market should be skipped based on filters.
+
+        Args:
+            market: Market data from API
+            end_date: Market end date
+            closed_time: Market closed time (if available)
+            quality_requirements: Quality constraints
+
+        Returns:
+            Tuple of (should_skip, reason)
+        """
+        from datetime import timedelta
+
+        if self.require_ground_truth:
+            # For ground truth: need closed markets with resolved outcomes
+            # Check 1: Must be closed (resolved)
+            if not market.get("closed"):
+                return True, "not_closed"
+
+            # Check 2: Must have outcome prices (indicates actual resolution)
+            outcome_prices_str = market.get("outcomePrices", "")
+            if not outcome_prices_str or outcome_prices_str == "[]":
+                return True, "not_closed"
+
+            # Check 3: Must have actual resolution time for accurate filtering
+            if not closed_time:
+                return True, "no_close_time"
+
+            # Check 4: closedTime must be within time window
+            now = datetime.now(timezone.utc)
+            lookback_days = self._get_lookback_days(quality_requirements)
+            min_date = now - timedelta(days=lookback_days)
+
+            if closed_time > now:
+                return True, "future_close"
+            if closed_time < min_date:
+                return True, "too_old"
+        else:
+            # For predictions: need open markets with future resolution
+            if market.get("closed"):
+                return True, "already_closed"
+
+            if end_date < datetime.now(timezone.utc):
+                return True, "wrong_date"
+
+        return False, ""
+
+    def _parse_single_market(self, market: Dict[str, Any], end_date: datetime, closed_time: Optional[datetime]) -> Optional[MarketQuestion]:
+        """Parse a single market into MarketQuestion.
+
+        Args:
+            market: Market data from API
+            end_date: Parsed end date
+            closed_time: Parsed closed time (if available)
+
+        Returns:
+            MarketQuestion or None if parsing fails
+        """
+        try:
+            question_text = market.get("question")
+            if not question_text:
+                return None
+
+            # Get description (resolution criteria)
+            description = market.get("description", "")
+            if not description:
+                # Fallback: try to get from events
+                events = market.get("events", [])
+                if events and isinstance(events, list) and len(events) > 0:
+                    description = events[0].get("description", "")
+
+            # Use description as resolution criteria, with fallback
+            resolution_criteria = description if description else f"See https://polymarket.com/event/{market.get('slug', '')}"
+
+            # Parse actual outcomes from the API
+            outcomes = self._parse_market_outcomes(market)
+
+            # Determine question type based on market type and outcomes content
+            market_type = market.get("marketType", "normal")
+            if market_type == "normal":
+                # Check if it's a true boolean (Yes/No) or binary MCQ
+                if outcomes == ["Yes", "No"]:
+                    question_type = "boolean"
+                else:
+                    question_type = "multiple_choice"
+            elif market_type == "scalar":
+                # Skip scalar markets (price predictions)
+                return None
+            else:
+                # Unknown market type, check outcomes as fallback
+                if outcomes == ["Yes", "No"]:
+                    question_type = "boolean"
+                else:
+                    question_type = "multiple_choice"
+
+            # Extract ground truth for resolved markets
+            ground_truth, resolution_reasoning = self._extract_ground_truth(market, outcomes)
+
+            # Get volume
+            volume = market.get("volumeNum", 0.0) or 0.0
+
+            return MarketQuestion(
+                market_id=market.get("conditionId", market.get("id")),
+                market_source="polymarket",
+                question_text=question_text,
+                question_type=question_type,
+                resolution_criteria=resolution_criteria,
+                close_time=end_date,
+                resolution_time=closed_time,
+                current_probability=market.get("lastTradePrice"),
+                volume_usd=volume if volume > 0 else None,
+                liquidity_usd=market.get("liquidityNum"),
+                category=market.get("category"),
+                options=outcomes,
+                metadata={
+                    "market_slug": market.get("slug"),
+                    "tags": market.get("tags", []),
+                    "active": market.get("active"),
+                    "events": market.get("events", []),
+                    "categories": market.get("categories", []),
+                    "ground_truth": ground_truth,
+                    "resolution_reasoning": resolution_reasoning,
+                    "closed": market.get("closed", False),
+                },
+            )
+        except Exception as e:
+            logger.debug(f"Failed to parse market {market.get('question', 'unknown')}: {e}")
+            return None
+
+    async def _fetch_market_list_from_api(
+        self,
+        session: aiohttp.ClientSession,
+        limit: int,
+        quality_requirements: Optional[QualityRequirements]
+    ) -> List[Dict[str, Any]]:
+        """Fetch raw market list from Polymarket API.
+
+        Args:
+            session: HTTP session
+            limit: Maximum markets to fetch
+            quality_requirements: Quality constraints
+
+        Returns:
+            List of market dictionaries from API
+        """
+        url = f"{self.API_BASE}/markets"
+        params = {
+            "limit": limit,
+            "offset": 0,
+        }
+
+        # For ground truth, query closed markets sorted by actual resolution time
+        if self.require_ground_truth:
+            from datetime import timedelta
+            lookback_days = self._get_lookback_days(quality_requirements)
+
+            # Query only closed markets, sorted by closedTime (most recent first)
+            params["closed"] = "true"
+            params["order"] = "closedTime"
+            params["ascending"] = "false"
+            logger.info(f"API filtering for closed markets sorted by closedTime (most recent first)")
+
+        async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
+            if response.status != 200:
+                logger.error(f"Polymarket Gamma API returned {response.status}")
+                return []
+
+            # Gamma API returns array directly
+            market_list = await response.json()
+
+            if not isinstance(market_list, list):
+                logger.error(f"Unexpected response format: {type(market_list)}")
+                return []
+
+            logger.info(f"Polymarket Gamma API returned {len(market_list)} markets")
+
+            # Log filtering criteria for ground truth
+            if self.require_ground_truth:
+                from datetime import timedelta
+                lookback_days = self._get_lookback_days(quality_requirements)
+                min_date = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+                logger.info(f"Client-side filter: {min_date.strftime('%Y-%m-%d')} <= closedTime <= now ({lookback_days} days)")
+
+            # Debug: Check sample market
+            if market_list:
+                sample = market_list[0]
+                logger.info(f"Sample: closed={sample.get('closed')}, endDate={sample.get('endDate')}, umaEndDate={sample.get('umaEndDate')}, closedTime={sample.get('closedTime')}, question={sample.get('question', 'N/A')[:60]}")
+
+            return market_list
+
     async def collect(
         self,
         count: int,
@@ -263,276 +566,93 @@ class PolymarketRunner(QuestionSourceRunner):
 
         try:
             async with aiohttp.ClientSession() as session:
-                url = f"{self.API_BASE}/markets"
-                params = {
-                    "limit": limit,
-                    "offset": 0,  # Start from beginning
-                }
+                # Fetch market list from API
+                market_list = await self._fetch_market_list_from_api(session, limit, quality_requirements)
 
-                # For ground truth, query closed markets sorted by actual resolution time
-                if self.require_ground_truth:
-                    from datetime import timedelta
-                    lookback_days = 180
-                    if quality_requirements and quality_requirements.min_resolution_days < 0:
-                        lookback_days = abs(quality_requirements.min_resolution_days)
+                if not market_list:
+                    return []
 
-                    # Query only closed markets, sorted by closedTime (most recent first)
-                    params["closed"] = "true"
-                    params["order"] = "closedTime"
-                    params["ascending"] = "false"
-                    logger.info(f"API filtering for closed markets sorted by closedTime (most recent first)")
+                parsed_count = 0
+                skipped_not_closed = 0  # For ground truth mode: markets not yet closed/resolved
+                skipped_closed = 0  # For prediction mode: markets already closed
+                skipped_past = 0  # Markets with dates outside target range
+                skipped_future_close = 0  # Markets with closedTime in the future
+                skipped_no_close_time = 0  # Markets without closedTime/umaEndDate
+                skipped_volume = 0
+                skipped_scalar = 0  # Scalar markets (price predictions)
+                failed_parse = 0
 
-                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
-                    if response.status != 200:
-                        logger.error(f"Polymarket Gamma API returned {response.status}")
-                        return []
+                for market in market_list:
+                    # Parse end date (needed for all markets)
+                    end_date_str = market.get("endDate")
+                    if not end_date_str:
+                        failed_parse += 1
+                        continue
 
-                    # Gamma API returns array directly
-                    market_list = await response.json()
+                    try:
+                        end_date = parse_iso_datetime(end_date_str)
+                    except Exception as e:
+                        failed_parse += 1
+                        logger.debug(f"Failed to parse endDate: {e}")
+                        continue
 
-                    if not isinstance(market_list, list):
-                        logger.error(f"Unexpected response format: {type(market_list)}")
-                        return []
+                    # Parse actual resolution date (try multiple fields for robustness)
+                    closed_time = self._parse_market_close_time(market)
 
-                    logger.info(f"Polymarket Gamma API returned {len(market_list)} markets")
+                    # Filter based on mode (ground truth vs prediction)
+                    should_skip, skip_reason = self._should_skip_market(market, end_date, closed_time, quality_requirements)
+                    if should_skip:
+                        # Update skip counters based on reason
+                        if skip_reason == "not_closed":
+                            skipped_not_closed += 1
+                        elif skip_reason == "no_close_time":
+                            skipped_no_close_time += 1
+                            logger.debug(f"Market closed but no resolution time: {market.get('question', 'unknown')[:50]}")
+                        elif skip_reason == "future_close":
+                            skipped_future_close += 1
+                        elif skip_reason == "too_old":
+                            skipped_past += 1
+                        elif skip_reason == "already_closed":
+                            skipped_closed += 1
+                        elif skip_reason == "wrong_date":
+                            skipped_past += 1
+                        continue
 
-                    # Log filtering criteria for ground truth
-                    if self.require_ground_truth:
-                        from datetime import timedelta
-                        lookback_days = 180
-                        if quality_requirements and quality_requirements.min_resolution_days < 0:
-                            lookback_days = abs(quality_requirements.min_resolution_days)
-                        min_date = datetime.now(timezone.utc) - timedelta(days=lookback_days)
-                        logger.info(f"Client-side filter: {min_date.strftime('%Y-%m-%d')} <= closedTime <= now ({lookback_days} days)")
+                    # Get volume (Gamma API provides volumeNum)
+                    volume = market.get("volumeNum", 0.0) or 0.0
 
-                    # Debug: Check sample market
-                    if market_list:
-                        sample = market_list[0]
-                        logger.info(f"Sample: closed={sample.get('closed')}, endDate={sample.get('endDate')}, umaEndDate={sample.get('umaEndDate')}, closedTime={sample.get('closedTime')}, question={sample.get('question', 'N/A')[:60]}")
+                    # Apply volume filter (relaxed - many markets don't have volume data)
+                    # Only filter if we have volume data AND it's below threshold
+                    if volume > 0 and volume < self.min_volume_usd:
+                        skipped_volume += 1
+                        continue
 
-                    parsed_count = 0
-                    skipped_not_closed = 0  # For ground truth mode: markets not yet closed/resolved
-                    skipped_closed = 0  # For prediction mode: markets already closed
-                    skipped_past = 0  # Markets with dates outside target range
-                    skipped_future_close = 0  # Markets with closedTime in the future
-                    skipped_no_close_time = 0  # Markets without closedTime/umaEndDate
-                    skipped_volume = 0
-                    skipped_scalar = 0  # Scalar markets (price predictions)
-                    failed_parse = 0
-
-                    for market in market_list:
-                        # Parse end date (needed for all markets)
-                        end_date_str = market.get("endDate")
-                        if not end_date_str:
-                            failed_parse += 1
-                            continue
-
-                        try:
-                            end_date = parse_iso_datetime(end_date_str)
-                        except Exception as e:
-                            failed_parse += 1
-                            logger.debug(f"Failed to parse endDate: {e}")
-                            continue
-
-                        # Parse actual resolution date (try multiple fields for robustness)
-                        # Priority: umaEndDate (ISO format) > closedTime > endDate
-                        closed_time = None
-
-                        # Try umaEndDate first (newer markets, already ISO format)
-                        if market.get("umaEndDate"):
-                            try:
-                                closed_time = parse_iso_datetime(market.get("umaEndDate"))
-                            except Exception as e:
-                                logger.debug(f"Failed to parse umaEndDate: {e}")
-
-                        # Fall back to closedTime (older markets)
-                        if not closed_time and market.get("closedTime"):
-                            try:
-                                closed_time_str = market.get("closedTime")
-                                # Handle format: "2020-11-02 16:31:01+00"
-                                if " " in closed_time_str and "+" in closed_time_str:
-                                    closed_time_str = closed_time_str.replace(" ", "T").replace("+00", "+00:00")
-                                closed_time = datetime.fromisoformat(closed_time_str)
-                            except Exception as e:
-                                logger.debug(f"Failed to parse closedTime: {e}")
-
-                        # Filter based on mode (ground truth vs prediction)
-                        if self.require_ground_truth:
-                            # For ground truth: need closed markets with resolved outcomes
-                            # Check 1: Must be closed (resolved)
-                            if not market.get("closed"):
-                                skipped_not_closed += 1
-                                continue
-
-                            # Check 2: Must have outcome prices (indicates actual resolution)
-                            outcome_prices_str = market.get("outcomePrices", "")
-                            if not outcome_prices_str or outcome_prices_str == "[]":
-                                skipped_not_closed += 1
-                                continue
-
-                            # Check 3: Must have actual resolution time for accurate filtering
-                            # If no closedTime/umaEndDate, we can't determine when it actually resolved
-                            if not closed_time:
-                                skipped_no_close_time += 1
-                                logger.debug(f"Market closed but no resolution time: {market.get('question', 'unknown')[:50]}")
-                                continue
-
-                            # Check 4: closedTime must be within time window
-                            # (now - time_window) <= closedTime <= now
-                            from datetime import timedelta
-                            now = datetime.now(timezone.utc)
-
-                            lookback_days = 180  # Default to last 6 months
-                            if quality_requirements and quality_requirements.min_resolution_days < 0:
-                                lookback_days = abs(quality_requirements.min_resolution_days)
-
-                            min_date = now - timedelta(days=lookback_days)
-
-                            # Skip if resolution date is outside the time window
-                            if closed_time > now:
-                                skipped_future_close += 1
-                                continue
-                            if closed_time < min_date:
-                                skipped_past += 1
-                                continue
+                    # Parse market into MarketQuestion
+                    mq = self._parse_single_market(market, end_date, closed_time)
+                    if mq is None:
+                        # Check if it was a scalar market (already logged in helper)
+                        if market.get("marketType") == "scalar":
+                            skipped_scalar += 1
                         else:
-                            # For predictions: need open markets with future resolution
-                            # Skip closed markets
-                            if market.get("closed"):
-                                skipped_closed += 1
-                                continue
-
-                            # Skip markets that already ended
-                            if end_date < datetime.now(timezone.utc):
-                                skipped_past += 1
-                                continue
-
-                        # Get volume (Gamma API provides volumeNum)
-                        volume = market.get("volumeNum", 0.0) or 0.0
-
-                        # Apply volume filter (relaxed - many markets don't have volume data)
-                        # Only filter if we have volume data AND it's below threshold
-                        if volume > 0 and volume < self.min_volume_usd:
-                            skipped_volume += 1
-                            continue
-
-                        # Parse market
-                        try:
-                            question_text = market.get("question")
-                            if not question_text:
-                                failed_parse += 1
-                                continue
-
-                            # Get description (resolution criteria)
-                            description = market.get("description", "")
-                            if not description:
-                                # Fallback: try to get from events
-                                events = market.get("events", [])
-                                if events and isinstance(events, list) and len(events) > 0:
-                                    description = events[0].get("description", "")
-
-                            # Use description as resolution criteria, with fallback
-                            resolution_criteria = description if description else f"See https://polymarket.com/event/{market.get('slug', '')}"
-
-                            # Parse actual outcomes from the API
-                            try:
-                                outcomes_str = market.get("outcomes", '["Yes", "No"]')
-                                outcomes = json.loads(outcomes_str)
-                                if not isinstance(outcomes, list) or len(outcomes) == 0:
-                                    outcomes = ["Yes", "No"]  # Fallback
-                            except Exception as e:
-                                logger.debug(f"Failed to parse outcomes for market {market.get('question', 'unknown')}: {e}")
-                                outcomes = ["Yes", "No"]  # Fallback
-
-                            # Determine question type based on market type and outcomes content
-                            market_type = market.get("marketType", "normal")
-                            if market_type == "normal":
-                                # Check if it's a true boolean (Yes/No) or binary MCQ
-                                if outcomes == ["Yes", "No"]:
-                                    question_type = "boolean"
-                                else:
-                                    question_type = "multiple_choice"
-                            elif market_type == "scalar":
-                                # Skip scalar markets (price predictions) - not suitable for forecasting questions
-                                skipped_scalar += 1
-                                continue
-                            else:
-                                # Unknown market type, check outcomes as fallback
-                                if outcomes == ["Yes", "No"]:
-                                    question_type = "boolean"
-                                else:
-                                    question_type = "multiple_choice"
-
-                            # Extract ground truth for resolved markets
-                            ground_truth = None
-                            resolution_reasoning = None
-                            if market.get("closed") and self.require_ground_truth:
-                                # Parse outcomePrices to determine winning outcome
-                                try:
-                                    import json as json_module
-                                    outcome_prices_str = market.get("outcomePrices", "")
-                                    if outcome_prices_str:
-                                        outcome_prices = json_module.loads(outcome_prices_str)
-                                        outcomes = json_module.loads(market.get("outcomes", '["Yes", "No"]'))
-
-                                        # Find the winning outcome (price = "1" means it won)
-                                        for idx, price in enumerate(outcome_prices):
-                                            if price == "1" and idx < len(outcomes):
-                                                ground_truth = outcomes[idx]
-                                                break
-
-                                        # Add resolution reasoning
-                                        if ground_truth:
-                                            resolved_by = market.get("resolvedBy", "")
-                                            auto_resolved = market.get("automaticallyResolved", False)
-                                            resolution_method = "automatically" if auto_resolved else "manually"
-                                            resolution_reasoning = f"Market resolved {resolution_method} to '{ground_truth}'"
-                                except Exception as e:
-                                    logger.debug(f"Failed to parse ground truth for market {market.get('question', 'unknown')}: {e}")
-
-                            mq = MarketQuestion(
-                                market_id=market.get("conditionId", market.get("id")),  # camelCase
-                                market_source="polymarket",
-                                question_text=question_text,
-                                question_type=question_type,
-                                resolution_criteria=resolution_criteria,
-                                close_time=end_date,  # Expected resolution date
-                                resolution_time=closed_time,  # Actual resolution date
-                                current_probability=market.get("lastTradePrice"),  # Use last trade price as proxy
-                                volume_usd=volume if volume > 0 else None,
-                                liquidity_usd=market.get("liquidityNum"),
-                                category=market.get("category"),  # Gamma provides category directly
-                                options=outcomes,  # Use actual outcomes from API
-                                metadata={
-                                    "market_slug": market.get("slug"),
-                                    "tags": market.get("tags", []),
-                                    "active": market.get("active"),
-                                    "events": market.get("events", []),
-                                    "categories": market.get("categories", []),
-                                    "ground_truth": ground_truth,  # Store ground truth in metadata
-                                    "resolution_reasoning": resolution_reasoning,
-                                    "closed": market.get("closed", False),
-                                },
-                            )
-                            markets.append(mq)
-                            parsed_count += 1
-                        except Exception as e:
                             failed_parse += 1
-                            logger.debug(f"Failed to parse market {market.get('question', 'unknown')}: {e}")
+                        continue
 
-                    if self.require_ground_truth:
-                        logger.info(
-                            f"Polymarket parsing: {parsed_count} markets parsed, "
-                            f"{skipped_not_closed} not closed/resolved, {skipped_no_close_time} no resolution time, "
-                            f"{skipped_past} too old, {skipped_future_close} future closedTime, "
-                            f"{skipped_volume} low volume, {skipped_scalar} scalar markets, {failed_parse} failed"
-                        )
-                    else:
-                        logger.info(
-                            f"Polymarket parsing: {parsed_count} markets parsed, "
-                            f"{skipped_closed} already closed, {skipped_past} wrong date, "
-                            f"{skipped_volume} low volume, {skipped_scalar} scalar markets, {failed_parse} failed"
-                        )
+                    markets.append(mq)
+                    parsed_count += 1
+
+                if self.require_ground_truth:
+                    logger.info(
+                        f"Polymarket parsing: {parsed_count} markets parsed, "
+                        f"{skipped_not_closed} not closed/resolved, {skipped_no_close_time} no resolution time, "
+                        f"{skipped_past} too old, {skipped_future_close} future closedTime, "
+                        f"{skipped_volume} low volume, {skipped_scalar} scalar markets, {failed_parse} failed"
+                    )
+                else:
+                    logger.info(
+                        f"Polymarket parsing: {parsed_count} markets parsed, "
+                        f"{skipped_closed} already closed, {skipped_past} wrong date, "
+                        f"{skipped_volume} low volume, {skipped_scalar} scalar markets, {failed_parse} failed"
+                    )
 
         except Exception as e:
             logger.error(f"Error fetching Polymarket markets: {e}")
