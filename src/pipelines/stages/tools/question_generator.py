@@ -7,9 +7,11 @@ import uuid
 from smolagents import Tool
 from src.domain.models import Event, Question, QuestionType, Domain
 from src.utils.enums import enum_to_list
+from src.utils.date_utils import parse_iso_datetime
+from src.pipelines.stages.tools.base import CollectorAwareTool
 
 
-class QuestionGeneratorTool(Tool):
+class QuestionGeneratorTool(CollectorAwareTool[Question]):
     """Stores and structures generated forecast questions.
     
     This tool helps the agent:
@@ -63,12 +65,8 @@ class QuestionGeneratorTool(Tool):
             collector: Optional ResultCollector[Question] for storing results.
                       If provided, questions are added to the collector instead of internal storage.
         """
-        super().__init__()
-        # Result storage - use collector if provided, otherwise internal list
-        self.collector = collector
+        super().__init__(collector)
         self.require_ground_truth = require_ground_truth
-        # Backward compatibility: internal storage when no collector provided
-        self.generated_questions = []
     
     def forward(
         self,
@@ -107,13 +105,10 @@ class QuestionGeneratorTool(Tool):
             JSON string of Question object
         """
         # Parse resolution date
-        try:
-            res_date = datetime.fromisoformat(resolution_date.replace('Z', '+00:00'))
-            # Ensure timezone-aware (add UTC if naive)
-            if res_date.tzinfo is None:
-                res_date = res_date.replace(tzinfo=timezone.utc)
-        except:
-            res_date = datetime.now(timezone.utc) + timedelta(days=30)
+        res_date = parse_iso_datetime(
+            resolution_date,
+            fallback=datetime.now(timezone.utc) + timedelta(days=30)
+        )
 
         # CRITICAL VALIDATION: Ground truth questions must have past/present resolution dates
         current_time = datetime.now(timezone.utc)
@@ -198,8 +193,8 @@ class QuestionGeneratorTool(Tool):
         if ground_truth:
             normalized_ground_truth = self._normalize_ground_truth(ground_truth, qtype_enum)
 
-        # Generate unique question ID (use collector count as counter if available, otherwise generated_questions)
-        counter = len(self.collector) if self.collector is not None else len(self.generated_questions)
+        # Generate unique question ID using stored count
+        counter = self.get_stored_count()
         question_id = self._generate_question_id(domain_enum, res_date, counter)
 
         # Determine time horizon based on resolution date
@@ -234,13 +229,8 @@ class QuestionGeneratorTool(Tool):
             quantity_bounds=bounds_dict,  # For quantity questions
         )
         
-        # Store full question using collector if provided, otherwise use internal list
-        # Note: Check 'is not None' because ResultCollector.__bool__ returns False when empty
-        if self.collector is not None:
-            self.collector.add(question)
-        else:
-            # Backward compatibility - store in internal list
-            self.generated_questions.append(question)
+        # Store question using unified collector interface
+        self.store_result(question, context=f"Question {question.id}")
         
         # Return summary to save tokens (NOT full question)
         summary = {

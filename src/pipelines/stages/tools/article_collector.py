@@ -15,9 +15,10 @@ from src.utils.enums import enum_to_list, parse_domain
 from src.utils.id_generator import generate_article_id
 from src.utils.date_utils import parse_iso_datetime
 from src.pipelines.stages.tools.web_fetch import WebFetchTool
+from src.pipelines.stages.tools.base import CollectorAwareTool
 
 
-class ArticleCollectorTool(Tool):
+class ArticleCollectorTool(CollectorAwareTool[Article]):
     """Fetches and stores article data from URLs into Article objects.
     
     This tool helps the agent:
@@ -70,22 +71,18 @@ class ArticleCollectorTool(Tool):
     
     def __init__(self, db=None, db_path: str = None, collector=None):
         """Initialize the article collector.
-        
+
         Args:
             db: Optional Database instance for cross-run deduplication
             db_path: Optional path to database file (creates new Database with schema if provided)
             collector: Optional ResultCollector[Article] for storing results.
                       If provided, articles are added to the collector instead of internal storage.
         """
-        super().__init__()
+        super().__init__(collector)
         self.config = None
         self.seen_hashes = set()  # For in-memory deduplication within this run
         self.web_visitor = WebFetchTool()  # Internal tool for fetching content
-        
-        # Result storage - use collector if provided, otherwise internal list
-        self.collector = collector
-        self.collected_articles = []  # Fallback for backward compatibility
-        
+
         logger.info(f"ArticleCollectorTool initialized with collector: {collector is not None}")
         
         # Database for cross-run deduplication (optional)
@@ -229,15 +226,8 @@ class ArticleCollectorTool(Tool):
         article.word_count = len(article.content.split())
         article.reading_time_minutes = max(1, article.word_count // 200)
         
-        # Store full article using collector if provided, otherwise use internal list
-        # Note: Check 'is not None' because ResultCollector.__bool__ returns False when empty
-        if self.collector is not None:
-            self.collector.add(article)
-            logger.info(f"Added article {article.id} to collector (total now: {self.collector.count()})")
-        else:
-            # Backward compatibility - store in internal list
-            self.collected_articles.append(article)
-            logger.info(f"Added article {article.id} to internal list (total now: {len(self.collected_articles)})")
+        # Store article using unified collector interface
+        self.store_result(article, context=f"Article {article.id}")
         
         # Convert to JSON and return a SUMMARY to save tokens
         # Return only metadata, NOT the full content

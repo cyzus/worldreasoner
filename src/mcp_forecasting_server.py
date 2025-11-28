@@ -75,6 +75,8 @@ from src.core.hybrid_search import HybridSearch
 from src.domain.models import Article, Question, Forecast, Event
 from src.domain.models.domain import Domain
 from src.utils.logging import logger
+from src.utils.enums import parse_domain
+from src.utils.date_utils import parse_flexible_datetime
 
 # Initialize MCP server
 mcp = FastMCP("worldreasoner-forecasting")
@@ -135,24 +137,10 @@ class ForecastContextMiddleware(Middleware):
                     if question_id and simulated_date:
                         try:
                             # Parse simulated date
-                            if 'T' in simulated_date:
-                                simulated_date_obj = datetime.fromisoformat(simulated_date.replace('Z', '+00:00'))
-                            else:
-                                simulated_date_obj = datetime.fromisoformat(f"{simulated_date}T00:00:00+00:00")
-
-                            if simulated_date_obj.tzinfo is None:
-                                simulated_date_obj = simulated_date_obj.replace(tzinfo=timezone.utc)
+                            simulated_date_obj = parse_flexible_datetime(simulated_date)
 
                             # Parse knowledge cutoff (optional, but recommended)
-                            knowledge_cutoff_obj = None
-                            if knowledge_cutoff:
-                                if 'T' in knowledge_cutoff:
-                                    knowledge_cutoff_obj = datetime.fromisoformat(knowledge_cutoff.replace('Z', '+00:00'))
-                                else:
-                                    knowledge_cutoff_obj = datetime.fromisoformat(f"{knowledge_cutoff}T00:00:00+00:00")
-
-                                if knowledge_cutoff_obj.tzinfo is None:
-                                    knowledge_cutoff_obj = knowledge_cutoff_obj.replace(tzinfo=timezone.utc)
+                            knowledge_cutoff_obj = parse_flexible_datetime(knowledge_cutoff) if knowledge_cutoff else None
 
                             # Validate question exists
                             question = db.get(Question, question_id)
@@ -432,12 +420,9 @@ async def temporal_search_articles(
             if article:
                 # Apply domain filter if specified
                 if domain.value:
-                    try:
-                        domain_filter = Domain(domain.value.lower())
-                        if article.domain != domain_filter:
-                            continue
-                    except ValueError:
-                        pass
+                    domain_filter = parse_domain(domain.value)
+                    if article.domain != domain_filter:
+                        continue
                 matches.append(article)
 
         # Limit results after domain filtering

@@ -15,6 +15,7 @@ from src.domain.models.domain import Domain
 from src.domain.models.question import QuestionType
 from src.config.collection_goal import QualityRequirements
 from src.utils.logging import logger
+from src.utils.date_utils import parse_iso_datetime
 
 
 class MarketQuestion(BaseModel):
@@ -321,13 +322,13 @@ class PolymarketRunner(QuestionSourceRunner):
 
                     for market in market_list:
                         # Parse end date (needed for all markets)
-                        try:
-                            end_date_str = market.get("endDate")
-                            if not end_date_str:
-                                failed_parse += 1
-                                continue
+                        end_date_str = market.get("endDate")
+                        if not end_date_str:
+                            failed_parse += 1
+                            continue
 
-                            end_date = datetime.fromisoformat(end_date_str.replace("Z", "+00:00"))
+                        try:
+                            end_date = parse_iso_datetime(end_date_str)
                         except Exception as e:
                             failed_parse += 1
                             logger.debug(f"Failed to parse endDate: {e}")
@@ -340,7 +341,7 @@ class PolymarketRunner(QuestionSourceRunner):
                         # Try umaEndDate first (newer markets, already ISO format)
                         if market.get("umaEndDate"):
                             try:
-                                closed_time = datetime.fromisoformat(market.get("umaEndDate").replace("Z", "+00:00"))
+                                closed_time = parse_iso_datetime(market.get("umaEndDate"))
                             except Exception as e:
                                 logger.debug(f"Failed to parse umaEndDate: {e}")
 

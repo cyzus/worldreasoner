@@ -11,9 +11,10 @@ from src.utils.enums import enum_to_list, parse_domain, parse_event_type
 from src.utils.id_generator import generate_event_id
 from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
 from src.utils.logging import logger
+from src.pipelines.stages.tools.base import CollectorAwareTool
 
 
-class BatchEventIdentifierTool(Tool):
+class BatchEventIdentifierTool(CollectorAwareTool[Event]):
     """Stores multiple identified events from article analysis in a single call.
 
     This tool helps the agent:
@@ -79,8 +80,7 @@ class BatchEventIdentifierTool(Tool):
         Args:
             collector: Optional ResultCollector[Event] for storing results.
         """
-        super().__init__()
-        self.collector = collector
+        super().__init__(collector)
         self.event_counter = 0
 
     def forward(self, events_json: str) -> str:
@@ -110,9 +110,8 @@ class BatchEventIdentifierTool(Tool):
                 try:
                     event = self._create_event(event_data, idx)
 
-                    # Store event
-                    if self.collector is not None:
-                        self.collector.add(event)
+                    # Store event using unified collector interface
+                    self.store_result(event, context=f"Event {event.id}")
 
                     stored_events.append({
                         "id": event.id,

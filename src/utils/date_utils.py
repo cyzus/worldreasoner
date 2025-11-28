@@ -51,3 +51,45 @@ def ensure_timezone_aware(dt: datetime) -> datetime:
         logger.warning("Converting naive datetime to UTC")
         return dt.replace(tzinfo=timezone.utc)
     return dt
+
+
+def parse_flexible_datetime(
+    date_str: Optional[str],
+    fallback: Optional[datetime] = None
+) -> datetime:
+    """
+    Parse datetime string that may be ISO datetime or date-only format.
+
+    Handles both:
+    - Full datetime: "2024-01-01T12:00:00Z" or "2024-01-01T12:00:00+00:00"
+    - Date only: "2024-01-01" (assumes midnight UTC)
+
+    Args:
+        date_str: Datetime or date string to parse
+        fallback: Fallback datetime if parsing fails (default: current UTC time)
+
+    Returns:
+        Parsed datetime or fallback
+
+    Examples:
+        >>> parse_flexible_datetime("2024-01-01T12:00:00Z")
+        datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+
+        >>> parse_flexible_datetime("2024-01-01")
+        datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc)
+    """
+    if not date_str:
+        return fallback or datetime.now(timezone.utc)
+
+    try:
+        # Handle date-only format (no 'T' separator)
+        if 'T' not in date_str:
+            # Add time component at midnight UTC
+            date_str = f"{date_str}T00:00:00+00:00"
+
+        # Handle 'Z' suffix by replacing with +00:00
+        normalized = date_str.replace('Z', '+00:00')
+        return datetime.fromisoformat(normalized)
+    except (ValueError, AttributeError) as e:
+        logger.warning(f"Failed to parse datetime '{date_str}': {e}")
+        return fallback or datetime.now(timezone.utc)

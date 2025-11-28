@@ -10,9 +10,10 @@ from src.domain.models import Article, Event, EventType, EventStatus, Domain
 from src.utils.enums import enum_to_list, parse_domain, parse_event_type
 from src.utils.id_generator import generate_event_id
 from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
+from src.pipelines.stages.tools.base import CollectorAwareTool
 
 
-class EventIdentifierTool(Tool):
+class EventIdentifierTool(CollectorAwareTool[Event]):
     """Stores and structures identified events from article analysis.
     
     This tool helps the agent:
@@ -66,15 +67,12 @@ class EventIdentifierTool(Tool):
     
     def __init__(self, collector=None):
         """Initialize the event identifier.
-        
+
         Args:
             collector: Optional ResultCollector[Event] for storing results.
                       If provided, events are added to the collector instead of internal storage.
         """
-        super().__init__()
-        # Result storage - use collector if provided, otherwise internal list
-        self.collector = collector
-        self.identified_events = []  # Fallback for backward compatibility
+        super().__init__(collector)
     
     def forward(
         self,
@@ -133,13 +131,8 @@ class EventIdentifierTool(Tool):
             is_synthetic=False
         )
         
-        # Store full event using collector if provided, otherwise use internal list
-        # Note: Check 'is not None' because ResultCollector.__bool__ returns False when empty
-        if self.collector is not None:
-            self.collector.add(event)
-        else:
-            # Backward compatibility - store in internal list
-            self.identified_events.append(event)
+        # Store event using unified collector interface
+        self.store_result(event, context=f"Event {event.id}")
         
         # Return summary to save tokens (NOT full event)
         summary = {
