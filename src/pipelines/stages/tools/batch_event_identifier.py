@@ -179,7 +179,11 @@ class BatchEventIdentifierTool(Tool):
             raise ValueError("Missing required field: domain")
 
         # Parse occurred date or use current time
-        event_date = parse_iso_datetime(occurred_date_str)
+        occurred_date_str = event_data.get("occurred_date")
+        if occurred_date_str:
+            event_date = parse_iso_datetime(occurred_date_str)
+        else:
+            event_date = datetime.now(timezone.utc)
         event_date = ensure_timezone_aware(event_date)
 
         # Parse article IDs
