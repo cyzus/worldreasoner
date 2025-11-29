@@ -3,7 +3,7 @@
 Imports questions directly from prediction markets like Polymarket and Metaculus.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from datetime import datetime, timezone
 import json
 import aiohttp
@@ -55,7 +55,7 @@ class PolymarketRunner(QuestionSourceRunner):
         "technology": Domain.TECH,
         "tech": Domain.TECH,
         "politics": Domain.POLITICS,
-        "science": Domain.HEALTH,  # Map science to health for now
+        "science": Domain.SCIENCE,
         "sports": Domain.SPORTS,
         "other": Domain.GENERAL,
     }
@@ -391,7 +391,7 @@ class PolymarketRunner(QuestionSourceRunner):
         self,
         count: int,
         type_filter: Optional[List[str]] = None,
-        category_filter: Optional[List[str]] = None,
+        category_filter: Optional[Union[Dict[str, int], List[str]]] = None,
         quality_requirements: Optional[QualityRequirements] = None,
         existing_question_ids: Optional[set] = None,
     ) -> CollectionResult:
@@ -400,7 +400,7 @@ class PolymarketRunner(QuestionSourceRunner):
         Args:
             count: Target number of questions
             type_filter: Only collect these question types
-            category_filter: Only collect these categories
+            category_filter: Dict mapping categories to number still needed
             quality_requirements: Quality constraints
             existing_question_ids: Set of existing IDs to skip
 

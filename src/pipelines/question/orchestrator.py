@@ -5,7 +5,7 @@ distribution requirements.
 """
 
 import asyncio
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 
@@ -209,29 +209,49 @@ class QuestionCollectionOrchestrator:
     async def _collect_from_sources(self) -> None:
         """Collect from all sources based on quotas and needs."""
 
+        # Calculate needed categories and types once for all sources to avoid race conditions
+        # Pass the full gaps mapping (category -> needed count) so downstream
+        # stages/agents can show specific amounts in prompts.
+        category_gaps = self.progress.get_category_gaps(self.goal)
+        # Don't convert empty dict to None - empty dict means "no gaps"
+        needed_categories = category_gaps  # Can be {}, {'tech': 1}, or None
+        needed_types = self._get_needed_types()
+
+        if needed_categories:
+            logger.debug(f"Category gaps to fill: {needed_categories}")
+        else:
+            logger.debug("No category gaps - all categories satisfied")
+
         if self.config.parallel_sources:
             # Run sources in parallel
             tasks = []
             for source_name, runner in self.sources.items():
-                task = self._collect_from_source(source_name, runner)
+                task = self._collect_from_source(source_name, runner, needed_categories, needed_types)
                 tasks.append(task)
 
             await asyncio.gather(*tasks, return_exceptions=True)
         else:
             # Run sources sequentially
             for source_name, runner in self.sources.items():
-                await self._collect_from_source(source_name, runner)
+                await self._collect_from_source(source_name, runner, needed_categories, needed_types)
 
     async def _collect_from_source(
         self,
         source_name: str,
         runner: QuestionSourceRunner,
+        needed_categories: Optional[Union[Dict[str, int], List[str]]] = None,
+        needed_types: Optional[List[str]] = None,
     ) -> None:
         """Collect from a single source.
 
         Args:
             source_name: Name of the source
             runner: Runner instance for this source
+            needed_categories: Either a dict mapping categories->needed counts
+                (used during gap-aware collection) or a list of category keys
+                (fallback). This is forwarded to source runners which handle
+                both shapes.
+            needed_types: Question types that still need questions
         """
         # Check source quota
         already_collected = self.progress.by_source.get(source_name, 0)
@@ -251,14 +271,11 @@ class QuestionCollectionOrchestrator:
         logger.info(f"Collecting from '{source_name}': {needed} questions...")
 
         try:
-            # Calculate which types we need most
-            needed_types = self._get_needed_types()
-
-            # Collect with type hints and existing IDs for early deduplication
+            # Collect with type and category hints and existing IDs for early deduplication
             result = await runner.collect(
                 count=needed,
-                type_filter=needed_types if needed_types else None,  # Hint which types we need
-                category_filter=None,
+                type_filter=needed_types,  # Pass directly (None is valid)
+                category_filter=needed_categories,  # Pass directly (None is valid)
                 quality_requirements=self.goal.quality,
                 existing_question_ids=self.existing_question_ids,  # Skip duplicates early
             )
@@ -301,6 +318,22 @@ class QuestionCollectionOrchestrator:
 
         # Sort by gap size (descending) and return types with positive gaps
         needed = [qtype for qtype, gap in type_gaps.items() if gap > 0]
+
+        return needed if needed else None
+
+    def _get_needed_categories(self) -> Optional[List[str]]:
+        """Get list of categories we need most.
+
+        Returns:
+            List of needed categories, or None if all categories equally needed
+        """
+        category_gaps = self.progress.get_category_gaps(self.goal)
+
+        if not category_gaps:
+            return None
+
+        # Sort by gap size (descending) and return categories with positive gaps
+        needed = [category for category, gap in category_gaps.items() if gap > 0]
 
         return needed if needed else None
 
@@ -347,6 +380,12 @@ class QuestionCollectionOrchestrator:
         logger.info(f"  Types: {gaps['types']}")
         logger.info(f"  Categories: {gaps['categories']}")
 
+        # Get current category gaps to pass along with type filters
+        category_gaps = gaps["categories"] if gaps["categories"] else None
+
+        # Get ALL type gaps as hints (not just the one being filled)
+        type_gaps_list = [qtype for qtype, gap in gaps["types"].items() if gap > 0] if gaps["types"] else None
+
         # Try to fill type gaps
         for qtype, count in gaps["types"].items():
             if count <= 0:
@@ -370,12 +409,15 @@ class QuestionCollectionOrchestrator:
                 if already_collected >= source_quota:
                     continue
 
-                # Collect with type filter
-                logger.info(f"  Trying '{source_name}' for '{qtype}'...")
+                # Collect with type filter AND category hints
+                # Pass ALL type gaps as hints (not just the focused one)
+                # This allows questions to satisfy multiple gaps at once
+                logger.info(f"  Trying '{source_name}' for '{qtype}' (all type hints: {type_gaps_list})...")
                 try:
                     result = await runner.collect(
                         count=count,
-                        type_filter=[qtype],
+                        type_filter=type_gaps_list,  # Hint at ALL type gaps
+                        category_filter=category_gaps,  # Hint at ALL category gaps
                         quality_requirements=self.goal.quality,
                         existing_question_ids=self.existing_question_ids,
                     )
@@ -389,6 +431,55 @@ class QuestionCollectionOrchestrator:
                             self.source_results[source_name].append(result)
                             count -= len(unique_questions)
                             logger.info(f"    ✓ Got {len(unique_questions)} '{qtype}' questions")
+
+                except Exception as e:
+                    logger.warning(f"    ✗ Error: {e}")
+
+        # Try to fill category gaps
+        # (type_gaps_list already calculated above)
+        for category, count in gaps["categories"].items():
+            if count <= 0:
+                continue
+
+            logger.info(f"Filling gap: need {count} '{category}' questions")
+
+            # Find sources that can provide this category
+            for source_name, runner in self.sources.items():
+                if count <= 0:
+                    break
+
+                # Check if source can provide this category
+                can_provide = await runner.can_provide(category=category)
+                if not can_provide:
+                    continue
+
+                # Check quota
+                already_collected = self.progress.by_source.get(source_name, 0)
+                source_quota = self.goal.source_quotas.get(source_name, 100)
+                if already_collected >= source_quota:
+                    continue
+
+                # Collect with category filter AND type hints
+                # This allows questions to satisfy multiple gaps at once
+                logger.info(f"  Trying '{source_name}' for '{category}' (all type hints: {type_gaps_list})...")
+                try:
+                    result = await runner.collect(
+                        count=count,
+                        type_filter=type_gaps_list,  # Hint at ALL type gaps
+                        category_filter={category: count},  # Pass specific category gap
+                        quality_requirements=self.goal.quality,
+                        existing_question_ids=self.existing_question_ids,
+                    )
+
+                    if result.success and result.questions:
+                        # Filter duplicates
+                        unique_questions = self._filter_duplicates(result.questions)
+
+                        if unique_questions:
+                            self.progress.add_questions(unique_questions)
+                            self.source_results[source_name].append(result)
+                            count -= len(unique_questions)
+                            logger.info(f"    ✓ Got {len(unique_questions)} '{category}' questions")
 
                 except Exception as e:
                     logger.warning(f"    ✗ Error: {e}")

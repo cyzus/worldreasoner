@@ -14,8 +14,8 @@ sources:
     domain: "tech"
 
   # Finance
-  - name: "Seeking Alpha"
-    url: "https://seekingalpha.com/feed"
+  - name: "MarketWatch"
+    url: "https://feeds.content.dowjones.io/public/rss/mw_topstories"
     scraper_type: "rss"
     domain: "finance"
 
@@ -38,33 +38,38 @@ sources:
     domain: "climate"
 
   # Science
-  - name: "Nature Latest"
-    url: "https://www.nature.com/rss/latest-news.xml"
+  - name: "Science Daily"
+    url: "https://www.sciencedaily.com/rss/all.xml"
     scraper_type: "rss"
     domain: "science"
 
   # Business
-  - name: "Reuters Business"
-    url: "https://feeds.reuters.com/reuters/businessNews"
+  - name: "Forbes Business"
+    url: "https://www.forbes.com/business/feed/"
     scraper_type: "rss"
     domain: "business"
 
   # Sports
-  - name: "ESPN Top"
-    url: "https://www.espn.com/espn/rss/news"
+  - name: "CBS Sports"
+    url: "https://www.cbssports.com/rss/headlines/"
     scraper_type: "rss"
     domain: "sports"
 
   # Culture (arts & entertainment)
-  - name: "Variety"
-    url: "https://variety.com/feed/"
+  - name: "The Hollywood Reporter"
+    url: "https://www.hollywoodreporter.com/feed/"
     scraper_type: "rss"
     domain: "culture"
 
   # General
-  - name: "BBC World"
-    url: "http://feeds.bbci.co.uk/news/world/rss.xml"
+  - name: "BBC News"
+    url: "http://feeds.bbci.co.uk/news/rss.xml"
     scraper_type: "rss"
+    domain: "general"
+
+  - name: "Associated Press"
+    url: "https://apnews.com/apf-topnews"
+    scraper_type: "web"
     domain: "general"
 
   # Additional science (web scraping fallback)

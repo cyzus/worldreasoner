@@ -4,7 +4,7 @@ Defines the interface that all question sources must implement.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from pydantic import BaseModel, Field
 
 from src.domain.models import Question
@@ -50,7 +50,7 @@ class QuestionSourceRunner(ABC):
         self,
         count: int,
         type_filter: Optional[List[str]] = None,
-        category_filter: Optional[List[str]] = None,
+        category_filter: Optional[Union[Dict[str, int], List[str]]] = None,
         quality_requirements: Optional[QualityRequirements] = None,
         existing_question_ids: Optional[set] = None,
     ) -> CollectionResult:
@@ -59,7 +59,7 @@ class QuestionSourceRunner(ABC):
         Args:
             count: Target number of questions to collect
             type_filter: Only collect these question types (e.g., ["boolean", "mcq"])
-            category_filter: Only collect these categories (e.g., ["finance", "tech"])
+            category_filter: Dict mapping categories to number still needed (e.g., {"finance": 1, "tech": 2})
             quality_requirements: Quality constraints for collected questions
             existing_question_ids: Set of existing IDs to skip (for deduplication)
 
@@ -90,7 +90,7 @@ class QuestionSourceRunner(ABC):
         self,
         questions: List[Question],
         type_filter: Optional[List[str]] = None,
-        category_filter: Optional[List[str]] = None,
+        category_filter: Optional[Union[Dict[str, int], List[str]]] = None,
         quality_requirements: Optional[QualityRequirements] = None,
     ) -> List[Question]:
         """Filter questions based on criteria.
@@ -98,7 +98,7 @@ class QuestionSourceRunner(ABC):
         Args:
             questions: Questions to filter
             type_filter: Allowed question types
-            category_filter: Allowed categories
+            category_filter: Dict mapping allowed categories to number needed
             quality_requirements: Quality constraints
 
         Returns:
@@ -112,9 +112,10 @@ class QuestionSourceRunner(ABC):
 
         # Filter by category
         if category_filter:
+            allowed_categories = category_filter.keys()
             filtered = [
                 q for q in filtered
-                if q.metadata.get("category", "other") in category_filter
+                if q.metadata.get("category", "other") in allowed_categories
             ]
 
         # Filter by quality requirements

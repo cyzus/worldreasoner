@@ -2,7 +2,8 @@
 
 from datetime import datetime
 from typing import List, Optional
-from src.domain.models import Article
+from src.domain.models import Article, Domain
+from src.utils.enums import enum_to_list
 from .base import ContextualPromptGenerator, PromptTemplate
 
 
@@ -121,8 +122,8 @@ Call final_answer only after you finish the task.""",
         if category_hints:
             domain_options = f"One of ({', '.join(category_hints)})"
         else:
-            # Fallback: use common domains only if no hints provided
-            domain_options = "One of (finance, politics, tech, health, climate, sports, business, science, culture, general)"
+            # Fallback: use actual Domain enum values to ensure consistency
+            domain_options = f"One of ({', '.join(enum_to_list(Domain))})"
         
         # Build priority guidance from hints
         priority_guidance = ""

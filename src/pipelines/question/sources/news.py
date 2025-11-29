@@ -3,7 +3,7 @@
 Wraps the existing article → event → question pipeline as a question source.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Dict, Union
 from datetime import datetime, timezone
 
 from .base import QuestionSourceRunner, CollectionResult
@@ -70,7 +70,7 @@ class NewsBasedRunner(QuestionSourceRunner):
         self,
         count: int,
         type_filter: Optional[List[str]] = None,
-        category_filter: Optional[List[str]] = None,
+        category_filter: Optional[Union[Dict[str, int], List[str]]] = None,
         quality_requirements: Optional[QualityRequirements] = None,
         existing_question_ids: Optional[set] = None,
     ) -> CollectionResult:
@@ -81,7 +81,7 @@ class NewsBasedRunner(QuestionSourceRunner):
         Args:
             count: Target number of questions
             type_filter: Only collect these question types
-            category_filter: Only collect these categories
+            category_filter: Dict mapping categories to number still needed
             quality_requirements: Quality constraints
             existing_question_ids: Set of existing IDs to skip
 
@@ -93,24 +93,39 @@ class NewsBasedRunner(QuestionSourceRunner):
                 f"NewsBasedRunner: Collecting {count} questions "
                 f"(types: {type_filter}, categories: {category_filter})"
             )
+            logger.debug(f"NewsBasedRunner received category_filter: type={type(category_filter)}, value={category_filter}")
 
             # Stage 1: Collect articles (filter sources by needed categories)
             logger.info("Stage 1: Collecting articles from news sources...")
-            
-            # Filter sources to match needed categories
+
+            # Filter sources to match needed categories and update config domains
             sources_to_use = self.article_config.sources
-            if category_filter:
-                filtered_sources = [
-                    source for source in self.article_config.sources
-                    if source.domain in category_filter
-                ]
-                if filtered_sources:
-                    sources_to_use = filtered_sources
-                    logger.info(f"Filtering to {len(sources_to_use)} sources matching categories: {category_filter}")
+            # Use 'is not None' instead of truthy check to handle empty dicts
+            if category_filter is not None:
+                if isinstance(category_filter, dict):
+                    filter_keys = list(category_filter.keys())
                 else:
-                    logger.warning(f"No sources match categories {category_filter}, using all sources")
+                    filter_keys = list(category_filter) if category_filter else []
+
+                # Only filter sources if we have specific categories to target
+                if filter_keys:
+                    filtered_sources = [
+                        source for source in self.article_config.sources
+                        if source.domain in filter_keys
+                    ]
+                    if filtered_sources:
+                        sources_to_use = filtered_sources
+                        # Update the article stage config to focus on missing domains
+                        self.article_stage.config.domains = filter_keys
+                        logger.info(f"Filtering to {len(sources_to_use)} sources matching categories: {filter_keys}")
+                    else:
+                        logger.warning(f"No sources match categories {filter_keys}, using all sources")
+                else:
+                    # Empty dict/list means no gaps - don't filter sources but clear domains
+                    logger.debug("Empty category_filter - no specific categories needed")
+                    self.article_stage.config.domains = []
             
-            article_result = await self.article_stage.execute(sources_to_use)
+            article_result = await self.article_stage.execute(sources_to_use, category_filter=category_filter)
 
             if not article_result.outputs:
                 logger.warning("No articles collected")
@@ -126,16 +141,23 @@ class NewsBasedRunner(QuestionSourceRunner):
             articles = article_result.outputs
             logger.info(f"Collected {len(articles)} articles")
             # Filter articles by category if hints provided
-            if category_filter and articles:
-                filtered_articles = [
-                    article for article in articles
-                    if article.domain in category_filter
-                ]
-                if filtered_articles:
-                    logger.info(f"Filtered to {len(filtered_articles)} articles matching categories: {category_filter}")
-                    articles = filtered_articles
+            if category_filter is not None and articles:
+                if isinstance(category_filter, dict):
+                    filter_keys = list(category_filter.keys())
                 else:
-                    logger.warning(f"No articles match categories {category_filter}, keeping all {len(articles)} articles")
+                    filter_keys = list(category_filter) if category_filter else []
+
+                # Only filter if we have specific categories
+                if filter_keys:
+                    filtered_articles = [
+                        article for article in articles
+                        if article.domain in filter_keys
+                    ]
+                    if filtered_articles:
+                        logger.info(f"Filtered to {len(filtered_articles)} articles matching categories: {filter_keys}")
+                        articles = filtered_articles
+                    else:
+                        logger.warning(f"No articles match categories {filter_keys}, keeping all {len(articles)} articles")
 
 
             # Persist articles
