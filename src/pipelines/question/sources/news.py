@@ -94,11 +94,23 @@ class NewsBasedRunner(QuestionSourceRunner):
                 f"(types: {type_filter}, categories: {category_filter})"
             )
 
-            # Stage 1: Collect articles
+            # Stage 1: Collect articles (filter sources by needed categories)
             logger.info("Stage 1: Collecting articles from news sources...")
-            article_result = await self.article_stage.execute(
-                self.article_config.sources
-            )
+            
+            # Filter sources to match needed categories
+            sources_to_use = self.article_config.sources
+            if category_filter:
+                filtered_sources = [
+                    source for source in self.article_config.sources
+                    if source.domain in category_filter
+                ]
+                if filtered_sources:
+                    sources_to_use = filtered_sources
+                    logger.info(f"Filtering to {len(sources_to_use)} sources matching categories: {category_filter}")
+                else:
+                    logger.warning(f"No sources match categories {category_filter}, using all sources")
+            
+            article_result = await self.article_stage.execute(sources_to_use)
 
             if not article_result.outputs:
                 logger.warning("No articles collected")
@@ -113,14 +125,35 @@ class NewsBasedRunner(QuestionSourceRunner):
 
             articles = article_result.outputs
             logger.info(f"Collected {len(articles)} articles")
+            # Filter articles by category if hints provided
+            if category_filter and articles:
+                filtered_articles = [
+                    article for article in articles
+                    if article.domain in category_filter
+                ]
+                if filtered_articles:
+                    logger.info(f"Filtered to {len(filtered_articles)} articles matching categories: {category_filter}")
+                    articles = filtered_articles
+                else:
+                    logger.warning(f"No articles match categories {category_filter}, keeping all {len(articles)} articles")
+
 
             # Persist articles
             if articles:
                 await self.article_persist.execute(articles)
 
-            # Stage 2: Identify events
+            # Stage 2: Identify events with intelligent hints
             logger.info("Stage 2: Identifying events from articles...")
-            event_result = await self.event_stage.execute_batched(
+            
+            # Pass category hints to guide event identification toward needed categories
+            # Create new stage instance with hints for this specific run
+            event_stage_with_hints = EventIdentificationStage(
+                self.event_config,
+                db_path=self.db_path,
+                category_hints=category_filter  # Tell agent which domains/categories we need
+            )
+            
+            event_result = await event_stage_with_hints.execute_batched(
                 articles,
                 batch_size=self.question_config.article_batch_size
             )
@@ -147,9 +180,20 @@ class NewsBasedRunner(QuestionSourceRunner):
             if articles:
                 await self.article_persist.execute(articles)
 
-            # Stage 3: Generate questions
+            # Stage 3: Generate questions with intelligent hints
             logger.info("Stage 3: Generating questions from events...")
-            question_result = await self.question_stage.execute_batched(
+            
+            # Pass type/category hints to guide generation intelligently
+            # Create new stage instance with hints for this specific run
+            question_stage_with_hints = QuestionGenerationStage(
+                self.question_config,
+                db_path=self.db_path,
+                type_hints=type_filter,  # Tell agent which types we need
+                category_hints=category_filter,  # Tell agent which categories we need
+                existing_question_ids=existing_question_ids  # Skip duplicates early
+            )
+            
+            question_result = await question_stage_with_hints.execute_batched(
                 events,
                 batch_size=self.question_config.event_batch_size
             )

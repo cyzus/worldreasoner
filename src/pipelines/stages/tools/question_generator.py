@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 import uuid
 
 from smolagents import Tool
@@ -58,15 +59,17 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
     }
     output_type = "string"  # JSON string
     
-    def __init__(self, require_ground_truth, collector=None):
+    def __init__(self, require_ground_truth, collector=None, existing_question_ids: Optional[set] = None):
         """Initialize the question generator.
 
         Args:
             collector: Optional ResultCollector[Question] for storing results.
                       If provided, questions are added to the collector instead of internal storage.
+            existing_question_ids: Set of existing question IDs to skip (for deduplication)
         """
         super().__init__(collector)
         self.require_ground_truth = require_ground_truth
+        self.existing_question_ids = existing_question_ids or set()
     
     def forward(
         self,
@@ -196,6 +199,16 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
         # Generate unique question ID using stored count
         counter = self.get_stored_count()
         question_id = self._generate_question_id(domain_enum, res_date, counter)
+        
+        # Check for duplicates - skip if this question ID already exists
+        if question_id in self.existing_question_ids:
+            from src.utils.logging import logger
+            logger.debug(f"Skipping duplicate question: {question_id}")
+            return json.dumps({
+                "status": "skipped",
+                "reason": "duplicate",
+                "id": question_id
+            })
 
         # Determine time horizon based on resolution date
         # Use current time as reference if cutoff_date not provided

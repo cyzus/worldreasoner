@@ -24,17 +24,28 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
     for deeper context when generating questions.
     """
     
-    def __init__(self, config: QuestionPipelineConfig, db_path: Optional[str] = None):
+    def __init__(self, config: QuestionPipelineConfig, db_path: Optional[str] = None, 
+                 type_hints: Optional[List[str]] = None, category_hints: Optional[List[str]] = None,
+                 existing_question_ids: Optional[set] = None):
         super().__init__(name="QuestionGeneration", config=config)
 
         # Store db_path for tools
         self.db_path = db_path
+        
+        # Store hints for intelligent generation
+        self.type_hints = type_hints  # Priority types needed
+        self.category_hints = category_hints  # Priority categories needed
+        self.existing_question_ids = existing_question_ids or set()  # For deduplication
 
         # Create result collector for questions
         self.collector = ResultCollector[Question]()
 
-        # Create question tool with collector
-        self.question_tool = QuestionGeneratorTool(collector=self.collector, require_ground_truth=config.require_ground_truth)
+        # Create question tool with collector and existing IDs for early filtering
+        self.question_tool = QuestionGeneratorTool(
+            collector=self.collector, 
+            require_ground_truth=config.require_ground_truth,
+            existing_question_ids=self.existing_question_ids
+        )
 
         # Prompt generator
         self.prompts = QuestionGenerationPrompts()
@@ -87,7 +98,9 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
                 events=filtered_events,  # Use filtered events
                 max_questions=max_questions,
                 domains=self.config.domains,
-                require_ground_truth=self.config.require_ground_truth
+                require_ground_truth=self.config.require_ground_truth,
+                type_hints=self.type_hints,
+                category_hints=self.category_hints
             )
             
             # Run the agent with the instruction

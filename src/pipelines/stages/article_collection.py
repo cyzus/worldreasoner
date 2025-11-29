@@ -21,6 +21,7 @@ class ArticleSource(BaseModel):
     name: str
     url: str
     scraper_type: str  # "rss", "web", "api"
+    domain: str  # Domain category for articles from this source
     auth_token: Optional[str] = None
     rate_limit_per_second: float = 1.0
 
@@ -66,12 +67,12 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
         # Usage tracking
         self.usage_tracker = UsageTracker()
     
-    async def _fetch_rss_item_async(self, item: dict, source_name: str) -> bool:
+    async def _fetch_rss_item_async(self, item: dict, source: ArticleSource) -> bool:
         """Fetch a single RSS item asynchronously.
         
         Args:
             item: RSS feed item with title, link, published
-            source_name: Name of the source
+            source: Article source configuration
             
         Returns:
             True if successfully collected, False otherwise
@@ -95,8 +96,8 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
                 lambda: self.article_tool.forward(
                     url=link,
                     title=title,
-                    source=source_name,
-                    domain="general",  # Default domain category for RSS articles
+                    source=source.name,
+                    domain=source.domain,  # Use actual domain from source config
                     published_date=published,
                     author=author
                 )
@@ -144,7 +145,7 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
             
             # Fetch all items concurrently using asyncio.gather
             logger.info(f"[RSS] Fetching {len(items)} items concurrently...")
-            tasks = [self._fetch_rss_item_async(item, source.name) for item in items]
+            tasks = [self._fetch_rss_item_async(item, source) for item in items]
             results = await asyncio.gather(*tasks, return_exceptions=True)
             
             # Count successful fetches (ignore exceptions)

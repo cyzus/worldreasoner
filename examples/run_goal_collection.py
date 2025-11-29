@@ -182,8 +182,14 @@ async def run_goal_collection(
         logger.info("Sample questions collected:")
         for i, q in enumerate(result.questions[:3], 1):
             logger.info(f"{i}. [{q.question_type}] {q.question_text}")
-            logger.info(f"   Source: {q.metadata.get('source', 'unknown')}")
-            logger.info(f"   Category: {q.metadata.get('category', 'other')}")
+            # Extract source from target_event_id (format: evt_<source>_<date>_<counter>)
+            source = "unknown"
+            if q.target_event_id:
+                parts = q.target_event_id.split('_')
+                if len(parts) >= 2:
+                    source = parts[1]
+            logger.info(f"   Source: {source}")
+            logger.info(f"   Domain: {q.domain}")
             logger.info(f"   Resolution: {q.resolution_date.strftime('%Y-%m-%d') if q.resolution_date else 'N/A'}")
 
     # Auto-index articles for search if not skipped

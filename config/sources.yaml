@@ -2,79 +2,76 @@
 # Defines RSS feeds and web sources for article collection
 
 sources:
-  # Technology RSS Feeds
+  # Technology
   - name: "TechCrunch"
     url: "https://techcrunch.com/feed/"
     scraper_type: "rss"
     domain: "tech"
-    rate_limit_per_second: 1.0
-  
+
   - name: "Ars Technica"
     url: "https://feeds.arstechnica.com/arstechnica/index"
     scraper_type: "rss"
     domain: "tech"
-    rate_limit_per_second: 1.0
-  
-  - name: "The Verge"
-    url: "https://www.theverge.com/rss/index.xml"
-    scraper_type: "rss"
-    domain: "tech"
-    rate_limit_per_second: 1.0
 
-  # Finance RSS Feeds
+  # Finance
   - name: "Seeking Alpha"
     url: "https://seekingalpha.com/feed"
     scraper_type: "rss"
     domain: "finance"
-    rate_limit_per_second: 1.0
 
+  # Politics
+  - name: "The Hill"
+    url: "https://thehill.com/feed/"
+    scraper_type: "rss"
+    domain: "politics"
 
-  # # Climate RSS Feeds
-  # - name: "Climate Home News"
-  #   url: "https://www.climatechangenews.com/feed/"
-  #   scraper_type: "rss"
-  #   domain: "climate"
-  #   rate_limit_per_second: 1.0
-  
-  # - name: "Inside Climate News"
-  #   url: "https://insideclimatenews.org/feed/"
-  #   scraper_type: "rss"
-  #   domain: "climate"
-  #   rate_limit_per_second: 1.0
-  
-  # # Politics RSS Feeds  
-  # - name: "The Hill"
-  #   url: "https://thehill.com/feed/"
-  #   scraper_type: "rss"
-  #   domain: "politics"
-  #   rate_limit_per_second: 1.0
-  
-  # # Health RSS Feeds  
-  # - name: "STAT News"
-  #   url: "https://www.statnews.com/feed/"
-  #   scraper_type: "rss"
-  #   domain: "health"
-  #   rate_limit_per_second: 1.0
-  
-  # # General News RSS Feeds
-  # - name: "BBC News"
-  #   url: "http://feeds.bbci.co.uk/news/rss.xml"
-  #   scraper_type: "rss"
-  #   domain: "general"
-  #   rate_limit_per_second: 1.0  
+  # Health
+  - name: "STAT News"
+    url: "https://www.statnews.com/feed/"
+    scraper_type: "rss"
+    domain: "health"
 
-  # # Web scraping sources (for agent-based collection)
-  # - name: "Nature News"
-  #   url: "https://www.nature.com/latest-news"
-  #   scraper_type: "web"
-  #   domain: "general"
-  #   rate_limit_per_second: 0.5
-  
-  # - name: "Science Magazine"
-  #   url: "https://www.science.org/news"
-  #   scraper_type: "web"
-  #   domain: "general"
-  #   rate_limit_per_second: 0.5
+  # Climate / Environment
+  - name: "Climate Home News"
+    url: "https://www.climatechangenews.com/feed/"
+    scraper_type: "rss"
+    domain: "climate"
+
+  # Science
+  - name: "Nature Latest"
+    url: "https://www.nature.com/rss/latest-news.xml"
+    scraper_type: "rss"
+    domain: "science"
+
+  # Business
+  - name: "Reuters Business"
+    url: "https://feeds.reuters.com/reuters/businessNews"
+    scraper_type: "rss"
+    domain: "business"
+
+  # Sports
+  - name: "ESPN Top"
+    url: "https://www.espn.com/espn/rss/news"
+    scraper_type: "rss"
+    domain: "sports"
+
+  # Culture (arts & entertainment)
+  - name: "Variety"
+    url: "https://variety.com/feed/"
+    scraper_type: "rss"
+    domain: "culture"
+
+  # General
+  - name: "BBC World"
+    url: "http://feeds.bbci.co.uk/news/world/rss.xml"
+    scraper_type: "rss"
+    domain: "general"
+
+  # Additional science (web scraping fallback)
+  - name: "Science Magazine"
+    url: "https://www.science.org/news"
+    scraper_type: "web"
+    domain: "science"
 
 # Collection settings
 collection:

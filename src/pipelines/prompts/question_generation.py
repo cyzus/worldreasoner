@@ -232,7 +232,9 @@ Call final_answer only after you finish the task.""",
         domains: Optional[List[str]] = None,
         description_preview_length: int = 200,
         tool_name: str = "question_generator",
-        require_ground_truth: bool = True
+        require_ground_truth: bool = True,
+        type_hints: Optional[List[str]] = None,
+        category_hints: Optional[List[str]] = None
     ) -> str:
         """Generate instruction for question generation.
 
@@ -245,6 +247,8 @@ Call final_answer only after you finish the task.""",
             tool_name: Name of the tool to call (default: question_generator)
             require_ground_truth: If True, only generate questions about past events with known outcomes.
                                  If False, only generate questions about future predictions.
+            type_hints: Priority question types needed (e.g., ["boolean", "mcq"])
+            category_hints: Priority categories needed (e.g., ["finance", "tech"])
 
         Returns:
             Formatted instruction string
@@ -291,6 +295,16 @@ Call final_answer only after you finish the task.""",
         domain_filter = ""
         if domains:
             domain_filter = f" Focus on domains: {self.format_list(domains)}."
+        
+        # Build priority guidance from hints
+        priority_guidance = ""
+        if type_hints or category_hints:
+            guidance_parts = []
+            if type_hints:
+                guidance_parts.append(f"PRIORITY TYPES NEEDED: {self.format_list(type_hints)}")
+            if category_hints:
+                guidance_parts.append(f"PRIORITY CATEGORIES NEEDED: {self.format_list(category_hints)}")
+            priority_guidance = "\n\n⚠️ COLLECTION PRIORITIES:\n" + "\n".join(guidance_parts) + "\nFocus on generating questions of these types/categories first!"
 
         # Select appropriate template based on mode
         if require_ground_truth:
@@ -315,5 +329,9 @@ Call final_answer only after you finish the task.""",
                 domain_filter=domain_filter,
                 tool_name=tool_name
             )
+
+        # Add priority guidance if provided
+        if priority_guidance:
+            instruction_body = instruction_body + priority_guidance
 
         return f"Today's date is {date_str}.\n\n{instruction_body}"

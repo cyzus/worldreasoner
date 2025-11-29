@@ -1,7 +1,7 @@
 """Prompts for event identification stage."""
 
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from src.domain.models import Article
 from .base import ContextualPromptGenerator, PromptTemplate
 
@@ -41,7 +41,7 @@ After analyzing all articles, call {tool_name} tool ONCE with a JSON array conta
 Each event should have:
 - title: Short event title
 - description: Detailed description
-- domain: One of (finance, politics, tech, health, climate, general)
+- domain: {domain_options}
 - occurred_date: ISO date format (YYYY-MM-DD)
 - event_type: One of (decision, outcome, indicator, milestone, external_shock)
 - source_article_ids: Comma-separated article IDs
@@ -49,7 +49,7 @@ Each event should have:
 Only include events with confidence >= {confidence_threshold}.
 
 Call final_answer only after you finish the task.""",
-        required_vars=["num_articles", "articles_text", "confidence_threshold"],
+        required_vars=["num_articles", "articles_text", "confidence_threshold", "domain_options"],
         optional_vars={"tool_name": "batch_event_identifier"}
     )
     
@@ -93,7 +93,8 @@ Call final_answer only after you finish the task.""",
         articles: List[Article],
         confidence_threshold: float,
         content_preview_length: int = 300,
-        tool_name: str = "batch_event_identifier"
+        tool_name: str = "batch_event_identifier",
+        category_hints: Optional[List[str]] = None
     ) -> str:
         """Generate instruction for event identification.
 
@@ -103,6 +104,7 @@ Call final_answer only after you finish the task.""",
             confidence_threshold: Minimum confidence threshold
             content_preview_length: Length of content preview (default: 300)
             tool_name: Name of the tool to call (default: batch_event_identifier)
+            category_hints: Priority categories/domains needed (e.g., ["finance", "tech"])
 
         Returns:
             Formatted instruction string
@@ -115,13 +117,30 @@ Call final_answer only after you finish the task.""",
             content_preview_length=content_preview_length
         )
         
+        # Build domain options from category hints (fully adaptive)
+        if category_hints:
+            domain_options = f"One of ({', '.join(category_hints)})"
+        else:
+            # Fallback: use common domains only if no hints provided
+            domain_options = "One of (finance, politics, tech, health, climate, sports, business, science, culture, general)"
+        
+        # Build priority guidance from hints
+        priority_guidance = ""
+        if category_hints:
+            priority_guidance = f"\n\n⚠️ PRIORITY DOMAINS NEEDED: {self.format_list(category_hints)}\nFocus on identifying events in these domains first!"
+        
         # Format the instruction body
         instruction_body = self.IDENTIFICATION_TEMPLATE.format(
             num_articles=len(articles),
             articles_text=articles_text,
             confidence_threshold=confidence_threshold,
+            domain_options=domain_options,
             tool_name=tool_name
         )
+        
+        # Add priority guidance if provided
+        if priority_guidance:
+            instruction_body = instruction_body + priority_guidance
         
         return f"Today's date is {date_str}.\n\n{instruction_body}"
     

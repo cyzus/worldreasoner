@@ -421,7 +421,7 @@ class QuestionCollectionOrchestrator:
             self.errors.append(f"Database save error: {e}")
 
     async def _load_existing_questions(self) -> None:
-        """Load existing question IDs from database for deduplication."""
+        """Load existing questions from database for deduplication and progress tracking."""
         if not self.db:
             logger.info("No database configured, skipping deduplication")
             return
@@ -430,8 +430,13 @@ class QuestionCollectionOrchestrator:
             # Use get_many() to retrieve all questions
             existing = self.db.get_many(Question, ids=None, filters=None)
             self.existing_question_ids = {q.id for q in existing}
-            if self.existing_question_ids:
-                logger.info(f"Loaded {len(self.existing_question_ids)} existing questions for deduplication")
+            
+            # CRITICAL: Add existing questions to progress tracker
+            # This ensures the orchestrator knows about previous runs
+            if existing:
+                logger.info(f"Loaded {len(existing)} existing questions from database")
+                self.progress.add_questions(existing)
+                logger.info(f"Progress tracker initialized with {self.progress.total} questions")
                 logger.debug(f"Sample existing IDs: {list(self.existing_question_ids)[:3]}")
             else:
                 logger.info("No existing questions found in database")

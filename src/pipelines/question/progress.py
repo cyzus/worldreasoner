@@ -45,13 +45,18 @@ class CollectionProgress(BaseModel):
         self.by_type[question.question_type] += 1
 
         # Update category distribution
-        category = question.metadata.get("category") if question.metadata else None
-        if category is None:
-            category = "other"
+        # Use domain as category (since Question model doesn't have metadata/category field)
+        category = question.domain.value if hasattr(question.domain, 'value') else str(question.domain)
         self.by_category[category] += 1
 
         # Update source distribution
-        source = question.metadata.get("source", "unknown")
+        # Try to extract source from target_event_id or use "unknown"
+        # Format: evt_<source>_<date>_<counter>
+        source = "unknown"
+        if question.target_event_id:
+            parts = question.target_event_id.split('_')
+            if len(parts) >= 2:
+                source = parts[1]  # e.g., "polymarket" or "news"
         self.by_source[source] += 1
 
         # Update quality metrics
@@ -97,7 +102,8 @@ class CollectionProgress(BaseModel):
         # Check type distribution (with tolerance)
         for qtype, target in goal.type_distribution.items():
             actual = self.by_type.get(qtype, 0)
-            min_required = int(target * goal.distribution_tolerance)
+            # Use max(1, ...) to ensure at least 1 required when target > 0
+            min_required = max(1, int(target * goal.distribution_tolerance)) if target > 0 else 0
 
             if actual < min_required:
                 logger.debug(
@@ -109,7 +115,8 @@ class CollectionProgress(BaseModel):
         # Check category distribution (with tolerance)
         for category, target in goal.category_distribution.items():
             actual = self.by_category.get(category, 0)
-            min_required = int(target * goal.distribution_tolerance)
+            # Use max(1, ...) to ensure at least 1 required when target > 0
+            min_required = max(1, int(target * goal.distribution_tolerance)) if target > 0 else 0
 
             if actual < min_required:
                 logger.debug(

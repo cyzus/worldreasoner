@@ -1,7 +1,7 @@
 """Event identification stage for Question Pipeline."""
 
 import json
-from typing import List
+from typing import List, Optional
 from datetime import datetime, timezone
 from pydantic import BaseModel
 
@@ -29,14 +29,19 @@ class EventIdentificationStage(PipelineStage[Article, Event]):
     Agent has access to database to query articles as needed.
     """
     
-    def __init__(self, config: EventIdentificationConfig, db_path: str = "worldreasoner.db"):
+    def __init__(self, config: EventIdentificationConfig, db_path: str = "worldreasoner.db", 
+                 category_hints: Optional[List[str]] = None):
         """Initialize event identification stage.
         
         Args:
             config: Event identification configuration
             db_path: Path to database for article retrieval
+            category_hints: Priority categories/domains needed (e.g., ["finance", "tech"])
         """
         super().__init__(name="EventIdentification", config=config)
+        
+        # Store hints for intelligent identification
+        self.category_hints = category_hints
         
         # Create result collector for events
         self.collector = ResultCollector[Event]()
@@ -76,7 +81,8 @@ class EventIdentificationStage(PipelineStage[Article, Event]):
             instruction = self.prompts.get_instruction(
                 current_date=current_date,
                 articles=inputs,
-                confidence_threshold=self.config.confidence_threshold
+                confidence_threshold=self.config.confidence_threshold,
+                category_hints=self.category_hints
             )
             
             # Run the agent with the instruction

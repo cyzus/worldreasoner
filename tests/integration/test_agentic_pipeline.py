@@ -26,12 +26,14 @@ async def test_agentic_pipeline():
         ArticleSource(
             name="climate change",
             url="https://news.google.com",
-            scraper_type="web"
+            scraper_type="web",
+            domain="climate"
         ),
         ArticleSource(
             name="artificial intelligence",
             url="https://news.google.com",
-            scraper_type="web"
+            scraper_type="web",
+            domain="tech"
         )
     ]
 
