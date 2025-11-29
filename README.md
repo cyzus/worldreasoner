@@ -35,51 +35,6 @@ Consider an LLM with knowledge cutoff in April 2024:
 
 **Value**: This tests genuine forecasting ability, not just memorized facts.
 
-## Key Features
-
-### 🤖 Agentic Pipeline System
-- **LLM-Powered Agents**: Uses smolagents framework for intelligent data processing
-- **Web Intelligence**: Combines web_search + advanced scraping (crawl4ai) for JavaScript-heavy sites
-- **Type-Safe**: Generic types and Pydantic models ensure data integrity
-- **Modular Design**: AgentFactory and ResultCollector patterns for maintainability
-
-### 🕐 Temporal Gateway
-- Enforces strict temporal boundaries on information access
-- Prevents data leakage from future information
-- Enables realistic forecasting scenarios
-
-### 🔍 Advanced Search Tools
-- Semantic search using embeddings
-- Temporal weighting for trend detection
-- Domain-specific filtering
-- Causal relationship tracking
-
-### 📊 Multi-Type Benchmarks
-- **Boolean**: Yes/No predictions
-- **Multiple Choice**: Select from options
-- **Quantity Estimation**: Numerical predictions with ranges
-- **Timeframe**: When will X occur?
-
-### 🎯 Comprehensive Evaluation
-- **Accuracy**: Correctness of predictions
-- **Calibration**: Confidence alignment with accuracy
-- **Resolution**: Ability to distinguish outcomes
-- **Reasoning Quality**: Causal chain completeness
-- **Information Efficiency**: Performance per article accessed
-
-### 🌍 Multi-Domain Coverage
-- Finance (stock markets, economics, corporate)
-- Politics (elections, policy, international relations)
-- Technology (product launches, adoption, breakthroughs)
-- Healthcare (drug approvals, public health, clinical trials)
-- Climate (emissions, weather, policy)
-
-### 🧪 Synthetic Data Generation
-- Controlled causal complexity
-- Domain-specific scenarios
-- Known ground truth by construction
-- Adjustable difficulty parameters
-
 ## Architecture
 
 ### System Architecture
