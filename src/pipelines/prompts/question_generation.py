@@ -92,7 +92,10 @@ QUALITY CHECKLIST:
 ✓ Round milestone numbers
 ✓ Broad public interest
 
-Use {tool_name} to save each question.
+CRITICAL: Call {tool_name} individually for EACH question you generate.
+- Do NOT try to batch multiple questions into one call
+- Make separate {tool_name} calls for Question #1, Question #2, Question #3, etc.
+- Each call should have complete arguments for ONE question only
 
 Call final_answer only after you finish the task.""",
         required_vars=["num_events", "events_text", "max_questions", "current_date", "min_resolution_date"],
@@ -165,7 +168,10 @@ QUALITY CHECKLIST:
 ✓ Round milestone numbers
 ✓ Broad public interest
 
-Use {tool_name} to save each question. 
+CRITICAL: Call {tool_name} individually for EACH question you generate.
+- Do NOT try to batch multiple questions into one call
+- Make separate {tool_name} calls for Question #1, Question #2, Question #3, etc.
+- Each call should have complete arguments for ONE question only
 
 Call final_answer only after you finish the task.""",
         required_vars=["num_events", "events_text", "max_questions", "current_date", "max_resolution_date"],
