@@ -54,24 +54,30 @@ async def run_goal_collection(
         skip_indexing: Skip automatic search indexing after completion
     """
     # Load collection goal
-    logger.info(f"Loading collection goal from {goal_path}")
+    logger.info(f"📋 Loading collection goal from {goal_path}")
     goal = CollectionGoal.from_yaml(goal_path)
     goal.validate_distributions()
 
-    logger.info(f"Goal: {goal.total_questions} questions")
-    logger.info(f"  Types: {goal.type_distribution}")
-    logger.info(f"  Categories: {goal.category_distribution}")
+    logger.info("")
+    logger.info("🎯 COLLECTION GOAL")
+    logger.info("-" * 20)
+    logger.info(f"Target: {goal.total_questions} questions")
+    logger.info(f"Types: {goal.type_distribution}")
+    logger.info(f"Categories: {goal.category_distribution}")
+    logger.info("")
 
     # Initialize database
+    logger.info("💾 Initializing database...")
     db = GenericDatabase(db_path)
     db.create_table(Question)
 
     # Initialize question sources
+    logger.info("🔧 Initializing sources...")
     sources = {}
 
     # Polymarket source
     if enable_polymarket:
-        logger.info("Initializing Polymarket source...")
+        logger.info("  📊 Polymarket source")
         sources["polymarket"] = PolymarketRunner(
             min_volume_usd=0.0,  # No volume filter (relaxed)
             use_agent_enhancement=True,  # Use LLM to categorize
@@ -80,7 +86,7 @@ async def run_goal_collection(
 
     # News-based source
     if enable_news:
-        logger.info("Initializing news-based source...")
+        logger.info("  📰 News-based source")
 
         # Load article sources from config
         import yaml
@@ -122,10 +128,11 @@ async def run_goal_collection(
         )
 
     if not sources:
-        logger.error("No sources enabled! Enable at least one source.")
+        logger.error("❌ No sources enabled! Enable at least one source.")
         return
 
-    logger.info(f"Initialized {len(sources)} sources: {list(sources.keys())}")
+    logger.info(f"✅ Initialized {len(sources)} sources: {', '.join(sources.keys())}")
+    logger.info("")
 
     # Configure orchestrator
     orchestrator_config = OrchestratorConfig(
@@ -147,62 +154,115 @@ async def run_goal_collection(
     result = await orchestrator.collect_until_goal_met()
 
     # Display results
-    logger.info("" + "=" * 60)
-    logger.info("COLLECTION RESULTS")
-    logger.info("=" * 60)
-    logger.info(f"Goal met: {result.goal_met}")
-    logger.info(f"Questions collected: {len(result.questions)}/{goal.total_questions}")
-    logger.info(f"Iterations: {result.iterations}")
-    logger.info(f"Duration: {result.duration_seconds():.1f}s")
+    logger.info("")
+    logger.info("🎯 COLLECTION COMPLETE")
+    logger.info("=" * 50)
+
+    # Summary stats
+    status_icon = "✅" if result.goal_met else "⚠️"
+    logger.info(f"{status_icon} Goal: {'MET' if result.goal_met else 'NOT MET'}")
+    logger.info(f"📊 Questions: {len(result.questions)}/{goal.total_questions}")
+    logger.info(f"🔄 Iterations: {result.iterations}")
+    logger.info(f"⏱️  Duration: {result.duration_seconds():.1f}s")
 
     if result.errors:
-        logger.warning(f"Errors encountered: {len(result.errors)}")
-        for error in result.errors[:5]:  # Show first 5
-            logger.warning(f"  - {error}")
+        logger.warning(f"❌ Errors: {len(result.errors)}")
+        for error in result.errors[:3]:  # Show first 3
+            logger.warning(f"   • {error}")
+        if len(result.errors) > 3:
+            logger.warning(f"   ... and {len(result.errors) - 3} more")
 
-    # Show source breakdown
-    logger.info("By Source:")
-    for source, count in result.progress.by_source.items():
-        logger.info(f"  {source:15} {count:3}")
+    logger.info("")
 
-    logger.info("By Type:")
-    for qtype, count in result.progress.by_type.items():
-        target = goal.type_distribution.get(qtype, 0)
-        logger.info(f"  {qtype:15} {count:3}/{target:3}")
+    # Distribution breakdowns
+    logger.info("📈 DISTRIBUTION BREAKDOWN")
+    logger.info("-" * 30)
 
-    logger.info("By Category:")
-    for category, count in result.progress.by_category.items():
-        target = goal.category_distribution.get(category, 0)
-        logger.info(f"  {category:15} {count:3}/{target:3}")
+    # Sources
+    if result.progress.by_source:
+        logger.info("📍 Sources:")
+        for source, count in sorted(result.progress.by_source.items()):
+            logger.info(f"   {source:12} {count:3}")
+        logger.info("")
 
-    logger.info("=" * 60)
+    # Types
+    if result.progress.by_type:
+        logger.info("🏷️  Types:")
+        for qtype, count in sorted(result.progress.by_type.items()):
+            target = goal.type_distribution.get(qtype, 0)
+            status = "✅" if count >= target else "❌"
+            logger.info(f"   {status} {qtype:12} {count:2}/{target:<2}")
+        logger.info("")
 
-    # Show sample questions
+    # Categories
+    if result.progress.by_category:
+        logger.info("📂 Categories:")
+        for category, count in sorted(result.progress.by_category.items()):
+            target = goal.category_distribution.get(category, 0)
+            status = "✅" if count >= target else "❌"
+            logger.info(f"   {status} {category:12} {count:2}/{target:<2}")
+
+    # Show missing items if goal not met
+    if not result.goal_met:
+        logger.info("")
+        logger.info("❌ MISSING ITEMS")
+        logger.info("-" * 30)
+
+        # Missing types
+        if hasattr(result, 'missing_types') and result.missing_types:
+            logger.info("Missing question types:")
+            for qtype, needed in result.missing_types.items():
+                target = goal.type_distribution.get(qtype, 0)
+                collected = target - needed
+                logger.info(f"   • {qtype:12} {collected}/{target}")
+            logger.info("")
+
+        # Missing categories
+        if hasattr(result, 'missing_categories') and result.missing_categories:
+            logger.info("Missing categories:")
+            for category, needed in result.missing_categories.items():
+                target = goal.category_distribution.get(category, 0)
+                collected = target - needed
+                logger.info(f"   • {category:12} {collected}/{target}")
+
+    logger.info("")
+
+    # Sample questions
     if result.questions:
-        logger.info("Sample questions collected:")
+        logger.info("💡 SAMPLE QUESTIONS")
+        logger.info("-" * 30)
         for i, q in enumerate(result.questions[:3], 1):
-            logger.info(f"{i}. [{q.question_type}] {q.question_text}")
-            # Use the source field from the question directly
-            source = q.source if q.source else "unknown"
-            logger.info(f"   Source: {source}")
-            logger.info(f"   Domain: {q.domain}")
-            logger.info(f"   Resolution: {q.resolution_date.strftime('%Y-%m-%d') if q.resolution_date else 'N/A'}")
+            # Format question type nicely
+            qtype_str = str(q.question_type).replace('QuestionType.', '')
+            source_str = q.source or "unknown"
+            domain_str = str(q.domain).replace('Domain.', '')
+
+            logger.info(f"{i}. {q.question_text}")
+            logger.info(f"   ├─ Type: {qtype_str}")
+            logger.info(f"   ├─ Source: {source_str}")
+            logger.info(f"   └─ Domain: {domain_str}")
+
+        if len(result.questions) > 3:
+            logger.info(f"   ... and {len(result.questions) - 3} more questions")
+
+    logger.info("")
 
     # Auto-index articles for search if not skipped
     if should_auto_index(skip_indexing):
-        logger.info("Indexing articles for hybrid search...")
+        logger.info("🔍 INDEXING ARTICLES")
+        logger.info("-" * 30)
         index_stats = await auto_index_articles(db_path=db_path)
         if index_stats['status'] == 'success':
-            logger.info(f"✓ Indexed {index_stats['newly_indexed']} new articles")
-            logger.info(f"  Total indexed: {index_stats['final_indexed']}")
+            logger.info(f"✅ Indexed {index_stats['newly_indexed']} new articles")
+            logger.info(f"   Total indexed: {index_stats['final_indexed']}")
         elif index_stats['status'] == 'up_to_date':
-            logger.info("✓ Search index is up to date")
+            logger.info("✅ Search index is up to date")
         elif index_stats['status'] == 'no_articles':
-            logger.info("⚠ No articles to index")
+            logger.info("⚠️  No articles to index")
         else:
-            logger.info(f"✗ Indexing failed: {index_stats.get('error', 'Unknown error')}")
+            logger.info(f"❌ Indexing failed: {index_stats.get('error', 'Unknown error')}")
 
-    logger.success("Collection complete!")
+    logger.success("🎉 Collection complete!")
 
 
 def main():

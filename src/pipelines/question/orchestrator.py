@@ -131,7 +131,7 @@ class QuestionCollectionOrchestrator:
             # Phase 1: Broad collection from all sources
             while iterations < self.config.max_iterations:
                 iterations += 1
-                logger.info(f"\n--- Iteration {iterations}/{self.config.max_iterations} ---")
+                logger.info(f"--- Iteration {iterations}/{self.config.max_iterations} ---")
 
                 # Check if goal already met
                 if self.progress.is_goal_met(self.goal):
@@ -145,12 +145,9 @@ class QuestionCollectionOrchestrator:
                 if self.config.save_intermediate_results and self.db:
                     self._save_to_database()
 
-                # Log progress
-                self.progress.log_summary(self.goal)
-
                 # If we're close but not quite there, try targeted collection
                 if self.progress.total >= self.goal.total_questions * 0.8:
-                    logger.info("\nAttempting targeted gap filling...")
+                    logger.info("Attempting targeted gap filling...")
                     await self._fill_gaps()
 
             # Final check
@@ -171,10 +168,10 @@ class QuestionCollectionOrchestrator:
             # Report missing items
             missing = self._report_missing_items()
 
-            logger.info("\n" + "=" * 60)
+            logger.info("=" * 60)
             logger.info("COLLECTION COMPLETE")
             logger.info("=" * 60)
-            self.progress.log_summary(self.goal)
+            # Don't log detailed summary here - main script will do it
             logger.info(f"Duration: {(completed_at - started_at).total_seconds():.1f}s")
             if self.duplicates_skipped > 0:
                 logger.info(f"Duplicates skipped: {self.duplicates_skipped}")
@@ -251,7 +248,7 @@ class QuestionCollectionOrchestrator:
             logger.debug(f"No more questions needed from '{source_name}'")
             return
 
-        logger.info(f"\nCollecting from '{source_name}': {needed} questions...")
+        logger.info(f"Collecting from '{source_name}': {needed} questions...")
 
         try:
             # Calculate which types we need most
@@ -355,7 +352,7 @@ class QuestionCollectionOrchestrator:
             if count <= 0:
                 continue
 
-            logger.info(f"\nFilling gap: need {count} '{qtype}' questions")
+            logger.info(f"Filling gap: need {count} '{qtype}' questions")
 
             # Find sources that can provide this type
             for source_name, runner in self.sources.items():
@@ -486,7 +483,7 @@ class QuestionCollectionOrchestrator:
         }
 
         if missing["types"] or missing["categories"]:
-            logger.info("\n" + "=" * 60)
+            logger.info("=" * 60)
             logger.info("MISSING ITEMS REPORT")
             logger.info("=" * 60)
 
@@ -498,7 +495,7 @@ class QuestionCollectionOrchestrator:
                     logger.info(f"  {qtype:15} {collected:3}/{target:3} ({count} short)")
 
             if missing["categories"]:
-                logger.info("\nMissing categories:")
+                logger.info("Missing categories:")
                 for cat, count in missing["categories"].items():
                     target = self.goal.category_distribution.get(cat, 0)
                     collected = target - count
