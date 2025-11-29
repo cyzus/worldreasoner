@@ -2,6 +2,7 @@
 
 from .article_collector import ArticleCollectorTool
 from .article_retrieval import ArticleRetrievalTool
+from .batch_article_retrieval import BatchArticleRetrievalTool
 from .event_identifier import EventIdentifierTool
 from .batch_event_identifier import BatchEventIdentifierTool
 from .question_generator import QuestionGeneratorTool
@@ -14,6 +15,7 @@ from .causal_reasoner import CausalReasonerTool
 __all__ = [
     "ArticleCollectorTool",
     "ArticleRetrievalTool",
+    "BatchArticleRetrievalTool",
     "EventIdentifierTool",
     "BatchEventIdentifierTool",
     "QuestionGeneratorTool",

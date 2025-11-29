@@ -9,7 +9,7 @@ from ..base import PipelineStage
 from src.domain.models import Event, Question, Article
 from src.config.pipeline import QuestionPipelineConfig
 from src.agents.factory import AgentFactory
-from .tools import QuestionGeneratorTool, BatchQuestionGeneratorTool, EventDetailsTool, ArticleRetrievalTool
+from .tools import QuestionGeneratorTool, BatchQuestionGeneratorTool, EventDetailsTool, ArticleRetrievalTool, BatchArticleRetrievalTool
 from .collectors import ResultCollector
 from ..prompts import QuestionGenerationPrompts
 from src.utils.logging import logger
@@ -130,7 +130,7 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
 
             # Create tools with database access
             self.event_details_tool = EventDetailsTool(db_path=self.db_path)
-            self.article_retrieval_tool = ArticleRetrievalTool(db_path=self.db_path)
+            self.article_retrieval_tool = BatchArticleRetrievalTool(db_path=self.db_path)
 
             # Create agent using factory
             self.base_agent = AgentFactory.create_base_agent(
