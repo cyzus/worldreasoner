@@ -189,13 +189,16 @@ class QuestionSourceRunner(ABC):
             questions: Questions to tag (modified in place)
         """
         for question in questions:
+            # Set the source field on the question
+            question.source = self.source_name
+
             # Initialize metadata if needed
             if not hasattr(question, 'metadata') or question.metadata is None:
                 question.metadata = {}
 
             if "source" not in question.metadata:
                 question.metadata["source"] = self.source_name
-            
+
             # Set category from domain for progress tracking
             if "category" not in question.metadata:
                 question.metadata["category"] = question.domain.value

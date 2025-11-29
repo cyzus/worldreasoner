@@ -18,7 +18,7 @@ class QuestionType(str, Enum):
     TIMEFRAME = "timeframe"
 
 
-@register_model('questions', indexes=['domain', 'difficulty'])
+@register_model('questions', indexes=['domain', 'difficulty', 'source'])
 class Question(BaseModel):
     """Benchmark forecast question.
     
@@ -34,6 +34,7 @@ class Question(BaseModel):
     
     # Classification
     domain: Domain = Field(..., description="Primary domain")
+    source: str = Field(..., description="Source system that generated this question (e.g., 'polymarket', 'news', 'synthetic')")
     difficulty: int = Field(..., ge=1, le=5, description="Difficulty rating 1-5")
 
     # Temporal boundaries

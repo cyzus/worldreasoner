@@ -680,6 +680,7 @@ class PolymarketRunner(QuestionSourceRunner):
             question_text=mq.question_text,
             question_type=self.type_map.get(mq.question_type, QuestionType.BOOLEAN),
             domain=domain,
+            source="polymarket",
             difficulty=self._estimate_difficulty(mq),
             resolution_date=mq.resolution_time or mq.close_time,
             cutoff_date=mq.close_time,

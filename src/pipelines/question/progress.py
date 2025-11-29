@@ -50,13 +50,8 @@ class CollectionProgress(BaseModel):
         self.by_category[category] += 1
 
         # Update source distribution
-        # Try to extract source from target_event_id or use "unknown"
-        # Format: evt_<source>_<date>_<counter>
-        source = "unknown"
-        if question.target_event_id:
-            parts = question.target_event_id.split('_')
-            if len(parts) >= 2:
-                source = parts[1]  # e.g., "polymarket" or "news"
+        # Use the source field from the question directly
+        source = question.source if question.source else "unknown"
         self.by_source[source] += 1
 
         # Update quality metrics

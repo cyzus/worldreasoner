@@ -92,12 +92,16 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
             # Determine max questions
             max_questions = self.config.max_questions or 10
 
+            # Use category_hints as domains if provided (focus on missing categories)
+            # Otherwise fall back to config domains
+            target_domains = self.category_hints if self.category_hints else self.config.domains
+
             # Get instruction from prompts module
             instruction = self.prompts.get_instruction(
                 current_date=current_date,
                 events=filtered_events,  # Use filtered events
                 max_questions=max_questions,
-                domains=self.config.domains,
+                domains=target_domains,
                 require_ground_truth=self.config.require_ground_truth,
                 type_hints=self.type_hints,
                 category_hints=self.category_hints
