@@ -5,11 +5,11 @@ from .article_retrieval import ArticleRetrievalTool
 from .event_identifier import EventIdentifierTool
 from .batch_event_identifier import BatchEventIdentifierTool
 from .question_generator import QuestionGeneratorTool
+from .batch_question_generator import BatchQuestionGeneratorTool
 from .event_details import EventDetailsTool
 from .web_fetch import WebFetchTool
 from .rss_fetch import RssFetchTool
 from .causal_reasoner import CausalReasonerTool
-from .market_question_enhancer import MarketQuestionEnhancerTool
 
 __all__ = [
     "ArticleCollectorTool",
@@ -17,9 +17,9 @@ __all__ = [
     "EventIdentifierTool",
     "BatchEventIdentifierTool",
     "QuestionGeneratorTool",
+    "BatchQuestionGeneratorTool",
     "EventDetailsTool",
     "WebFetchTool",
     "RssFetchTool",
     "CausalReasonerTool",
-    "MarketQuestionEnhancerTool",
 ]

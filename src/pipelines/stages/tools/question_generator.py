@@ -8,7 +8,7 @@ import uuid
 from smolagents import Tool
 from src.domain.models import Event, Question, QuestionType, Domain
 from src.utils.enums import enum_to_list
-from src.utils.date_utils import parse_iso_datetime
+from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
 from src.pipelines.stages.tools.base import CollectorAwareTool
 
 
@@ -112,6 +112,7 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             resolution_date,
             fallback=datetime.now(timezone.utc) + timedelta(days=30)
         )
+        res_date = ensure_timezone_aware(res_date)
 
         # CRITICAL VALIDATION: Ground truth questions must have past/present resolution dates
         current_time = datetime.now(timezone.utc)
@@ -228,6 +229,7 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             question_text=question_text,
             question_type=qtype_enum,
             domain=domain_enum,
+            source="news",  # These questions are generated from news events
             difficulty=min(5, max(1, difficulty)),
             resolution_date=res_date,
             ground_truth=normalized_ground_truth,  # Use normalized value

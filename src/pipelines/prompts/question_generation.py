@@ -29,79 +29,33 @@ Event {idx} (ID: {event_id}){status_note}:
 
 {events_text}
 
-═══════════════════════════════════════════════════════════════════════
-GROUND TRUTH MODE - Past Events with Known Outcomes
-═══════════════════════════════════════════════════════════════════════
+RULES:
+- Today: {current_date} → resolution_date ≤ {current_date}
+- Only use events marked "(PAST EVENT)"
+- ground_truth = past outcome only (YES/NO/value, never future dates)
+- Alternate boolean answers: YES, NO, YES, NO (avoid bias)
+- Types: boolean, mcq, quantity, timeframe (distribute evenly)
+- Use round numbers ($100K, 1M users) not oddly specific values
+- Natural deadlines ("by end of Q4 2024" not "by Oct 27")
 
-CRITICAL RULES:
-1. Today: {current_date} → resolution_date MUST be ≤ {current_date}
-2. ONLY use WELL-ESTABLISHED events marked "(PAST EVENT)"
-3. Questions use FUTURE TENSE: "Will X happen by DATE?" (NOT "Did X happen?")
-4. ground_truth = VERIFIED FACT from the past (NEVER a future date or speculation)
-5. Use natural deadlines: "by end of Q4 2024" NOT "by Oct 27, 2024"
+QUALITY:
+- Broad appeal (elections, major companies, crypto, policy, sports)
+- Skip niche topics requiring insider knowledge
+- Ask "Will X happen?" not "Which company will..." (don't assume outcomes)
+- MCQ options from actual event participants only
 
-⚠️ GROUND TRUTH VALIDATION:
-- ground_truth must be a DEFINITIVE PAST OUTCOME (e.g., "YES", "NO", "Apple", "500000")
-- ground_truth CANNOT be a future date (e.g., "November 17 2025" is INVALID)
-- If outcome is unknown/unverified, SKIP this event
+TOOL USAGE:
+1. Generate all {max_questions} questions as JSON array
+2. Call {tool_name}(questions_json="[...]") ONCE
+3. Then call final_answer
 
-DISTRIBUTION TRACKER (Track as you generate):
-Generate EXACTLY in this order:
-1. Boolean #1 (answer: YES/TRUE)
-2. Boolean #2 (answer: NO/FALSE)
-3. MCQ #1
-4. MCQ #2
-5. Quantity #1
-6. Quantity #2
-7. Timeframe #1
-8. Timeframe #2
-... continue pattern to {max_questions} questions
+Required fields: question_text, question_type, domain, difficulty, resolution_date, resolution_criteria, ground_truth, resolution_reasoning, related_event_ids
 
-⚠️ CRITICAL: Alternate Boolean answers YES/NO/YES/NO to avoid bias!
-
-GOAL: Generate questions people would actually want to forecast on (like Polymarket)
-
-EVENT SELECTION - What topics are interesting?
-Focus on: Elections, major companies (Apple/Tesla/Google), crypto milestones, policy changes, product launches, sports
-Skip: Niche legal disputes, corporate trivia, insider knowledge required, minor settlements
-
-QUESTION FRAMING PRINCIPLES:
-
-1. Ask IF something will happen - don't assume outcomes
-   - Ask: "Will Bitcoin exceed $100K by year end?"
-   - NOT: "Which company will be ordered to pay X..." (assumes ordering happens)
-   - NOT: "Which person will Trump call a traitor..." (assumes negative event)
-
-2. MCQ options must be contextually relevant to the actual event
-   - If asking about Apple vs Masimo, don't list Samsung/Fitbit (they're not involved)
-   - Use actual competitors, candidates, or stakeholders from the event
-
-3. Use round milestone numbers that people track
-   - Use: $100K, $1M, $10M, $100M, $1B, 100K users, 1M vehicles
-   - NOT: $142M, $847K, 142,387 users (oddly specific)
-
-4. Questions should have broad appeal
-   - Would the average informed person care about this outcome?
-   - Is this something discussed in mainstream news/social media?
-
-QUALITY CHECKLIST:
-✓ Specific, measurable criteria
-✓ Clear, objective resolution source
-✓ Natural deadlines (end of quarter/year)
-✓ Verifiable outcomes
-✓ Round milestone numbers
-✓ Broad public interest
-
-CRITICAL: Call {tool_name} individually for EACH question you generate.
-- Do NOT try to batch multiple questions into one call
-- Make separate {tool_name} calls for Question #1, Question #2, Question #3, etc.
-- Each call should have complete arguments for ONE question only
-
-Call final_answer only after you finish the task.""",
+Example: {tool_name}(questions_json='[{{"question_text": "Will Bitcoin exceed $100K by Dec 31, 2025?", "question_type": "boolean", "domain": "finance", "difficulty": 3, "resolution_date": "2025-12-31", "resolution_criteria": "CoinMarketCap closing price", "ground_truth": "YES", "resolution_reasoning": "BTC closed at $105K on Dec 31 per CoinMarketCap", "related_event_ids": "evt_fin_20251201_001"}}]')""",
         required_vars=["num_events", "events_text", "max_questions", "current_date", "min_resolution_date"],
         optional_vars={
             "domain_filter": "",
-            "tool_name": "question_generator"
+            "tool_name": "batch_question_generator"
         }
     )
 
@@ -111,73 +65,35 @@ Call final_answer only after you finish the task.""",
 
 {events_text}
 
-═══════════════════════════════════════════════════════════════════════
-FUTURE PREDICTION MODE - Unknown Outcomes
-═══════════════════════════════════════════════════════════════════════
+RULES:
+- Today: {current_date} → resolution_date > {current_date}
+- Skip events marked "(PAST EVENT)"
+- NO ground_truth (outcomes unknown)
+- Resolution dates: 1-12 months in future
+- Balance boolean predictions: ~50% likely YES, ~50% likely NO
+- Types: boolean, mcq, quantity, timeframe (distribute evenly)
+- Use round numbers ($100K, 1M users) not oddly specific values
+- Natural deadlines ("by end of Q1 2026" not "by Mar 15")
 
-CRITICAL RULES:
-1. Today: {current_date} → resolution_date MUST be > {current_date}
-2. SKIP events marked "(PAST EVENT)"
-3. NO ground_truth (outcomes unknown)
-4. Resolution dates: 1-12 months in future
+QUALITY:
+- Broad appeal (elections, major companies, crypto, policy, sports)
+- Skip niche topics requiring insider knowledge
+- Ask "Will X happen?" not "Which company will..." (don't assume outcomes)
+- MCQ options from actual event participants only
 
-DISTRIBUTION TRACKER (Track as you generate):
-Generate EXACTLY in this order:
-1. Boolean #1 (predict: likely YES)
-2. Boolean #2 (predict: likely NO)
-3. MCQ #1
-4. MCQ #2
-5. Quantity #1
-6. Quantity #2
-7. Timeframe #1
-8. Timeframe #2
-... continue pattern to {max_questions} questions
+TOOL USAGE:
+1. Generate all {max_questions} questions as JSON array
+2. Call {tool_name}(questions_json="[...]") ONCE
+3. Then call final_answer
 
-⚠️ BALANCE: Make ~50% Boolean likely YES, ~50% likely NO (avoid all-positive bias)
+Required fields: question_text, question_type, domain, difficulty, resolution_date, resolution_criteria, related_event_ids
+DO NOT include: ground_truth, resolution_reasoning (outcomes unknown)
 
-GOAL: Generate questions people would actually want to forecast on (like Polymarket)
-
-EVENT SELECTION - What topics are interesting?
-Focus on: Elections, major companies (Apple/Tesla/Google), crypto milestones, policy changes, product launches, sports
-Skip: Niche legal disputes, corporate trivia, insider knowledge required, minor settlements
-
-QUESTION FRAMING PRINCIPLES:
-
-1. Ask IF something will happen - don't assume outcomes
-   - Ask: "Will Bitcoin exceed $150K by year end?"
-   - NOT: "Which company will be ordered to pay X..." (assumes ordering happens)
-   - NOT: "Which person will [negative action]..." (assumes negative event)
-
-2. MCQ options must be contextually relevant to the actual event
-   - Use actual competitors, candidates, or stakeholders from the event
-   - Don't list random companies/people not involved in the event
-
-3. Use round milestone numbers that people track
-   - Use: $100K, $1M, $10M, $100M, $1B, 100K users, 1M vehicles
-   - NOT: $142M, $847K, 142,387 users (oddly specific)
-
-4. Questions should have broad appeal
-   - Would the average informed person care about this outcome?
-   - Is this something discussed in mainstream news/social media?
-
-QUALITY CHECKLIST:
-✓ Specific, measurable criteria
-✓ Clear, objective resolution source
-✓ Natural deadlines (end of quarter/year)
-✓ Verifiable outcomes
-✓ Round milestone numbers
-✓ Broad public interest
-
-CRITICAL: Call {tool_name} individually for EACH question you generate.
-- Do NOT try to batch multiple questions into one call
-- Make separate {tool_name} calls for Question #1, Question #2, Question #3, etc.
-- Each call should have complete arguments for ONE question only
-
-Call final_answer only after you finish the task.""",
+Example: {tool_name}(questions_json='[{{"question_text": "Will Bitcoin exceed $150K by Dec 31, 2026?", "question_type": "boolean", "domain": "finance", "difficulty": 3, "resolution_date": "2026-12-31", "resolution_criteria": "CoinMarketCap closing price", "related_event_ids": "evt_fin_20260601_001"}}]')""",
         required_vars=["num_events", "events_text", "max_questions", "current_date", "max_resolution_date"],
         optional_vars={
             "domain_filter": "",
-            "tool_name": "question_generator"
+            "tool_name": "batch_question_generator"
         }
     )
     

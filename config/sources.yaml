@@ -73,10 +73,10 @@ sources:
     domain: "general"
 
   # Additional science (web scraping fallback)
-  - name: "Science Magazine"
-    url: "https://www.science.org/news"
-    scraper_type: "web"
-    domain: "science"
+  # - name: "Science Magazine"
+  #   url: "https://www.science.org/news"
+  #   scraper_type: "web"
+  #   domain: "science"
 
 # Collection settings
 collection:

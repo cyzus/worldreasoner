@@ -9,7 +9,7 @@ from ..base import PipelineStage
 from src.domain.models import Event, Question, Article
 from src.config.pipeline import QuestionPipelineConfig
 from src.agents.factory import AgentFactory
-from .tools import QuestionGeneratorTool, EventDetailsTool, ArticleRetrievalTool
+from .tools import QuestionGeneratorTool, BatchQuestionGeneratorTool, EventDetailsTool, ArticleRetrievalTool
 from .collectors import ResultCollector
 from ..prompts import QuestionGenerationPrompts
 from src.utils.logging import logger
@@ -40,9 +40,9 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
         # Create result collector for questions
         self.collector = ResultCollector[Question]()
 
-        # Create question tool with collector and existing IDs for early filtering
-        self.question_tool = QuestionGeneratorTool(
-            collector=self.collector, 
+        # Create batch question tool with collector and existing IDs for early filtering
+        self.question_tool = BatchQuestionGeneratorTool(
+            collector=self.collector,
             require_ground_truth=config.require_ground_truth,
             existing_question_ids=self.existing_question_ids
         )
@@ -79,7 +79,55 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
             # Get current date for context
             current_date = datetime.now(timezone.utc)
 
-            filtered_events = inputs
+            # Determine target domains
+            # Use category_hints as domains if provided (focus on missing categories)
+            # Otherwise fall back to config domains
+            target_domains = self.category_hints if self.category_hints else self.config.domains
+
+            # Filter events by domain if target_domains is specified
+            if target_domains:
+                filtered_events = [
+                    event for event in inputs
+                    if event.domain.value in target_domains
+                ]
+                logger.info(f"Filtered {len(inputs)} events to {len(filtered_events)} events matching domains: {target_domains}")
+            else:
+                filtered_events = inputs
+                logger.info(f"No domain filter applied, using all {len(inputs)} events")
+
+            # Apply batch size limit with domain distribution
+            batch_size = self.config.event_batch_size
+            if len(filtered_events) > batch_size:
+                # Distribute events evenly across domains for better question diversity
+                from collections import defaultdict
+                events_by_domain = defaultdict(list)
+                for event in filtered_events:
+                    events_by_domain[event.domain.value].append(event)
+
+                # Calculate events per domain for balanced distribution
+                num_domains = len(events_by_domain)
+                events_per_domain = batch_size // num_domains
+                remainder = batch_size % num_domains
+
+                # Select events from each domain
+                distributed_events = []
+                for domain, events in sorted(events_by_domain.items()):
+                    # Take events_per_domain from this domain (+ 1 if remainder)
+                    take = events_per_domain + (1 if remainder > 0 else 0)
+                    distributed_events.extend(events[:take])
+                    if remainder > 0:
+                        remainder -= 1
+
+                logger.info(f"Distributed {batch_size} events across {num_domains} domains: " +
+                           f"{', '.join(f'{d}:{len([e for e in distributed_events if e.domain.value == d])}' for d in events_by_domain.keys())}")
+                filtered_events = distributed_events
+            else:
+                logger.info(f"Using all {len(filtered_events)} filtered events (within batch size {batch_size})")
+
+            if not filtered_events:
+                logger.warning("No events remain after filtering")
+                return []
+
             # Create tools with database access
             self.event_details_tool = EventDetailsTool(db_path=self.db_path)
             self.article_retrieval_tool = ArticleRetrievalTool(db_path=self.db_path)
@@ -91,10 +139,6 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
 
             # Determine max questions
             max_questions = self.config.max_questions or 10
-
-            # Use category_hints as domains if provided (focus on missing categories)
-            # Otherwise fall back to config domains
-            target_domains = self.category_hints if self.category_hints else self.config.domains
 
             # Get instruction from prompts module
             instruction = self.prompts.get_instruction(
