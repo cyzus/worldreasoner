@@ -10,7 +10,7 @@ from src.domain.models import Event, Question, Article
 from src.config.pipeline import QuestionPipelineConfig
 from src.agents.factory import AgentFactory
 from src.tools import QuestionGeneratorTool, BatchQuestionGeneratorTool, EventDetailsTool, ArticleRetrievalTool, BatchArticleRetrievalTool
-from .collectors import ResultCollector
+from src.core.collectors import ResultCollector
 from ..prompts import QuestionGenerationPrompts
 from src.utils.logging import logger
 from src.utils.usage_tracking import UsageTracker, log_usage

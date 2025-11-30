@@ -9,7 +9,7 @@ from ..base import PipelineStage
 from src.domain.models import Article, Event
 from src.agents.factory import AgentFactory
 from src.tools import BatchEventIdentifierTool, ArticleRetrievalTool
-from .collectors import ResultCollector
+from src.core.collectors import ResultCollector
 from ..prompts import EventIdentificationPrompts
 from src.utils.logging import logger
 from src.utils.usage_tracking import UsageTracker, log_usage

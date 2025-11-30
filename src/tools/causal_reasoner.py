@@ -7,7 +7,7 @@ from typing import Optional
 
 from smolagents import Tool
 from src.domain.models import CausalHypothesis, CausalRelationType
-from src.pipelines.stages.collectors import ResultCollector
+from src.core.collectors import ResultCollector
 
 
 class CausalReasonerTool(Tool):

@@ -1,7 +1,7 @@
 """Base classes for pipeline tools."""
 from typing import Any, Generic, TypeVar, Optional, List
 from smolagents import Tool
-from src.pipelines.stages.collectors import ResultCollector
+from src.core.collectors import ResultCollector
 from src.utils.logging import logger
 
 T = TypeVar('T')

@@ -31,7 +31,7 @@ from .database_persistence import (
     DatabasePersistenceConfig,
     DatabasePersistenceStage,
 )
-from .collectors import ResultCollector
+from src.core.collectors import ResultCollector
 
 __all__ = [
     # Question Pipeline Stages
