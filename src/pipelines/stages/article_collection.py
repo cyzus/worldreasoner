@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from ..base import PipelineStage, PipelineStageResult
 from src.domain.models import Article
 from src.agents.factory import AgentFactory
-from .tools import ArticleCollectorTool, RssFetchTool
+from src.tools import ArticleCollectorTool, RssFetchTool
 from .collectors import ResultCollector
 from ..prompts import ArticleCollectionPrompts
 from src.utils.logging import logger

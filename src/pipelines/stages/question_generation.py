@@ -9,7 +9,7 @@ from ..base import PipelineStage
 from src.domain.models import Event, Question, Article
 from src.config.pipeline import QuestionPipelineConfig
 from src.agents.factory import AgentFactory
-from .tools import QuestionGeneratorTool, BatchQuestionGeneratorTool, EventDetailsTool, ArticleRetrievalTool, BatchArticleRetrievalTool
+from src.tools import QuestionGeneratorTool, BatchQuestionGeneratorTool, EventDetailsTool, ArticleRetrievalTool, BatchArticleRetrievalTool
 from .collectors import ResultCollector
 from ..prompts import QuestionGenerationPrompts
 from src.utils.logging import logger

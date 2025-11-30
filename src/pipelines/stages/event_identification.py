@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from ..base import PipelineStage
 from src.domain.models import Article, Event
 from src.agents.factory import AgentFactory
-from .tools import BatchEventIdentifierTool, ArticleRetrievalTool
+from src.tools import BatchEventIdentifierTool, ArticleRetrievalTool
 from .collectors import ResultCollector
 from ..prompts import EventIdentificationPrompts
 from src.utils.logging import logger
