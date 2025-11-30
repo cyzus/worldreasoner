@@ -65,7 +65,8 @@ class NewsBasedRunner(QuestionSourceRunner):
         )
         self.article_persist = DatabasePersistenceStage(persist_config, "article")
         self.event_persist = DatabasePersistenceStage(persist_config, "event")
-
+        self.question_persist = DatabasePersistenceStage(persist_config, "question")
+    
     async def collect(
         self,
         count: int,
@@ -204,7 +205,7 @@ class NewsBasedRunner(QuestionSourceRunner):
 
             # Stage 3: Generate questions with intelligent hints
             logger.info("Stage 3: Generating questions from events...")
-            
+
             # Pass type/category hints to guide generation intelligently
             # Create new stage instance with hints for this specific run
             question_stage_with_hints = QuestionGenerationStage(
@@ -212,7 +213,8 @@ class NewsBasedRunner(QuestionSourceRunner):
                 db_path=self.db_path,
                 type_hints=type_filter,  # Tell agent which types we need
                 category_hints=category_filter,  # Tell agent which categories we need
-                existing_question_ids=existing_question_ids  # Skip duplicates early
+                existing_question_ids=existing_question_ids,  # Skip duplicates early
+                target_count=count  # Tell stage exactly how many questions we need
             )
             
             question_result = await question_stage_with_hints.execute_batched(
@@ -234,26 +236,6 @@ class NewsBasedRunner(QuestionSourceRunner):
             questions = question_result.outputs
             logger.info(f"Generated {len(questions)} questions")
 
-            # Update events with question links (bidirectional relationship)
-            # Questions already have target_event_id and related_event_ids
-            # Now add the reverse direction: events pointing to questions
-            event_map = {event.id: event for event in events}
-
-            for question in questions:
-                # Add this question to all related events
-                for event_id in question.related_event_ids:
-                    if event_id in event_map:
-                        event = event_map[event_id]
-                        if 'related_question_ids' not in event.metadata:
-                            event.metadata['related_question_ids'] = []
-                        if question.id not in event.metadata['related_question_ids']:
-                            event.metadata['related_question_ids'].append(question.id)
-                            logger.debug(f"Linked event {event_id} to question {question.id}")
-
-            # Re-persist events to save updated question links
-            if events:
-                await self.event_persist.execute(events)
-
             # Tag questions with source
             self._tag_questions_with_source(questions)
 
@@ -270,8 +252,33 @@ class NewsBasedRunner(QuestionSourceRunner):
                 f"(from {len(questions)} total)"
             )
 
-            # Return up to 'count' questions
-            final_questions = filtered_questions[:count]
+            # Note: filtered_questions should already be <= count since we passed target_count
+            # to QuestionGenerationStage. Just use them as-is (no slicing needed).
+            final_questions = filtered_questions
+
+            # Persist the final questions that will be returned
+            if final_questions:
+                await self.question_persist.execute(final_questions)
+
+            # Update events with question links (bidirectional relationship)
+            # Questions already have target_event_id and related_event_ids
+            # Now add the reverse direction: events pointing to questions
+            event_map = {event.id: event for event in events}
+
+            for question in final_questions:
+                # Add this question to all related events
+                for event_id in question.related_event_ids:
+                    if event_id in event_map:
+                        event = event_map[event_id]
+                        if 'related_question_ids' not in event.metadata:
+                            event.metadata['related_question_ids'] = []
+                        if question.id not in event.metadata['related_question_ids']:
+                            event.metadata['related_question_ids'].append(question.id)
+                            logger.debug(f"Linked event {event_id} to question {question.id}")
+
+            # Re-persist events to save updated question links
+            if events:
+                await self.event_persist.execute(events)
 
             return CollectionResult(
                 source_name=self.source_name,

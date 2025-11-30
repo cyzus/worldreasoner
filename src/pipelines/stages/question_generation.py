@@ -24,18 +24,19 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
     for deeper context when generating questions.
     """
     
-    def __init__(self, config: QuestionPipelineConfig, db_path: Optional[str] = None, 
+    def __init__(self, config: QuestionPipelineConfig, db_path: Optional[str] = None,
                  type_hints: Optional[List[str]] = None, category_hints: Optional[List[str]] = None,
-                 existing_question_ids: Optional[set] = None):
+                 existing_question_ids: Optional[set] = None, target_count: Optional[int] = None):
         super().__init__(name="QuestionGeneration", config=config)
 
         # Store db_path for tools
         self.db_path = db_path
-        
+
         # Store hints for intelligent generation
         self.type_hints = type_hints  # Priority types needed
         self.category_hints = category_hints  # Priority categories needed
         self.existing_question_ids = existing_question_ids or set()  # For deduplication
+        self.target_count = target_count  # Override config.max_questions if provided
 
         # Create result collector for questions
         self.collector = ResultCollector[Question]()
@@ -60,21 +61,35 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
         
     async def process(self, inputs: List[Event]) -> List[Question]:
         """Generate forecast questions from events using LLM agent.
-        
+
         The agent has access to:
         - Event summaries (truncated descriptions)
         - EventDetailsTool to request full event + article content
         - QuestionGeneratorTool to store generated questions
-        
+
         Args:
             inputs: List of events to generate questions about
-            
+
         Returns:
             List of generated questions
         """
         if not inputs:
             return []
-        
+
+        # Early exit if we already have enough questions (batching optimization)
+        # The collector is shared across batches, so check how many we've collected so far
+        # Use target_count if provided (from orchestrator), otherwise fall back to config
+        max_questions = self.target_count if self.target_count is not None else (self.config.max_questions or 10)
+        current_count = len(self.collector.get_all())
+
+        if current_count >= max_questions:
+            logger.info(f"Already collected {current_count}/{max_questions} questions, skipping batch")
+            return []
+
+        # Adjust target for this batch based on how many we still need
+        remaining_needed = max_questions - current_count
+        logger.debug(f"Current: {current_count}, Target: {max_questions}, This batch will aim for: {remaining_needed}")
+
         try:
             # Get current date for context
             current_date = datetime.now(timezone.utc)
@@ -137,14 +152,12 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
                 tools=[self.event_details_tool, self.question_tool, self.article_retrieval_tool]
             )
 
-            # Determine max questions
-            max_questions = self.config.max_questions or 10
-
             # Get instruction from prompts module
+            # Use remaining_needed (already calculated above) to tell agent how many questions to generate
             instruction = self.prompts.get_instruction(
                 current_date=current_date,
                 events=filtered_events,  # Use filtered events
-                max_questions=max_questions,
+                max_questions=remaining_needed,  # Use adjusted target based on what we still need
                 domains=target_domains,
                 require_ground_truth=self.config.require_ground_truth,
                 type_hints=self.type_hints,
@@ -165,10 +178,6 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
 
             # Get generated questions from the collector
             questions = self.collector.get_all()
-            
-            # Apply max_questions limit from config if set
-            if self.config.max_questions:
-                questions = questions[:self.config.max_questions]
 
             # Log usage summary for this stage
             if self.usage_tracker.total_calls > 0:
