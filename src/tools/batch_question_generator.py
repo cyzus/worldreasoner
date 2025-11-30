@@ -10,7 +10,7 @@ from src.domain.models import Event, Question, QuestionType, Domain
 from src.utils.enums import enum_to_list
 from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
 from src.utils.logging import logger
-from src.pipelines.stages.tools.base import CollectorAwareTool
+from src.tools.base import CollectorAwareTool
 
 
 class BatchQuestionGeneratorTool(CollectorAwareTool[Question]):

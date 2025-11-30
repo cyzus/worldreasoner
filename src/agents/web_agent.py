@@ -6,8 +6,8 @@ class WebAgent(BaseAgent):
     """Agent specialized for web interactions."""
     def __init__(self, config: Config, tools: list = None, max_steps: int = 15):
         # Lazy import to avoid circular dependency
-        from src.pipelines.stages.tools.web_fetch import WebFetchTool
-        from src.pipelines.stages.tools.web_search import WebSearchTool
+        from src.tools.web_fetch import WebFetchTool
+        from src.tools.web_search import WebSearchTool
         
         
         # Create a new list with web tools

@@ -2,7 +2,7 @@
 
 import pytest
 import asyncio
-from src.pipelines.stages.tools import WebFetchTool
+from src.tools import WebFetchTool
 
 
 class TestWebFetchTool:

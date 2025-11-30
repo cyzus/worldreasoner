@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 from src.pipelines.base import PipelineStage
 from src.domain.models import Question, Article, Event
 from src.agents.factory import AgentFactory
-from src.pipelines.stages.tools import ArticleCollectorTool, EventIdentifierTool
+from src.tools import ArticleCollectorTool, EventIdentifierTool
 from src.pipelines.stages.collectors import ResultCollector
 from src.pipelines.prompts import HindsightAnalysisPrompts
 from src.utils.logging import logger

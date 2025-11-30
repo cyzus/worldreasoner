@@ -14,8 +14,8 @@ from src.utils.logging import logger
 from src.utils.enums import enum_to_list, parse_domain
 from src.utils.id_generator import generate_article_id
 from src.utils.date_utils import parse_iso_datetime
-from src.pipelines.stages.tools.web_fetch import WebFetchTool
-from src.pipelines.stages.tools.base import CollectorAwareTool
+from src.tools.web_fetch import WebFetchTool
+from src.tools.base import CollectorAwareTool
 
 
 class ArticleCollectorTool(CollectorAwareTool[Article]):

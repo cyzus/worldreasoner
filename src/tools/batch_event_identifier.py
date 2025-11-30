@@ -11,7 +11,7 @@ from src.utils.enums import enum_to_list, parse_domain, parse_event_type
 from src.utils.id_generator import generate_event_id
 from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
 from src.utils.logging import logger
-from src.pipelines.stages.tools.base import CollectorAwareTool
+from src.tools.base import CollectorAwareTool
 
 
 class BatchEventIdentifierTool(CollectorAwareTool[Event]):
