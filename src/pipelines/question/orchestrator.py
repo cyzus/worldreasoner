@@ -386,6 +386,10 @@ class QuestionCollectionOrchestrator:
         # Get ALL type gaps as hints (not just the one being filled)
         type_gaps_list = [qtype for qtype, gap in gaps["types"].items() if gap > 0] if gaps["types"] else None
 
+        # Track sources that have been exhausted (returned 0 questions)
+        # This prevents repeated calls to sources that don't have what we need
+        exhausted_sources = set()
+
         # Try to fill type gaps
         for qtype, count in gaps["types"].items():
             if count <= 0:
@@ -397,6 +401,11 @@ class QuestionCollectionOrchestrator:
             for source_name, runner in self.sources.items():
                 if count <= 0:
                     break
+
+                # Skip if source is exhausted
+                if source_name in exhausted_sources:
+                    logger.debug(f"  Skipping '{source_name}' (exhausted)")
+                    continue
 
                 # Check if source can provide this type
                 can_provide = await runner.can_provide(question_type=qtype)
@@ -431,6 +440,14 @@ class QuestionCollectionOrchestrator:
                             self.source_results[source_name].append(result)
                             count -= len(unique_questions)
                             logger.info(f"    ✓ Got {len(unique_questions)} '{qtype}' questions")
+                        else:
+                            # Got questions but all were duplicates - mark as exhausted
+                            logger.info(f"    ✗ '{source_name}': all questions were duplicates, marking exhausted")
+                            exhausted_sources.add(source_name)
+                    else:
+                        # Source returned 0 questions - mark as exhausted for this gap-filling round
+                        logger.debug(f"    ✗ '{source_name}': no questions, marking exhausted")
+                        exhausted_sources.add(source_name)
 
                 except Exception as e:
                     logger.warning(f"    ✗ Error: {e}")
@@ -447,6 +464,11 @@ class QuestionCollectionOrchestrator:
             for source_name, runner in self.sources.items():
                 if count <= 0:
                     break
+
+                # Skip if source is exhausted
+                if source_name in exhausted_sources:
+                    logger.debug(f"  Skipping '{source_name}' (exhausted)")
+                    continue
 
                 # Check if source can provide this category
                 can_provide = await runner.can_provide(category=category)
@@ -480,6 +502,14 @@ class QuestionCollectionOrchestrator:
                             self.source_results[source_name].append(result)
                             count -= len(unique_questions)
                             logger.info(f"    ✓ Got {len(unique_questions)} '{category}' questions")
+                        else:
+                            # Got questions but all were duplicates - mark as exhausted
+                            logger.info(f"    ✗ '{source_name}': all questions were duplicates, marking exhausted")
+                            exhausted_sources.add(source_name)
+                    else:
+                        # Source returned 0 questions - mark as exhausted for this gap-filling round
+                        logger.debug(f"    ✗ '{source_name}': no questions, marking exhausted")
+                        exhausted_sources.add(source_name)
 
                 except Exception as e:
                     logger.warning(f"    ✗ Error: {e}")

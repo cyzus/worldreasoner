@@ -84,6 +84,9 @@ class PolymarketRunner(QuestionSourceRunner):
         self.type_map = type_map or self.DEFAULT_TYPE_MAP
         self.category_map = category_map or self.DEFAULT_CATEGORY_MAP
 
+        # Cache categorizations across multiple collect() calls to avoid re-categorizing
+        self._categorization_cache: Dict[str, tuple] = {}  # question_id -> (domain, category)
+
     def _get_lookback_days(self, quality_requirements: Optional[QualityRequirements]) -> int:
         """Get lookback days from quality requirements.
 
@@ -429,17 +432,36 @@ class PolymarketRunner(QuestionSourceRunner):
             # Tag with source
             self._tag_questions_with_source(questions)
 
+            # Apply cached categorizations from previous calls to avoid re-categorizing
+            cached_count = 0
+            for q in questions:
+                if q.id in self._categorization_cache:
+                    domain, category = self._categorization_cache[q.id]
+                    q.domain = domain
+                    if not hasattr(q, 'metadata') or q.metadata is None:
+                        q.metadata = {}
+                    q.metadata["category"] = category
+                    cached_count += 1
+
+            if cached_count > 0:
+                logger.info(f"Applied {cached_count} cached categorizations (skipping re-categorization)")
+
+            # Separate questions into: need categorization vs already categorized
+            need_categorization = [q for q in questions if q.id not in self._categorization_cache]
+            already_categorized = [q for q in questions if q.id in self._categorization_cache]
+
             # Early deduplication (before expensive categorization!)
-            if existing_question_ids is not None:
-                before_dedup = len(questions)
-                questions = [q for q in questions if q.id not in existing_question_ids]
+            # Only deduplicate questions that still need categorization
+            if existing_question_ids is not None and need_categorization:
+                before_dedup = len(need_categorization)
+                need_categorization = [q for q in need_categorization if q.id not in existing_question_ids]
 
-                if before_dedup != len(questions):
-                    logger.info(f"Filtered out {before_dedup - len(questions)} duplicates before categorization")
-                    logger.debug(f"Remaining: {len(questions)} unique questions")
+                if before_dedup != len(need_categorization):
+                    logger.info(f"Filtered out {before_dedup - len(need_categorization)} duplicates before categorization")
+                    logger.debug(f"Remaining: {len(need_categorization)} questions need categorization")
 
-                # Note: Don't add to existing_question_ids here - let orchestrator do it
-                # after confirming questions are actually being collected
+            # Combine back together
+            questions = need_categorization + already_categorized
 
             if not questions:
                 logger.warning("No questions remaining after deduplication")
@@ -453,12 +475,16 @@ class PolymarketRunner(QuestionSourceRunner):
                 )
 
             # Iterative enhancement: enhance in small batches, only as needed
+            # Only categorize questions that need it (not already cached)
             enhanced_questions = []
-            remaining_questions = questions[:]
+            remaining_questions = need_categorization[:]  # Only enhance uncategorized questions
+            already_enhanced = already_categorized[:]  # Keep already categorized ones
 
-            if self.use_agent_enhancement and questions:
+            if self.use_agent_enhancement and remaining_questions:
                 try:
-                    batch_size = count * 2  # Enhance 2x what we need per batch
+                    # Use efficient batch size for categorization (min 20, max 50)
+                    # Don't make it dependent on count to avoid tiny batches when count=1
+                    batch_size = min(50, max(20, count * 2))
 
                     while remaining_questions and len(enhanced_questions) < count * 3:
                         # Take next batch
@@ -467,11 +493,18 @@ class PolymarketRunner(QuestionSourceRunner):
 
                         logger.info(f"Enhancing batch of {len(batch)} questions ({len(enhanced_questions)} enhanced so far)...")
                         batch_enhanced = await self._enhance_with_agent(batch)
+
+                        # Cache the categorizations
+                        for q in batch_enhanced:
+                            if q.domain and q.metadata and q.metadata.get("category"):
+                                self._categorization_cache[q.id] = (q.domain, q.metadata["category"])
+
                         enhanced_questions.extend(batch_enhanced)
 
-                        # Try filtering with what we have so far
+                        # Try filtering with what we have so far (including already enhanced from cache)
+                        all_enhanced_so_far = enhanced_questions + already_enhanced
                         filtered = self._filter_questions(
-                            enhanced_questions,
+                            all_enhanced_so_far,
                             type_filter=type_filter,
                             category_filter=category_filter,
                             quality_requirements=quality_requirements,
@@ -479,15 +512,18 @@ class PolymarketRunner(QuestionSourceRunner):
 
                         # If we have enough after filtering, stop enhancing
                         if len(filtered) >= count:
-                            logger.info(f"Found {len(filtered)} matching questions after enhancing {len(enhanced_questions)}, stopping enhancement")
+                            logger.info(f"Found {len(filtered)} matching questions after enhancing {len(enhanced_questions)} (+ {len(already_enhanced)} cached), stopping enhancement")
                             break
 
-                    # Add any remaining unenhanced questions as fallback
-                    questions = enhanced_questions + remaining_questions
+                    # Add any remaining unenhanced questions as fallback + already enhanced from cache
+                    questions = enhanced_questions + already_enhanced + remaining_questions
 
                 except Exception as e:
                     logger.warning(f"Agent enhancement failed: {e}, using questions as-is")
-                    questions = enhanced_questions + remaining_questions if enhanced_questions else questions
+                    questions = enhanced_questions + already_enhanced + remaining_questions if enhanced_questions else (already_enhanced + need_categorization)
+            else:
+                # No enhancement, use all questions (already cached + new uncategorized)
+                questions = already_enhanced + need_categorization
 
             # Final filtering
             filtered = self._filter_questions(
