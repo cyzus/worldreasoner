@@ -47,7 +47,7 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             "enum": enum_to_list(Domain)
         },
         "difficulty": {"type": "integer", "description": "Difficulty level 1-5"},
-        "resolution_date": {"type": "string", "description": "When question can be resolved (ISO format)"},
+        "resolution_date": {"type": "string", "description": "When question can be resolved (ISO 8601 WITH timezone, e.g. 2025-12-31T23:59:59Z or 2025-12-31T23:59:59+00:00; MUST include 'Z' or an explicit offset)"},
         "resolution_criteria": {"type": "string", "description": "Objective rules for how to verify/resolve this question"},
         "related_event_ids": {"type": "string", "description": "Comma-separated event IDs", "nullable": True},
         "ground_truth": {"type": "string", "description": "Answer if already resolved", "nullable": True},

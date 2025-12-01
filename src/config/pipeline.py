@@ -54,7 +54,7 @@ class QuestionPipelineConfig(BaseModel):
     
     # Batch processing settings (for handling large datasets)
     article_batch_size: int = Field(
-        default=50,
+        default=20,
         description="Maximum articles to process in a single batch for event identification"
     )
     event_batch_size: int = Field(

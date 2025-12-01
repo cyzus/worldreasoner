@@ -54,7 +54,7 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
             "description": f"Event domain - one of: {', '.join(enum_to_list(Domain))}",
             "enum": enum_to_list(Domain)
         },
-        "occurred_date": {"type": "string", "description": "When event occurred (ISO format)", "nullable": True},
+        "occurred_date": {"type": "string", "description": "When event occurred (ISO 8601 WITH timezone, e.g. 2025-11-27T14:30:00Z or 2025-11-27T14:30:00+00:00; MUST include 'Z' or an explicit offset)", "nullable": True},
         "event_type": {
             "type": "string",
             "description": f"Event type - one of: {', '.join(enum_to_list(EventType))}",

@@ -13,16 +13,14 @@ type_distribution:
 
 # Distribution by category (must sum to total_questions)
 category_distribution:
-  finance: 1          # Financial markets, earnings, IPOs
+  finance: 2          # Financial markets, earnings, IPOs
   tech: 1             # Tech products, launches, AI developments
-  politics: 1         # Elections, policy changes, legislation
+  politics: 2         # Elections, policy changes, legislation
   health: 1           # Medical, healthcare, pandemics
   climate: 1          # Environmental, climate change
   culture: 1          # Entertainment, arts, media
-  science: 1          # Research, clinical trials, discoveries
   sports: 1           # Major sports events, tournaments
   business: 1         # Corporate news, market trends
-  general: 1          # Miscellaneous topics
 
 # Quality requirements for collected questions
 quality:
