@@ -256,3 +256,23 @@ class CollectionProgress(BaseModel):
             List of all questions added to progress tracker
         """
         return self.questions_list.copy()
+
+    def set_questions(self, questions: List[Question]) -> None:
+        """Replace the list of questions with a new list.
+
+        This is useful when reordering or filtering questions (e.g., after quality ranking).
+
+        Args:
+            questions: New list of questions to set
+        """
+        # Clear the current state
+        self.questions_list.clear()
+        self.by_type.clear()
+        self.by_category.clear()
+        self.by_source.clear()
+        self.total = 0
+        self.avg_difficulty = 0.0
+        self.questions_with_criteria = 0
+
+        # Re-add all questions
+        self.add_questions(questions)

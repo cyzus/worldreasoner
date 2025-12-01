@@ -10,8 +10,10 @@ from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 
 from src.config.collection_goal import CollectionGoal
+from src.config.pipeline import QuestionQualityConfig
 from src.pipelines.question.sources.base import QuestionSourceRunner, CollectionResult
 from .progress import CollectionProgress
+from ..stages.question_quality import QuestionQualityRankingStage
 from src.domain.models import Question
 from src.core.database import GenericDatabase
 from src.utils.logging import logger
@@ -31,6 +33,10 @@ class OrchestratorConfig(BaseModel):
     save_intermediate_results: bool = Field(
         default=True,
         description="Save questions to DB as they're collected"
+    )
+    quality_ranking: QuestionQualityConfig = Field(
+        default_factory=QuestionQualityConfig,
+        description="Configuration for the quality ranking stage"
     )
 
 
@@ -93,6 +99,15 @@ class QuestionCollectionOrchestrator:
         # Initialize DB if path provided
         self.db = GenericDatabase(db_path) if db_path else None
 
+        # Initialize the quality ranking stage if enabled
+        if self.config.quality_ranking.enabled:
+            self.quality_stage = QuestionQualityRankingStage(
+                config=self.config.quality_ranking,
+                db_path=self.db_path
+            )
+        else:
+            self.quality_stage = None
+
         # Track existing question IDs for deduplication
         self.existing_question_ids: set = set()
         self.duplicates_skipped: int = 0
@@ -149,6 +164,19 @@ class QuestionCollectionOrchestrator:
                 if self.progress.total >= self.goal.total_questions * 0.8:
                     logger.info("Attempting targeted gap filling...")
                     await self._fill_gaps()
+
+            # Phase 2: Quality Ranking (if enabled)
+            if self.quality_stage:
+                logger.info("--- Running Quality Ranking Stage ---")
+                all_questions = self.progress.get_questions()
+                ranked_questions_result = await self.quality_stage.execute(all_questions)
+                if ranked_questions_result.status == "completed":
+                    # Update the progress tracker with the scored and sorted questions
+                    self.progress.set_questions(ranked_questions_result.outputs)
+                    logger.success("Quality ranking complete.")
+                else:
+                    logger.error("Quality ranking stage failed.")
+                    self.errors.extend(err.message for err in ranked_questions_result.errors)
 
             # Final check
             goal_met = self.progress.is_goal_met(self.goal)

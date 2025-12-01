@@ -49,6 +49,7 @@ class EvidencePipeline(Pipeline):
         database_config: DatabaseConfig,
         enable_persistence: bool = True,
         max_concurrent_questions: int = 1,
+        min_quality_score: Optional[float] = None,
     ):
         """Initialize the evidence pipeline.
 
@@ -56,7 +57,8 @@ class EvidencePipeline(Pipeline):
             evidence_config: Configuration for evidence pipeline
             database_config: Database connection configuration
             enable_persistence: Whether to save to database
-            max_concurrent_questions: Max number of questions to process in parallel (default: 3)
+            max_concurrent_questions: Max number of questions to process in parallel
+            min_quality_score: If set, only process questions with a quality score >= this value
         """
         super().__init__(name="EvidencePipeline")
 
@@ -64,6 +66,7 @@ class EvidencePipeline(Pipeline):
         self.database_config = database_config
         self.enable_persistence = enable_persistence
         self.max_concurrent_questions = max_concurrent_questions
+        self.min_quality_score = min_quality_score
 
         # Semaphore to limit concurrent question processing
         self.semaphore = asyncio.Semaphore(max_concurrent_questions)
@@ -133,19 +136,25 @@ class EvidencePipeline(Pipeline):
 
     async def run(
         self,
-        resolved_questions: Optional[List[Question]] = None
+        resolved_questions: Optional[List[Question]] = None,
+        min_quality_score: Optional[float] = None,
     ) -> List[PipelineStageResult]:
         """Run the evidence pipeline with per-question async processing.
 
         Args:
             resolved_questions: Optional list of resolved questions.
                                If None, loads from database.
+            min_quality_score: Overrides the instance's min_quality_score for this run.
 
         Returns:
             List of results from each stage
         """
         self._results = []
 
+        # Allow overriding the quality score threshold at runtime
+        if min_quality_score is not None:
+            self.min_quality_score = min_quality_score
+            
         try:
             # Get resolved questions
             if resolved_questions is None:
@@ -380,6 +389,11 @@ class EvidencePipeline(Pipeline):
             if self.evidence_config.domains and q.domain not in self.evidence_config.domains:
                 continue
 
+            # Skip if quality score is below threshold
+            if self.min_quality_score is not None:
+                if q.quality_score is None or q.quality_score < self.min_quality_score:
+                    continue
+
             # Skip if already processed by evidence pipeline (if configured)
             if self.evidence_config.skip_already_processed and q.id in processed_question_ids:
                 skipped_already_processed += 1
@@ -387,6 +401,11 @@ class EvidencePipeline(Pipeline):
                 continue
 
             resolved.append(q)
+
+        # Sort by quality score (descending) if threshold is applied
+        if self.min_quality_score is not None:
+            resolved.sort(key=lambda q: q.quality_score or 0.0, reverse=True)
+            logger.info(f"Prioritizing questions by quality score (min_score={self.min_quality_score}).")
 
         # Apply max_questions limit if configured
         if self.evidence_config.max_questions is not None:

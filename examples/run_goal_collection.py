@@ -245,6 +245,26 @@ async def run_goal_collection(
         if len(result.questions) > 3:
             logger.info(f"   ... and {len(result.questions) - 3} more questions")
 
+    # Quality score statistics
+    if result.questions and result.questions[0].quality_score is not None:
+        logger.info("")
+        logger.info("⭐ QUALITY SCORE STATS")
+        logger.info("-" * 30)
+        scores = [q.quality_score for q in result.questions if q.quality_score is not None]
+        if scores:
+            avg_score = sum(scores) / len(scores)
+            min_score = min(scores)
+            max_score = max(scores)
+            logger.info(f"   - Average: {avg_score:.2f}")
+            logger.info(f"   - Min:     {min_score:.2f}")
+            logger.info(f"   - Max:     {max_score:.2f}")
+            
+            # Show top 3 best questions
+            logger.info("   Top 3 Questions:")
+            sorted_questions = sorted(result.questions, key=lambda q: q.quality_score or 0.0, reverse=True)
+            for i, q in enumerate(sorted_questions[:3], 1):
+                logger.info(f"     {i}. (Score: {q.quality_score:.2f}) {q.question_text[:80]}...")
+
     logger.info("")
 
     # Auto-index articles for search if not skipped

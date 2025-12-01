@@ -91,6 +91,16 @@ class Question(BaseModel):
     
     # Metadata
     is_synthetic: bool = Field(default=False, description="Whether question uses synthetic data")
+    quality_score: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description="Composite quality score (0.0-1.0), null if not scored"
+    )
+    quality_dimensions: Optional[Dict[str, float]] = Field(
+        None,
+        description="Detailed scores for each quality dimension"
+    )
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
 

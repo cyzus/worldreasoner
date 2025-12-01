@@ -11,7 +11,7 @@ def test_causal_hypothesis_creation():
     """Test basic causal hypothesis creation."""
     hypothesis = CausalHypothesis(
         id="hyp_test_001",
-        question_id="q_test_001",
+        discovered_by_question_ids=["q_test_001"],
         source_event_id="evt_cause_001",
         target_event_id="evt_effect_001",
         relation_type=CausalRelationType.CAUSES,
@@ -22,13 +22,12 @@ def test_causal_hypothesis_creation():
     )
 
     assert hypothesis.id == "hyp_test_001"
-    assert hypothesis.question_id == "q_test_001"
+    assert "q_test_001" in hypothesis.discovered_by_question_ids
     assert hypothesis.source_event_id == "evt_cause_001"
     assert hypothesis.target_event_id == "evt_effect_001"
     assert hypothesis.relation_type == CausalRelationType.CAUSES
     assert hypothesis.strength == 0.8
     assert hypothesis.confidence == 0.9
-    assert hypothesis.validated is False
     assert len(hypothesis.evidence_article_ids) == 2
 
 
@@ -36,7 +35,7 @@ def test_causal_hypothesis_with_enables_relation():
     """Test hypothesis with ENABLES relation type."""
     hypothesis = CausalHypothesis(
         id="hyp_test_002",
-        question_id="q_test_002",
+        discovered_by_question_ids=["q_test_002"],
         source_event_id="evt_enable_001",
         target_event_id="evt_enabled_001",
         relation_type=CausalRelationType.ENABLES,
@@ -129,11 +128,11 @@ def test_has_evidence_without_citations():
     assert not hypothesis.has_evidence()
 
 
-def test_mark_validated():
-    """Test marking hypothesis as validated."""
+def test_add_discovery():
+    """Test adding a discovery to a hypothesis."""
     hypothesis = CausalHypothesis(
         id="hyp_test_007",
-        question_id="q_test_007",
+        discovered_by_question_ids=["q_test_007"],
         source_event_id="evt_001",
         target_event_id="evt_002",
         relation_type=CausalRelationType.CAUSES,
@@ -143,20 +142,20 @@ def test_mark_validated():
         evidence_article_ids=["art_009"],
     )
 
-    assert hypothesis.validated is False
-    assert hypothesis.validation_notes == ""
+    assert "q_test_007" in hypothesis.discovered_by_question_ids
+    assert len(hypothesis.discovered_by_question_ids) == 1
 
-    hypothesis.mark_validated(notes="Added to causal graph successfully")
+    hypothesis.add_discovery("q_test_008")
 
-    assert hypothesis.validated is True
-    assert hypothesis.validation_notes == "Added to causal graph successfully"
+    assert "q_test_008" in hypothesis.discovered_by_question_ids
+    assert len(hypothesis.discovered_by_question_ids) == 2
 
 
 def test_default_metadata_fields():
     """Test that metadata fields have correct defaults."""
     hypothesis = CausalHypothesis(
         id="hyp_test_008",
-        question_id="q_test_008",
+        discovered_by_question_ids=["q_test_008"],
         source_event_id="evt_001",
         target_event_id="evt_002",
         relation_type=CausalRelationType.CAUSES,
@@ -167,9 +166,7 @@ def test_default_metadata_fields():
     )
 
     assert hypothesis.identified_by == "evidence_pipeline"
-    assert hypothesis.validated is False
-    assert hypothesis.validation_notes == ""
-    assert isinstance(hypothesis.identified_at, datetime)
+    assert isinstance(hypothesis.first_identified_at, datetime)
 
 
 def test_prevents_relation_type():

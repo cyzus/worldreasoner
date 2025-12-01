@@ -218,6 +218,7 @@ class TestTemporalGateway:
             question_text="Will the technology event occur as predicted in the next week?",
             question_type=QuestionType.BOOLEAN,
             domain="tech",
+            source="test",
             difficulty=3,
             cutoff_date=cutoff_date,
             resolution_date=cutoff_date + timedelta(days=2),
@@ -247,6 +248,7 @@ class TestTemporalGateway:
             question_text="Will the technology event occur as predicted in the next week?",
             question_type=QuestionType.BOOLEAN,
             domain="tech",
+            source="test",
             difficulty=3,
             cutoff_date=cutoff_date,
             resolution_date=cutoff_date + timedelta(days=2),
@@ -277,6 +279,7 @@ class TestTemporalGateway:
             question_text="Will the technology event occur as predicted in the next week?",
             question_type=QuestionType.BOOLEAN,
             domain="tech",
+            source="test",
             difficulty=3,
             cutoff_date=None,  # No cutoff
             resolution_date=cutoff_date + timedelta(days=2),

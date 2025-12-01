@@ -63,6 +63,29 @@ class QuestionPipelineConfig(BaseModel):
     )
 
 
+class QuestionQualityConfig(BaseModel):
+    """Configuration for the Question Quality Ranking stage."""
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable/disable the quality ranking stage"
+    )
+    batch_size: int = Field(
+        default=20,
+        description="Number of questions to score in a single batch"
+    )
+    # Weights for each dimension in the composite score
+    dimension_weights: dict[str, float] = Field(default_factory=lambda: {
+        "interestingness": 1.0,
+        "clarity": 1.0,
+        "verifiability": 1.0,
+        "temporal_validity": 1.0,
+        "context_sufficiency": 1.0,
+        "difficulty_appropriateness": 1.0,
+        "format_consistency": 1.0,
+    })
+
+
 class EvidencePipelineConfig(BaseModel):
     """Configuration for the Evidence Pipeline (backward-looking causal analysis)."""
 
