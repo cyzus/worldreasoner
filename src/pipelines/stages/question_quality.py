@@ -22,7 +22,7 @@ class QuestionQualityRankingStage(PipelineStage[Question, Question]):
     def __init__(self, config: QuestionQualityConfig, db_path: str):
         super().__init__("question_quality_ranking", {"config": config.dict()})
         self.config = config
-        self.scorer = QuestionQualityScorer()
+        self.scorer = QuestionQualityScorer(timeout=config.timeout)
 
     async def process(self, inputs: List[Question]) -> List[Question]:
         """

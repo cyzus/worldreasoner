@@ -1,6 +1,7 @@
 """Tool for scoring the quality of forecast questions using an LLM."""
 
 import json
+import re
 from typing import List, Dict, Any, Optional
 
 from pydantic import BaseModel, Field
@@ -10,6 +11,7 @@ from src.domain.models.question import Question
 from src.llm import LiteLLMClient
 from src.config import get_config
 from src.pipelines.prompts.question_quality import QUESTION_QUALITY_ASSESSMENT_PROMPT, QUALITY_ASSESSMENT_SCHEMA
+from src.utils.logging import logger
 
 
 class QualityAssessment(BaseModel):
@@ -41,11 +43,16 @@ class QuestionQualityScorer(Tool):
     def __init__(
         self,
         collector: Optional[ResultCollector[QualityAssessment]] = None,
+        timeout: Optional[int] = None,
     ):
         super().__init__()
         self.collector = collector
         app_config = get_config()
-        self.llm_client = LiteLLMClient(app_config.llm)
+        # Override timeout if provided
+        llm_config = app_config.llm.model_copy()
+        if timeout is not None:
+            llm_config.timeout = timeout
+        self.llm_client = LiteLLMClient(llm_config)
 
     def _prepare_question_json(self, questions: List[Question]) -> str:
         """Prepare a JSON string of questions for the prompt."""
@@ -89,17 +96,32 @@ class QuestionQualityScorer(Tool):
         # Create messages for the LLM
         messages = [{"role": "user", "content": prompt}]
 
-        # Call the LLM with structured output
-        response_str = await self.llm_client.acomplete(messages=messages)
+        # Call the LLM with structured JSON output
+        response_str = await self.llm_client.acomplete(
+            messages=messages,
+            response_format={"type": "json_object"}
+        )
         
-        # LiteLLM with some providers returns a string that needs to be parsed
+        # Parse the JSON response
         try:
             response_json = json.loads(response_str)
-        except json.JSONDecodeError:
-            # Handle cases where the response is not valid JSON
-            # This might happen if the model doesn't respect the JSON output format constraint
-            # You could try to extract JSON from the string or log an error
-            return json.dumps({"error": "Invalid JSON response from LLM", "response": response_str})
+        except json.JSONDecodeError as e:
+            # Try to extract JSON from markdown code blocks
+            import re
+            json_match = re.search(r'```(?:json)?\s*({.*?})\s*```', response_str, re.DOTALL)
+            if json_match:
+                try:
+                    response_json = json.loads(json_match.group(1))
+                except json.JSONDecodeError:
+                    from src.utils.logging import logger
+                    logger.error(f"Failed to parse JSON from LLM response: {e}")
+                    logger.debug(f"Raw response: {response_str[:500]}...")
+                    return json.dumps({"error": "Invalid JSON response from LLM", "response": response_str[:500]})
+            else:
+                from src.utils.logging import logger
+                logger.error(f"Failed to parse JSON from LLM response: {e}")
+                logger.debug(f"Raw response: {response_str[:500]}...")
+                return json.dumps({"error": "Invalid JSON response from LLM", "response": response_str[:500]})
 
         # Assuming response_json is a dict
         assessments_data = response_json.get("assessments", [])

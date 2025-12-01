@@ -111,8 +111,8 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
         # Validate and convert event_type
         event_type_enum = parse_event_type(event_type)
 
-        # Generate unique event ID (use count of identified_events as counter)
-        event_id = generate_event_id(domain_enum, event_date, len(self.identified_events))
+        # Generate unique event ID (use count of stored events as counter)
+        event_id = generate_event_id(domain_enum, event_date, self.get_stored_count())
 
         # Determine status based on date
         status = EventStatus.OCCURRED if event_date <= datetime.now(timezone.utc) else EventStatus.PREDICTED

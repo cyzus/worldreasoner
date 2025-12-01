@@ -13,9 +13,19 @@ class LiteLLMClient():
         else:
             self.llm_config = llm_config
 
-    async def acomplete(self, messages: list[dict]):
+    async def acomplete(self, messages: list[dict], response_format: dict = None):
+        """Complete an LLM request.
+        
+        Args:
+            messages: List of message dicts with role and content
+            response_format: Optional response format specification (e.g., {"type": "json_object"})
+        """
+        kwargs = {**self.llm_config}
+        if response_format:
+            kwargs['response_format'] = response_format
+        
         response = await litellm.acompletion(
-            **self.llm_config,
+            **kwargs,
             messages=messages
         )
         return response['choices'][0]['message']['content']

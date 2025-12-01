@@ -74,6 +74,10 @@ class QuestionQualityConfig(BaseModel):
         default=20,
         description="Number of questions to score in a single batch"
     )
+    timeout: int = Field(
+        default=180,
+        description="Timeout in seconds for quality scoring LLM calls (default 180s for batch processing)"
+    )
     # Weights for each dimension in the composite score
     dimension_weights: dict[str, float] = Field(default_factory=lambda: {
         "interestingness": 1.0,

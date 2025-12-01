@@ -142,8 +142,8 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
                     self.collector.add(existing)
                     logger.debug(f"Added existing article {existing.id} to collector (duplicate URL, total: {self.collector.count()})")
                 else:
-                    self.collected_articles.append(existing)
-                    logger.debug(f"Added existing article {existing.id} to internal list (duplicate URL, total: {len(self.collected_articles)})")
+                    self._fallback_items.append(existing)
+                    logger.debug(f"Added existing article {existing.id} to internal list (duplicate URL, total: {len(self._fallback_items)})")
                 
                 return json.dumps({
                     "id": existing.id,
