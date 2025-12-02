@@ -18,6 +18,8 @@ from ..stages import (
     DatabasePersistenceConfig,
     HindsightEvidenceCollectionStage,
     EvidenceCollectionConfig,
+    TargetEventIdentificationStage,
+    TargetEventIdentificationConfig,
     CausalReasoningStage,
     CausalReasoningConfig,
     CausalGraphBuildingStage,
@@ -83,6 +85,17 @@ class EvidencePipeline(Pipeline):
         self.evidence_stage = HindsightEvidenceCollectionStage(
             evidence_collection_config,
             db_path=db_path
+
+        )       
+
+        # Stage 1.5: Target Event Identification (for questions without target events)
+        target_event_config = TargetEventIdentificationConfig(
+            similarity_threshold=0.75,
+            create_if_not_found=True,
+        )
+        self.target_event_stage = TargetEventIdentificationStage(
+            target_event_config,
+            db_path=db_path
         )
 
         # Stage 2: Causal Reasoning
@@ -109,6 +122,7 @@ class EvidencePipeline(Pipeline):
 
         # Add stages
         self.add_stage(self.evidence_stage)
+        self.add_stage(self.target_event_stage)
         self.add_stage(self.reasoning_stage)
         self.add_stage(self.graph_stage)
 
@@ -287,6 +301,19 @@ class EvidencePipeline(Pipeline):
                 # Persist evidence articles immediately
                 if self.enable_persistence:
                     await self.article_persist.execute(evidence_articles)
+                # Stage 1.5: Identify target event if missing
+                if not question.target_event_id:
+                    logger.debug(f"[{question.id}] Identifying target event...")
+                    question_evidence_pair = (question, evidence_articles)
+                    target_event_result = await self.target_event_stage.execute([question_evidence_pair])
+                    # Update question with target event (target_event_stage returns updated questions)
+                    if target_event_result.outputs:
+                        question = target_event_result.outputs[0]
+                        stage_results.append(target_event_result)
+                        logger.info(f"[{question.id}] Target event identified: {question.target_event_id}")
+                    else:
+                        logger.warning(f"[{question.id}] Could not identify target event")
+
 
                 # Stage 2: Causal reasoning with collected evidence
                 logger.debug(f"[{question.id}] Performing causal reasoning...")

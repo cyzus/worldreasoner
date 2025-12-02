@@ -17,6 +17,11 @@ from .evidence_collection import (
     HindsightEvidenceCollectionStage,
     EvidenceCollectionConfig,
 )
+from .target_event_identification import (
+    TargetEventIdentificationStage,
+    TargetEventIdentificationConfig,
+)
+
 from .causal_reasoning import (
     CausalReasoningStage,
     CausalReasoningConfig,
@@ -44,6 +49,8 @@ __all__ = [
     # Evidence Pipeline Stages
     "HindsightEvidenceCollectionStage",
     "EvidenceCollectionConfig",
+    "TargetEventIdentificationStage",
+    "TargetEventIdentificationConfig",
     "CausalReasoningStage",
     "CausalReasoningConfig",
     "CausalGraphBuildingStage",

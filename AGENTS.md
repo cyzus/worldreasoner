@@ -109,10 +109,17 @@ WorldReasoner uses **two complementary pipelines**:
    - Implementation: `src/pipelines/question/pipeline.py`
 
 2. **Evidence Pipeline (Backward-Looking)**: Builds causal explanations using hindsight
-   - Flow: Resolved Questions → Evidence Articles → Causal Hypotheses → Event Graph Updates
+    - Flow: Resolved Questions → Evidence Articles → Target Event Identification → Causal Hypotheses → Event Graph Updates
    - Runs after questions resolve to create ground truth explanations
    - Uses async processing with per-question analysis for parallelism
    - Implementation: `src/pipelines/evidence/pipeline.py`
+
+**Target Event Identification** (New Stage):
+- Automatically creates or identifies target events for questions without them (e.g., Polymarket)
+- Runs between evidence collection and causal reasoning
+- Analyzes question + ground truth to extract event description
+- Matches existing events or creates new ones
+- See `docs/TARGET_EVENT_IDENTIFICATION.md` for details
 
 ### Design Patterns
 
