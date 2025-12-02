@@ -104,6 +104,12 @@ class Question(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
 
+    # Source-specific metadata (stores extra fields from various question sources)
+    metadata: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Additional metadata from question source (market_id, clob_token_ids, etc.)"
+    )
+
     model_config = ConfigDict(
         extra="allow",  # Allow transient fields like cutoff_date during evaluation
         json_schema_extra={

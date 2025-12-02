@@ -301,6 +301,10 @@ class PolymarketRunner(QuestionSourceRunner):
             # Get volume
             volume = market.get("volumeNum", 0.0) or 0.0
 
+            # Parse CLOB token IDs for price history
+            clob_ids_raw = market.get('clobTokenIds', '[]')
+            clob_ids = json.loads(clob_ids_raw) if isinstance(clob_ids_raw, str) else clob_ids_raw
+
             return MarketQuestion(
                 market_id=market.get("conditionId", market.get("id")),
                 market_source="polymarket",
@@ -316,6 +320,7 @@ class PolymarketRunner(QuestionSourceRunner):
                 options=outcomes,
                 metadata={
                     "market_slug": market.get("slug"),
+                    "clob_token_ids": clob_ids,  # Store for price history fetching
                     "tags": market.get("tags", []),
                     "active": market.get("active"),
                     "events": market.get("events", []),
@@ -711,6 +716,22 @@ class PolymarketRunner(QuestionSourceRunner):
         ground_truth = mq.metadata.get("ground_truth") if mq.metadata else None
         resolution_reasoning = mq.metadata.get("resolution_reasoning") if mq.metadata else None
 
+        # Prepare metadata dict with all Polymarket-specific data
+        # Remove fields that are already direct Question parameters to avoid conflicts
+        extra_metadata = {k: v for k, v in mq.metadata.items()
+                         if k not in ('ground_truth', 'resolution_reasoning')}
+
+        metadata_dict = {
+            "source": "polymarket",
+            "market_id": mq.market_id,
+            "current_probability": mq.current_probability,
+            "volume_usd": mq.volume_usd,
+            "liquidity_usd": mq.liquidity_usd,
+            "category": mq.category or "general",
+            "options": mq.options,
+            **extra_metadata,  # Includes clob_token_ids and other market data
+        }
+
         return Question(
             id=f"polymarket_{mq.market_id}",
             question_text=mq.question_text,
@@ -726,16 +747,7 @@ class PolymarketRunner(QuestionSourceRunner):
             resolution_criteria=mq.resolution_criteria,
             target_event_id=None,
             related_event_ids=[],
-            metadata={
-                "source": "polymarket",
-                "market_id": mq.market_id,
-                "current_probability": mq.current_probability,
-                "volume_usd": mq.volume_usd,
-                "liquidity_usd": mq.liquidity_usd,
-                "category": mq.category or "general",
-                "options": mq.options,
-                **mq.metadata,
-            },
+            metadata=metadata_dict,  # Store all extra fields in metadata
         )
 
     def _estimate_difficulty(self, mq: MarketQuestion) -> int:

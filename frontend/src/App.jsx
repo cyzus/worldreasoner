@@ -4,7 +4,8 @@ import ControlPanel from './components/ControlPanel'
 import EventDetails from './components/EventDetails'
 import QuestionList from './components/QuestionList'
 import Timeline from './components/Timeline'
-import { fetchGraph, fetchStatistics, fetchQuestions, fetchQuestionEvents } from './api/graphApi'
+import TimeSeriesChart from './components/TimeSeriesChart'
+import { fetchGraph, fetchStatistics, fetchQuestions, fetchQuestionEvents, fetchQuestionPriceHistory } from './api/graphApi'
 import './App.css'
 
 function App() {
@@ -24,6 +25,10 @@ function App() {
   const [questions, setQuestions] = useState([]) // List of all questions
   const [selectedQuestionId, setSelectedQuestionId] = useState(null) // Currently selected question filter
   const [leftPanelTab, setLeftPanelTab] = useState('controls') // 'controls' or 'questions'
+  const [priceHistoryData, setPriceHistoryData] = useState(null) // Price history for selected question
+  const [loadingPriceHistory, setLoadingPriceHistory] = useState(false) // Loading state for price history
+  const [questionRelatedEvents, setQuestionRelatedEvents] = useState([]) // All events related to selected question
+  const [priceHistoryInterval, setPriceHistoryInterval] = useState('max') // Price history interval (max, 1d, 1h, 5m)
 
   // Load full graph data once
   const loadGraph = useCallback(async (queryParams = {}) => {
@@ -259,6 +264,36 @@ function App() {
     applyTimeFilter(startDate, endDate)
   }
 
+  // Fetch price history for selected question with given interval
+  const fetchPriceHistory = useCallback(async (questionId, interval) => {
+    const question = questions.find(q => q.id === questionId)
+    if (!question || question.source !== 'polymarket') {
+      setPriceHistoryData(null)
+      return
+    }
+
+    console.log(`Fetching price history for question ${questionId} with interval ${interval}`)
+    setLoadingPriceHistory(true)
+
+    try {
+      const priceData = await fetchQuestionPriceHistory(questionId, interval)
+      console.log('✓ Loaded price history:', priceData)
+      setPriceHistoryData(priceData)
+    } catch (error) {
+      console.warn('✗ Failed to load price history:', error.message || error)
+      setPriceHistoryData(null)
+    } finally {
+      setLoadingPriceHistory(false)
+    }
+  }, [questions])
+
+  // Refetch price history when interval changes
+  useEffect(() => {
+    if (selectedQuestionId) {
+      fetchPriceHistory(selectedQuestionId, priceHistoryInterval)
+    }
+  }, [priceHistoryInterval, selectedQuestionId, fetchPriceHistory])
+
   // Handle question filter
   const handleQuestionFilter = useCallback(async (questionId, depth = 2) => {
     if (!questionId) {
@@ -283,6 +318,9 @@ function App() {
       })
       setSelectedQuestionId(null)
       setTimeFilter(null)
+      setPriceHistoryData(null) // Clear price history
+      setQuestionRelatedEvents([]) // Clear question-related events
+      setPriceHistoryInterval('max') // Reset interval to default
       return
     }
 
@@ -297,10 +335,24 @@ function App() {
 
     console.log('Filtering by question:', question.question_text)
 
+    // Price history will be fetched automatically by useEffect when selectedQuestionId changes
+
     try {
       // Fetch all events related to this question (including from metadata and hypotheses)
       const questionEventsData = await fetchQuestionEvents(questionId)
       const seedEventIds = new Set(questionEventsData.event_ids)
+
+      // Extract full event data for all question-related events (for TimeSeriesChart)
+      const relatedEvents = fullGraphData.nodes
+        .filter(node => seedEventIds.has(node.id))
+        .map(node => ({
+          id: node.id,
+          title: node.name,
+          occurred_date: node.properties?.occurred_date,
+          predicted_date: node.properties?.predicted_date,
+        }))
+      setQuestionRelatedEvents(relatedEvents)
+      console.log(`Stored ${relatedEvents.length} events for TimeSeriesChart`)
 
       console.log('=== Question Filter Statistics ===')
       console.log(`Direct events: ${questionEventsData.direct_events}`)
@@ -535,6 +587,104 @@ function App() {
             onTimeRangeChange={handleTimeRangeChange}
             selectedNode={selectedNode}
           />
+
+          {/* Price history chart for Polymarket questions */}
+          {selectedQuestionId && questions.find(q => q.id === selectedQuestionId)?.source === 'polymarket' && (
+            <div style={{ marginTop: '20px', padding: '0 20px', backgroundColor: '#1a1a1a', borderRadius: '8px', minHeight: '100px' }}>
+              {/* Time interval controls - always visible */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '10px 20px 0 20px',
+                gap: '10px',
+                borderBottom: '1px solid #333',
+                paddingBottom: '10px',
+                marginBottom: '10px'
+              }}>
+                <div style={{ color: '#888', fontSize: '12px', fontStyle: 'italic' }}>
+                  {!loadingPriceHistory && priceHistoryData && priceHistoryData.price_history && (() => {
+                    // Calculate actual date range from price data
+                    const allTimestamps = []
+                    Object.values(priceHistoryData.price_history).forEach(history => {
+                      history.forEach(point => allTimestamps.push(point.t * 1000))
+                    })
+                    if (allTimestamps.length > 0) {
+                      const minDate = new Date(Math.min(...allTimestamps))
+                      const maxDate = new Date(Math.max(...allTimestamps))
+                      const daysDiff = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24))
+                      return `Showing ${daysDiff + 1} day${daysDiff !== 0 ? 's' : ''} of market data`
+                    }
+                    return ''
+                  })()}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ color: '#999', fontSize: '13px' }}>Time Range:</span>
+                  {['max', '1w', '1d', '6h', '1h', '1m'].map(interval => (
+                    <button
+                      key={interval}
+                      onClick={() => setPriceHistoryInterval(interval)}
+                      disabled={loadingPriceHistory}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: priceHistoryInterval === interval ? '#4CAF50' : '#333',
+                        color: priceHistoryInterval === interval ? '#fff' : '#ddd',
+                        border: priceHistoryInterval === interval ? '2px solid #4CAF50' : '1px solid #555',
+                        borderRadius: '4px',
+                        cursor: loadingPriceHistory ? 'not-allowed' : 'pointer',
+                        fontSize: '12px',
+                        fontWeight: priceHistoryInterval === interval ? 'bold' : 'normal',
+                        transition: 'all 0.2s',
+                        opacity: loadingPriceHistory ? 0.5 : 1
+                      }}
+                      onMouseEnter={(e) => {
+                        if (priceHistoryInterval !== interval && !loadingPriceHistory) {
+                          e.target.style.backgroundColor = '#444'
+                          e.target.style.borderColor = '#666'
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (priceHistoryInterval !== interval && !loadingPriceHistory) {
+                          e.target.style.backgroundColor = '#333'
+                          e.target.style.borderColor = '#555'
+                        }
+                      }}
+                    >
+                      {interval === 'max' ? 'All' : interval.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Loading state */}
+              {loadingPriceHistory && (
+                <div style={{ color: '#ddd', textAlign: 'center', padding: '40px', fontSize: '16px' }}>
+                  ⏳ Loading market price history...
+                </div>
+              )}
+
+              {/* Chart display */}
+              {!loadingPriceHistory && priceHistoryData && priceHistoryData.price_history && Object.keys(priceHistoryData.price_history).length > 0 && (
+                <TimeSeriesChart
+                  priceHistory={priceHistoryData.price_history}
+                  events={questionRelatedEvents}
+                  targetEventId={questions.find(q => q.id === selectedQuestionId)?.target_event_id}
+                  outcomes={priceHistoryData.outcomes || ['Yes', 'No']}
+                />
+              )}
+
+              {/* Error/no data state */}
+              {!loadingPriceHistory && (!priceHistoryData || !priceHistoryData.price_history || Object.keys(priceHistoryData.price_history).length === 0) && (
+                <div style={{ color: '#888', textAlign: 'center', padding: '40px', fontSize: '14px' }}>
+                  ℹ️ No price data available for this time range
+                  <br />
+                  <span style={{ fontSize: '12px', opacity: 0.7 }}>
+                    Try selecting a different time range above
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {selectedNode && (

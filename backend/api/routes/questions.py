@@ -3,13 +3,14 @@
 Provides REST API for querying forecast questions.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Query, HTTPException, Depends
 from pydantic import BaseModel
 
 from src.core.database import GenericDatabase
 from src.domain.models import Question, CausalHypothesis
 from src.utils.logging import logger
+from src.utils.polymarket import get_price_history_for_market
 
 
 router = APIRouter()
@@ -199,4 +200,92 @@ async def get_question_events(
         raise
     except Exception as e:
         logger.error(f"Failed to fetch question events: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{question_id}/price_history")
+async def get_question_price_history(
+    question_id: str,
+    interval: str = Query("1d", description="Time interval: 1m, 1w, 1d, 6h, 1h, or max"),
+    db: GenericDatabase = Depends(get_database),
+):
+    """Get price history for a Polymarket question.
+
+    This endpoint fetches historical market prices from Polymarket's CLOB API
+    for questions that originated from Polymarket.
+
+    Args:
+        question_id: Question identifier (must be a Polymarket question)
+        interval: Time interval for price data (1m, 1w, 1d, 6h, 1h, or max)
+
+    Returns:
+        Dict with price history for each outcome token:
+        {
+            "question_id": str,
+            "market_id": str,
+            "interval": str,
+            "price_history": {
+                "token_id": [{"t": timestamp_ms, "p": price_0_to_1}, ...],
+                ...
+            },
+            "outcomes": [str, ...]  # Outcome labels for each token
+        }
+    """
+    try:
+        logger.info(f"Fetching question {question_id} for price history")
+        question = db.get(Question, question_id)
+
+        if not question:
+            raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
+
+        logger.info(f"Question loaded, source={question.source}")
+
+        # Check if this is a Polymarket question
+        if question.source != "polymarket":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Price history only available for Polymarket questions (source={question.source})"
+            )
+
+        # Extract data from metadata
+        metadata = question.metadata or {}
+        clob_token_ids = metadata.get("clob_token_ids", [])
+
+        if not clob_token_ids:
+            raise HTTPException(
+                status_code=404,
+                detail="No CLOB token IDs available for this question"
+            )
+
+        logger.info(f"Found {len(clob_token_ids)} CLOB token IDs")
+
+        # Fetch price history for all tokens
+        price_history = await get_price_history_for_market(clob_token_ids, interval)
+
+        if not price_history:
+            logger.warning(f"No price history found for question {question_id}")
+
+        # Get outcome labels and market ID from metadata
+        options = metadata.get("options", ["Yes", "No"])
+        market_id = metadata.get("market_id")
+
+        logger.info(
+            f"Fetched price history for question {question_id}: "
+            f"{len(price_history)} tokens, {sum(len(h) for h in price_history.values())} total points"
+        )
+
+        return {
+            "question_id": question_id,
+            "market_id": market_id,
+            "interval": interval,
+            "price_history": price_history,
+            "outcomes": options,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"Failed to fetch price history: {e}")
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))

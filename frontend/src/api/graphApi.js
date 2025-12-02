@@ -123,3 +123,13 @@ export async function fetchEventQuestions(eventId) {
   const response = await axios.get(`${API_BASE_URL}/events/${eventId}/questions`)
   return response.data
 }
+
+/**
+ * Fetch price history for a Polymarket question
+ */
+export async function fetchQuestionPriceHistory(questionId, interval = '1d') {
+  const response = await axios.get(
+    `${API_BASE_URL}/questions/${questionId}/price_history?interval=${interval}`
+  )
+  return response.data
+}
