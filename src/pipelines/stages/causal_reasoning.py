@@ -150,7 +150,9 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
         )
 
         # Load related events from database to provide valid event IDs
-        related_events = self._load_related_events(question)
+        # Pass evidence article IDs to filter events
+        evidence_article_ids = [article.id for article in evidence_articles]
+        related_events = self._load_related_events(question, evidence_article_ids)
 
         # Generate hindsight analysis instruction
         current_date = datetime.now(timezone.utc)
@@ -279,49 +281,87 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
 
         return unique
 
-    def _load_related_events(self, question: Question) -> List[Event]:
+    def _load_related_events(self, question: Question, evidence_article_ids: List[str] = None) -> List[Event]:
         """Load events that could be potential causal sources.
 
-        This includes:
-        1. Events extracted from evidence articles (most recent first)
-        2. Other events in the same domain that occurred before resolution
+        Priority order:
+        1. Question's explicit target_event_id and related_event_ids
+        2. Events extracted from THIS question's evidence articles
+        3. Events linked to THIS question via metadata
+        4. Only as last resort: same-domain events (filtered by evidence article overlap)
 
         Args:
             question: The question being analyzed
+            evidence_article_ids: IDs of articles collected as evidence for this question
 
         Returns:
             List of related events ordered by recency
         """
         try:
-            # Get all events in the same domain
-            filters = {}
-            if question.domain:
-                filters['domain'] = question.domain
+            related_events = []
+            evidence_article_ids = evidence_article_ids or []
+            evidence_article_ids_set = set(evidence_article_ids)
 
-            events = self.db.get_many(Event, filters=filters)
+            # Priority 1: Question's explicit event references
+            explicit_event_ids = []
+            if question.target_event_id:
+                explicit_event_ids.append(question.target_event_id)
+            explicit_event_ids.extend(question.related_event_ids or [])
+            
+            for event_id in explicit_event_ids:
+                event = self.db.get(Event, event_id)
+                if event:
+                    related_events.append(event)
+                    logger.debug(f"Added explicit event: {event_id}")
 
-            # Prioritize extracted events (from evidence articles)
-            extracted_events = []
-            other_events = []
+            # Priority 2 & 3: Events linked to this question via metadata or evidence articles
+            all_events = self.db.get_many(Event, filters={})
+            
+            for event in all_events:
+                # Skip if already added
+                if event.id in explicit_event_ids:
+                    continue
 
-            for event in events:
-                # Check if event was extracted from evidence articles (metadata indicator)
-                if event.metadata and event.metadata.get('extracted_for_evidence'):
-                    # Extracted events are good causal sources even if same-day
-                    # (article published on same day could still cause same-day effect)
-                    extracted_events.append(event)
-                else:
-                    # Other events must occur before resolution to be causal sources
-                    if event.occurred_date and event.occurred_date <= question.resolution_date:
-                        other_events.append(event)
+                # Check if event metadata references this question
+                if event.metadata and question.id in event.metadata.get('related_question_ids', []):
+                    related_events.append(event)
+                    logger.debug(f"Added question-linked event: {event.id}")
+                    continue
 
-            # Combine: extracted events first (freshest), then other events
-            all_events = extracted_events + other_events
+                # Check if event is linked to any of the evidence articles
+                event_article_ids = set(event.article_ids or [])
+                if evidence_article_ids_set and event_article_ids.intersection(evidence_article_ids_set):
+                    # Only include if event occurred before resolution
+                    if event.occurred_date and event.occurred_date < question.resolution_date:
+                        related_events.append(event)
+                        logger.debug(f"Added evidence-linked event: {event.id}")
 
-            # Limit to most recent N events to avoid overwhelming the LLM
-            # (configurable via max_related_events)
-            all_events.sort(key=lambda e: e.occurred_date or e.predicted_date, reverse=True)
-            return all_events[:self.config.max_related_events]
+            # If we have no related events, fall back to same-domain (but still filter by evidence)
+            if not related_events and question.domain:
+                logger.debug(f"No direct event links found, falling back to domain filter: {question.domain}")
+                domain_events = self.db.get_many(Event, filters={'domain': question.domain})
+                
+                for event in domain_events:
+                    # Only include if linked to evidence articles or occurred before resolution
+                    event_article_ids = set(event.article_ids or [])
+                    has_evidence_link = bool(evidence_article_ids_set and event_article_ids.intersection(evidence_article_ids_set))
+                    
+                    if has_evidence_link or (event.occurred_date and event.occurred_date < question.resolution_date):
+                        related_events.append(event)
+
+            # Remove duplicates and sort by recency
+            seen_ids = set()
+            unique_events = []
+            for event in related_events:
+                if event.id not in seen_ids:
+                    seen_ids.add(event.id)
+                    unique_events.append(event)
+
+            unique_events.sort(key=lambda e: e.occurred_date or e.predicted_date or datetime.now(timezone.utc), reverse=True)
+            result = unique_events[:self.config.max_related_events]
+            
+            logger.info(f"Loaded {len(result)} related events for question {question.id}")
+            return result
 
         except Exception as e:
             logger.warning(f"Failed to load related events: {e}")
