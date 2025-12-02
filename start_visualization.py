@@ -8,6 +8,8 @@ import subprocess
 import sys
 import time
 import signal
+import os
+import platform
 from pathlib import Path
 from typing import Optional
 
@@ -65,13 +67,21 @@ def start_servers():
     print_colored("\nStarting backend server...", Colors.YELLOW)
     
     # Start backend
+    # Configure subprocess flags for better signal handling on Windows
+    is_windows = platform.system() == "Windows"
+    creationflags = 0
+    if is_windows:
+        # Create a new process group so we can send CTRL_BREAK_EVENT
+        creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+
     backend_process = subprocess.Popen(
         ["uv", "run", "worldreasoner", "--reload"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stdout=None,  # inherit parent stdout for direct logs
+        stderr=None,
         text=True,
         bufsize=1,
-        shell=True
+        shell=False,
+        creationflags=creationflags
     )
     
     # Wait for backend to start
@@ -80,14 +90,20 @@ def start_servers():
     
     # Start frontend
     print_colored("Starting frontend dev server...", Colors.YELLOW)
+    # Resolve npm command on Windows (npm.cmd) vs Unix (npm)
+    npm_cmd = "npm"
+    if is_windows:
+        npm_cmd = "npm.cmd"
+
     frontend_process = subprocess.Popen(
-        ["npm", "run", "dev"],
+        [npm_cmd, "run", "dev"],
         cwd=Path("frontend"),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stdout=None,
+        stderr=None,
         text=True,
         bufsize=1,
-        shell=True
+        shell=False,
+        creationflags=creationflags
     )
     
     # Print success message
@@ -100,8 +116,24 @@ def start_servers():
     # Handle graceful shutdown
     def signal_handler(sig, frame):
         print_colored("\n\nStopping servers...", Colors.YELLOW)
-        backend_process.terminate()
-        frontend_process.terminate()
+        try:
+            if is_windows:
+                # Send CTRL_BREAK_EVENT to process group for graceful shutdown
+                backend_process.send_signal(signal.CTRL_BREAK_EVENT)
+                frontend_process.send_signal(signal.CTRL_BREAK_EVENT)
+            else:
+                backend_process.terminate()
+                frontend_process.terminate()
+        except Exception:
+            # Fallback to terminate
+            try:
+                backend_process.terminate()
+            except Exception:
+                pass
+            try:
+                frontend_process.terminate()
+            except Exception:
+                pass
         
         # Wait for processes to terminate
         try:
@@ -122,8 +154,13 @@ def start_servers():
     
     # Wait for processes
     try:
-        backend_process.wait()
-        frontend_process.wait()
+        # Wait until either process exits; keep the script responsive to Ctrl+C
+        while True:
+            ret_backend = backend_process.poll()
+            ret_frontend = frontend_process.poll()
+            if ret_backend is not None and ret_frontend is not None:
+                break
+            time.sleep(0.25)
     except KeyboardInterrupt:
         signal_handler(None, None)
 
