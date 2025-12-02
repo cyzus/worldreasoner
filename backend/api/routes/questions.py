@@ -28,6 +28,7 @@ class QuestionListItem(BaseModel):
     question_type: str
     domain: str
     difficulty: int
+    source: str
     target_event_id: Optional[str]
     related_event_ids: List[str]
 
@@ -61,6 +62,7 @@ async def get_questions(
                 question_type=q.question_type.value,
                 domain=q.domain.value,
                 difficulty=q.difficulty,
+                source=q.source,
                 target_event_id=q.target_event_id,
                 related_event_ids=q.related_event_ids,
             )
@@ -93,13 +95,13 @@ async def get_question(
 
         if not question:
             raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
-
         return QuestionListItem(
             id=question.id,
             question_text=question.question_text,
             question_type=question.question_type.value,
             domain=question.domain.value,
             difficulty=question.difficulty,
+            source=question.source,
             target_event_id=question.target_event_id,
             related_event_ids=question.related_event_ids,
         )

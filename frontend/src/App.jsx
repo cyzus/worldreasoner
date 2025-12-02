@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import GraphVisualization from './components/GraphVisualization'
 import ControlPanel from './components/ControlPanel'
 import EventDetails from './components/EventDetails'
+import QuestionList from './components/QuestionList'
 import Timeline from './components/Timeline'
 import { fetchGraph, fetchStatistics, fetchQuestions, fetchQuestionEvents } from './api/graphApi'
 import './App.css'
@@ -22,6 +23,7 @@ function App() {
   const [timeFilter, setTimeFilter] = useState(null) // { start: Date, end: Date }
   const [questions, setQuestions] = useState([]) // List of all questions
   const [selectedQuestionId, setSelectedQuestionId] = useState(null) // Currently selected question filter
+  const [leftPanelTab, setLeftPanelTab] = useState('controls') // 'controls' or 'questions'
 
   // Load full graph data once
   const loadGraph = useCallback(async (queryParams = {}) => {
@@ -474,14 +476,45 @@ function App() {
       </header>
 
       <div className="app-content">
-        <ControlPanel
-          filters={filters}
-          onFilterChange={handleFilterChange}
-          onRefresh={() => loadGraph(filters)}
-          loading={loading}
-          questions={questions}
-          onQuestionFilter={handleQuestionFilter}
-        />
+        <div className="left-sidebar">
+          <div className="sidebar-tabs">
+            <button
+              className={`tab-btn ${leftPanelTab === 'controls' ? 'active' : ''}`}
+              onClick={() => setLeftPanelTab('controls')}
+            >
+              ⚙️ Controls
+            </button>
+            <button
+              className={`tab-btn ${leftPanelTab === 'questions' ? 'active' : ''}`}
+              onClick={() => setLeftPanelTab('questions')}
+            >
+              📋 Questions ({questions.length})
+            </button>
+          </div>
+          
+          <div className="sidebar-content">
+            {leftPanelTab === 'controls' ? (
+              <ControlPanel
+                filters={filters}
+                onFilterChange={handleFilterChange}
+                onRefresh={() => loadGraph(filters)}
+                loading={loading}
+                questions={questions}
+                onQuestionFilter={handleQuestionFilter}
+              />
+            ) : (
+              <QuestionList
+                questions={questions}
+                selectedQuestionId={selectedQuestionId}
+                onQuestionSelect={(questionId) => {
+                  setSelectedQuestionId(questionId)
+                  handleQuestionFilter(questionId)
+                }}
+                onClose={() => setLeftPanelTab('controls')}
+              />
+            )}
+          </div>
+        </div>
 
         <div className="graph-main">
           <div className="graph-container">
