@@ -590,7 +590,7 @@ function App() {
 
           {/* Price history chart for Polymarket questions */}
           {selectedQuestionId && questions.find(q => q.id === selectedQuestionId)?.source === 'polymarket' && (
-            <div style={{ marginTop: '20px', padding: '0 20px', backgroundColor: '#1a1a1a', borderRadius: '8px', minHeight: '100px' }}>
+            <div style={{ marginTop: '20px', padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '8px', minHeight: '100px', border: '1px solid #dee2e6' }}>
               {/* Time interval controls - always visible */}
               <div style={{
                 display: 'flex',
@@ -658,7 +658,7 @@ function App() {
 
               {/* Loading state */}
               {loadingPriceHistory && (
-                <div style={{ color: '#ddd', textAlign: 'center', padding: '40px', fontSize: '16px' }}>
+                <div style={{ color: '#495057', textAlign: 'center', padding: '40px', fontSize: '15px', fontWeight: 500 }}>
                   ⏳ Loading market price history...
                 </div>
               )}
@@ -675,10 +675,10 @@ function App() {
 
               {/* Error/no data state */}
               {!loadingPriceHistory && (!priceHistoryData || !priceHistoryData.price_history || Object.keys(priceHistoryData.price_history).length === 0) && (
-                <div style={{ color: '#888', textAlign: 'center', padding: '40px', fontSize: '14px' }}>
+                <div style={{ color: '#6c757d', textAlign: 'center', padding: '40px', fontSize: '14px' }}>
                   ℹ️ No price data available for this time range
                   <br />
-                  <span style={{ fontSize: '12px', opacity: 0.7 }}>
+                  <span style={{ fontSize: '12px', color: '#adb5bd' }}>
                     Try selecting a different time range above
                   </span>
                 </div>
