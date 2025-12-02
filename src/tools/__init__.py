@@ -1,6 +1,7 @@
 """Tools for pipeline stages using LLM agents."""
 
 from .article_collector import ArticleCollectorTool
+from .batch_article_collector import BatchArticleCollectorTool
 from .article_retrieval import ArticleRetrievalTool
 from .batch_article_retrieval import BatchArticleRetrievalTool
 from .event_identifier import EventIdentifierTool
@@ -14,6 +15,7 @@ from .causal_reasoner import CausalReasonerTool
 
 __all__ = [
     "ArticleCollectorTool",
+    "BatchArticleCollectorTool",
     "ArticleRetrievalTool",
     "BatchArticleRetrievalTool",
     "EventIdentifierTool",

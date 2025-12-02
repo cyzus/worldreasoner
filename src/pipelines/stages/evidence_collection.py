@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 from src.pipelines.base import PipelineStage
 from src.domain.models import Question, Article, Event
 from src.agents.factory import AgentFactory
-from src.tools import ArticleCollectorTool, EventIdentifierTool
+from src.tools import BatchArticleCollectorTool, BatchEventIdentifierTool
 from src.core.collectors import ResultCollector
 from src.pipelines.prompts import HindsightAnalysisPrompts
 from src.utils.logging import logger
@@ -160,9 +160,10 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
         """
         # Instantiate per-question collector, tool, and agent to avoid cross-talk
         article_collector = ResultCollector[Article]()
-        article_tool = ArticleCollectorTool(
+        article_tool = BatchArticleCollectorTool(
             db_path=self.db_path,
-            collector=article_collector
+            collector=article_collector,
+            default_domain=(question.domain.value if hasattr(question.domain, 'value') and question.domain else 'general')
         )
         web_agent = AgentFactory.create_web_agent(tools=[article_tool])
 
@@ -280,7 +281,7 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
 
         # Instantiate per-question event collector, tool, and agent
         event_collector = ResultCollector[Event]()
-        event_tool = EventIdentifierTool(collector=event_collector)
+        event_tool = BatchEventIdentifierTool(collector=event_collector)
         event_agent = AgentFactory.create_base_agent(tools=[event_tool])
 
         # Generate event extraction instruction using centralized prompt
