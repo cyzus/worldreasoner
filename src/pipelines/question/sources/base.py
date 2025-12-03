@@ -218,12 +218,16 @@ class QuestionSourceRunner(ABC):
         from src.domain.models.domain import Domain
         from src.llm import LiteLLMClient
         from src.config import get_config
-        import json
+        from src.pipelines.prompts import QuestionCategorizationPrompts
+        from src.utils.llm_utils import parse_json_response
 
         try:
             # Get LLM config and create client
             config = get_config()
             llm_client = LiteLLMClient(config.llm.model_dump(exclude_none=True))
+
+            # Create prompt generator
+            prompt_generator = QuestionCategorizationPrompts()
 
             # Batch categorize - 10 questions at a time for speed
             batch_size = 10
@@ -231,45 +235,28 @@ class QuestionSourceRunner(ABC):
             for batch_idx in range(0, len(questions), batch_size):
                 batch = questions[batch_idx:batch_idx + batch_size]
 
-                # Build batch prompt
-                questions_text = []
-                for idx, q in enumerate(batch, 1):
-                    tags = q.metadata.get('tags', []) if hasattr(q, 'metadata') and q.metadata else []
-                    tags_list = tags[:3] if isinstance(tags, list) else []
-                    questions_text.append(
-                        f"{idx}. ID: {q.id}\n"
-                        f"   Q: {q.question_text}\n"
-                        f"   Tags: {', '.join(tags_list) if tags_list else 'none'}"
-                    )
-
-                prompt = f"""Categorize these prediction market questions into domains.
-
-Questions:
-{chr(10).join(questions_text)}
-
-Available domains: finance, tech, politics, health, climate, culture, business, sports, general
-
-Return JSON array with format:
-[{{"id": "question_id", "domain": "domain_name"}}, ...]
-
-Only return the JSON array, nothing else."""
+                # Generate prompt using the prompt generator
+                prompt = prompt_generator.get_instruction(questions=batch)
 
                 logger.info(f"Categorizing batch {batch_idx//batch_size + 1} ({len(batch)} questions)...")
 
-                # Call LLM
+                # Call LLM with structured JSON output
                 messages = [{"role": "user", "content": prompt}]
-                response_text = await llm_client.acomplete(messages)
-                response_text = response_text.strip()
+                response_text = await llm_client.acomplete(
+                    messages=messages,
+                    response_format={"type": "json_object"}
+                )
 
-                # Parse response
-                # Remove markdown code blocks if present
-                if response_text.startswith("```"):
-                    response_text = response_text.split("```")[1]
-                    if response_text.startswith("json"):
-                        response_text = response_text[4:]
-                    response_text = response_text.strip()
+                # Parse JSON response using utility
+                response_json = parse_json_response(response_text)
 
-                categorizations = json.loads(response_text)
+                # Handle both array and object formats
+                if isinstance(response_json, list):
+                    categorizations = response_json
+                elif isinstance(response_json, dict) and "categorizations" in response_json:
+                    categorizations = response_json["categorizations"]
+                else:
+                    categorizations = response_json
 
                 # Apply categorizations
                 cat_dict = {c['id']: c['domain'] for c in categorizations}

@@ -17,6 +17,7 @@ from .article_collection import ArticleCollectionPrompts
 from .event_identification import EventIdentificationPrompts
 from .question_generation import QuestionGenerationPrompts
 from .hindsight_analysis import HindsightAnalysisPrompts
+from .question_categorization import QuestionCategorizationPrompts
 
 __all__ = [
     # Base classes
@@ -28,4 +29,5 @@ __all__ = [
     "EventIdentificationPrompts",
     "QuestionGenerationPrompts",
     "HindsightAnalysisPrompts",
+    "QuestionCategorizationPrompts",
 ]

@@ -101,27 +101,15 @@ class QuestionQualityScorer(Tool):
             messages=messages,
             response_format={"type": "json_object"}
         )
-        
-        # Parse the JSON response
+
+        # Parse the JSON response using utility
+        from src.utils.llm_utils import parse_json_response
         try:
-            response_json = json.loads(response_str)
+            response_json = parse_json_response(response_str)
         except json.JSONDecodeError as e:
-            # Try to extract JSON from markdown code blocks
-            import re
-            json_match = re.search(r'```(?:json)?\s*({.*?})\s*```', response_str, re.DOTALL)
-            if json_match:
-                try:
-                    response_json = json.loads(json_match.group(1))
-                except json.JSONDecodeError:
-                    from src.utils.logging import logger
-                    logger.error(f"Failed to parse JSON from LLM response: {e}")
-                    logger.debug(f"Raw response: {response_str[:500]}...")
-                    return json.dumps({"error": "Invalid JSON response from LLM", "response": response_str[:500]})
-            else:
-                from src.utils.logging import logger
-                logger.error(f"Failed to parse JSON from LLM response: {e}")
-                logger.debug(f"Raw response: {response_str[:500]}...")
-                return json.dumps({"error": "Invalid JSON response from LLM", "response": response_str[:500]})
+            logger.error(f"Failed to parse JSON from LLM response: {e}")
+            logger.debug(f"Raw response: {response_str[:500]}...")
+            return json.dumps({"error": "Invalid JSON response from LLM", "response": response_str[:500]})
 
         # Assuming response_json is a dict
         assessments_data = response_json.get("assessments", [])
