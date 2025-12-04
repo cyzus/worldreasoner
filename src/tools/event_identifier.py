@@ -10,6 +10,7 @@ from src.domain.models import Article, Event, EventType, EventStatus, Domain
 from src.utils.enums import enum_to_list, parse_domain, parse_event_type
 from src.utils.id_generator import generate_event_id
 from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
+from src.utils.logging import logger
 from src.tools.base import CollectorAwareTool
 
 
@@ -65,14 +66,18 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
     }
     output_type = "string"  # JSON string
     
-    def __init__(self, collector=None):
+    def __init__(self, collector=None, db_path: str = None):
         """Initialize the event identifier.
 
         Args:
             collector: Optional ResultCollector[Event] for storing results.
-                      If provided, events are added to the collector instead of internal storage.
+            db_path: Optional database path for persisting events.
         """
         super().__init__(collector)
+        self.db = None
+        if db_path:
+            from src.core.database import Database
+            self.db = Database(db_path)
     
     def forward(
         self,
@@ -133,7 +138,12 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
         
         # Store event using unified collector interface
         self.store_result(event, context=f"Event {event.id}")
-        
+
+        # Persist to database if available
+        if self.db is not None:
+            self.db.save_event(event)
+            logger.debug(f"Event {event.id} persisted to database")
+
         # Return summary to save tokens (NOT full event)
         summary = {
             "id": event.id,

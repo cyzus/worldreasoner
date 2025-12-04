@@ -150,6 +150,7 @@ class AgentFactory:
         tools: Optional[List[Tool]] = None,
         config: Optional[Config] = None,
         max_steps: Optional[int] = None,
+        is_code: bool = False,
         # Forecast-specific parameters
         question: Optional[Question] = None,
         simulated_date: Optional[str] = None,
@@ -189,12 +190,12 @@ class AgentFactory:
             ... )
         """
         if agent_type == "web":
-            kwargs = {"tools": tools, "config": config}
+            kwargs = {"tools": tools, "config": config, "is_code": is_code}
             if max_steps is not None:
                 kwargs["max_steps"] = max_steps
             return AgentFactory.create_web_agent(**kwargs)
         elif agent_type == "base":
-            kwargs = {"tools": tools, "config": config}
+            kwargs = {"tools": tools, "config": config, "is_code": is_code}
             if max_steps is not None:
                 kwargs["max_steps"] = max_steps
             return AgentFactory.create_base_agent(**kwargs)

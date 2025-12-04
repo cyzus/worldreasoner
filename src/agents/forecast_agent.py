@@ -13,6 +13,7 @@ class ForecastAgent(BaseAgent):
                  config: Config,
                  tools: list = None,
                  max_steps: int = 15,
+                 is_code: bool = False,
                  knowledge_only: bool = False):
         """Initialize ForecastAgent.
 
@@ -58,4 +59,4 @@ class ForecastAgent(BaseAgent):
             forecast_tools.extend(tools)
 
         # WebAgent gets more steps since it needs to search + visit + collect
-        super().__init__(config=config, tools=forecast_tools, max_steps=max_steps)
+        super().__init__(config=config, tools=forecast_tools, max_steps=max_steps, is_code=is_code)

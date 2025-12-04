@@ -24,15 +24,31 @@ class CausalReasonerTool(Tool):
     """
 
     name = "causal_reasoner"
-    description = """Propose a causal explanation for an outcome with evidence.
+    description = """Create a causal link in the graph between two events.
 
-    Use this tool AFTER analyzing evidence to record a causal relationship you identified.
-    Call once for EACH causal link you identify (not all at once).
+    CRITICAL FOR DEEP GRAPHS: Build multi-level causal chains, not just direct links!
 
-    IMPORTANT: For multi-hop graphs, create SEPARATE links for each step:
-    - If A→B→C, call this tool twice: once for A→B, once for B→C
-    - Build causal graphs by connecting intermediate events
-    - Target event can be an intermediate event OR the final outcome
+    PROCESS FOR DEEP CAUSAL GRAPHS:
+    1. Create intermediate events first using event_identifier
+    2. Link them in chains: Root Cause → Intermediate → Immediate → Target
+    3. Don't just link everything directly to the target event!
+
+    Example for "Why did stock price crash?":
+    - Target: "Stock price fell 25%" (evt_target)
+    - Don't just do: "Bad earnings" → Target
+    - Instead build chain:
+      a) Create: "Whistleblower report filed" (evt_1)
+      b) Create: "SEC investigation opened" (evt_2)
+      c) Create: "CEO resigned" (evt_3)
+      d) Create: "Stock downgraded" (evt_4)
+      e) Link: evt_1 → evt_2 → evt_3 → evt_4 → evt_target
+
+    This creates a 5-level causal chain instead of shallow 1-level!
+
+    BEFORE calling this tool:
+    - Ensure both source and target events exist (use event_identifier first!)
+    - Check graph_inspector to see current depth
+    - If depth < 2, you need MORE intermediate events!
 
     Args:
         question_id (str): ID of the question being analyzed
@@ -84,16 +100,23 @@ class CausalReasonerTool(Tool):
     }
     output_type = "string"  # JSON confirmation
 
-    def __init__(self, collector: Optional[ResultCollector[CausalHypothesis]] = None):
+    def __init__(self, collector: Optional[ResultCollector[CausalHypothesis]] = None, db_path: str = None):
         """Initialize the causal reasoner tool.
 
         Args:
             collector: Optional ResultCollector for storing hypotheses
+            db_path: Optional database path for persisting hypotheses
         """
         super().__init__()
         self.collector = collector
         self.hypotheses = []  # Fallback for backward compatibility
         self._counter = 0  # For generating hypothesis IDs
+
+        # Database for persistence
+        self.db = None
+        if db_path:
+            from src.core.database import Database
+            self.db = Database(db_path)
 
     def forward(
         self,
@@ -164,6 +187,12 @@ class CausalReasonerTool(Tool):
         else:
             # Fallback for backward compatibility
             self.hypotheses.append(hypothesis)
+
+        # Persist to database if available
+        if self.db is not None:
+            self.db.save_causal_hypothesis(hypothesis)
+            from src.utils.logging import logger
+            logger.debug(f"Hypothesis {hypothesis_id} persisted to database")
 
         # Return confirmation (minimal to save tokens)
         confirmation = {

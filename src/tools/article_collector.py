@@ -228,7 +228,12 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         
         # Store article using unified collector interface
         self.store_result(article, context=f"Article {article.id}")
-        
+
+        # Persist to database if available
+        if self.db:
+            self.db.save_article(article)
+            logger.debug(f"Article {article.id} persisted to database")
+
         # Convert to JSON and return a SUMMARY to save tokens
         # Return only metadata, NOT the full content
         summary = {

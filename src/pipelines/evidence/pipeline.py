@@ -1,6 +1,7 @@
 """Evidence generation pipeline for WorldReasoner.
 
 This pipeline builds causal explanations with hindsight:
+0. Identify target events for all questions (batch processing)
 1. Collect evidence articles AFTER outcomes are known (per question)
 2. Identify causal relationships using hindsight (per question)
 3. Build validated causal graphs
@@ -36,9 +37,10 @@ from src.utils.usage_tracking import UsageTracker
 class EvidencePipeline(Pipeline):
     """Pipeline for building causal explanations with hindsight.
 
-    Flow: Resolved Questions → Evidence Articles → Causal Hypotheses → Graph
+    Flow: Resolved Questions → Target Events (batch) → Evidence Articles → Causal Hypotheses → Graph
 
     This pipeline:
+    - Identifies target events for all questions upfront (batch processing)
     - Collects evidence articles AFTER outcomes are known
     - Uses hindsight to identify true causal factors
     - Saves causal hypotheses to the graph database
@@ -185,6 +187,28 @@ class EvidencePipeline(Pipeline):
                 f"with max {self.max_concurrent_questions} in parallel"
             )
 
+            # Stage 0: Batch identify target events for questions that don't have them
+            # This happens BEFORE evidence collection so all questions have target events
+            questions_needing_events = [q for q in self.resolved_questions if not q.target_event_id]
+            if questions_needing_events:
+                logger.info(f"Identifying target events for {len(questions_needing_events)} questions (batch processing)...")
+                # Pass empty article lists since we haven't collected evidence yet
+                question_article_pairs = [(q, []) for q in questions_needing_events]
+                target_event_result = await self.target_event_stage.execute(question_article_pairs)
+
+                # Update questions in the main list with the returned questions
+                if target_event_result.outputs:
+                    updated_questions_map = {q.id: q for q in target_event_result.outputs}
+                    for i, question in enumerate(self.resolved_questions):
+                        if question.id in updated_questions_map:
+                            self.resolved_questions[i] = updated_questions_map[question.id]
+
+                    self._results.append(target_event_result)
+                    identified_count = sum(1 for q in target_event_result.outputs if q.target_event_id)
+                    logger.info(f"Target events identified: {identified_count}/{len(questions_needing_events)}")
+                else:
+                    logger.warning("Target event identification returned no results")
+
             # Process each question through the pipeline (stages 1-2)
             # Stage 3 (graph building) happens after collecting all hypotheses
             question_tasks = [
@@ -319,21 +343,9 @@ class EvidencePipeline(Pipeline):
                 # Persist evidence articles immediately
                 if self.enable_persistence:
                     await self.article_persist.execute(evidence_articles)
-                # Stage 1.5: Identify target event if missing
-                if not question.target_event_id:
-                    logger.debug(f"[{question.id}] Identifying target event...")
-                    question_evidence_pair = (question, evidence_articles)
-                    target_event_result = await self.target_event_stage.execute([question_evidence_pair])
-                    # Update question with target event (target_event_stage returns updated questions)
-                    if target_event_result.outputs:
-                        question = target_event_result.outputs[0]
-                        stage_results.append(target_event_result)
-                        logger.info(f"[{question.id}] Target event identified: {question.target_event_id}")
-                    else:
-                        logger.warning(f"[{question.id}] Could not identify target event")
-
 
                 # Stage 2: Causal reasoning with collected evidence
+                # Note: Target event identification now happens in batch before evidence collection
                 logger.debug(f"[{question.id}] Performing causal reasoning...")
                 question_evidence_pair = (question, evidence_articles)
                 reasoning_result = await self.reasoning_stage.execute([question_evidence_pair])

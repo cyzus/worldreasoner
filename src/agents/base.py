@@ -1,22 +1,33 @@
 from typing import Optional
-from smolagents import ToolCallingAgent, LiteLLMModel
+from smolagents import CodeAgent, ToolCallingAgent, LiteLLMModel
 from src.config import Config, get_config
 from src.utils.usage_tracking import UsageMetrics, extract_usage_from_agent
 
 class BaseAgent():
     """Base class for all agents in the SmolAgents framework."""
-    def __init__(self, config: Config = None, tools: list = None, max_steps: int = 10):
+    def __init__(self, config: Config = None, tools: list = None, max_steps: int = 10, is_code: bool = False,
+                 **kwargs):
         self.config = config or get_config()
         self.llm_model = LiteLLMModel(
             model_id=self.config.llm.model,
             **self.config.llm.model_dump(exclude={"model", "embedding_model"})
         )
-        self.agent = ToolCallingAgent(
-            model=self.llm_model,
-            tools=tools or [],
-            max_steps=max_steps,  # Configurable max steps
-            stream_outputs=True
-        )
+        if not is_code:
+            self.agent = ToolCallingAgent(
+                model=self.llm_model,
+                tools=tools or [],
+                max_steps=max_steps,  # Configurable max steps
+                stream_outputs=True,
+                **kwargs
+            )
+        else:
+            self.agent = CodeAgent(
+                model=self.llm_model,
+                tools=tools or [],
+                max_steps=max_steps,  
+                stream_outputs=True,
+                **kwargs
+            )
         self._last_usage: Optional[UsageMetrics] = None
 
     def run(self, prompt: str) -> str:

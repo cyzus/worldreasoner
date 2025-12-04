@@ -38,7 +38,7 @@ class BatchEventIdentifierTool(CollectorAwareTool[Event]):
             - title (str): Short descriptive title
             - description (str): Detailed description
             - domain (str): Event domain (finance|politics|tech|health|climate|general)
-            - occurred_date (str, optional): When event occurred (ISO format YYYY-MM-DD)
+            - occurred_date (str, optional): When event occurred (ISO 8601 WITH timezone)
             - event_type (str, optional): Type (decision|outcome|indicator|milestone|external_shock)
             - source_article_ids (str, optional): Comma-separated article IDs
 

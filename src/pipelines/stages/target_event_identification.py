@@ -9,12 +9,14 @@ import hashlib
 from pydantic import BaseModel, Field
 
 from src.pipelines.base import PipelineStage
+from src.pipelines.prompts.target_event_identification import TargetEventIdentificationPrompts
 from src.domain.models import Question, Event, Article
 from src.domain.models.domain import Domain
 from src.domain.models.event import EventType, EventStatus
 from src.core.database import GenericDatabase
 from src.utils.logging import logger
 from src.utils.usage_tracking import UsageTracker, log_usage
+from src.utils.llm_utils import parse_json_response
 from src.llm import LiteLLMClient
 from src.config import get_config
 
@@ -65,10 +67,13 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
         super().__init__(name="TargetEventIdentification", config=config)
         self.db = GenericDatabase(db_path)
         self.usage_tracker = UsageTracker()
-        
+
         # Initialize LLM client
         app_config = get_config()
         self.llm_client = LiteLLMClient(app_config.llm)
+
+        # Initialize prompts generator
+        self.prompts = TargetEventIdentificationPrompts()
 
     async def process(
         self,
@@ -178,97 +183,37 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
         Returns:
             Event description or None
         """
-        # Create instruction
-        instruction = self._build_extraction_instruction(question)
-
         try:
+            # Create instruction using prompts module
+            instruction = self.prompts.get_instruction(question)
+
             # Call LLM using the client
             messages = [{"role": "user", "content": instruction}]
             result = await self.llm_client.acomplete(messages)
-            
-            # Parse result
-            event_description = self._parse_event_description(result)
-            return event_description
 
-        except Exception as e:
-            logger.error(f"Failed to extract event description: {e}")
-            return Nonet_description
+            # Parse JSON response
+            parsed = parse_json_response(result)
+
+            # Extract and validate event description
+            event_description = parsed.get("event_description")
+            if not event_description:
+                logger.warning("No 'event_description' field in LLM response")
+                return None
+
+            # Validate length
+            description = event_description.strip()
+            if len(description) < 10:
+                logger.warning(f"Event description too short: {len(description)} chars")
+                return None
+            if len(description) > 200:
+                logger.warning(f"Event description too long ({len(description)} chars), truncating")
+                description = description[:200]
+
+            return description
 
         except Exception as e:
             logger.error(f"Failed to extract event description: {e}")
             return None
-
-    def _build_extraction_instruction(self, question: Question) -> str:
-        """Build instruction for event extraction.
-
-        Args:
-            question: Question to analyze
-
-        Returns:
-            Instruction string
-        """
-        ground_truth_str = str(question.ground_truth)
-        
-        return f"""You are analyzing a resolved forecast question to identify the target event (what actually happened).
-
-Question: {question.question_text}
-Question Type: {question.question_type.value}
-Ground Truth: {ground_truth_str}
-Resolution Date: {question.resolution_date.strftime('%Y-%m-%d')}
-Domain: {question.domain.value}
-
-Based on this information, describe the EVENT that occurred (or didn't occur) in a clear, factual way.
-
-Guidelines:
-- Be specific and concrete
-- Use past tense (the event already happened or didn't happen)
-- Focus on WHAT happened, not WHY
-- Keep it under 150 characters
-- If ground_truth is False/No, phrase it as "X did NOT happen" or describe what happened instead
-
-Examples:
-Question: "Will Bitcoin reach $100,000 by Dec 31, 2024?"
-Ground Truth: True
-→ "Bitcoin reaches $100,000 USD"
-
-Question: "Will Donald Trump win the 2024 US Presidential Election?"
-Ground Truth: True
-→ "Donald Trump wins 2024 US Presidential Election"
-
-Question: "Will there be a recession in 2024?"
-Ground Truth: False
-→ "No recession occurs in 2024"
-
-Now extract the target event for the given question. Respond with ONLY the event description, nothing else.
-"""
-
-    def _parse_event_description(self, result: str) -> Optional[str]:
-        """Parse event description from LLM result.
-
-        Args:
-            result: LLM output
-
-        Returns:
-            Event description or None
-        """
-        # Clean up the result
-        description = result.strip()
-        
-        # Remove common prefixes
-        prefixes = [
-            "Event description:", "Target event:", "Event:", 
-            "The event is:", "Output:"
-        ]
-        for prefix in prefixes:
-            if description.lower().startswith(prefix.lower()):
-                description = description[len(prefix):].strip()
-
-        # Validate length
-        if len(description) < 10 or len(description) > 200:
-            logger.warning(f"Event description has invalid length: {len(description)}")
-            return None
-
-        return description
 
     def _find_matching_event(
         self,
@@ -354,7 +299,7 @@ Now extract the target event for the given question. Respond with ONLY the event
         Args:
             event_description: Event description
             question: Question being analyzed
-            evidence_articles: Evidence articles
+            evidence_articles: Evidence articles (can be empty if called before evidence collection)
 
         Returns:
             New Event instance
@@ -363,12 +308,12 @@ Now extract the target event for the given question. Respond with ONLY the event
         event_hash = hashlib.sha256(
             f"{event_description}_{question.resolution_date}".encode()
         ).hexdigest()[:8]
-        
+
         event_id = f"evt_{question.domain.value}_{question.resolution_date.strftime('%Y%m%d')}_{event_hash}"
 
         # Determine event type based on question type and domain
         event_type = EventType.OUTCOME  # Most forecast questions are about outcomes
-        
+
         # Determine status based on ground truth
         if question.ground_truth is False:
             status = EventStatus.CANCELLED  # Event didn't happen
@@ -385,7 +330,7 @@ Now extract the target event for the given question. Respond with ONLY the event
             status=status,
             occurred_date=question.resolution_date if question.ground_truth is not False else None,
             resolution_date=question.resolution_date,
-            article_ids=[a.id for a in evidence_articles[:5]],  # Link to evidence
+            article_ids=[a.id for a in evidence_articles[:5]] if evidence_articles else [],  # Link to evidence if available
             metadata={
                 'created_from_question': question.id,
                 'source': 'target_event_identification',
