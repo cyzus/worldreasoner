@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 from src.pipelines.base import PipelineStage
 from src.domain.models import Question, Article, Event
 from src.agents.factory import AgentFactory
-from src.tools import BatchArticleCollectorTool, BatchEventIdentifierTool
+from src.tools import BatchArticleCollectorTool, BatchEventIdentifierTool, ArticleRetrievalTool
 from src.core.collectors import ResultCollector
 from src.pipelines.prompts import HindsightAnalysisPrompts
 from src.utils.logging import logger
@@ -282,7 +282,8 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
         # Instantiate per-question event collector, tool, and agent
         event_collector = ResultCollector[Event]()
         event_tool = BatchEventIdentifierTool(collector=event_collector)
-        event_agent = AgentFactory.create_base_agent(tools=[event_tool])
+        article_retrieval_tool = ArticleRetrievalTool(db_path=self.db_path)
+        event_agent = AgentFactory.create_base_agent(tools=[event_tool, article_retrieval_tool])
 
         # Generate event extraction instruction using centralized prompt
         current_date = datetime.now(timezone.utc)

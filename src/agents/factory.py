@@ -59,6 +59,7 @@ class AgentFactory:
     @staticmethod
     def create_base_agent(
         tools: Optional[List[Tool]] = None,
+        is_code: bool = False,
         config: Optional[Config] = None,
         max_steps: int = 10
     ) -> BaseAgent:
@@ -81,7 +82,7 @@ class AgentFactory:
             >>> result = agent.run("Analyze these articles for events")
         """
         app_config = config or get_config()
-        return BaseAgent(config=app_config, tools=tools, max_steps=max_steps)
+        return BaseAgent(config=app_config, tools=tools, max_steps=max_steps, is_code=is_code)
 
     @staticmethod
     def create_forecast_agent(

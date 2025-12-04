@@ -146,7 +146,7 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
         collector = ResultCollector[CausalHypothesis]()
         causal_tool = CausalReasonerTool(collector=collector)
         agent = AgentFactory.create_base_agent(
-            tools=[causal_tool, self.article_retrieval_tool]
+            tools=[causal_tool, self.article_retrieval_tool], is_code=True
         )
 
         # Load related events from database to provide valid event IDs

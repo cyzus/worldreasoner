@@ -48,7 +48,7 @@ class BatchEventIdentifierTool(CollectorAwareTool[Event]):
             "title": "Fed raises rates",
             "description": "Federal Reserve raises interest rates by 0.25%",
             "domain": "finance",
-            "occurred_date": "2025-11-26",
+            "occurred_date": "2025-11-26T14:30:00+00:00",
             "event_type": "decision",
             "source_article_ids": "art_123,art_456"
           },
@@ -56,7 +56,7 @@ class BatchEventIdentifierTool(CollectorAwareTool[Event]):
             "title": "New iPhone announced",
             "description": "Apple announces iPhone 17 launch",
             "domain": "tech",
-            "occurred_date": "2025-11-27",
+            "occurred_date": "2025-11-27T09:15:00Z",
             "event_type": "indicator",
             "source_article_ids": "art_789"
           }
