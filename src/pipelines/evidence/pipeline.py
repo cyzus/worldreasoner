@@ -196,7 +196,11 @@ class EvidencePipeline(Pipeline):
             )
 
             if not self.causal_hypotheses:
-                logger.warning("No causal hypotheses generated")
+                logger.error("No causal hypotheses generated - pipeline failed")
+                # Mark the overall pipeline as failed
+                if self._results:
+                    self._results[-1].status = PipelineStageStatus.FAILED
+                    self._results[-1].error_message = "No causal hypotheses generated from any question"
                 return self._results
 
             logger.info(f"Total: {len(self.evidence_articles)} evidence articles, "
@@ -206,9 +210,17 @@ class EvidencePipeline(Pipeline):
             # Note: Hypotheses are already saved by graph building stage
             logger.info("Stage 3: Building causal graph...")
             graph_result = await self.graph_stage.execute(self.causal_hypotheses)
-            self._results.append(graph_result)
 
+            # Mark as failed if no results
             saved_hypotheses = graph_result.outputs
+            if not saved_hypotheses:
+                graph_result.status = PipelineStageStatus.FAILED
+                graph_result.error_message = "No causal hypotheses saved to graph"
+                logger.error("Stage 3: No causal hypotheses saved to graph - pipeline failed")
+                self._results.append(graph_result)
+                return self._results
+
+            self._results.append(graph_result)
             logger.info(f"Saved {len(saved_hypotheses)} causal hypotheses to graph")
 
             # Aggregate usage from all stages
@@ -263,10 +275,16 @@ class EvidencePipeline(Pipeline):
                 logger.debug(f"[{question.id}] Collecting evidence...")
                 evidence_result = await self.evidence_stage.execute([question])
                 evidence_articles = evidence_result.outputs
+
+                # Mark as failed if no results
+                if not evidence_articles:
+                    evidence_result.status = PipelineStageStatus.FAILED
+                    evidence_result.error_message = "No evidence articles collected"
+                    logger.warning(f"[{question.id}] No evidence articles collected - terminating processing")
+
                 stage_results.append(evidence_result)
 
                 if not evidence_articles:
-                    logger.warning(f"[{question.id}] No evidence articles collected")
                     return {
                         "evidence_articles": [],
                         "causal_hypotheses": [],
@@ -284,10 +302,16 @@ class EvidencePipeline(Pipeline):
                 question_evidence_pair = (question, evidence_articles)
                 reasoning_result = await self.reasoning_stage.execute([question_evidence_pair])
                 causal_hypotheses = reasoning_result.outputs
+
+                # Mark as failed if no results
+                if not causal_hypotheses:
+                    reasoning_result.status = PipelineStageStatus.FAILED
+                    reasoning_result.error_message = "No causal hypotheses generated"
+                    logger.warning(f"[{question.id}] No causal hypotheses generated - terminating processing")
+
                 stage_results.append(reasoning_result)
 
                 if not causal_hypotheses:
-                    logger.warning(f"[{question.id}] No causal hypotheses generated")
                     return {
                         "evidence_articles": evidence_articles,
                         "causal_hypotheses": [],
