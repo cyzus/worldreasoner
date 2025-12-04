@@ -437,6 +437,26 @@ class PolymarketRunner(QuestionSourceRunner):
             # Tag with source
             self._tag_questions_with_source(questions)
 
+            # EARLY DEDUPLICATION: Filter duplicates before ANY processing
+            # This saves both categorization AND cache lookups
+            if existing_question_ids is not None:
+                before_dedup = len(questions)
+                questions = [q for q in questions if q.id not in existing_question_ids]
+
+                if before_dedup != len(questions):
+                    logger.info(f"Early duplicate filter: removed {before_dedup - len(questions)} duplicates before processing")
+
+            if not questions:
+                logger.warning("No questions remaining after early deduplication")
+                return CollectionResult(
+                    source_name=self.source_name,
+                    questions=[],
+                    requested_count=count,
+                    actual_count=0,
+                    success=True,
+                    metadata={"all_duplicates": True},
+                )
+
             # Apply cached categorizations from previous calls to avoid re-categorizing
             cached_count = 0
             for q in questions:
@@ -455,29 +475,8 @@ class PolymarketRunner(QuestionSourceRunner):
             need_categorization = [q for q in questions if q.id not in self._categorization_cache]
             already_categorized = [q for q in questions if q.id in self._categorization_cache]
 
-            # Early deduplication (before expensive categorization!)
-            # Only deduplicate questions that still need categorization
-            if existing_question_ids is not None and need_categorization:
-                before_dedup = len(need_categorization)
-                need_categorization = [q for q in need_categorization if q.id not in existing_question_ids]
-
-                if before_dedup != len(need_categorization):
-                    logger.info(f"Filtered out {before_dedup - len(need_categorization)} duplicates before categorization")
-                    logger.debug(f"Remaining: {len(need_categorization)} questions need categorization")
-
             # Combine back together
             questions = need_categorization + already_categorized
-
-            if not questions:
-                logger.warning("No questions remaining after deduplication")
-                return CollectionResult(
-                    source_name=self.source_name,
-                    questions=[],
-                    requested_count=count,
-                    actual_count=0,
-                    success=True,
-                    metadata={"all_duplicates": True},
-                )
 
             # Iterative enhancement: enhance in small batches, only as needed
             # Only categorize questions that need it (not already cached)
@@ -487,9 +486,10 @@ class PolymarketRunner(QuestionSourceRunner):
 
             if self.use_agent_enhancement and remaining_questions:
                 try:
-                    # Use efficient batch size for categorization (min 20, max 50)
-                    # Don't make it dependent on count to avoid tiny batches when count=1
-                    batch_size = min(50, max(20, count * 2))
+                    # Use efficient batch size for categorization
+                    # For gap-filling (small count), use smaller batches to avoid waste
+                    # For bulk collection (large count), use larger batches for efficiency
+                    batch_size = min(50, max(count * 2, 10))
 
                     while remaining_questions and len(enhanced_questions) < count * 3:
                         # Take next batch

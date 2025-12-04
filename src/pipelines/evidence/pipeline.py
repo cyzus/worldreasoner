@@ -431,6 +431,7 @@ class EvidencePipeline(Pipeline):
         # Filter for resolved questions in date range
         resolved = []
         skipped_already_processed = 0
+        skipped_low_quality = 0
 
         for q in all_questions:
             # Must have resolution date and ground truth
@@ -456,6 +457,12 @@ class EvidencePipeline(Pipeline):
             if self.min_quality_score is not None:
                 if q.quality_score is None or q.quality_score < self.min_quality_score:
                     continue
+
+            # Skip if marked to skip evidence processing (low quality, noisy, etc.)
+            if q.skip_evidence:
+                skipped_low_quality += 1
+                logger.debug(f"Skipping question marked for skip_evidence: {q.id} - {q.skip_reason}")
+                continue
 
             # Skip if already processed by evidence pipeline (if configured)
             if self.evidence_config.skip_already_processed and q.id in processed_question_ids:
@@ -490,6 +497,9 @@ class EvidencePipeline(Pipeline):
 
         if skipped_already_processed > 0:
             logger.info(f"Skipped {skipped_already_processed} already processed questions")
+
+        if skipped_low_quality > 0:
+            logger.info(f"Skipped {skipped_low_quality} low-quality questions (marked skip_evidence)")
 
         return resolved
 

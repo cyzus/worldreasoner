@@ -78,15 +78,30 @@ class QuestionQualityConfig(BaseModel):
         default=180,
         description="Timeout in seconds for quality scoring LLM calls (default 180s for batch processing)"
     )
-    # Weights for each dimension in the composite score
+
+    # Weights for each dimension in the composite score (must sum to 1.0)
     dimension_weights: dict[str, float] = Field(default_factory=lambda: {
-        "interestingness": 1.0,
-        "clarity": 1.0,
-        "verifiability": 1.0,
-        "temporal_validity": 1.0,
-        "context_sufficiency": 1.0,
-        "difficulty_appropriateness": 1.0,
-        "format_consistency": 1.0,
+        "verifiability": 0.25,            # Most critical - can we verify outcome?
+        "interestingness": 0.20,          # Is this engaging and significant?
+        "clarity": 0.20,                  # Is it unambiguous and well-defined?
+        "temporal_validity": 0.15,        # Is the resolution date appropriate?
+        "context_sufficiency": 0.10,      # Is there enough background info?
+        "difficulty_appropriateness": 0.05,  # Is difficulty rating accurate?
+        "format_consistency": 0.05,       # Are fields consistent with type?
+    })
+
+    # Thresholds for skipping evidence processing (questions below these are saved but not processed)
+    skip_thresholds: dict[str, float] = Field(default_factory=lambda: {
+        "composite_score": 0.40,          # Overall quality too low
+        "verifiability": 0.40,            # Cannot be objectively verified
+        "interestingness": 0.25,          # Boring/noisy/trivial
+        "clarity": 0.30,                  # Too ambiguous
+    })
+
+    # Thresholds for quality warnings (borderline cases that still get processed)
+    warning_thresholds: dict[str, float] = Field(default_factory=lambda: {
+        "composite_score": 0.55,          # Borderline overall quality
+        "critical_dimension": 0.50,       # Any critical dimension (verifiability, interestingness, clarity) below this
     })
 
 

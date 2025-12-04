@@ -22,7 +22,10 @@ class QuestionQualityRankingStage(PipelineStage[Question, Question]):
     def __init__(self, config: QuestionQualityConfig, db_path: str):
         super().__init__("question_quality_ranking", {"config": config.dict()})
         self.config = config
-        self.scorer = QuestionQualityScorer(timeout=config.timeout)
+        self.scorer = QuestionQualityScorer(
+            timeout=config.timeout,
+            dimension_weights=config.dimension_weights
+        )
 
     async def process(self, inputs: List[Question]) -> List[Question]:
         """
@@ -66,6 +69,40 @@ class QuestionQualityRankingStage(PipelineStage[Question, Question]):
                 assessment = assessment_map[question.id]
                 question.quality_score = assessment.composite_score
                 question.quality_dimensions = assessment.dimensions
+
+                # Check if should skip evidence processing
+                skip_reasons = []
+                dims = assessment.dimensions
+
+                if question.quality_score < self.config.skip_thresholds['composite_score']:
+                    skip_reasons.append(f"composite_score too low ({question.quality_score:.2f})")
+                if dims.get('verifiability', 0) < self.config.skip_thresholds['verifiability']:
+                    skip_reasons.append(f"verifiability too low ({dims.get('verifiability', 0):.2f})")
+                if dims.get('interestingness', 0) < self.config.skip_thresholds['interestingness']:
+                    skip_reasons.append(f"not interesting enough ({dims.get('interestingness', 0):.2f})")
+                if dims.get('clarity', 0) < self.config.skip_thresholds['clarity']:
+                    skip_reasons.append(f"clarity too low ({dims.get('clarity', 0):.2f})")
+
+                if skip_reasons:
+                    question.skip_evidence = True
+                    question.skip_reason = "; ".join(skip_reasons)
+                    logger.info(f"Question {question.id} marked to skip evidence: {question.skip_reason}")
+                else:
+                    # Check for warnings (borderline cases)
+                    critical_dims = ['verifiability', 'interestingness', 'clarity']
+                    low_critical = [
+                        dim for dim in critical_dims
+                        if dims.get(dim, 0) < self.config.warning_thresholds['critical_dimension']
+                    ]
+
+                    if question.quality_score < self.config.warning_thresholds['composite_score']:
+                        question.quality_warning = f"Borderline quality score: {question.quality_score:.2f}"
+                        logger.debug(f"Question {question.id} flagged with warning: {question.quality_warning}")
+                    elif low_critical:
+                        dim_scores = ", ".join([f"{dim}={dims.get(dim, 0):.2f}" for dim in low_critical])
+                        question.quality_warning = f"Low critical dimensions: {dim_scores}"
+                        logger.debug(f"Question {question.id} flagged with warning: {question.quality_warning}")
+
                 scored_questions.append(question)
                 logger.debug(f"Question '{question.id}' scored: {question.quality_score:.2f}")
             else:
@@ -77,14 +114,24 @@ class QuestionQualityRankingStage(PipelineStage[Question, Question]):
         scored_questions.sort(key=lambda q: q.quality_score or 0.0, reverse=True)
 
         logger.success(f"Successfully scored and ranked {len(scored_questions)} questions.")
-        
-        # Log score distribution for analysis
+
+        # Log statistics
         if scored_questions:
             scores = [q.quality_score for q in scored_questions if q.quality_score is not None]
+            total = len(scored_questions)
+            skipped = sum(1 for q in scored_questions if q.skip_evidence)
+            warned = sum(1 for q in scored_questions if q.quality_warning)
+
             if scores:
                 avg_score = sum(scores) / len(scores)
                 min_score = min(scores)
                 max_score = max(scores)
                 logger.info(f"Score stats: Avg={avg_score:.2f}, Min={min_score:.2f}, Max={max_score:.2f}")
+
+            logger.info(
+                f"Quality decisions: {total} total, "
+                f"{skipped} skip evidence ({skipped/total*100:.1f}%), "
+                f"{warned} warnings ({warned/total*100:.1f}%)"
+            )
 
         return scored_questions

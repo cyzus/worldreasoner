@@ -156,6 +156,22 @@ class QuestionCollectionOrchestrator:
                 # Collect from sources
                 await self._collect_from_sources()
 
+                # Run incremental quality ranking after collection
+                # This filters out low-quality questions before expensive gap-filling
+                if self.quality_stage and self.progress.get_questions():
+                    logger.info("--- Running Incremental Quality Ranking ---")
+                    all_questions = self.progress.get_questions()
+                    ranked_questions_result = await self.quality_stage.execute(all_questions)
+                    if ranked_questions_result.status == "completed":
+                        # Update progress with scored questions
+                        self.progress.set_questions(ranked_questions_result.outputs)
+                        # Count how many are marked to skip
+                        skip_count = sum(1 for q in ranked_questions_result.outputs if q.skip_evidence)
+                        keep_count = len(ranked_questions_result.outputs) - skip_count
+                        logger.info(f"Quality filter: keeping {keep_count}, skipping {skip_count} low-quality questions")
+                    else:
+                        logger.warning("Incremental quality ranking failed, continuing without it")
+
                 # Save intermediate results
                 if self.config.save_intermediate_results and self.db:
                     self._save_to_database()
@@ -164,19 +180,6 @@ class QuestionCollectionOrchestrator:
                 if self.progress.total >= self.goal.total_questions * 0.8:
                     logger.info("Attempting targeted gap filling...")
                     await self._fill_gaps()
-
-            # Phase 2: Quality Ranking (if enabled)
-            if self.quality_stage:
-                logger.info("--- Running Quality Ranking Stage ---")
-                all_questions = self.progress.get_questions()
-                ranked_questions_result = await self.quality_stage.execute(all_questions)
-                if ranked_questions_result.status == "completed":
-                    # Update the progress tracker with the scored and sorted questions
-                    self.progress.set_questions(ranked_questions_result.outputs)
-                    logger.success("Quality ranking complete.")
-                else:
-                    logger.error("Quality ranking stage failed.")
-                    self.errors.extend(err.message for err in ranked_questions_result.errors)
 
             # Final check
             goal_met = self.progress.is_goal_met(self.goal)

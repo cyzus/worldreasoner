@@ -101,6 +101,18 @@ class Question(BaseModel):
         None,
         description="Detailed scores for each quality dimension"
     )
+    skip_evidence: bool = Field(
+        default=False,
+        description="If True, skip this question in evidence processing (low quality, noisy, etc.)"
+    )
+    skip_reason: Optional[str] = Field(
+        None,
+        description="Reason why this question is marked to skip evidence processing"
+    )
+    quality_warning: Optional[str] = Field(
+        None,
+        description="Warning about borderline quality issues (still processed, but flagged)"
+    )
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
 
