@@ -17,6 +17,7 @@ from src.core.database import GenericDatabase
 from src.utils.logging import logger
 from src.utils.usage_tracking import UsageTracker, log_usage
 from src.utils.llm_utils import parse_json_response
+from src.utils.similarity import SimilarityMatcher
 from src.llm import LiteLLMClient
 from src.config import get_config
 
@@ -74,6 +75,14 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
 
         # Initialize prompts generator
         self.prompts = TargetEventIdentificationPrompts()
+        
+        # Initialize similarity matcher for event deduplication
+        self._matcher = SimilarityMatcher(
+            db=self.db,
+            model_class=Event,
+            text_fields=[("title", 0.5), ("description", 0.5)],
+            similarity_threshold=config.similarity_threshold,
+        )
 
     async def process(
         self,
@@ -168,9 +177,22 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
             new_event = self._create_target_event(
                 event_description, question, evidence_articles
             )
-            self.db.save(Event, new_event)
-            logger.info(f"Created new target event: {new_event.id} for question {question.id}")
-            return new_event.id
+            logger.debug(f"About to save event: {new_event.id} with domain={new_event.domain}, occurred_date={new_event.occurred_date}")
+            try:
+                save_result = self.db.save(Event, new_event)
+                logger.info(f"Created new target event: {new_event.id} for question {question.id} (save_result={save_result})")
+                
+                # Verify the event was actually saved
+                verify = self.db.get(Event, new_event.id)
+                if verify:
+                    logger.debug(f"Verified event {new_event.id} exists in database")
+                else:
+                    logger.error(f"ERROR: Event {new_event.id} was NOT found after save! Database save may have failed.")
+                
+                return new_event.id
+            except Exception as e:
+                logger.error(f"Exception saving event {new_event.id}: {e}", exc_info=True)
+                raise
 
         return None
 
@@ -223,6 +245,8 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
     ) -> Optional[Event]:
         """Find existing event matching the description.
 
+        Uses the generic SimilarityMatcher with temporal filtering.
+
         Args:
             event_description: Event description to match
             question: Question being analyzed
@@ -231,62 +255,27 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
         Returns:
             Matching event or None
         """
-        # Get all events in same domain
-        all_events = self.db.get_many(Event, filters={'domain': question.domain})
-
-        # Filter by temporal proximity (within 30 days of resolution)
+        # Define temporal filter - events within 30 days of resolution
         time_window_days = 30
-        candidates = []
         
-        for event in all_events:
+        def temporal_filter(event: Event) -> bool:
             if not event.occurred_date:
-                continue
-                
-            # Check if event occurred near question resolution
+                return False
             time_diff = abs((event.occurred_date - question.resolution_date).days)
-            if time_diff <= time_window_days:
-                candidates.append(event)
+            return time_diff <= time_window_days
 
-        if not candidates:
-            logger.debug(f"No temporal candidates found for {question.id}")
-            return None
+        # Use the generic matcher with domain filter and temporal filter
+        match = self._matcher.find_match(
+            filters={"domain": question.domain.value if hasattr(question.domain, 'value') else question.domain},
+            additional_filter=temporal_filter,
+            title=event_description,
+            description=event_description,
+        )
 
-        # Simple text similarity matching
-        best_match = None
-        best_score = 0.0
+        if match:
+            logger.info(f"Found matching event: {match.id} for question {question.id}")
 
-        for event in candidates:
-            score = self._calculate_similarity(event_description, event.title)
-            if score > best_score and score >= self.config.similarity_threshold:
-                best_score = score
-                best_match = event
-
-        if best_match:
-            logger.info(f"Found match with score {best_score:.2f}: {best_match.id}")
-
-        return best_match
-
-    def _calculate_similarity(self, text1: str, text2: str) -> float:
-        """Calculate simple text similarity.
-
-        Args:
-            text1: First text
-            text2: Second text
-
-        Returns:
-            Similarity score 0.0-1.0
-        """
-        # Simple word overlap similarity
-        words1 = set(text1.lower().split())
-        words2 = set(text2.lower().split())
-        
-        if not words1 or not words2:
-            return 0.0
-
-        intersection = words1.intersection(words2)
-        union = words1.union(words2)
-
-        return len(intersection) / len(union) if union else 0.0
+        return match
 
     def _create_target_event(
         self,

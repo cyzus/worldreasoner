@@ -95,7 +95,8 @@ class CausalReasonerTool(Tool):
         },
         "evidence_article_ids": {
             "type": "string",
-            "description": "Comma-separated article IDs supporting this claim"
+            "description": "Comma-separated article IDs supporting this claim",
+            "nullable": True
         },
     }
     output_type = "string"  # JSON confirmation

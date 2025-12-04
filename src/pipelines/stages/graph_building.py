@@ -123,7 +123,15 @@ class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, CausalHypothesis]
             return 'invalid_events'
 
         if not target_event:
-            logger.warning(f"Target event not found: {hypothesis.target_event_id}")
+            # Debug: List all events in database to help diagnose
+            all_events = self.db.get_many(Event, filters={})
+            event_ids = [e.id for e in all_events]
+            logger.warning(
+                f"Target event not found: {hypothesis.target_event_id}\n"
+                f"This should not happen. The event should have been created during target event identification.\n"
+                f"Check if target_event_identification stage saved the event to the database.\n"
+                f"Events in database ({len(all_events)} total): {event_ids[:10]}..."
+            )
             return 'invalid_events'
 
         # Check if hypothesis already exists in database

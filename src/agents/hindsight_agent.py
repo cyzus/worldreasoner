@@ -54,6 +54,7 @@ class HindsightAgent(BaseAgent):
             model=llm_model,
             tools=[
                 EventIdentifierTool(db_path=db_path),  # Persist events to DB
+                EventDetailsTool(db_path=db_path),  # Get details about existing events
                 CausalReasonerTool(db_path=db_path),  # Persist hypotheses to DB
                 GraphInspectorTool(db_path=db_path),
                 ArticleRetrievalTool(db_path=db_path)
@@ -66,11 +67,15 @@ class HindsightAgent(BaseAgent):
             CRITICAL: Build DEEP multi-level causal chains, not just direct links!
 
             Process:
-            1. Create target event for the question
-            2. Identify immediate causes (level 1)
-            3. For each cause, ask "What caused THIS?" and create intermediate events (level 2+)
-            4. Use graph_inspector to check depth - iterate if < 2 levels
-            5. Build causal chains: Root → Intermediate → Immediate → Target
+            1. If target_event_id is provided, use EventDetailsTool to understand it
+            2. Otherwise, create target event for the question using event_identifier
+            3. Identify immediate causes (level 1) that lead to the target
+            4. For each cause, ask "What caused THIS?" and create intermediate events (level 2+)
+            5. Use graph_inspector to check depth - iterate if < 2 levels
+            6. Build causal chains: Root → Intermediate → Immediate → TARGET
+            
+            IMPORTANT: All causal chains must ultimately connect to the target event!
+            Use causal_reasoner with the correct target_event_id for final-stage links.
 
             All events and hypotheses are automatically saved to database.
 

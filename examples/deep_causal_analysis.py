@@ -34,6 +34,7 @@ import argparse
 import asyncio
 from datetime import datetime, timezone
 from src.agents.hindsight_agent import HindsightAgent
+from src.pipelines.prompts import HindsightCausalAnalysisPrompts
 from src.domain.models import Question, QuestionType, Domain
 from src.core.database import Database, GenericDatabase
 from src.config import get_config
@@ -85,6 +86,8 @@ def parse_args():
                        help='Days before resolution to collect evidence (default: 90)')
     parser.add_argument('--min-articles', type=int, default=5,
                        help='Minimum evidence articles required (default: 5)')
+    parser.add_argument('--confidence-threshold', type=float, default=0.6,
+                       help='Minimum confidence for causal links (default: 0.6)')
 
     # Output control
     parser.add_argument('--verbose', action='store_true',
@@ -168,67 +171,15 @@ async def run_deep_causal_analysis(args):
     # Initialize HindsightAgent
     agent = HindsightAgent(db_path=args.db, max_steps=args.max_steps)
 
-    # Construct prompt
-    prompt = f"""
-Your task: Build a DEEP causal explanation for this question with hindsight.
-
-QUESTION ID: {question.id}
-QUESTION: {question.question_text}
-RESOLUTION DATE: {question.resolution_date}
-GROUND TRUTH: {question.ground_truth}
-
-CRITICAL: When using tools, ALWAYS use question_id="{question.id}"
-
-REQUIREMENTS:
-- Causal graph depth must be >= {args.min_depth} levels (multi-hop chains)
-- Each causal link must have supporting evidence
-- Build from root causes → intermediate factors → immediate causes → outcome
-
-PROCESS:
-
-1. COLLECT EVIDENCE:
-   Call evidence_collector to gather relevant articles:
-   - Time window: {args.evidence_window} days before resolution
-   - Need at least {args.min_articles} high-quality articles
-   - If insufficient, ask agent to broaden search
-
-2. BUILD DEEP CAUSAL GRAPH:
-   Call causal_analyzer with this exact prompt:
-
-   "Build a deep causal graph for question '{question.id}' about: {question.question_text}
-
-   CRITICAL: When calling event_identifier and causal_reasoner tools,
-   use question_id='{question.id}' (not any other ID!).
-
-   Steps:
-   1. Create target event (the outcome from ground truth)
-   2. Identify 3-4 immediate causes (level 1)
-   3. For EACH immediate cause, identify what caused IT (level 2)
-   4. For top 2 level-2 causes, go even deeper (level 3)
-   5. Use graph_inspector(question_id='{question.id}') to check depth
-   6. If depth < {args.min_depth}, create more intermediate events
-
-   REMEMBER: Every causal_reasoner call must have question_id='{question.id}'"
-
-3. EVALUATE & ITERATE:
-   - Call graph_inspector(question_id='{question.id}') to check current depth
-   - If max_depth < {args.min_depth}: Tell causal_analyzer to go deeper
-   - Target: {args.min_articles}+ events, {args.min_depth}+ levels, quality > {args.min_quality}
-
-4. FINAL VALIDATION:
-   - Verify each causal link has evidence support
-   - Check temporal validity (causes before effects)
-   - Confirm chains explain the ground truth outcome
-
-SUCCESS CRITERIA:
-✓ Evidence: {args.min_articles}+ relevant articles collected
-✓ Depth: Causal chains with {args.min_depth}+ levels
-✓ Events: 5+ events created
-✓ Links: Multiple causal chains to target
-✓ Quality: Score > {args.min_quality}
-
-Begin the analysis!
-"""
+    # Construct prompt using prompt generator
+    prompt_generator = HindsightCausalAnalysisPrompts()
+    prompt = prompt_generator.get_agent_prompt(
+        question=question,
+        min_graph_depth=args.min_depth,
+        evidence_window_days=args.evidence_window,
+        min_evidence_articles=args.min_articles,
+        confidence_threshold=args.confidence_threshold,
+    )
 
     # Run agent
     try:
