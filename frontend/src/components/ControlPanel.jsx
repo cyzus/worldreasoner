@@ -3,7 +3,6 @@ import './ControlPanel.css'
 
 const ControlPanel = ({ filters, onFilterChange, onRefresh, loading, questions, onQuestionFilter }) => {
   const [localFilters, setLocalFilters] = useState(filters)
-  const [isExpanded, setIsExpanded] = useState(true)
   const [selectedQuestionId, setSelectedQuestionId] = useState('')
   const [questionSearch, setQuestionSearch] = useState('')
   const [showQuestionList, setShowQuestionList] = useState(false)
@@ -81,19 +80,8 @@ const ControlPanel = ({ filters, onFilterChange, onRefresh, loading, questions, 
   }, [])
 
   return (
-    <div className={`control-panel ${isExpanded ? 'expanded' : 'collapsed'}`}>
-      <div className="panel-header">
-        <h3>Controls</h3>
-        <button
-          className="toggle-btn"
-          onClick={() => setIsExpanded(!isExpanded)}
-        >
-          {isExpanded ? '◀' : '▶'}
-        </button>
-      </div>
-
-      {isExpanded && (
-        <div className="panel-content">
+    <div className="control-panel-wrapper">
+      <div className="panel-content">
           <div className="filter-section question-search-section" ref={questionSearchRef}>
             <label>Filter by Question</label>
             <div className="question-search-container">
@@ -203,7 +191,6 @@ const ControlPanel = ({ filters, onFilterChange, onRefresh, loading, questions, 
             </button>
           </div>
         </div>
-      )}
     </div>
   )
 }

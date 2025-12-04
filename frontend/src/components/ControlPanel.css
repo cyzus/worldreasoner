@@ -1,77 +1,8 @@
-.control-panel {
-  background: #ffffff;
-  border-right: 1px solid #dee2e6;
+.control-panel-wrapper {
   display: flex;
   flex-direction: column;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
-  position: relative;
-  z-index: 5;
-  overflow: hidden; /* Ensure content doesn't spill during transition */
-}
-
-.control-panel.expanded {
-  width: 300px;
-}
-
-.control-panel.collapsed {
-  width: 48px; /* Thinner collapsed state */
-}
-
-.panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.25rem;
-  border-bottom: 1px solid #dee2e6;
-  background: #f8f9fa;
-  min-height: 65px; /* Fixed height to prevent jumping */
-  box-sizing: border-box;
-  white-space: nowrap; /* Prevent text wrapping */
-}
-
-.panel-header h3 {
-  color: #212529;
-  font-size: 1.125rem;
-  font-weight: 600;
-  margin: 0;
-  letter-spacing: -0.3px;
-  opacity: 1;
-  transition: opacity 0.2s ease;
-}
-
-.control-panel.collapsed .panel-header h3 {
-  opacity: 0;
-  width: 0;
-  margin: 0;
-  overflow: hidden;
-}
-
-.toggle-btn {
-  background: transparent;
-  border: 1px solid transparent;
-  color: #495057;
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.75rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-  padding: 0;
-}
-
-.toggle-btn:hover {
-  background: #e9ecef;
-  color: #212529;
-}
-
-.control-panel.collapsed .toggle-btn {
-  margin: 0 auto; /* Center button when collapsed */
-  width: 100%;
   height: 100%;
+  overflow: hidden;
 }
 
 .panel-content {
@@ -79,13 +10,6 @@
   overflow-y: auto;
   flex: 1;
   overflow-x: hidden;
-  opacity: 1;
-  transition: opacity 0.2s ease;
-}
-
-.control-panel.collapsed .panel-content {
-  display: none;
-  opacity: 0;
 }
 
 .filter-section {

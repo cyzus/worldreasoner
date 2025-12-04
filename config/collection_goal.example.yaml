@@ -1,0 +1,45 @@
+# Collection Goal Configuration
+# Defines targets for goal-oriented question collection
+
+# Total number of questions to collect
+total_questions: 10
+
+# Distribution by question type (must sum to total_questions)
+type_distribution:
+  boolean: 4          # Binary yes/no questions
+  mcq: 3  # Multiple choice questions
+  quantity: 2         # Numeric/quantity questions
+  timeframe: 1        # Date/timeframe questions
+
+# Distribution by category (must sum to total_questions)
+category_distribution:
+  finance: 2          # Financial markets, earnings, IPOs
+  tech: 1             # Tech products, launches, AI developments
+  politics: 2         # Elections, policy changes, legislation
+  health: 1           # Medical, healthcare, pandemics
+  climate: 1          # Environmental, climate change
+  culture: 1          # Entertainment, arts, media
+  sports: 1           # Major sports events, tournaments
+  business: 1         # Corporate news, market trends
+
+# Quality requirements for collected questions
+quality:
+  min_difficulty: 2              # Minimum difficulty (1-5 scale)
+  max_difficulty: 5              # Maximum difficulty
+  min_resolution_days: -7       # Days from now: -90 = questions resolved within last 90 days
+  max_resolution_days: 0        # -1 = questions resolved at least 1 day ago
+  require_resolution_criteria: true  # Must have clear resolution criteria
+  min_confidence_score: 0.7      # Minimum confidence for validated questions
+
+# Ground truth requirement
+require_ground_truth: true      # If true, collect resolved questions with known outcomes. If false, collect future predictions.
+                                 # When true, use negative min/max_resolution_days (e.g., -90 to -1)
+                                 # When false, use positive min/max_resolution_days (e.g., 7 to 365)
+
+# Tolerance for distribution matching (0.9 = accept 90% of target)
+distribution_tolerance: 0.9
+
+# Source quotas (maximum questions from each source)
+source_quotas:
+  polymarket: 100    # Polymarket prediction market
+  news: 10          # News-based pipeline (RSS + web scraping)

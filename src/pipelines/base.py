@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 from enum import Enum
 
+from src.utils.usage_tracking import UsageTracker, log_usage
+
 
 TInput = TypeVar('TInput')
 TOutput = TypeVar('TOutput')
@@ -45,18 +47,28 @@ class PipelineStageResult(BaseModel, Generic[TOutput]):
 
 
 class PipelineStage(ABC, Generic[TInput, TOutput]):
-    """Abstract base class for a pipeline stage."""
-    
-    def __init__(self, name: str, config: Optional[BaseModel] = None):
+    """Abstract base class for a pipeline stage with built-in usage tracking."""
+
+    def __init__(
+        self,
+        name: str,
+        config: Optional[BaseModel] = None,
+        track_usage: bool = True
+    ):
         """Initialize pipeline stage.
-        
+
         Args:
             name: Name of the stage
             config: Optional configuration for the stage
+            track_usage: Whether to enable usage tracking (default: True)
         """
         self.name = name
         self.config = config
+        self.track_usage = track_usage
         self._result: Optional[PipelineStageResult] = None
+
+        if track_usage:
+            self._usage_tracker = UsageTracker()
     
     @abstractmethod
     async def process(self, inputs: List[TInput]) -> List[TOutput]:
@@ -179,6 +191,25 @@ class PipelineStage(ABC, Generic[TInput, TOutput]):
     def get_result(self) -> Optional[PipelineStageResult]:
         """Get the last execution result."""
         return self._result
+
+    def track_agent_usage(self, agent) -> None:
+        """Track usage from agent execution.
+
+        Args:
+            agent: Agent instance after execution
+        """
+        if not self.track_usage:
+            return
+
+        metrics = agent.get_last_usage()
+        if metrics:
+            self._usage_tracker.add_usage(metrics)
+            log_usage(metrics, context=self.name)
+
+    def finalize_usage_tracking(self) -> None:
+        """Log final usage summary."""
+        if self.track_usage and self._usage_tracker.total_calls > 0:
+            self._usage_tracker.log_summary(context=self.name)
 
 
 class Pipeline(ABC):

@@ -61,6 +61,9 @@ def parse_args():
     # Causal reasoning thresholds
     parser.add_argument('--confidence', type=float, default=0.6, help='Minimum confidence threshold (0.0-1.0, default: 0.6)')
     parser.add_argument('--strength', type=float, default=0.3, help='Minimum causal strength threshold (0.0-1.0, default: 0.3)')
+    
+    # New argument for quality score
+    parser.add_argument('--min-quality-score', type=float, default=None, help='Minimum quality score to process a question (0.0-1.0)')
 
     # Processing settings
     parser.add_argument('--question-batch-size', type=int, default=10, help='Batch size for evidence collection (default: 10)')
@@ -135,13 +138,16 @@ async def run_pipeline(args):
     logger.info(f"Skip already processed: {evidence_config.skip_already_processed}")
     if domains:
         logger.info(f"Domain filter: {', '.join(domains)}")
+    if args.min_quality_score is not None:
+        logger.info(f"Minimum quality score: {args.min_quality_score}")
     logger.info("")
 
     # Create pipeline
     pipeline = EvidencePipeline(
         evidence_config=evidence_config,
         database_config=db_config,
-        enable_persistence=True
+        enable_persistence=True,
+        min_quality_score=args.min_quality_score,
     )
 
     # Run pipeline

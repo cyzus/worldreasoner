@@ -1,7 +1,7 @@
 """Unit tests for ResultCollector."""
 
 import pytest
-from src.pipelines.stages.collectors import ResultCollector
+from src.core.collectors import ResultCollector
 
 
 class TestResultCollector:

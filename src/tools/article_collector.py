@@ -11,11 +11,14 @@ from smolagents import Tool
 from src.config import get_config
 from src.domain.models import Article, Domain
 from src.utils.logging import logger
-from src.utils.enums import enum_to_list
-from src.pipelines.stages.tools.web_fetch import WebFetchTool
+from src.utils.enums import enum_to_list, parse_domain
+from src.utils.id_generator import generate_article_id
+from src.utils.date_utils import parse_iso_datetime
+from src.tools.web_fetch import WebFetchTool
+from src.tools.base import CollectorAwareTool
 
 
-class ArticleCollectorTool(Tool):
+class ArticleCollectorTool(CollectorAwareTool[Article]):
     """Fetches and stores article data from URLs into Article objects.
     
     This tool helps the agent:
@@ -68,22 +71,18 @@ class ArticleCollectorTool(Tool):
     
     def __init__(self, db=None, db_path: str = None, collector=None):
         """Initialize the article collector.
-        
+
         Args:
             db: Optional Database instance for cross-run deduplication
             db_path: Optional path to database file (creates new Database with schema if provided)
             collector: Optional ResultCollector[Article] for storing results.
                       If provided, articles are added to the collector instead of internal storage.
         """
-        super().__init__()
+        super().__init__(collector)
         self.config = None
         self.seen_hashes = set()  # For in-memory deduplication within this run
         self.web_visitor = WebFetchTool()  # Internal tool for fetching content
-        
-        # Result storage - use collector if provided, otherwise internal list
-        self.collector = collector
-        self.collected_articles = []  # Fallback for backward compatibility
-        
+
         logger.info(f"ArticleCollectorTool initialized with collector: {collector is not None}")
         
         # Database for cross-run deduplication (optional)
@@ -143,8 +142,8 @@ class ArticleCollectorTool(Tool):
                     self.collector.add(existing)
                     logger.debug(f"Added existing article {existing.id} to collector (duplicate URL, total: {self.collector.count()})")
                 else:
-                    self.collected_articles.append(existing)
-                    logger.debug(f"Added existing article {existing.id} to internal list (duplicate URL, total: {len(self.collected_articles)})")
+                    self._fallback_items.append(existing)
+                    logger.debug(f"Added existing article {existing.id} to internal list (duplicate URL, total: {len(self._fallback_items)})")
                 
                 return json.dumps({
                     "id": existing.id,
@@ -171,13 +170,7 @@ class ArticleCollectorTool(Tool):
             return json.dumps({"error": f"Error fetching URL: {str(e)}", "url": url})
         
         # Parse published date or use current time
-        if published_date:
-            try:
-                pub_date = datetime.fromisoformat(published_date.replace('Z', '+00:00'))
-            except:
-                pub_date = datetime.now(timezone.utc)
-        else:
-            pub_date = datetime.now(timezone.utc)
+        pub_date = parse_iso_datetime(published_date)
         
         # STAGE 3: Content hash deduplication (catches syndicated/republished articles)
         # Check if we've already seen this content (in-memory for current run)
@@ -201,15 +194,10 @@ class ArticleCollectorTool(Tool):
         self.seen_hashes.add(content_hash)
 
         # Validate and convert domain
-        try:
-            domain_enum = Domain(domain.lower() if domain else "general")
-        except ValueError:
-            # Fall back to general if invalid
-            print(f"Warning: Invalid domain '{domain}', using 'general'")
-            domain_enum = Domain.GENERAL
+        domain_enum = parse_domain(domain)
 
         # Generate unique ID
-        article_id = self._generate_article_id(domain_enum, pub_date, len(self.seen_hashes))
+        article_id = generate_article_id(domain_enum, pub_date, len(self.seen_hashes))
 
         # Extract domain from URL if not provided
         parsed_url = urlparse(url)
@@ -238,15 +226,8 @@ class ArticleCollectorTool(Tool):
         article.word_count = len(article.content.split())
         article.reading_time_minutes = max(1, article.word_count // 200)
         
-        # Store full article using collector if provided, otherwise use internal list
-        # Note: Check 'is not None' because ResultCollector.__bool__ returns False when empty
-        if self.collector is not None:
-            self.collector.add(article)
-            logger.info(f"Added article {article.id} to collector (total now: {self.collector.count()})")
-        else:
-            # Backward compatibility - store in internal list
-            self.collected_articles.append(article)
-            logger.info(f"Added article {article.id} to internal list (total now: {len(self.collected_articles)})")
+        # Store article using unified collector interface
+        self.store_result(article, context=f"Article {article.id}")
         
         # Convert to JSON and return a SUMMARY to save tokens
         # Return only metadata, NOT the full content
@@ -265,13 +246,6 @@ class ArticleCollectorTool(Tool):
         }
         
         return json.dumps(summary, indent=2, default=str)
-    
-    def _generate_article_id(self, domain: Domain, published_date: datetime, counter: int) -> str:
-        """Generate unique article ID."""
-        date_str = published_date.strftime('%Y%m%d')
-        suffix = uuid.uuid4().hex[:8]
-        # Domain is a str enum, so it works directly in f-strings
-        return f"art_{domain.value}_{date_str}_{counter+1:03d}_{suffix}"
     
     def _normalize_url(self, url: str) -> str:
         """Normalize URL for consistent duplicate detection.

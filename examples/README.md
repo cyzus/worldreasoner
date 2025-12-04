@@ -5,12 +5,12 @@ Example scripts demonstrating WorldReasoner functionality.
 
 ## Pipeline Examples
 
-### Question Pipeline (`run_question_pipeline.py`)
+### Goal-Oriented Question Collection (`run_goal_collection.py`)
 
-Generate forecast questions from news sources.
+Collect forecast questions from multiple sources (Polymarket, news) until distribution goals are met.
 
 ```bash
-python examples/run_question_pipeline.py
+python examples/run_goal_collection.py --goal config/collection_goal.yaml --db worldreasoner.db
 ```
 
 ### Evidence Pipeline (`run_evidence_pipeline.py`)
@@ -36,8 +36,8 @@ python examples/run_forecast_smolagents.py
 ### Quick Start
 
 ```bash
-# Generate questions (auto-indexes articles after completion)
-python examples/run_question_pipeline.py
+# Collect questions from multiple sources (auto-indexes articles after completion)
+python examples/run_goal_collection.py --goal config/collection_goal.yaml --db worldreasoner.db
 
 # Build evidence graph (auto-indexes articles after completion)
 python examples/run_evidence_pipeline.py

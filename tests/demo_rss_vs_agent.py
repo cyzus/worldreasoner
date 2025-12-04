@@ -23,6 +23,7 @@ async def demo_rss_approach():
             name="BBC News",
             url="http://feeds.bbci.co.uk/news/rss.xml",
             scraper_type="rss",
+            domain="general"
         )
     ]
     
@@ -106,6 +107,7 @@ async def demo_agent_approach():
             name="BBC News",
             url="https://www.bbc.com/news",
             scraper_type="web",  # Use agent-based
+            domain="general"
         )
     ]
     

@@ -54,13 +54,40 @@ class QuestionPipelineConfig(BaseModel):
     
     # Batch processing settings (for handling large datasets)
     article_batch_size: int = Field(
-        default=50,
+        default=20,
         description="Maximum articles to process in a single batch for event identification"
     )
     event_batch_size: int = Field(
         default=20,
         description="Maximum events to process in a single batch for question generation"
     )
+
+
+class QuestionQualityConfig(BaseModel):
+    """Configuration for the Question Quality Ranking stage."""
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable/disable the quality ranking stage"
+    )
+    batch_size: int = Field(
+        default=20,
+        description="Number of questions to score in a single batch"
+    )
+    timeout: int = Field(
+        default=180,
+        description="Timeout in seconds for quality scoring LLM calls (default 180s for batch processing)"
+    )
+    # Weights for each dimension in the composite score
+    dimension_weights: dict[str, float] = Field(default_factory=lambda: {
+        "interestingness": 1.0,
+        "clarity": 1.0,
+        "verifiability": 1.0,
+        "temporal_validity": 1.0,
+        "context_sufficiency": 1.0,
+        "difficulty_appropriateness": 1.0,
+        "format_consistency": 1.0,
+    })
 
 
 class EvidencePipelineConfig(BaseModel):

@@ -17,6 +17,11 @@ from .evidence_collection import (
     HindsightEvidenceCollectionStage,
     EvidenceCollectionConfig,
 )
+from .target_event_identification import (
+    TargetEventIdentificationStage,
+    TargetEventIdentificationConfig,
+)
+
 from .causal_reasoning import (
     CausalReasoningStage,
     CausalReasoningConfig,
@@ -31,7 +36,7 @@ from .database_persistence import (
     DatabasePersistenceConfig,
     DatabasePersistenceStage,
 )
-from .collectors import ResultCollector
+from src.core.collectors import ResultCollector
 
 __all__ = [
     # Question Pipeline Stages
@@ -44,6 +49,8 @@ __all__ = [
     # Evidence Pipeline Stages
     "HindsightEvidenceCollectionStage",
     "EvidenceCollectionConfig",
+    "TargetEventIdentificationStage",
+    "TargetEventIdentificationConfig",
     "CausalReasoningStage",
     "CausalReasoningConfig",
     "CausalGraphBuildingStage",

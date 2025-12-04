@@ -2,7 +2,7 @@ from datetime import datetime, timezone, timedelta
 import pytest
 
 from src.pipelines.stages.evidence_collection import EvidenceCollectionConfig, HindsightEvidenceCollectionStage
-from src.domain.models.question import Question, QuestionType
+from src.domain.models.question import Question, QuestionType, Domain
 
 
 def make_question(resolution_date: datetime) -> Question:
@@ -10,7 +10,8 @@ def make_question(resolution_date: datetime) -> Question:
         id="q_test_001",
         question_text="Is this a test question that is long enough?",
         question_type=QuestionType.BOOLEAN,
-        domain="test",
+        domain=Domain.TECH,
+        source="test",
         difficulty=1,
         resolution_date=resolution_date,
         ground_truth=True,

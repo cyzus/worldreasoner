@@ -9,6 +9,12 @@ from loguru import logger
 from pathlib import Path
 
 
+def _shorten_name(record):
+    """Filter to shorten module names in logs."""
+    record["extra"]["short_name"] = record["name"].split(".")[-1]
+    return record
+
+
 def setup_logging(
     level: str = "INFO",
     log_file: str = None,
@@ -34,9 +40,10 @@ def setup_logging(
     # Add console handler with nice formatting
     logger.add(
         sys.stderr,
-        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>",
+        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{extra[short_name]:<20}</cyan> - <level>{message}</level>",
         level=level,
-        colorize=True
+        colorize=True,
+        filter=_shorten_name
     )
 
     # Add file handler with rotation

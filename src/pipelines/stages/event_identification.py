@@ -1,15 +1,15 @@
 """Event identification stage for Question Pipeline."""
 
 import json
-from typing import List
+from typing import List, Optional
 from datetime import datetime, timezone
 from pydantic import BaseModel
 
 from ..base import PipelineStage
 from src.domain.models import Article, Event
 from src.agents.factory import AgentFactory
-from .tools import EventIdentifierTool, ArticleRetrievalTool
-from .collectors import ResultCollector
+from src.tools import BatchEventIdentifierTool, ArticleRetrievalTool
+from src.core.collectors import ResultCollector
 from ..prompts import EventIdentificationPrompts
 from src.utils.logging import logger
 from src.utils.usage_tracking import UsageTracker, log_usage
@@ -29,22 +29,27 @@ class EventIdentificationStage(PipelineStage[Article, Event]):
     Agent has access to database to query articles as needed.
     """
     
-    def __init__(self, config: EventIdentificationConfig, db_path: str = "worldreasoner.db"):
+    def __init__(self, config: EventIdentificationConfig, db_path: str = "worldreasoner.db", 
+                 category_hints: Optional[List[str]] = None):
         """Initialize event identification stage.
         
         Args:
             config: Event identification configuration
             db_path: Path to database for article retrieval
+            category_hints: Priority categories/domains needed (e.g., ["finance", "tech"])
         """
         super().__init__(name="EventIdentification", config=config)
         
+        # Store hints for intelligent identification
+        self.category_hints = category_hints
+        
         # Create result collector for events
         self.collector = ResultCollector[Event]()
-        
+
         # Create tools
-        self.event_tool = EventIdentifierTool(collector=self.collector)
+        self.event_tool = BatchEventIdentifierTool(collector=self.collector)
         self.article_retrieval_tool = ArticleRetrievalTool(db_path=db_path)
-        
+
         # Create BaseAgent using factory
         self.base_agent = AgentFactory.create_base_agent(
             tools=[self.event_tool, self.article_retrieval_tool]
@@ -76,7 +81,8 @@ class EventIdentificationStage(PipelineStage[Article, Event]):
             instruction = self.prompts.get_instruction(
                 current_date=current_date,
                 articles=inputs,
-                confidence_threshold=self.config.confidence_threshold
+                confidence_threshold=self.config.confidence_threshold,
+                category_hints=self.category_hints
             )
             
             # Run the agent with the instruction

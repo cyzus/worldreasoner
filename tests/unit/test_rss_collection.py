@@ -5,7 +5,7 @@ import json
 import yaml
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
-from src.pipelines.stages.tools.rss_fetch import RssFetchTool
+from src.tools.rss_fetch import RssFetchTool
 from src.pipelines.stages.article_collection import ArticleCollectionStage, ArticleCollectionConfig, ArticleSource
 
 
@@ -103,6 +103,7 @@ class TestArticleCollectionWithRSS:
                     name=source_data['name'],
                     url=source_data['url'],
                     scraper_type=source_data['scraper_type'],
+                    domain=source_data.get('domain', 'general'),
                     rate_limit_per_second=source_data.get('rate_limit_per_second', 1.0)
                 ))
         return rss_sources
@@ -173,6 +174,7 @@ class TestArticleCollectionWithRSS:
                 name="NPR News",
                 url="https://feeds.npr.org/1001/rss.xml",
                 scraper_type="rss",
+                domain="general",
             )
         ]
 

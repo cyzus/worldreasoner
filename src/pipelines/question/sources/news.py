@@ -1,0 +1,324 @@
+"""News-based question source runner.
+
+Wraps the existing article → event → question pipeline as a question source.
+"""
+
+from typing import List, Optional, Dict, Union
+from datetime import datetime, timezone
+
+from .base import QuestionSourceRunner, CollectionResult
+from src.domain.models import Question
+from src.config.collection_goal import QualityRequirements
+from src.pipelines.stages import (
+    ArticleCollectionStage,
+    ArticleCollectionConfig,
+    EventIdentificationStage,
+    EventIdentificationConfig,
+    QuestionGenerationStage,
+    DatabasePersistenceStage,
+    DatabasePersistenceConfig,
+)
+from src.config.pipeline import QuestionPipelineConfig
+from src.utils.logging import logger
+
+
+class NewsBasedRunner(QuestionSourceRunner):
+    """Question source that uses the news-based pipeline.
+
+    This wraps the existing three-stage pipeline:
+    1. ArticleCollectionStage - Collect articles from RSS/web
+    2. EventIdentificationStage - Extract events from articles
+    3. QuestionGenerationStage - Generate questions from events
+    """
+
+    def __init__(
+        self,
+        article_config: ArticleCollectionConfig,
+        event_config: EventIdentificationConfig,
+        question_config: QuestionPipelineConfig,
+        db_path: str,
+    ):
+        """Initialize news-based runner.
+
+        Args:
+            article_config: Configuration for article collection
+            event_config: Configuration for event identification
+            question_config: Configuration for question generation
+            db_path: Path to database
+        """
+        super().__init__(source_name="news")
+
+        self.article_config = article_config
+        self.event_config = event_config
+        self.question_config = question_config
+        self.db_path = db_path
+
+        # Initialize pipeline stages
+        self.article_stage = ArticleCollectionStage(article_config, db_path=db_path)
+        self.event_stage = EventIdentificationStage(event_config, db_path=db_path)
+        self.question_stage = QuestionGenerationStage(question_config, db_path=db_path)
+
+        # Initialize persistence stages
+        persist_config = DatabasePersistenceConfig(
+            db_path=db_path,
+            batch_size=50
+        )
+        self.article_persist = DatabasePersistenceStage(persist_config, "article")
+        self.event_persist = DatabasePersistenceStage(persist_config, "event")
+        self.question_persist = DatabasePersistenceStage(persist_config, "question")
+    
+    async def collect(
+        self,
+        count: int,
+        type_filter: Optional[List[str]] = None,
+        category_filter: Optional[Union[Dict[str, int], List[str]]] = None,
+        quality_requirements: Optional[QualityRequirements] = None,
+        existing_question_ids: Optional[set] = None,
+    ) -> CollectionResult:
+        """Collect questions from news sources.
+
+        Runs the full article→event→question pipeline with filtering.
+
+        Args:
+            count: Target number of questions
+            type_filter: Only collect these question types
+            category_filter: Dict mapping categories to number still needed
+            quality_requirements: Quality constraints
+            existing_question_ids: Set of existing IDs to skip
+
+        Returns:
+            CollectionResult with questions from news sources
+        """
+        try:
+            logger.info(
+                f"NewsBasedRunner: Collecting {count} questions "
+                f"(types: {type_filter}, categories: {category_filter})"
+            )
+            logger.debug(f"NewsBasedRunner received category_filter: type={type(category_filter)}, value={category_filter}")
+
+            # Stage 1: Collect articles (filter sources by needed categories)
+            logger.info("Stage 1: Collecting articles from news sources...")
+
+            # Filter sources to match needed categories and update config domains
+            sources_to_use = self.article_config.sources
+            # Use 'is not None' instead of truthy check to handle empty dicts
+            if category_filter is not None:
+                if isinstance(category_filter, dict):
+                    filter_keys = list(category_filter.keys())
+                else:
+                    filter_keys = list(category_filter) if category_filter else []
+
+                # Only filter sources if we have specific categories to target
+                if filter_keys:
+                    filtered_sources = [
+                        source for source in self.article_config.sources
+                        if source.domain in filter_keys
+                    ]
+                    if filtered_sources:
+                        sources_to_use = filtered_sources
+                        # Update the article stage config to focus on missing domains
+                        self.article_stage.config.domains = filter_keys
+                        logger.info(f"Filtering to {len(sources_to_use)} sources matching categories: {filter_keys}")
+                    else:
+                        logger.warning(f"No sources match categories {filter_keys}, using all sources")
+                else:
+                    # Empty dict/list means no gaps - don't filter sources but clear domains
+                    logger.debug("Empty category_filter - no specific categories needed")
+                    self.article_stage.config.domains = []
+            
+            article_result = await self.article_stage.execute(sources_to_use, category_filter=category_filter)
+
+            if not article_result.outputs:
+                logger.warning("No articles collected")
+                return CollectionResult(
+                    source_name=self.source_name,
+                    questions=[],
+                    requested_count=count,
+                    actual_count=0,
+                    success=False,
+                    error_message="No articles collected from news sources",
+                )
+
+            articles = article_result.outputs
+            logger.info(f"Collected {len(articles)} articles")
+            # Filter articles by category if hints provided
+            if category_filter is not None and articles:
+                if isinstance(category_filter, dict):
+                    filter_keys = list(category_filter.keys())
+                else:
+                    filter_keys = list(category_filter) if category_filter else []
+
+                # Only filter if we have specific categories
+                if filter_keys:
+                    filtered_articles = [
+                        article for article in articles
+                        if article.domain in filter_keys
+                    ]
+                    if filtered_articles:
+                        logger.info(f"Filtered to {len(filtered_articles)} articles matching categories: {filter_keys}")
+                        articles = filtered_articles
+                    else:
+                        logger.warning(f"No articles match categories {filter_keys}, keeping all {len(articles)} articles")
+
+
+            # Persist articles
+            if articles:
+                await self.article_persist.execute(articles)
+
+            # Stage 2: Identify events with intelligent hints
+            logger.info("Stage 2: Identifying events from articles...")
+            
+            # Pass category hints to guide event identification toward needed categories
+            # Create new stage instance with hints for this specific run
+            event_stage_with_hints = EventIdentificationStage(
+                self.event_config,
+                db_path=self.db_path,
+                category_hints=category_filter  # Tell agent which domains/categories we need
+            )
+            
+            event_result = await event_stage_with_hints.execute_batched(
+                articles,
+                batch_size=self.question_config.article_batch_size
+            )
+
+            if not event_result.outputs:
+                logger.warning("No events identified from articles")
+                return CollectionResult(
+                    source_name=self.source_name,
+                    questions=[],
+                    requested_count=count,
+                    actual_count=0,
+                    success=False,
+                    error_message="No events identified from articles",
+                )
+
+            events = event_result.outputs
+            logger.info(f"Identified {len(events)} events")
+
+            # Persist events
+            if events:
+                await self.event_persist.execute(events)
+
+            # Re-persist articles to save event links
+            if articles:
+                await self.article_persist.execute(articles)
+
+            # Stage 3: Generate questions with intelligent hints
+            logger.info("Stage 3: Generating questions from events...")
+
+            # Pass type/category hints to guide generation intelligently
+            # Create new stage instance with hints for this specific run
+            question_stage_with_hints = QuestionGenerationStage(
+                self.question_config,
+                db_path=self.db_path,
+                type_hints=type_filter,  # Tell agent which types we need
+                category_hints=category_filter,  # Tell agent which categories we need
+                existing_question_ids=existing_question_ids,  # Skip duplicates early
+                target_count=count  # Tell stage exactly how many questions we need
+            )
+            
+            question_result = await question_stage_with_hints.execute_batched(
+                events,
+                batch_size=self.question_config.event_batch_size
+            )
+
+            if not question_result.outputs:
+                logger.warning("No questions generated from events")
+                return CollectionResult(
+                    source_name=self.source_name,
+                    questions=[],
+                    requested_count=count,
+                    actual_count=0,
+                    success=False,
+                    error_message="No questions generated from events",
+                )
+
+            questions = question_result.outputs
+            logger.info(f"Generated {len(questions)} questions")
+
+            # Tag questions with source
+            self._tag_questions_with_source(questions)
+
+            # Apply filters
+            filtered_questions = self._filter_questions(
+                questions,
+                type_filter=type_filter,
+                category_filter=category_filter,
+                quality_requirements=quality_requirements,
+            )
+
+            logger.info(
+                f"After filtering: {len(filtered_questions)} questions "
+                f"(from {len(questions)} total)"
+            )
+
+            # Note: filtered_questions should already be <= count since we passed target_count
+            # to QuestionGenerationStage. Just use them as-is (no slicing needed).
+            final_questions = filtered_questions
+
+            # Persist the final questions that will be returned
+            if final_questions:
+                await self.question_persist.execute(final_questions)
+
+            # Update events with question links (bidirectional relationship)
+            # Questions already have target_event_id and related_event_ids
+            # Now add the reverse direction: events pointing to questions
+            event_map = {event.id: event for event in events}
+
+            for question in final_questions:
+                # Add this question to all related events
+                for event_id in question.related_event_ids:
+                    if event_id in event_map:
+                        event = event_map[event_id]
+                        if 'related_question_ids' not in event.metadata:
+                            event.metadata['related_question_ids'] = []
+                        if question.id not in event.metadata['related_question_ids']:
+                            event.metadata['related_question_ids'].append(question.id)
+                            logger.debug(f"Linked event {event_id} to question {question.id}")
+
+            # Re-persist events to save updated question links
+            if events:
+                await self.event_persist.execute(events)
+
+            return CollectionResult(
+                source_name=self.source_name,
+                questions=final_questions,
+                requested_count=count,
+                actual_count=len(final_questions),
+                success=True,
+                metadata={
+                    "articles_collected": len(articles),
+                    "events_identified": len(events),
+                    "questions_generated": len(questions),
+                    "questions_after_filter": len(filtered_questions),
+                },
+            )
+
+        except Exception as e:
+            logger.error(f"NewsBasedRunner error: {e}")
+            return CollectionResult(
+                source_name=self.source_name,
+                questions=[],
+                requested_count=count,
+                actual_count=0,
+                success=False,
+                error_message=str(e),
+            )
+
+    async def can_provide(
+        self,
+        question_type: Optional[str] = None,
+        category: Optional[str] = None,
+    ) -> bool:
+        """Check if news sources can provide questions of given type/category.
+
+        Args:
+            question_type: Question type to check
+            category: Category to check
+
+        Returns:
+            True (news sources can provide all types/categories)
+        """
+        # News sources can potentially provide any type of question
+        # depending on what's in the news
+        return True

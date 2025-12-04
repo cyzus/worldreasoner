@@ -2,15 +2,15 @@
 
 import json
 import asyncio
-from typing import List, Optional
+from typing import List, Optional, Dict, Union
 from datetime import datetime
 from pydantic import BaseModel
 
-from ..base import PipelineStage
+from ..base import PipelineStage, PipelineStageResult
 from src.domain.models import Article
 from src.agents.factory import AgentFactory
-from .tools import ArticleCollectorTool, RssFetchTool
-from .collectors import ResultCollector
+from src.tools import ArticleCollectorTool, RssFetchTool
+from src.core.collectors import ResultCollector
 from ..prompts import ArticleCollectionPrompts
 from src.utils.logging import logger
 from src.utils.usage_tracking import UsageTracker, log_usage
@@ -21,6 +21,7 @@ class ArticleSource(BaseModel):
     name: str
     url: str
     scraper_type: str  # "rss", "web", "api"
+    domain: str  # Domain category for articles from this source
     auth_token: Optional[str] = None
     rate_limit_per_second: float = 1.0
 
@@ -65,13 +66,43 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
 
         # Usage tracking
         self.usage_tracker = UsageTracker()
+
+        # Category filter (set during execute)
+        self._category_filter = None
     
-    async def _fetch_rss_item_async(self, item: dict, source_name: str) -> bool:
+    async def execute(self, inputs: List[ArticleSource], category_filter: Optional[Union[Dict[str, int], List[str]]] = None) -> PipelineStageResult[Article]:
+        """Execute article collection with optional category filtering.
+
+        Args:
+            inputs: List of article sources to scrape
+            category_filter: Optional dict mapping categories to number needed
+
+        Returns:
+            PipelineStageResult with collected articles
+        """
+        # Store category filter for use in processing
+        self._category_filter = category_filter
+        logger.debug(f"ArticleCollectionStage.execute() received category_filter: {category_filter}")
+
+        # If a dict of category gaps is provided, prefer its keys as the
+        # active domains so prompts and downstream filtering reflect the
+        # actual missing categories (not the original full domain list).
+        if isinstance(category_filter, dict):
+            try:
+                self.config.domains = list(category_filter.keys())
+            except Exception:
+                # Be defensive: if something goes wrong, keep existing domains
+                logger.debug("Failed to set domains from category_filter; using existing domains")
+        
+        # Call parent execute method
+        return await super().execute(inputs)
+    
+    async def _fetch_rss_item_async(self, item: dict, source: ArticleSource) -> bool:
         """Fetch a single RSS item asynchronously.
         
         Args:
             item: RSS feed item with title, link, published
-            source_name: Name of the source
+            source: Article source configuration
             
         Returns:
             True if successfully collected, False otherwise
@@ -95,8 +126,8 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
                 lambda: self.article_tool.forward(
                     url=link,
                     title=title,
-                    source=source_name,
-                    domain="general",  # Default domain category for RSS articles
+                    source=source.name,
+                    domain=source.domain,  # Use actual domain from source config
                     published_date=published,
                     author=author
                 )
@@ -144,7 +175,7 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
             
             # Fetch all items concurrently using asyncio.gather
             logger.info(f"[RSS] Fetching {len(items)} items concurrently...")
-            tasks = [self._fetch_rss_item_async(item, source.name) for item in items]
+            tasks = [self._fetch_rss_item_async(item, source) for item in items]
             results = await asyncio.gather(*tasks, return_exceptions=True)
             
             # Count successful fetches (ignore exceptions)
@@ -175,10 +206,31 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
             # Limit to 3 articles per source to keep token usage reasonable
             max_articles = min(self.config.max_articles_per_source or 3, 3)
             
-            # Build domain context
+            # Build domain context from category filter if provided
             domain_context = ""
-            if self.config.domains:
+            logger.debug(f"_collect_from_web_agent: self._category_filter = {self._category_filter}")
+            if self._category_filter is not None:
+                if isinstance(self._category_filter, dict):
+                    if self._category_filter:  # Non-empty dict
+                        # Build specific context with gap amounts
+                        gap_parts = []
+                        for category, needed in self._category_filter.items():
+                            gap_parts.append(f"{needed} more in {category}")
+                        domain_context = f" We need: {', '.join(gap_parts)}."
+                        logger.debug(f"Using category gaps for domain context: {list(self._category_filter.keys())}")
+                    else:
+                        logger.debug("Empty category_filter dict - no domain context needed")
+                    # else: empty dict means no specific gaps, skip domain context
+                elif self._category_filter:  # Non-empty list
+                    # Fallback for list format
+                    domain_context = f" Focus on topics related to: {', '.join(self._category_filter)}."
+                    logger.debug(f"Using category list for domain context: {self._category_filter}")
+            elif self.config.domains:
+                # Only use config.domains if no category_filter was provided at all
+                logger.warning(f"No category_filter provided, falling back to ALL config.domains: {self.config.domains}")
                 domain_context = f" Focus on topics related to: {', '.join(self.config.domains)}."
+            else:
+                logger.debug("No domain context available")
             
             # Get instruction from prompts module
             instruction = self.prompts.get_instruction(

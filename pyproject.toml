@@ -30,7 +30,7 @@ dependencies = [
     "pydantic-settings>=2.11.0",
     "python-dotenv",
     "pyyaml>=6.0.3",
-    "smolagents[toolkit,litellm,mcp]>=1.22.0",
+    "smolagents[litellm,mcp,toolkit]>=1.22.0",
     "crawl4ai>=0.4.0",
     "feedparser>=6.0.0",
     "fastapi>=0.115.0",

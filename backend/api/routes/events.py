@@ -130,8 +130,11 @@ async def get_event_questions(event_id: str):
 
     Returns:
         List of questions that reference this event (as target or related event)
+        or were linked via evidence pipeline/causal hypotheses
     """
     try:
+        from src.domain.models import CausalHypothesis
+        
         db = GenericDatabase("worldreasoner.db")
         event = db.get(Event, event_id)
 
@@ -141,13 +144,46 @@ async def get_event_questions(event_id: str):
         # Fetch all questions
         all_questions = db.get_many(Question)
 
-        # Filter questions that reference this event
-        related_questions = [
+        # 1. Direct references: questions with this event as target or related
+        directly_related = [
             q for q in all_questions
             if q.target_event_id == event_id or event_id in q.related_event_ids
         ]
 
-        logger.info(f"Found {len(related_questions)} questions for event {event_id}")
+        # 2. Reverse lookup: questions that discovered this event via evidence pipeline
+        # Check metadata for extracted_events or other evidence collection markers
+        evidence_related = [
+            q for q in all_questions
+            if hasattr(q, 'metadata') and q.metadata and event_id in q.metadata.get("extracted_events", [])
+        ]
+
+        # 3. Causal hypothesis links: find questions linked via hypotheses
+        all_hypotheses = db.get_many(CausalHypothesis)
+        hypothesis_question_ids = set()
+        for h in all_hypotheses:
+            # Check if event is source or target of causal relationship
+            if event_id == h.source_event_id or event_id == h.target_event_id:
+                # Add all questions that discovered this hypothesis
+                hypothesis_question_ids.update(h.discovered_by_question_ids)
+
+        hypothesis_related = [
+            q for q in all_questions
+            if q.id in hypothesis_question_ids
+        ]
+
+        # Combine and deduplicate
+        seen_ids = set()
+        related_questions = []
+        for q in directly_related + evidence_related + hypothesis_related:
+            if q.id not in seen_ids:
+                related_questions.append(q)
+                seen_ids.add(q.id)
+
+        logger.info(
+            f"Found {len(related_questions)} questions for event {event_id} "
+            f"(direct={len(directly_related)}, evidence={len(evidence_related)}, "
+            f"hypothesis={len(hypothesis_related)})"
+        )
         return {"questions": related_questions, "total": len(related_questions)}
 
     except HTTPException:

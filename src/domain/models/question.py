@@ -18,7 +18,7 @@ class QuestionType(str, Enum):
     TIMEFRAME = "timeframe"
 
 
-@register_model('questions', indexes=['domain', 'difficulty'])
+@register_model('questions', indexes=['domain', 'difficulty', 'source'])
 class Question(BaseModel):
     """Benchmark forecast question.
     
@@ -34,6 +34,7 @@ class Question(BaseModel):
     
     # Classification
     domain: Domain = Field(..., description="Primary domain")
+    source: str = Field(..., description="Source system that generated this question (e.g., 'polymarket', 'news', 'synthetic')")
     difficulty: int = Field(..., ge=1, le=5, description="Difficulty rating 1-5")
 
     # Temporal boundaries
@@ -90,8 +91,24 @@ class Question(BaseModel):
     
     # Metadata
     is_synthetic: bool = Field(default=False, description="Whether question uses synthetic data")
+    quality_score: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description="Composite quality score (0.0-1.0), null if not scored"
+    )
+    quality_dimensions: Optional[Dict[str, float]] = Field(
+        None,
+        description="Detailed scores for each quality dimension"
+    )
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
+
+    # Source-specific metadata (stores extra fields from various question sources)
+    metadata: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Additional metadata from question source (market_id, clob_token_ids, etc.)"
+    )
 
     model_config = ConfigDict(
         extra="allow",  # Allow transient fields like cutoff_date during evaluation

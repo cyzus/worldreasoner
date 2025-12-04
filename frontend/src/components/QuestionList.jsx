@@ -1,0 +1,176 @@
+import React, { useState, useEffect, useMemo } from 'react'
+import './QuestionList.css'
+
+const QuestionList = ({ questions, selectedQuestionId, onQuestionSelect, onClose }) => {
+  const [searchTerm, setSearchTerm] = useState('')
+  const [domainFilter, setDomainFilter] = useState('all')
+  const [difficultyFilter, setDifficultyFilter] = useState('all')
+  const [sourceFilter, setSourceFilter] = useState('all')
+
+  // Extract unique values for filters
+  const domains = useMemo(() => {
+    const domainSet = new Set(questions.map(q => q.domain))
+    return Array.from(domainSet).sort()
+  }, [questions])
+
+  const sources = useMemo(() => {
+    const sourceSet = new Set(questions.map(q => q.source || 'unknown'))
+    return Array.from(sourceSet).sort()
+  }, [questions])
+
+  // Filter questions based on all criteria
+  const filteredQuestions = useMemo(() => {
+    return questions.filter(q => {
+      // Search term
+      if (searchTerm && !q.question_text.toLowerCase().includes(searchTerm.toLowerCase())) {
+        return false
+      }
+
+      // Domain filter
+      if (domainFilter !== 'all' && q.domain !== domainFilter) {
+        return false
+      }
+
+      // Difficulty filter
+      if (difficultyFilter !== 'all' && q.difficulty !== parseInt(difficultyFilter)) {
+        return false
+      }
+
+      // Source filter
+      const questionSource = q.source || 'unknown'
+      if (sourceFilter !== 'all' && questionSource !== sourceFilter) {
+        return false
+      }
+
+      return true
+    })
+  }, [questions, searchTerm, domainFilter, difficultyFilter, sourceFilter])
+
+  const handleClearFilters = () => {
+    setSearchTerm('')
+    setDomainFilter('all')
+    setDifficultyFilter('all')
+    setSourceFilter('all')
+  }
+
+  const hasActiveFilters = searchTerm || domainFilter !== 'all' || difficultyFilter !== 'all' || sourceFilter !== 'all'
+
+  return (
+    <div className="question-list-panel">
+      <div className="question-list-filters">
+        <input
+          type="text"
+          className="search-box"
+          placeholder="Search questions..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+
+        <div className="filter-row">
+          <select
+            className="filter-select"
+            value={domainFilter}
+            onChange={(e) => setDomainFilter(e.target.value)}
+          >
+            <option value="all">All Domains</option>
+            {domains.map(domain => (
+              <option key={domain} value={domain}>{domain}</option>
+            ))}
+          </select>
+
+          <select
+            className="filter-select"
+            value={difficultyFilter}
+            onChange={(e) => setDifficultyFilter(e.target.value)}
+          >
+            <option value="all">All Difficulties</option>
+            <option value="1">1 - Easy</option>
+            <option value="2">2</option>
+            <option value="3">3 - Medium</option>
+            <option value="4">4</option>
+            <option value="5">5 - Hard</option>
+          </select>
+        </div>
+
+        <div className="filter-row">
+          <select
+            className="filter-select"
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value)}
+          >
+            <option value="all">All Sources</option>
+            {sources.map(source => (
+              <option key={source} value={source}>{source}</option>
+            ))}
+          </select>
+
+          {hasActiveFilters && (
+            <button className="clear-filters-btn" onClick={handleClearFilters}>
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="question-list-content">
+        {filteredQuestions.length === 0 ? (
+          <div className="question-list-empty">
+            <div className="question-list-empty-icon">📋</div>
+            <div>No questions found</div>
+            {hasActiveFilters && <div style={{ fontSize: '12px', marginTop: '8px' }}>Try adjusting your filters</div>}
+          </div>
+        ) : (
+          filteredQuestions.map(q => (
+            <div
+              key={q.id}
+              className={`question-list-item ${selectedQuestionId === q.id ? 'selected' : ''}`}
+              onClick={() => onQuestionSelect(q.id)}
+            >
+              <div className="question-item-header">
+                <div className="question-item-badges">
+                  <span className="badge domain">{q.domain}</span>
+                  <span className={`badge difficulty difficulty-${q.difficulty}`}>
+                    Lvl {q.difficulty}
+                  </span>
+                </div>
+              </div>
+              <div className="question-item-text">{q.question_text}</div>
+              <div className="question-item-meta">
+                <div className="meta-item">
+                  <span className="meta-label">Type:</span>
+                  <span>{q.question_type}</span>
+                </div>
+                {q.source && (
+                  <div className="meta-item">
+                    <span className="meta-label">Source:</span>
+                    <span>{q.source}</span>
+                  </div>
+                )}
+                {q.target_event_id && (
+                  <div className="meta-item">
+                    <span className="meta-label">📍</span>
+                    <span>Has target event</span>
+                  </div>
+                )}
+                {q.related_event_ids && q.related_event_ids.length > 0 && (
+                  <div className="meta-item">
+                    <span className="meta-label">🔗</span>
+                    <span>{q.related_event_ids.length} related</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {filteredQuestions.length > 0 && (
+        <div className="question-list-stats">
+          Showing {filteredQuestions.length} of {questions.length} questions
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default QuestionList

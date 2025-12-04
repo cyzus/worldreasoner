@@ -29,8 +29,11 @@ class EventStatus(str, Enum):
 class CausalRelationType(str, Enum):
     """Type of causal relationship between events."""
     CAUSES = "causes"              # Direct causation
-    ENABLES = "enables"            # Makes possible
-    PREVENTS = "prevents"          # Blocks or inhibits
+    ENABLES = "enables"            # Makes possible (binary prerequisite)
+    PREVENTS = "prevents"          # Completely blocks or stops
+    INHIBITS = "inhibits"          # Reduces likelihood or intensity
+    AMPLIFIES = "amplifies"        # Increases intensity or severity
+    TRIGGERS = "triggers"          # Causes immediate or sudden onset
     CORRELATES = "correlates"      # Associated but not causal
     CONDITIONAL = "conditional"    # Causes only if conditions met
 

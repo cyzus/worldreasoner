@@ -1,16 +1,16 @@
 """Result collection utilities for pipeline stages.
 
-Provides a clean separation between tool processing logic and result storage,
-making tools stateless and reusable across different pipeline runs.
+DEPRECATED: This module has been moved to src.core.collectors.
+This file remains for backward compatibility only.
 """
 
-from typing import Generic, List, TypeVar, Optional
+# Re-export from new location for backward compatibility
+from src.core.collectors import ResultCollector
 
+__all__ = ["ResultCollector"]
 
-T = TypeVar('T')
-
-
-class ResultCollector(Generic[T]):
+# Old implementation moved to src.core.collectors
+# Keeping this file to avoid breaking any existing imports that haven't been updated yet
     """Generic collector for accumulating results from tool executions.
     
     This class provides a clean separation of concerns:
