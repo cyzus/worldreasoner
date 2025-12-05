@@ -128,7 +128,7 @@ class CausalReasonerTool(Tool):
         strength: float,
         confidence: float,
         reasoning: str,
-        evidence_article_ids: str,
+        evidence_article_ids: str = "",
     ) -> str:
         """Record a causal hypothesis with supporting evidence.
 

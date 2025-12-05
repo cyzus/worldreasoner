@@ -44,7 +44,7 @@ class HindsightAgent(BaseAgent):
             - Try multiple search queries if initial results are insufficient
             - Broaden time windows if needed
             - Fetch and analyze article content
-            - Articles are automatically saved to database when collected
+            - Finally, you MUST use the collector tool to save relevant articles to the database
 
             Returns detailed evidence including article ids for causal analysis."""
         )
