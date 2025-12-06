@@ -1,3 +1,5 @@
+from typing import Optional
+
 from src.agents.base import BaseAgent
 from src.config import Config, get_config
 from smolagents import CodeAgent, LiteLLMModel
@@ -5,6 +7,7 @@ from src.tools import (ArticleRetrievalTool, ArticleCollectorTool,
                        WebFetchTool, WebSearchTool,
                        EventDetailsTool, EventIdentifierTool,
                        CausalReasonerTool, GraphInspectorTool)
+
 
 class HindsightAgent(BaseAgent):
     """Manager agent for building deep causal explanations with hindsight.
@@ -15,12 +18,33 @@ class HindsightAgent(BaseAgent):
     3. Quality evaluation and iteration
     """
 
-    def __init__(self, config: Config = None, tools: list = [], max_steps: int = 30,
-                 is_code: bool = True, db_path: str = "worldreasoner.db"):
+    def __init__(
+        self,
+        config: Config = None,
+        tools: list = [],
+        max_steps: int = 30,
+        is_code: bool = True,
+        db_path: str = "worldreasoner.db",
+        question_id: Optional[str] = None,
+        target_event_id: Optional[str] = None,
+    ):
+        """Initialize the HindsightAgent.
 
+        Args:
+            config: Configuration object
+            tools: Additional tools for the manager agent
+            max_steps: Maximum steps for the manager agent
+            is_code: Whether to use CodeAgent
+            db_path: Path to the database
+            question_id: Question ID for provenance tracking (passed to all tools)
+            target_event_id: Target event ID for causal graph building
+        """
         # Initialize config and model first (needed for managed agents)
         if config is None:
             config = get_config()
+
+        self.question_id = question_id
+        self.target_event_id = target_event_id
 
         llm_model = LiteLLMModel(
             model_id=config.llm.model,
@@ -28,10 +52,11 @@ class HindsightAgent(BaseAgent):
         )
 
         # Evidence gathering specialist (web search, article collection)
+        # Tools get question_id for provenance tracking
         evidence_agent = CodeAgent(
             model=llm_model,
             tools=[
-                ArticleCollectorTool(db_path=db_path),  # Persist articles to DB
+                ArticleCollectorTool(db_path=db_path, question_id=question_id),  # Provenance-aware
                 WebFetchTool(),
                 WebSearchTool(),
             ],
@@ -50,12 +75,13 @@ class HindsightAgent(BaseAgent):
         )
 
         # Causal analysis specialist (event creation, graph building, depth evaluation)
+        # Tools get question_id for provenance tracking
         causal_agent = CodeAgent(
             model=llm_model,
             tools=[
-                EventIdentifierTool(db_path=db_path),  # Persist events to DB
-                EventDetailsTool(db_path=db_path),  # Get details about existing events
-                CausalReasonerTool(db_path=db_path),  # Persist hypotheses to DB
+                EventIdentifierTool(db_path=db_path, question_id=question_id),  # Provenance-aware
+                EventDetailsTool(db_path=db_path),
+                CausalReasonerTool(db_path=db_path, question_id=question_id),  # Provenance-aware
                 GraphInspectorTool(db_path=db_path),
                 ArticleRetrievalTool(db_path=db_path)
             ],
@@ -68,12 +94,11 @@ class HindsightAgent(BaseAgent):
 
             Process:
             1. If target_event_id is provided, use EventDetailsTool to understand it
-            2. Otherwise, create target event for the question using event_identifier
-            3. Identify immediate causes (level 1) that lead to the target
-            4. For each cause, ask "What caused THIS?" and create intermediate events (level 2+)
-            5. Use graph_inspector to check depth - iterate if < 2 levels
-            6. Build causal chains: Root → Intermediate → Immediate → TARGET
-            
+            2. Identify immediate causes (level 1) that lead to the target
+            3. For each cause, ask "What caused THIS?" and create intermediate events (level 2+)
+            4. Use graph_inspector to check depth - iterate if < 2 levels
+            5. Build causal chains: Root → Intermediate → Immediate → TARGET
+
             IMPORTANT: All causal chains must ultimately connect to the target event!
             Use causal_reasoner with the correct target_event_id for final-stage links.
 

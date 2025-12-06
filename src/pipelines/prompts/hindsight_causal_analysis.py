@@ -40,6 +40,7 @@ PROCESS:
 
    CRITICAL: When calling event_identifier and causal_reasoner tools,
    use question_id='{question_id}' (not any other ID!).
+   Make sure you provide the related article IDs from evidence_collector.
 
    {causal_graph_instructions}
 

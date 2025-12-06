@@ -49,10 +49,27 @@ class BatchArticleCollectorTool(CollectorAwareTool[Article]):
     }
     output_type = "string"
 
-    def __init__(self, db=None, db_path: str = None, collector=None, default_domain: Optional[str] = None):
+    def __init__(
+        self,
+        db=None,
+        db_path: str = None,
+        collector=None,
+        default_domain: Optional[str] = None,
+        question_id: Optional[str] = None,
+    ):
+        """Initialize the batch article collector.
+
+        Args:
+            db: Optional database instance
+            db_path: Optional database path
+            collector: Optional result collector
+            default_domain: Default domain for articles
+            question_id: Question ID for provenance tracking (sets collected_for_question_id)
+        """
         super().__init__(collector)
         self.web_visitor = WebFetchTool()
         self.default_domain = default_domain
+        self.question_id = question_id  # Provenance context
         # Precompute domain list for descriptions
         self._domain_list = ", ".join(enum_to_list(Domain))
 
@@ -115,6 +132,12 @@ class BatchArticleCollectorTool(CollectorAwareTool[Article]):
             # Generate ID (DB-backed systems may de-duplicate at save time)
             article_id = generate_article_id(domain_enum, pub_date, idx)
 
+            # Build metadata with provenance info
+            metadata = {}
+            if self.question_id:
+                metadata['evidence_type'] = 'hindsight'
+                metadata['related_question_ids'] = [self.question_id]
+
             article = Article(
                 id=article_id,
                 title=title,
@@ -128,7 +151,8 @@ class BatchArticleCollectorTool(CollectorAwareTool[Article]):
                 reading_time_minutes=max(1, len(content.split()) // 200),
                 tags=[],
                 event_ids=[],
-                metadata={}
+                collected_for_question_id=self.question_id,  # Provenance tracking
+                metadata=metadata
             )
 
             # Persist via unified collector interface (and optional DB)

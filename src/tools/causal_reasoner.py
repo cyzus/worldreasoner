@@ -101,17 +101,24 @@ class CausalReasonerTool(Tool):
     }
     output_type = "string"  # JSON confirmation
 
-    def __init__(self, collector: Optional[ResultCollector[CausalHypothesis]] = None, db_path: str = None):
+    def __init__(
+        self,
+        collector: Optional[ResultCollector[CausalHypothesis]] = None,
+        db_path: str = None,
+        question_id: Optional[str] = None,
+    ):
         """Initialize the causal reasoner tool.
 
         Args:
             collector: Optional ResultCollector for storing hypotheses
             db_path: Optional database path for persisting hypotheses
+            question_id: Default question ID for provenance (used if not passed in forward())
         """
         super().__init__()
         self.collector = collector
         self.hypotheses = []  # Fallback for backward compatibility
         self._counter = 0  # For generating hypothesis IDs
+        self.default_question_id = question_id  # Default context if agent forgets
 
         # Database for persistence
         self.db = None
@@ -145,6 +152,10 @@ class CausalReasonerTool(Tool):
         Returns:
             JSON confirmation with hypothesis ID
         """
+        # Use default question_id if not provided or empty
+        if not question_id and self.default_question_id:
+            question_id = self.default_question_id
+
         # Validate and parse relation type
         try:
             relation = CausalRelationType(relation_type.lower())

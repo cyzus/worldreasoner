@@ -69,7 +69,13 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
     }
     output_type = "string"  # JSON string
     
-    def __init__(self, db=None, db_path: str = None, collector=None):
+    def __init__(
+        self,
+        db=None,
+        db_path: str = None,
+        collector=None,
+        question_id: Optional[str] = None,
+    ):
         """Initialize the article collector.
 
         Args:
@@ -77,14 +83,16 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             db_path: Optional path to database file (creates new Database with schema if provided)
             collector: Optional ResultCollector[Article] for storing results.
                       If provided, articles are added to the collector instead of internal storage.
+            question_id: Question ID for provenance tracking (sets collected_for_question_id)
         """
         super().__init__(collector)
         self.config = None
         self.seen_hashes = set()  # For in-memory deduplication within this run
         self.web_visitor = WebFetchTool()  # Internal tool for fetching content
+        self.question_id = question_id  # Provenance context
 
-        logger.info(f"ArticleCollectorTool initialized with collector: {collector is not None}")
-        
+        logger.info(f"ArticleCollectorTool initialized with collector: {collector is not None}, question_id: {question_id}")
+
         # Database for cross-run deduplication (optional)
         self.db = None
         if db:
@@ -206,6 +214,12 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         # Store normalized URL for consistency
         normalized_url = self._normalize_url(url)
 
+        # Build metadata with provenance info
+        metadata = {}
+        if self.question_id:
+            metadata['evidence_type'] = 'hindsight'
+            metadata['related_question_ids'] = [self.question_id]
+
         # Create Article object
         article = Article(
             id=article_id,
@@ -220,6 +234,8 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             event_ids=[],  # Initialize with empty list (will be populated later in pipeline)
             is_synthetic=False,
             language='en',
+            collected_for_question_id=self.question_id,  # Provenance tracking
+            metadata=metadata,
         )
         
         # Calculate metadata

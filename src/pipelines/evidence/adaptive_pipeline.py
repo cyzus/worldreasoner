@@ -67,14 +67,10 @@ class AdaptiveEvidencePipeline(EvidencePipeline):
         # Initialize prompt generator
         self.prompts = HindsightCausalAnalysisPrompts()
 
-        # Initialize HindsightAgent if using agent mode
+        # Agent will be created per-question with context (not here)
+        # This ensures proper provenance tracking
         if self.use_agents:
-            logger.info("Initializing adaptive multi-agent system...")
-            self.hindsight_agent = HindsightAgent(
-                db_path=database_config.db_path,
-                max_steps=agent_max_steps
-            )
-            logger.info(f"✓ HindsightAgent initialized (max_steps={agent_max_steps})")
+            logger.info("Adaptive multi-agent mode enabled (agents created per-question with provenance context)")
 
     async def _process_single_question(self, question: Question) -> dict:
         """Process a single question using adaptive agents or fallback to base pipeline.
@@ -94,6 +90,9 @@ class AdaptiveEvidencePipeline(EvidencePipeline):
     async def _process_with_agents(self, question: Question) -> dict:
         """Process question using HindsightAgent multi-agent system.
 
+        Creates a new agent per question with provenance context, ensuring
+        all articles, events, and hypotheses are properly linked to the question.
+
         Args:
             question: Question to process
 
@@ -101,6 +100,16 @@ class AdaptiveEvidencePipeline(EvidencePipeline):
             Dictionary with results
         """
         logger.info(f"[AGENT MODE] Processing question: {question.id}")
+
+        # Create agent WITH question context for provenance tracking
+        # This ensures all tools know which question they're serving
+        hindsight_agent = HindsightAgent(
+            db_path=self.database_config.db_path,
+            max_steps=self.agent_max_steps,
+            question_id=question.id,  # Provenance context
+            target_event_id=question.target_event_id,  # Target for causal graph
+        )
+        logger.debug(f"[{question.id}] Created context-aware HindsightAgent")
 
         # Construct agent prompt using prompt generator
         prompt = self.prompts.get_agent_prompt(
@@ -114,7 +123,7 @@ class AdaptiveEvidencePipeline(EvidencePipeline):
         try:
             # Run agent in thread pool to avoid blocking
             logger.debug(f"[{question.id}] Starting HindsightAgent...")
-            result = await asyncio.to_thread(self.hindsight_agent.run, prompt)
+            result = await asyncio.to_thread(hindsight_agent.run, prompt)
             logger.info(f"[{question.id}] Agent completed successfully")
 
             # Extract results from database (agent persisted everything)

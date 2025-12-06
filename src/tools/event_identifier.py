@@ -61,21 +61,34 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
     
     # Auto-generate inputs from Enum classes (single source of truth)
     inputs = {
-        "title": {"type": "string", "description": "Short event title"},
-        "description": {"type": "string", "description": "Detailed event description"},
+        "title": {
+            "type": "string", 
+            "description": "Short event title"
+            },
+        "description": {
+            "type": "string", 
+            "description": "Detailed event description"
+            },
         "domain": {
             "type": "string",
             "description": f"Event domain - one of: {', '.join(enum_to_list(Domain))}",
             "enum": enum_to_list(Domain)
         },
-        "occurred_date": {"type": "string", "description": "When event occurred (ISO 8601 WITH timezone, e.g. 2025-11-27T14:30:00Z or 2025-11-27T14:30:00+00:00; MUST include 'Z' or an explicit offset)", "nullable": True},
+        "occurred_date": {
+            "type": "string", 
+            "description": "When event occurred (ISO 8601 WITH timezone, e.g. 2025-11-27T14:30:00Z or 2025-11-27T14:30:00+00:00; MUST include 'Z' or an explicit offset)", 
+            "nullable": True},
         "event_type": {
             "type": "string",
             "description": f"Event type - one of: {', '.join(enum_to_list(EventType))}",
             "enum": enum_to_list(EventType),
             "nullable": True
         },
-        "source_article_ids": {"type": "string", "description": "Comma-separated article IDs", "nullable": True},
+        "source_article_ids": 
+            {
+                "type": "string", 
+                "description": "Comma-separated article IDs", 
+            },
     }
     output_type = "string"  # JSON string
     
@@ -86,6 +99,7 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
         deduplicate: bool = True,
         time_window_days: int = 60,
+        question_id: Optional[str] = None,
     ):
         """Initialize the event identifier.
 
@@ -95,14 +109,16 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
             similarity_threshold: Minimum similarity score for deduplication (0.0-1.0).
             deduplicate: Whether to check for existing similar events.
             time_window_days: Time window for temporal proximity matching.
+            question_id: Question ID for provenance tracking (sets extracted_for_question_id)
         """
         super().__init__(collector)
         self.db = None
         self.similarity_threshold = similarity_threshold
         self.deduplicate = deduplicate
         self.time_window_days = time_window_days
+        self.question_id = question_id  # Provenance context
         self._matcher: Optional[SimilarityMatcher] = None
-        
+
         if db_path:
             from src.core.database import GenericDatabase
             self.db = GenericDatabase(db_path)
@@ -119,9 +135,9 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
         title: str,
         description: str,
         domain: str,
+        source_article_ids: str,
         occurred_date: str = None,
         event_type: str = None,
-        source_article_ids: str = None
     ) -> str:
         """Store event data and return as structured JSON.
 
@@ -281,6 +297,15 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
         # Determine status based on date
         status = EventStatus.OCCURRED if event_date <= datetime.now(timezone.utc) else EventStatus.PREDICTED
 
+        # Build metadata with provenance info
+        metadata = {}
+        if self.question_id:
+            metadata['related_question_ids'] = [self.question_id]
+            metadata['extracted_for_evidence'] = True
+
+        # Determine source article (first article in list)
+        source_article_id = article_ids[0] if article_ids else None
+
         # Create Event object
         event = Event(
             id=event_id,
@@ -292,9 +317,12 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
             predicted_date=event_date if status == EventStatus.PREDICTED else None,
             status=status,
             article_ids=article_ids,
-            is_synthetic=False
+            extracted_for_question_id=self.question_id,  # Provenance tracking
+            source_article_id=source_article_id,  # Link to source article
+            is_synthetic=False,
+            metadata=metadata,
         )
-        
+
         # Store event using unified collector interface
         self.store_result(event, context=f"Event {event.id}")
 
