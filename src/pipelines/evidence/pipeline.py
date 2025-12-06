@@ -475,8 +475,14 @@ class EvidencePipeline(Pipeline):
 
             resolved.append(q)
 
-        # Sort by quality score (descending) if threshold is applied
-        if self.min_quality_score is not None:
+        # Sort questions based on mode
+        if not self.evidence_config.skip_already_processed:
+            # Force-reprocess mode: prioritize already-processed questions first
+            # (the whole point is to reprocess them!)
+            resolved.sort(key=lambda q: (q.id not in processed_question_ids, -(q.quality_score or 0.0)))
+            logger.info("Prioritizing already-processed questions for reprocessing")
+        elif self.min_quality_score is not None:
+            # Normal mode with quality filter: sort by quality score only
             resolved.sort(key=lambda q: q.quality_score or 0.0, reverse=True)
             logger.info(f"Prioritizing questions by quality score (min_score={self.min_quality_score}).")
 
