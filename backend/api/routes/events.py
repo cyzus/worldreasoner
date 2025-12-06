@@ -151,11 +151,18 @@ async def get_event_questions(event_id: str):
         ]
 
         # 2. Reverse lookup: questions that discovered this event via evidence pipeline
-        # Check metadata for extracted_events or other evidence collection markers
-        evidence_related = [
-            q for q in all_questions
-            if hasattr(q, 'metadata') and q.metadata and event_id in q.metadata.get("extracted_events", [])
-        ]
+        # Use explicit provenance field with fallback to metadata
+        evidence_related = []
+        for q in all_questions:
+            # Skip if already found
+            if q in directly_related:
+                continue
+            # Check if this event was extracted for this question
+            if event.extracted_for_question_id == q.id:
+                evidence_related.append(q)
+            # Fallback to metadata for pre-migration data
+            elif event.metadata.get('related_question_ids') and q.id in event.metadata['related_question_ids']:
+                evidence_related.append(q)
 
         # 3. Causal hypothesis links: find questions linked via hypotheses
         all_hypotheses = db.get_many(CausalHypothesis)

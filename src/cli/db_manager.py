@@ -112,6 +112,9 @@ class QuestionManager:
     def analyze_cascade(self, question_id: str) -> Dict:
         """Analyze what would be deleted if this question is removed.
 
+        Uses explicit provenance fields (collected_for_question_id, extracted_for_question_id)
+        with fallback to metadata for backward compatibility.
+
         Returns:
             Dict with 'orphaned' (will delete) and 'shared' (will keep) items
         """
@@ -119,56 +122,65 @@ class QuestionManager:
         if not question:
             return {"error": f"Question {question_id} not found"}
 
-        # Collect all event IDs referenced by this question
-        question_event_ids = set()
-        if question.target_event_id:
-            question_event_ids.add(question.target_event_id)
-        question_event_ids.update(question.related_event_ids)
+        # === ARTICLES: Find articles collected for this question ===
+        all_articles = self.generic_db.get_many(Article)
 
-        # Find which events are referenced by OTHER questions
-        all_questions = self.generic_db.get_many(Question)
-        shared_event_ids = set()
-        for q in all_questions:
-            if q.id == question_id:
-                continue
-            if q.target_event_id and q.target_event_id in question_event_ids:
-                shared_event_ids.add(q.target_event_id)
-            for eid in q.related_event_ids:
-                if eid in question_event_ids:
-                    shared_event_ids.add(eid)
+        # Articles with explicit provenance field
+        articles_by_provenance = [
+            a.id for a in all_articles
+            if a.collected_for_question_id == question_id
+        ]
 
-        orphaned_event_ids = question_event_ids - shared_event_ids
+        # Fallback: articles with metadata (for pre-migration data)
+        articles_by_metadata = [
+            a.id for a in all_articles
+            if a.collected_for_question_id is None  # Not already counted
+            and a.metadata.get('related_question_ids')
+            and question_id in a.metadata['related_question_ids']
+        ]
 
-        # Collect article IDs from orphaned events
-        orphaned_article_ids = set()
-        shared_article_ids = set()
+        orphaned_article_ids = set(articles_by_provenance + articles_by_metadata)
 
-        for eid in orphaned_event_ids:
-            event = self.db.get_event(eid)
-            if event:
-                orphaned_article_ids.update(event.article_ids)
-
-        # Check if articles are referenced by non-orphaned events
+        # === EVENTS: Find events extracted for this question ===
         all_events = self.generic_db.get_many(Event)
-        for event in all_events:
-            if event.id not in orphaned_event_ids:
-                for aid in event.article_ids:
-                    if aid in orphaned_article_ids:
-                        shared_article_ids.add(aid)
 
-        orphaned_article_ids -= shared_article_ids
+        # Events with explicit provenance field
+        events_by_provenance = [
+            e.id for e in all_events
+            if e.extracted_for_question_id == question_id
+        ]
 
-        # Find causal hypotheses to update or delete
+        # Fallback: events with metadata (for pre-migration data)
+        events_by_metadata = [
+            e.id for e in all_events
+            if e.extracted_for_question_id is None  # Not already counted
+            and e.metadata.get('related_question_ids')
+            and question_id in e.metadata['related_question_ids']
+        ]
+
+        orphaned_event_ids = set(events_by_provenance + events_by_metadata)
+
+        # === Also include events referenced in question but NOT pre-existing ===
+        # Pre-existing events (target_event_id, related_event_ids) should be kept
+        pre_existing_event_ids = set()
+        if question.target_event_id:
+            pre_existing_event_ids.add(question.target_event_id)
+        pre_existing_event_ids.update(question.related_event_ids)
+
+        # Don't delete pre-existing events (they weren't created by evidence pipeline)
+        orphaned_event_ids -= pre_existing_event_ids
+
+        # === CAUSAL HYPOTHESES ===
         all_hypotheses = self.generic_db.get_many(CausalHypothesis)
 
-        hypotheses_to_delete = []  # Source or target event is orphaned
-        hypotheses_to_update = []  # Question ID in discovered_by list
+        hypotheses_to_delete = []  # Source or target event will be deleted
+        hypotheses_to_update = []  # Question ID in discovered_by list (but hypothesis kept)
 
         for h in all_hypotheses:
             # Delete if either endpoint is an orphaned event
             if h.source_event_id in orphaned_event_ids or h.target_event_id in orphaned_event_ids:
                 hypotheses_to_delete.append(h.id)
-            # Update if this question discovered it (and won't be deleted)
+            # Update if this question discovered it (and hypothesis won't be deleted)
             elif question_id in h.discovered_by_question_ids:
                 hypotheses_to_update.append(h.id)
 
@@ -180,16 +192,21 @@ class QuestionManager:
                 "causal_hypotheses_delete": hypotheses_to_delete,
             },
             "shared": {
-                "events": list(shared_event_ids),
-                "articles": list(shared_article_ids),
+                "pre_existing_events": list(pre_existing_event_ids),
                 "causal_hypotheses_update": hypotheses_to_update,
+            },
+            "provenance_stats": {
+                "articles_by_field": len(articles_by_provenance),
+                "articles_by_metadata": len(articles_by_metadata),
+                "events_by_field": len(events_by_provenance),
+                "events_by_metadata": len(events_by_metadata),
             },
             "summary": {
                 "will_delete_events": len(orphaned_event_ids),
                 "will_delete_articles": len(orphaned_article_ids),
                 "will_delete_hypotheses": len(hypotheses_to_delete),
                 "will_update_hypotheses": len(hypotheses_to_update),
-                "will_keep_shared_events": len(shared_event_ids),
+                "will_keep_pre_existing_events": len(pre_existing_event_ids),
             }
         }
 
@@ -329,6 +346,92 @@ class QuestionManager:
         self.generic_db.delete(Event, event_id)
         return {"success": True, "deleted": deleted}
 
+    def clear_evidence(self, question_id: str, dry_run: bool = False) -> Dict:
+        """Remove all evidence pipeline data for a question WITHOUT deleting the question.
+
+        This is useful for re-running the evidence pipeline on a question.
+        Removes:
+        - Articles collected for this question
+        - Events extracted for this question
+        - Causal hypotheses discovered by this question
+
+        Args:
+            question_id: Question to clear evidence for
+            dry_run: If True, only report what would be deleted
+
+        Returns:
+            Summary of deletions performed
+        """
+        question = self.db.get_question(question_id)
+        if not question:
+            return {"error": f"Question {question_id} not found"}
+
+        # Use the same analysis as cascade delete
+        analysis = self.analyze_cascade(question_id)
+
+        if dry_run:
+            return {
+                "dry_run": True,
+                "question_id": question_id,
+                "would_delete": {
+                    "articles": analysis["orphaned"]["articles"],
+                    "events": analysis["orphaned"]["events"],
+                    "causal_hypotheses": analysis["orphaned"]["causal_hypotheses_delete"],
+                },
+                "would_update": {
+                    "causal_hypotheses": analysis["shared"]["causal_hypotheses_update"],
+                },
+                "provenance_stats": analysis["provenance_stats"],
+                "summary": {
+                    "articles": len(analysis["orphaned"]["articles"]),
+                    "events": len(analysis["orphaned"]["events"]),
+                    "hypotheses_delete": len(analysis["orphaned"]["causal_hypotheses_delete"]),
+                    "hypotheses_update": len(analysis["shared"]["causal_hypotheses_update"]),
+                }
+            }
+
+        deleted = {
+            "articles": [],
+            "events": [],
+            "causal_hypotheses": [],
+            "hypotheses_updated": []
+        }
+
+        # Delete causal hypotheses where source/target event will be deleted
+        for hid in analysis["orphaned"]["causal_hypotheses_delete"]:
+            if self.generic_db.delete(CausalHypothesis, hid):
+                deleted["causal_hypotheses"].append(hid)
+
+        # Update hypotheses that referenced this question (remove from discovered_by)
+        for hid in analysis["shared"]["causal_hypotheses_update"]:
+            h = self.generic_db.get(CausalHypothesis, hid)
+            if h and question_id in h.discovered_by_question_ids:
+                h.discovered_by_question_ids.remove(question_id)
+                self.generic_db.save(CausalHypothesis, h)
+                deleted["hypotheses_updated"].append(hid)
+
+        # Delete events extracted for this question
+        for eid in analysis["orphaned"]["events"]:
+            if self.generic_db.delete(Event, eid):
+                deleted["events"].append(eid)
+
+        # Delete articles collected for this question
+        for aid in analysis["orphaned"]["articles"]:
+            if self.generic_db.delete(Article, aid):
+                deleted["articles"].append(aid)
+
+        return {
+            "success": True,
+            "question_id": question_id,
+            "deleted": deleted,
+            "summary": {
+                "articles": len(deleted["articles"]),
+                "events": len(deleted["events"]),
+                "causal_hypotheses": len(deleted["causal_hypotheses"]),
+                "hypotheses_updated": len(deleted["hypotheses_updated"])
+            }
+        }
+
     def update_question(self, question_id: str, updates: Dict) -> Dict:
         """Update specific fields on a question."""
         question = self.db.get_question(question_id)
@@ -363,8 +466,11 @@ Examples:
   %(prog)s stats
   %(prog)s list questions --domain finance --limit 10
   %(prog)s show question q_123
+  %(prog)s analyze question q_123
+  %(prog)s clear-evidence q_123 --dry-run
+  %(prog)s clear-evidence q_123
   %(prog)s delete question q_123 --dry-run
-  %(prog)s delete question q_123 --cascade
+  %(prog)s delete question q_123
         """
     )
     parser.add_argument("--db", default="worldreasoner.db", help="Database path")
@@ -404,6 +510,11 @@ Examples:
     update_parser.add_argument("id", help="Entity ID")
     update_parser.add_argument("--set", nargs=2, action="append", metavar=("FIELD", "VALUE"),
                                help="Field and value to update (can repeat)")
+
+    # Clear evidence command
+    clear_parser = subparsers.add_parser("clear-evidence", help="Remove evidence data for a question (keeps question)")
+    clear_parser.add_argument("id", help="Question ID")
+    clear_parser.add_argument("--dry-run", action="store_true", help="Preview without deleting")
 
     args = parser.parse_args()
 
@@ -466,6 +577,10 @@ Examples:
             sys.exit(1)
         updates = {field: value for field, value in args.set}
         result = manager.update_question(args.id, updates)
+        print_json(result)
+
+    elif args.command == "clear-evidence":
+        result = manager.clear_evidence(args.id, dry_run=args.dry_run)
         print_json(result)
 
 

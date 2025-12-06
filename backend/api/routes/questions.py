@@ -149,12 +149,17 @@ async def get_question_events(
 
         direct_event_count = len(event_ids)
 
-        # Find all events extracted during evidence collection (via metadata)
+        # Find all events extracted during evidence collection
+        # Use explicit provenance field with fallback to metadata
         all_events = db.get_many(Event)
         extracted_events = set()
         for event in all_events:
-            related_q_ids = event.metadata.get('related_question_ids', [])
-            if question_id in related_q_ids:
+            # Check explicit provenance field first
+            if event.extracted_for_question_id == question_id:
+                extracted_events.add(event.id)
+                event_ids.add(event.id)
+            # Fallback to metadata for pre-migration data
+            elif event.metadata.get('related_question_ids') and question_id in event.metadata['related_question_ids']:
                 extracted_events.add(event.id)
                 event_ids.add(event.id)
 

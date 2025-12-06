@@ -8,7 +8,7 @@ from ...core.database import register_model
 from .domain import Domain
 
 
-@register_model('articles', indexes=['domain', 'source', 'published_date'])
+@register_model('articles', indexes=['domain', 'source', 'published_date', 'collected_for_question_id'])
 class Article(BaseModel):
     """News article with temporal and causal metadata.
     
@@ -40,6 +40,12 @@ class Article(BaseModel):
     event_ids: List[str] = Field(
         default_factory=list,
         description="IDs of events discussed or documented in this article"
+    )
+
+    # Provenance tracking (for evidence pipeline)
+    collected_for_question_id: Optional[str] = Field(
+        None,
+        description="Question ID this article was collected for during evidence pipeline (None if pre-existing)"
     )
 
     # Computed fields

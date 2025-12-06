@@ -202,9 +202,12 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
         # Get articles collected during this run (isolated collector)
         new_articles = article_collector.get_all()
 
-        # Tag articles with evidence metadata
+        # Tag articles with provenance
         for article in new_articles:
-            # Mark as hindsight evidence
+            # Set explicit provenance field (indexed, queryable)
+            article.collected_for_question_id = question.id
+
+            # Also store in metadata for backward compatibility
             article.metadata['evidence_type'] = 'hindsight'
             article.metadata['related_question_ids'] = [question.id]
 
@@ -318,13 +321,18 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
             db = GenericDatabase(self.db_path)
 
             for event in new_events:
-                # Link event to the question
+                # Set explicit provenance field (indexed, queryable)
+                event.extracted_for_question_id = question.id
+
+                # Link to source article if possible (first article in event's article_ids)
+                if event.article_ids:
+                    event.source_article_id = event.article_ids[0]
+
+                # Also store in metadata for backward compatibility
                 if 'related_question_ids' not in event.metadata:
                     event.metadata['related_question_ids'] = []
                 if question.id not in event.metadata['related_question_ids']:
                     event.metadata['related_question_ids'].append(question.id)
-
-                # Mark as extracted from evidence articles
                 event.metadata['extracted_for_evidence'] = True
 
                 # Save event to database
