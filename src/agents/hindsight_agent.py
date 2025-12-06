@@ -87,7 +87,7 @@ class HindsightAgent(BaseAgent):
                 EventIdentifierTool(db_path=db_path, question_id=question_id),  # Provenance-aware
                 EventDetailsTool(db_path=db_path),
                 CausalReasonerTool(db_path=db_path, question_id=question_id),  # Provenance-aware
-                GraphInspectorTool(db_path=db_path),
+                GraphInspectorTool(db_path=db_path, question_id=question_id),  # Provenance-aware
                 ArticleRetrievalTool(db_path=db_path)
             ],
             max_steps=30,  # More steps for iterative graph building
@@ -98,12 +98,12 @@ class HindsightAgent(BaseAgent):
             CRITICAL: Build DEEP multi-level causal chains, not just direct links!
 
             FIRST STEP - Get article IDs:
-            Call get_question_articles() (no arguments needed) to get all articles
+            Call get_question_articles to get all articles
             collected for this question. Save the article_ids list - you MUST use
             these when creating events and causal links!
 
             Process:
-            1. Call get_question_articles() to get article IDs
+            1. Call get_question_articles to get article IDs
             2. If target_event_id is provided, use EventDetailsTool to understand it
             3. Create events using event_identifier with source_article_ids from step 1
             4. For each cause, ask "What caused THIS?" and create intermediate events
@@ -122,7 +122,7 @@ class HindsightAgent(BaseAgent):
 
         # Manager tools (high-level coordination)
         tools = tools + [
-            GraphInspectorTool(db_path=db_path)
+            GraphInspectorTool(db_path=db_path, question_id=question_id)
         ]
 
         super().__init__(

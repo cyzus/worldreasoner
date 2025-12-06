@@ -36,22 +36,13 @@ class GraphInspectorTool(Tool):
     3. Create intermediate events using event_identifier
     4. Link them with causal_reasoner: Root → Intermediate → Target
 
-    Args:
-        question_id (str): ID of the question to analyze
-
     Returns:
         str: JSON with graph statistics including depth, events, links, quality score
     """
-
-    inputs = {
-        "question_id": {
-            "type": "string",
-            "description": "Question ID to analyze the causal graph for"
-        }
-    }
+    inputs = {}
     output_type = "string"  # JSON string
 
-    def __init__(self, db_path: str = "worldreasoner.db"):
+    def __init__(self, question_id, db_path: str = "worldreasoner.db"):
         """Initialize the graph inspector.
 
         Args:
@@ -59,12 +50,10 @@ class GraphInspectorTool(Tool):
         """
         super().__init__()
         self.db = GenericDatabase(db_path)
+        self.question_id = question_id
 
-    def forward(self, question_id: str) -> str:
+    def forward(self) -> str:
         """Analyze graph structure for a question.
-
-        Args:
-            question_id: Question to analyze
 
         Returns:
             JSON string with graph statistics
@@ -73,12 +62,12 @@ class GraphInspectorTool(Tool):
         all_hypotheses = self.db.get_many(CausalHypothesis)
         question_hypotheses = [
             h for h in all_hypotheses
-            if question_id in h.discovered_by_question_ids
+            if self.question_id in h.discovered_by_question_ids
         ]
 
         if not question_hypotheses:
             return json.dumps({
-                "question_id": question_id,
+                "question_id": self.question_id,
                 "events": 0,
                 "hypotheses": 0,
                 "max_depth": 0,
@@ -89,7 +78,7 @@ class GraphInspectorTool(Tool):
             }, indent=2)
 
         # Build graph structure
-        graph_stats = self._analyze_graph_structure(question_hypotheses, question_id)
+        graph_stats = self._analyze_graph_structure(question_hypotheses, self.question_id)
 
         # Add recommendations
         graph_stats["recommendation"] = self._get_recommendation(graph_stats)

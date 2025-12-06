@@ -409,17 +409,17 @@ class EvidencePipeline(Pipeline):
         self.db_resolved_questions = len(resolved_with_ground_truth)
 
         # Get all existing causal hypotheses to check which questions were already processed
+        # Always load this - needed both for skip mode AND force-reprocess mode
         processed_question_ids = set()
-        if self.evidence_config.skip_already_processed:
-            try:
-                existing_hypotheses = db.get_many(CausalHypothesis, filters={})
-                # Collect all question IDs from discovered_by_question_ids lists
-                for h in existing_hypotheses:
-                    processed_question_ids.update(h.discovered_by_question_ids)
-            except Exception as e:
-                # Table might not exist on first run - that's okay
-                logger.debug(f"Could not load existing hypotheses (first run?): {e}")
-                processed_question_ids = set()
+        try:
+            existing_hypotheses = db.get_many(CausalHypothesis, filters={})
+            # Collect all question IDs from discovered_by_question_ids lists
+            for h in existing_hypotheses:
+                processed_question_ids.update(h.discovered_by_question_ids)
+        except Exception as e:
+            # Table might not exist on first run - that's okay
+            logger.debug(f"Could not load existing hypotheses (first run?): {e}")
+            processed_question_ids = set()
 
         # Count unprocessed: resolved questions that haven't been processed yet
         unprocessed_count = 0
@@ -464,17 +464,14 @@ class EvidencePipeline(Pipeline):
                 logger.debug(f"Skipping question marked for skip_evidence: {q.id} - {q.skip_reason}")
                 continue
 
-            # Handle already-processed questions
+            # Handle already-processed questions (but don't clear yet)
             if q.id in processed_question_ids:
                 if self.evidence_config.skip_already_processed:
                     # Skip mode: don't reprocess
                     skipped_already_processed += 1
                     logger.debug(f"Skipping already processed question: {q.id}")
                     continue
-                else:
-                    # Force-reprocess mode: clear old evidence first
-                    self._clear_evidence_for_question(q.id, db)
-                    logger.info(f"Cleared old evidence for reprocessing: {q.id}")
+                # else: include in candidates for reprocessing (will clear after applying limits)
 
             resolved.append(q)
 
@@ -486,6 +483,14 @@ class EvidencePipeline(Pipeline):
         # Apply max_questions limit if configured
         if self.evidence_config.max_questions is not None:
             resolved = resolved[:self.evidence_config.max_questions]
+
+        # Now clear evidence for any questions being reprocessed (after applying limits)
+        for q in resolved:
+            if q.id in processed_question_ids:
+                self._clear_evidence_for_question(q.id, db)
+                # Remove from processed set so it gets reprocessed
+                processed_question_ids.discard(q.id)
+                logger.info(f"Cleared old evidence for reprocessing: {q.id}")
 
         logger.info(
             f"Loaded {len(resolved)} resolved questions "
@@ -510,12 +515,14 @@ class EvidencePipeline(Pipeline):
         return resolved
 
     def _clear_evidence_for_question(self, question_id: str, db: GenericDatabase) -> dict:
-        """Clear all evidence pipeline data for a question before reprocessing.
+        """Clear evidence pipeline data for a question before reprocessing.
 
         This removes:
         - Articles collected for this question
-        - Events extracted for this question
+        - Events extracted for this question (but NOT the target event)
         - Causal hypotheses discovered by this question
+
+        The target event is preserved to avoid re-identifying it.
 
         Args:
             question_id: Question ID to clear evidence for
@@ -525,6 +532,10 @@ class EvidencePipeline(Pipeline):
             Summary of deleted items
         """
         deleted = {"articles": 0, "events": 0, "hypotheses": 0}
+
+        # Get the question to access its target event ID
+        question = db.get(Question, question_id)
+        target_event_id = question.target_event_id if question else None
 
         # Find and delete articles collected for this question
         all_articles = db.get_many(Article)
@@ -540,9 +551,13 @@ class EvidencePipeline(Pipeline):
                 db.delete(Article, article.id)
                 deleted["articles"] += 1
 
-        # Find and delete events extracted for this question
+        # Find and delete events extracted for this question (EXCEPT target event)
         all_events = db.get_many(Event)
         for event in all_events:
+            # Don't delete the target event - it's needed for causal graph
+            if target_event_id and event.id == target_event_id:
+                continue
+
             # Check explicit provenance field
             if event.extracted_for_question_id == question_id:
                 db.delete(Event, event.id)

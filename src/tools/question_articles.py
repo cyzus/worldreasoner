@@ -32,7 +32,7 @@ class QuestionArticlesTool(Tool):
         JSON with list of articles: [{id, title, source, published_date, content_preview}, ...]
     """
 
-    inputs = {}  # No inputs required
+    inputs = {}
     output_type = "string"
 
     def __init__(self, db_path: str = None, question_id: Optional[str] = None):
