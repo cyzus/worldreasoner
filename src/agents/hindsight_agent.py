@@ -6,7 +6,8 @@ from smolagents import CodeAgent, LiteLLMModel
 from src.tools import (ArticleRetrievalTool, ArticleCollectorTool,
                        WebFetchTool, WebSearchTool,
                        EventDetailsTool, EventIdentifierTool,
-                       CausalReasonerTool, GraphInspectorTool)
+                       CausalReasonerTool, GraphInspectorTool,
+                       QuestionArticlesTool)
 
 
 class HindsightAgent(BaseAgent):
@@ -69,9 +70,12 @@ class HindsightAgent(BaseAgent):
             - Try multiple search queries if initial results are insufficient
             - Broaden time windows if needed
             - Fetch and analyze article content
-            - Finally, you MUST use the collector tool to save relevant articles to the database
+            - Use article_collector to save relevant articles to the database
 
-            Returns detailed evidence including article ids for causal analysis."""
+            IMPORTANT: After collecting, report back the article IDs in this format:
+            "Collected articles: [art_xxx, art_yyy, art_zzz]"
+
+            This allows the causal_analyzer to link events to evidence."""
         )
 
         # Causal analysis specialist (event creation, graph building, depth evaluation)
@@ -79,6 +83,7 @@ class HindsightAgent(BaseAgent):
         causal_agent = CodeAgent(
             model=llm_model,
             tools=[
+                QuestionArticlesTool(db_path=db_path, question_id=question_id),  # Get articles for this question
                 EventIdentifierTool(db_path=db_path, question_id=question_id),  # Provenance-aware
                 EventDetailsTool(db_path=db_path),
                 CausalReasonerTool(db_path=db_path, question_id=question_id),  # Provenance-aware
@@ -92,19 +97,25 @@ class HindsightAgent(BaseAgent):
 
             CRITICAL: Build DEEP multi-level causal chains, not just direct links!
 
+            FIRST STEP - Get article IDs:
+            Call get_question_articles() (no arguments needed) to get all articles
+            collected for this question. Save the article_ids list - you MUST use
+            these when creating events and causal links!
+
             Process:
-            1. If target_event_id is provided, use EventDetailsTool to understand it
-            2. Identify immediate causes (level 1) that lead to the target
-            3. For each cause, ask "What caused THIS?" and create intermediate events (level 2+)
-            4. Use graph_inspector to check depth - iterate if < 2 levels
-            5. Build causal chains: Root → Intermediate → Immediate → TARGET
+            1. Call get_question_articles() to get article IDs
+            2. If target_event_id is provided, use EventDetailsTool to understand it
+            3. Create events using event_identifier with source_article_ids from step 1
+            4. For each cause, ask "What caused THIS?" and create intermediate events
+            5. Use causal_reasoner with evidence_article_ids from step 1
+            6. Use graph_inspector to check depth - iterate if < 2 levels
 
-            IMPORTANT: All causal chains must ultimately connect to the target event!
-            Use causal_reasoner with the correct target_event_id for final-stage links.
+            IMPORTANT:
+            - Always pass source_article_ids when creating events
+            - Always pass evidence_article_ids when creating causal links
+            - All chains must connect to the target event
 
-            All events and hypotheses are automatically saved to database.
-
-            Your goal: Create causal graphs with depth >= 3 levels."""
+            Your goal: Create causal graphs with depth >= 3 levels, properly linked to evidence."""
         )
 
         managed_agents = [evidence_agent, causal_agent]

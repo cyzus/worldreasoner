@@ -464,11 +464,17 @@ class EvidencePipeline(Pipeline):
                 logger.debug(f"Skipping question marked for skip_evidence: {q.id} - {q.skip_reason}")
                 continue
 
-            # Skip if already processed by evidence pipeline (if configured)
-            if self.evidence_config.skip_already_processed and q.id in processed_question_ids:
-                skipped_already_processed += 1
-                logger.debug(f"Skipping already processed question: {q.id}")
-                continue
+            # Handle already-processed questions
+            if q.id in processed_question_ids:
+                if self.evidence_config.skip_already_processed:
+                    # Skip mode: don't reprocess
+                    skipped_already_processed += 1
+                    logger.debug(f"Skipping already processed question: {q.id}")
+                    continue
+                else:
+                    # Force-reprocess mode: clear old evidence first
+                    self._clear_evidence_for_question(q.id, db)
+                    logger.info(f"Cleared old evidence for reprocessing: {q.id}")
 
             resolved.append(q)
 
@@ -502,6 +508,72 @@ class EvidencePipeline(Pipeline):
             logger.info(f"Skipped {skipped_low_quality} low-quality questions (marked skip_evidence)")
 
         return resolved
+
+    def _clear_evidence_for_question(self, question_id: str, db: GenericDatabase) -> dict:
+        """Clear all evidence pipeline data for a question before reprocessing.
+
+        This removes:
+        - Articles collected for this question
+        - Events extracted for this question
+        - Causal hypotheses discovered by this question
+
+        Args:
+            question_id: Question ID to clear evidence for
+            db: Database instance
+
+        Returns:
+            Summary of deleted items
+        """
+        deleted = {"articles": 0, "events": 0, "hypotheses": 0}
+
+        # Find and delete articles collected for this question
+        all_articles = db.get_many(Article)
+        for article in all_articles:
+            # Check explicit provenance field
+            if article.collected_for_question_id == question_id:
+                db.delete(Article, article.id)
+                deleted["articles"] += 1
+            # Fallback: check metadata for pre-migration data
+            elif (article.collected_for_question_id is None and
+                  article.metadata.get('related_question_ids') and
+                  question_id in article.metadata['related_question_ids']):
+                db.delete(Article, article.id)
+                deleted["articles"] += 1
+
+        # Find and delete events extracted for this question
+        all_events = db.get_many(Event)
+        for event in all_events:
+            # Check explicit provenance field
+            if event.extracted_for_question_id == question_id:
+                db.delete(Event, event.id)
+                deleted["events"] += 1
+            # Fallback: check metadata for pre-migration data
+            elif (event.extracted_for_question_id is None and
+                  event.metadata.get('related_question_ids') and
+                  question_id in event.metadata['related_question_ids']):
+                db.delete(Event, event.id)
+                deleted["events"] += 1
+
+        # Find and handle causal hypotheses
+        all_hypotheses = db.get_many(CausalHypothesis)
+        for hyp in all_hypotheses:
+            if question_id in hyp.discovered_by_question_ids:
+                if len(hyp.discovered_by_question_ids) == 1:
+                    # Only this question discovered it - delete
+                    db.delete(CausalHypothesis, hyp.id)
+                    deleted["hypotheses"] += 1
+                else:
+                    # Multiple questions discovered it - just remove this question
+                    hyp.discovered_by_question_ids.remove(question_id)
+                    db.save(CausalHypothesis, hyp)
+
+        logger.debug(
+            f"Cleared evidence for {question_id}: "
+            f"{deleted['articles']} articles, {deleted['events']} events, "
+            f"{deleted['hypotheses']} hypotheses"
+        )
+
+        return deleted
 
     def get_summary(self) -> dict:
         """Get a summary of pipeline results.

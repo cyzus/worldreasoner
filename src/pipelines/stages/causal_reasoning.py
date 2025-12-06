@@ -144,7 +144,7 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
         """
         # Create a per-analysis collector and agent to avoid cross-talk when running concurrently
         collector = ResultCollector[CausalHypothesis]()
-        causal_tool = CausalReasonerTool(collector=collector)
+        causal_tool = CausalReasonerTool(collector=collector, question_id=question.id)
         agent = AgentFactory.create_base_agent(
             tools=[causal_tool, self.article_retrieval_tool], is_code=True
         )

@@ -51,7 +51,6 @@ class CausalReasonerTool(Tool):
     - If depth < 2, you need MORE intermediate events!
 
     Args:
-        question_id (str): ID of the question being analyzed
         source_event_id (str): ID of the event that caused the target
         target_event_id (str): ID of the event that was caused (can be intermediate or final)
         relation_type (str): Type of causation (causes|enables|prevents|correlates|conditional)
@@ -65,10 +64,6 @@ class CausalReasonerTool(Tool):
     """
 
     inputs = {
-        "question_id": {
-            "type": "string",
-            "description": "Question being analyzed"
-        },
         "source_event_id": {
             "type": "string",
             "description": "Event ID of the cause"
@@ -128,7 +123,6 @@ class CausalReasonerTool(Tool):
 
     def forward(
         self,
-        question_id: str,
         source_event_id: str,
         target_event_id: str,
         relation_type: str,
@@ -140,7 +134,6 @@ class CausalReasonerTool(Tool):
         """Record a causal hypothesis with supporting evidence.
 
         Args:
-            question_id: Question being analyzed
             source_event_id: Event that caused the outcome
             target_event_id: Event that was caused
             relation_type: Type of causal relationship
@@ -153,8 +146,7 @@ class CausalReasonerTool(Tool):
             JSON confirmation with hypothesis ID
         """
         # Use default question_id if not provided or empty
-        if not question_id and self.default_question_id:
-            question_id = self.default_question_id
+        question_id = self.default_question_id
 
         # Validate and parse relation type
         try:
