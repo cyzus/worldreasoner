@@ -143,7 +143,10 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
 
   }, [graphData, forceSettings])
 
-  // Trigger continuous repainting for pulsing animation on outcome nodes
+  // DISABLED: Trigger continuous repainting for pulsing animation on outcome nodes
+  // This was causing performance issues by repainting the entire canvas at 60fps
+  // TODO: Re-implement with throttling if pulsing animation is needed
+  /*
   useEffect(() => {
     const hasOutcomeNode = graphData.nodes.some(node => node.isOutcome)
     if (!hasOutcomeNode) return
@@ -165,6 +168,7 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
       }
     }
   }, [graphData.nodes])
+  */
 
 
   // Node canvas rendering with glow effect
