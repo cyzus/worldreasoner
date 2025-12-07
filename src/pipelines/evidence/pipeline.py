@@ -15,8 +15,6 @@ from datetime import datetime, timezone, timedelta
 
 from ..base import Pipeline, PipelineStageResult, PipelineStageStatus
 from ..stages import (
-    DatabasePersistenceStage,
-    DatabasePersistenceConfig,
     HindsightEvidenceCollectionStage,
     EvidenceCollectionConfig,
     TargetEventIdentificationStage,
@@ -127,15 +125,6 @@ class EvidencePipeline(Pipeline):
         self.add_stage(self.target_event_stage)
         self.add_stage(self.reasoning_stage)
         self.add_stage(self.graph_stage)
-
-        # Persistence stages
-        if enable_persistence:
-            persist_config = DatabasePersistenceConfig(
-                batch_size=database_config.batch_size,
-                db_path=db_path
-            )
-            self.article_persist = DatabasePersistenceStage(persist_config, "article")
-            self.hypothesis_persist = DatabasePersistenceStage(persist_config, "causal_hypothesis")
 
         # Storage for pipeline outputs
         self.resolved_questions: List[Question] = []
@@ -340,10 +329,6 @@ class EvidencePipeline(Pipeline):
 
                 logger.info(f"[{question.id}] Collected {len(evidence_articles)} evidence articles")
 
-                # Persist evidence articles immediately
-                if self.enable_persistence:
-                    await self.article_persist.execute(evidence_articles)
-
                 # Stage 2: Causal reasoning with collected evidence
                 # Note: Target event identification now happens in batch before evidence collection
                 logger.debug(f"[{question.id}] Performing causal reasoning...")
@@ -367,10 +352,6 @@ class EvidencePipeline(Pipeline):
                     }
 
                 logger.info(f"[{question.id}] Generated {len(causal_hypotheses)} causal hypotheses")
-
-                # Persist hypotheses immediately
-                if self.enable_persistence:
-                    await self.hypothesis_persist.execute(causal_hypotheses)
 
                 logger.info(f"[{question.id}] Processing complete")
 

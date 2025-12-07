@@ -15,8 +15,6 @@ from src.pipelines.stages import (
     EventIdentificationStage,
     EventIdentificationConfig,
     QuestionGenerationStage,
-    DatabasePersistenceStage,
-    DatabasePersistenceConfig,
 )
 from src.config.pipeline import QuestionPipelineConfig
 from src.utils.logging import logger
@@ -57,15 +55,6 @@ class NewsBasedRunner(QuestionSourceRunner):
         self.article_stage = ArticleCollectionStage(article_config, db_path=db_path)
         self.event_stage = EventIdentificationStage(event_config, db_path=db_path)
         self.question_stage = QuestionGenerationStage(question_config, db_path=db_path)
-
-        # Initialize persistence stages
-        persist_config = DatabasePersistenceConfig(
-            db_path=db_path,
-            batch_size=50
-        )
-        self.article_persist = DatabasePersistenceStage(persist_config, "article")
-        self.event_persist = DatabasePersistenceStage(persist_config, "event")
-        self.question_persist = DatabasePersistenceStage(persist_config, "question")
     
     async def collect(
         self,
@@ -160,11 +149,6 @@ class NewsBasedRunner(QuestionSourceRunner):
                     else:
                         logger.warning(f"No articles match categories {filter_keys}, keeping all {len(articles)} articles")
 
-
-            # Persist articles
-            if articles:
-                await self.article_persist.execute(articles)
-
             # Stage 2: Identify events with intelligent hints
             logger.info("Stage 2: Identifying events from articles...")
             
@@ -194,14 +178,6 @@ class NewsBasedRunner(QuestionSourceRunner):
 
             events = event_result.outputs
             logger.info(f"Identified {len(events)} events")
-
-            # Persist events
-            if events:
-                await self.event_persist.execute(events)
-
-            # Re-persist articles to save event links
-            if articles:
-                await self.article_persist.execute(articles)
 
             # Stage 3: Generate questions with intelligent hints
             logger.info("Stage 3: Generating questions from events...")
@@ -256,29 +232,8 @@ class NewsBasedRunner(QuestionSourceRunner):
             # to QuestionGenerationStage. Just use them as-is (no slicing needed).
             final_questions = filtered_questions
 
-            # Persist the final questions that will be returned
-            if final_questions:
-                await self.question_persist.execute(final_questions)
-
-            # Update events with question links (bidirectional relationship)
-            # Questions already have target_event_id and related_event_ids
-            # Now add the reverse direction: events pointing to questions
-            event_map = {event.id: event for event in events}
-
-            for question in final_questions:
-                # Add this question to all related events
-                for event_id in question.related_event_ids:
-                    if event_id in event_map:
-                        event = event_map[event_id]
-                        if 'related_question_ids' not in event.metadata:
-                            event.metadata['related_question_ids'] = []
-                        if question.id not in event.metadata['related_question_ids']:
-                            event.metadata['related_question_ids'].append(question.id)
-                            logger.debug(f"Linked event {event_id} to question {question.id}")
-
-            # Re-persist events to save updated question links
-            if events:
-                await self.event_persist.execute(events)
+            # Note: Bidirectional event↔question links are now handled by BatchQuestionGeneratorTool
+            # The tool updates event.metadata['related_question_ids'] when creating questions
 
             return CollectionResult(
                 source_name=self.source_name,

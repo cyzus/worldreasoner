@@ -76,18 +76,25 @@ class BatchQuestionGeneratorTool(CollectorAwareTool[Question]):
     }
     output_type = "string"
 
-    def __init__(self, require_ground_truth: bool, collector=None, existing_question_ids: Optional[set] = None):
+    def __init__(self, require_ground_truth: bool, collector=None, existing_question_ids: Optional[set] = None, db_path: str = None):
         """Initialize the batch question generator.
 
         Args:
             require_ground_truth: If True, require ground_truth for all questions
             collector: Optional ResultCollector[Question] for storing results
             existing_question_ids: Set of existing question IDs to skip
+            db_path: Optional path to database for persistence
         """
         super().__init__(collector)
         self.require_ground_truth = require_ground_truth
         self.existing_question_ids = existing_question_ids or set()
         self.question_counter = 0
+
+        # Database for persistence
+        self.db = None
+        if db_path:
+            from src.core.database import Database
+            self.db = Database(db_path)
 
     def forward(self, questions_json: str) -> str:
         """Store multiple questions from JSON array.
@@ -135,6 +142,14 @@ class BatchQuestionGeneratorTool(CollectorAwareTool[Question]):
 
                         # Store question using unified collector interface
                         self.store_result(question, context=f"Question {question.id}")
+
+                        # Persist to database if available
+                        if self.db is not None:
+                            self.db.save_question(question)
+                            logger.debug(f"Question {question.id} persisted to database")
+
+                            # Update bidirectional event→question links
+                            self._update_event_question_links(question)
 
                         stored_questions.append({
                             "id": question.id,
@@ -389,3 +404,57 @@ class BatchQuestionGeneratorTool(CollectorAwareTool[Question]):
 
         else:
             return ground_truth_str
+
+    def _update_event_question_links(self, question: Question) -> None:
+        """Update events to include bidirectional link to this question.
+
+        For each event referenced by the question (target_event_id and related_event_ids),
+        add this question's ID to the event's metadata['related_question_ids'].
+
+        Args:
+            question: Question to link to events
+        """
+        if not self.db:
+            return
+
+        from src.domain.models import Event
+
+        # Collect all event IDs referenced by this question
+        event_ids = set()
+        if question.target_event_id:
+            event_ids.add(question.target_event_id)
+        if question.related_event_ids:
+            event_ids.update(question.related_event_ids)
+
+        if not event_ids:
+            return
+
+        for event_id in event_ids:
+            try:
+                # Fetch event from database
+                event = self.db.db.get(Event, event_id)
+                if not event:
+                    logger.debug(f"Event {event_id} not found for question {question.id}")
+                    continue
+
+                # Initialize metadata if needed
+                if not event.metadata:
+                    event.metadata = {}
+
+                # Initialize related_question_ids list if needed
+                if 'related_question_ids' not in event.metadata:
+                    event.metadata['related_question_ids'] = []
+
+                # Check if question ID is already linked
+                if question.id in event.metadata['related_question_ids']:
+                    continue
+
+                # Add question ID to event's metadata
+                event.metadata['related_question_ids'].append(question.id)
+
+                # Save updated event
+                self.db.save_event(event)
+                logger.debug(f"Linked event {event_id} to question {question.id}")
+
+            except Exception as e:
+                logger.warning(f"Failed to update event {event_id} for question {question.id}: {e}")

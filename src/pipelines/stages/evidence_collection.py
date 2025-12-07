@@ -202,18 +202,29 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
         # Get articles collected during this run (isolated collector)
         new_articles = article_collector.get_all()
 
-        # Tag articles with provenance
-        for article in new_articles:
-            # Set explicit provenance field (indexed, queryable)
-            article.collected_for_question_id = question.id
+        # Tag articles with provenance and persist updates
+        if new_articles:
+            from src.core.database import GenericDatabase
+            db = GenericDatabase(self.db_path)
 
-            # Also store in metadata for backward compatibility
-            article.metadata['evidence_type'] = 'hindsight'
-            article.metadata['related_question_ids'] = [question.id]
+            for article in new_articles:
+                # Set explicit provenance field (indexed, queryable)
+                article.collected_for_question_id = question.id
 
-            # Link to target event if possible
-            if question.target_event_id and question.target_event_id not in article.event_ids:
-                article.event_ids.append(question.target_event_id)
+                # Also store in metadata for backward compatibility
+                article.metadata['evidence_type'] = 'hindsight'
+                article.metadata['related_question_ids'] = [question.id]
+
+                # Link to target event if possible
+                if question.target_event_id and question.target_event_id not in article.event_ids:
+                    article.event_ids.append(question.target_event_id)
+
+                # Persist updated article with provenance and event links
+                try:
+                    db.save(Article, article)
+                    logger.debug(f"Updated article {article.id} with question provenance")
+                except Exception as e:
+                    logger.warning(f"Failed to update article {article.id}: {e}")
 
         # Extract intermediate events from articles using LLM
         await self._extract_events_from_articles(new_articles, question)
@@ -284,7 +295,7 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
 
         # Instantiate per-question event collector, tool, and agent
         event_collector = ResultCollector[Event]()
-        event_tool = BatchEventIdentifierTool(collector=event_collector)
+        event_tool = BatchEventIdentifierTool(collector=event_collector, db_path=self.db_path)
         article_retrieval_tool = ArticleRetrievalTool(db_path=self.db_path)
         event_agent = AgentFactory.create_base_agent(tools=[event_tool, article_retrieval_tool])
 
