@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import GraphVisualization from './components/GraphVisualization'
 import ControlPanel from './components/ControlPanel'
 import EventDetails from './components/EventDetails'
@@ -88,18 +88,25 @@ function App() {
 
   // Client-side temporal filtering
   const applyTimeFilter = useCallback((startDate, endDate) => {
+    console.log('[TimeFilter] Called with:', { 
+      start: startDate?.toISOString(), 
+      end: endDate?.toISOString(),
+      totalNodes: fullGraphData.nodes.length 
+    })
+
     if (!startDate || !endDate) {
       // No filter, show all data and clear outcome markers
-      const resetNodes = fullGraphData.nodes.map(node => ({
-        ...node,
-        isOutcome: false
-      }))
+      // Reuse original objects to maintain reference identity
+      const resetNodes = fullGraphData.nodes
+      resetNodes.forEach(node => {
+        node.isOutcome = false
+      })
 
-      // Filter out synthetic links
+      // Filter out synthetic links - reuse original objects
       const resetLinks = fullGraphData.links
         .filter(link => !link.isSynthetic && link.type !== 'potentially_relevant')
-        .map(link => ({...link}))
 
+      console.log('[TimeFilter] Resetting to full data:', resetNodes.length, 'nodes')
       setGraphData({
         nodes: resetNodes,
         links: resetLinks
@@ -111,7 +118,7 @@ function App() {
 
     setTimeFilter({ start: startDate, end: endDate })
 
-    // Filter nodes by date, clear outcome markers
+    // Filter nodes by date - reuse original objects to maintain reference identity
     const filteredNodes = fullGraphData.nodes
       .filter(node => {
         const eventDate = node.properties?.occurred_date || node.properties?.predicted_date
@@ -120,29 +127,24 @@ function App() {
         const date = new Date(eventDate)
         return date >= startDate && date <= endDate
       })
-      .map(node => ({
-        ...node,
-        isOutcome: false
-      }))
+
+    // Reset isOutcome on filtered nodes directly
+    filteredNodes.forEach(node => {
+      node.isOutcome = false
+    })
+
+    console.log('[TimeFilter] Filtered to', filteredNodes.length, 'nodes')
 
     const nodeIds = new Set(filteredNodes.map(n => n.id))
 
     // Filter links to only include those between visible nodes (exclude synthetic)
+    // Reuse original link objects to maintain reference identity
     const filteredLinks = fullGraphData.links
-      .filter(link => !link.isSynthetic && link.type !== 'potentially_relevant')
       .filter(link => {
+        if (link.isSynthetic || link.type === 'potentially_relevant') return false
         const sourceId = typeof link.source === 'object' ? link.source.id : link.source
         const targetId = typeof link.target === 'object' ? link.target.id : link.target
         return nodeIds.has(sourceId) && nodeIds.has(targetId)
-      })
-      .map(link => {
-        // Create a shallow copy to avoid mutating the original link object
-        // This forces react-force-graph to re-process the link
-        return {
-          ...link,
-          source: typeof link.source === 'object' ? link.source.id : link.source,
-          target: typeof link.target === 'object' ? link.target.id : link.target
-        }
       })
 
     // Update with new filtered data

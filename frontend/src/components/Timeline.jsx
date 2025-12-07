@@ -6,9 +6,8 @@ const Timeline = ({ graphData, onTimeRangeChange, onEventClick, selectedNode }) 
   const [timeRange, setTimeRange] = useState({ start: null, end: null })
   const [hoveredEvent, setHoveredEvent] = useState(null)
   const [currentTime, setCurrentTime] = useState(100) // Percentage (0-100)
-  const [timeWindowDays, setTimeWindowDays] = useState(90) // Days before current time
   const [isPlaying, setIsPlaying] = useState(false)
-  const [playbackSpeed, setPlaybackSpeed] = useState(1) // 1x, 2x, 5x
+  const [playbackSpeed, setPlaybackSpeed] = useState(1) // 0.5x, 1x, 2x, 5x
   const playbackIntervalRef = useRef(null)
 
   // Extract events with dates and sort them
@@ -37,34 +36,34 @@ const Timeline = ({ graphData, onTimeRangeChange, onEventClick, selectedNode }) 
   }
 
   // Calculate time window (start and end dates)
+  // Show all events from the beginning up to current time (cumulative view)
   const getTimeWindow = () => {
     const endDate = getCurrentDate()
-    if (!endDate) return null
+    if (!endDate || !timeRange.start) return null
 
-    const startDate = new Date(endDate.getTime() - timeWindowDays * 24 * 60 * 60 * 1000)
-    return { start: startDate, end: endDate }
+    return { start: timeRange.start, end: endDate }
   }
 
-  // Update graph when time position or window changes (with debounce for smoother UX)
+  // Update graph when time position changes (with debounce for smoother UX)
   useEffect(() => {
     const timer = setTimeout(() => {
       const window = getTimeWindow()
       if (window && onTimeRangeChange) {
         onTimeRangeChange(window.start, window.end)
       }
-    }, 50) // 50ms debounce for smooth sliding
+    }, 30) // 30ms debounce for responsive updates during playback
 
     return () => clearTimeout(timer)
-  }, [currentTime, timeWindowDays])
+  }, [currentTime])
 
   // Playback controls
   useEffect(() => {
     if (isPlaying) {
-      // Move forward by 0.5% every 100ms (adjustable by speed)
+      // Move forward by 0.2% every 100ms (adjustable by speed)
       const interval = 100 / playbackSpeed
       playbackIntervalRef.current = setInterval(() => {
         setCurrentTime(prev => {
-          const next = prev + 0.5
+          const next = prev + 0.2
           if (next >= 100) {
             setIsPlaying(false)
             return 100
@@ -91,11 +90,6 @@ const Timeline = ({ graphData, onTimeRangeChange, onEventClick, selectedNode }) 
     setCurrentTime(parseFloat(e.target.value))
   }
 
-  // Handle window size change
-  const handleWindowChange = (e) => {
-    setTimeWindowDays(parseInt(e.target.value))
-  }
-
   // Toggle playback
   const togglePlayback = () => {
     setIsPlaying(!isPlaying)
@@ -113,10 +107,9 @@ const Timeline = ({ graphData, onTimeRangeChange, onEventClick, selectedNode }) 
     setIsPlaying(false)
   }
 
-  // Clear filter
+  // Clear filter (reset to show all)
   const handleClearFilter = () => {
     setCurrentTime(100)
-    setTimeWindowDays(90)
     if (onTimeRangeChange) {
       onTimeRangeChange(null, null)
     }
@@ -218,17 +211,6 @@ const Timeline = ({ graphData, onTimeRangeChange, onEventClick, selectedNode }) 
             <option value={2}>2x</option>
             <option value={5}>5x</option>
           </select>
-
-          <div className="timeline-window-control">
-            <label>Window:</label>
-            <select value={timeWindowDays} onChange={handleWindowChange}>
-              <option value={7}>7 days</option>
-              <option value={30}>30 days</option>
-              <option value={90}>90 days</option>
-              <option value={180}>6 months</option>
-              <option value={365}>1 year</option>
-            </select>
-          </div>
 
           <button
             className="timeline-clear-btn"
