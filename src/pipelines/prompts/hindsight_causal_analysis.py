@@ -18,8 +18,6 @@ RESOLUTION DATE: {resolution_date}
 GROUND TRUTH: {ground_truth}
 {target_event_info}
 
-CRITICAL: When using tools, ALWAYS use question_id="{question_id}"
-
 REQUIREMENTS:
 - Causal graph depth must be >= {min_graph_depth} levels (multi-hop chains)
 - Each causal link must have supporting evidence
@@ -38,8 +36,6 @@ PROCESS:
 
    "Build a deep causal graph for question '{question_id}' about: {question_text}
 
-   CRITICAL: When calling event_identifier and causal_reasoner tools,
-   use question_id='{question_id}' (not any other ID!).
    Make sure you provide the related article IDs from evidence_collector.
 
    {causal_graph_instructions}
@@ -47,7 +43,7 @@ PROCESS:
    REMEMBER: Every causal_reasoner call must have question_id='{question_id}'"
 
 3. EVALUATE & ITERATE:
-   - Call graph_inspector(question_id='{question_id}') to check current depth
+   - Call graph_inspector to check current depth
    - If max_depth < {min_graph_depth}: Tell causal_analyzer to go deeper
    - Target: {min_evidence_articles}+ events, {min_graph_depth}+ levels
 
@@ -138,7 +134,7 @@ Begin the analysis!""",
    3. For EACH immediate cause, identify what caused IT (level 2)
    4. For top 2 level-2 causes, go even deeper (level 3)
    5. Use causal_reasoner with target_event_id="{question.target_event_id}" for final links
-   6. Use graph_inspector(question_id='{question.id}') to check depth
+   6. Use graph_inspector to check depth
    7. If depth < {min_graph_depth}, create more intermediate events
    
    IMPORTANT: All causal chains MUST eventually lead to target_event_id="{question.target_event_id}"!
@@ -152,7 +148,7 @@ Begin the analysis!""",
    4. For EACH immediate cause, identify what caused IT (level 2)
    5. For top 2 level-2 causes, go even deeper (level 3)
    6. Use causal_reasoner with the target_event_id for final links
-   7. Use graph_inspector(question_id='{question.id}') to check depth
+   7. Use graph_inspector to check depth
    8. If depth < {min_graph_depth}, create more intermediate events
    
    IMPORTANT: All causal chains MUST eventually lead to your created target event!

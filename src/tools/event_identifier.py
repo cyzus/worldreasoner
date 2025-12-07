@@ -147,7 +147,7 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
             domain: Event domain (string, will be converted to enum)
             occurred_date: Optional occurrence date (ISO format)
             event_type: Type of event (string, will be converted to enum)
-            source_article_ids: Optional comma-separated article IDs
+            source_article_ids: Comma-separated article IDs
 
         Returns:
             JSON string of Event object (new or existing match)
@@ -160,7 +160,18 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
         article_ids = []
         if source_article_ids:
             article_ids = [aid.strip() for aid in source_article_ids.split(',')]
-
+            if self.db is not None:
+                # Verify article IDs exist in database
+                missing_ids = []
+                for aid in article_ids:
+                    if self.db.get(Article, aid) is None:
+                        missing_ids.append(aid)
+                
+                if missing_ids:
+                    return f"Error: The following article IDs do not exist in database: {', '.join(missing_ids)}"
+                
+        else:
+            return "Error: source_article_ids cannot be empty."
         # Validate and convert domain
         domain_enum = parse_domain(domain)
 
