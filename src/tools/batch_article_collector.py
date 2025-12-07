@@ -4,17 +4,13 @@ import json
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
-from smolagents import Tool
 from src.domain.models import Article, Domain
 from src.utils.enums import parse_domain, enum_to_list
-from src.utils.id_generator import generate_article_id
-from src.utils.date_utils import parse_iso_datetime
 from src.utils.logging import logger
-from src.tools.web_fetch import WebFetchTool
-from src.tools.base import CollectorAwareTool
+from src.tools.article_collector import ArticleCollectorTool
 
 
-class BatchArticleCollectorTool(CollectorAwareTool[Article]):
+class BatchArticleCollectorTool(ArticleCollectorTool):
     """Fetches and stores multiple articles from URLs into Article objects.
 
     Use this after web_search yields multiple URLs. Pass a JSON array of
@@ -66,21 +62,10 @@ class BatchArticleCollectorTool(CollectorAwareTool[Article]):
             default_domain: Default domain for articles
             question_id: Question ID for provenance tracking (sets collected_for_question_id)
         """
-        super().__init__(collector)
-        self.web_visitor = WebFetchTool()
+        super().__init__(db=db, db_path=db_path, collector=collector, question_id=question_id)
         self.default_domain = default_domain
-        self.question_id = question_id  # Provenance context
         # Precompute domain list for descriptions
         self._domain_list = ", ".join(enum_to_list(Domain))
-
-        # Optional database for deduplication/persistence via Database wrapper
-        if db:
-            self.db = db
-        elif db_path:
-            from src.core.database import Database
-            self.db = Database(db_path)
-        else:
-            self.db = None
 
     def forward(self, articles_json: str) -> str:
         """Process multiple articles from a JSON array."""
@@ -116,54 +101,24 @@ class BatchArticleCollectorTool(CollectorAwareTool[Article]):
                 errors.append({"index": idx, "error": "Missing required fields: url/title/source"})
                 continue
 
-            # Fetch content per URL
+            # Use parent class forward method to process single article
             try:
-                content = self.web_visitor.forward(url)
-                if not content or len(content.strip()) < 100:
-                    errors.append({"index": idx, "url": url, "error": "Failed to fetch or content too short"})
-                    continue
+                result_json = super().forward(
+                    url=url,
+                    title=title,
+                    source=source,
+                    domain=domain,
+                    published_date=published_date,
+                    author=author
+                )
+                result = json.loads(result_json)
+                
+                if "error" in result:
+                    errors.append({"index": idx, "url": url, "error": result["error"]})
+                else:
+                    stored.append({"id": result["id"], "title": result["title"], "url": result["url"]})
             except Exception as e:
-                errors.append({"index": idx, "url": url, "error": f"Fetch error: {e}"})
-                continue
-
-            pub_date = parse_iso_datetime(published_date)
-            domain_enum = parse_domain(domain)
-
-            # Generate ID (DB-backed systems may de-duplicate at save time)
-            article_id = generate_article_id(domain_enum, pub_date, idx)
-
-            # Build metadata with provenance info
-            metadata = {}
-            if self.question_id:
-                metadata['evidence_type'] = 'hindsight'
-                metadata['related_question_ids'] = [self.question_id]
-
-            article = Article(
-                id=article_id,
-                title=title,
-                url=url,
-                source=source,
-                domain=domain_enum,
-                published_date=pub_date or datetime.now(timezone.utc),
-                author=author,
-                content=content,
-                word_count=len(content.split()),
-                reading_time_minutes=max(1, len(content.split()) // 200),
-                tags=[],
-                event_ids=[],
-                collected_for_question_id=self.question_id,  # Provenance tracking
-                metadata=metadata
-            )
-
-            # Persist via unified collector interface (and optional DB)
-            self.store_result(article, context=f"Article {article.id}")
-            if self.db:
-                try:
-                    self.db.save_article(article)
-                except Exception as e:
-                    logger.debug(f"DB save failed for {article.id}: {e}")
-
-            stored.append({"id": article.id, "title": article.title, "url": article.url})
+                errors.append({"index": idx, "url": url, "error": f"Processing error: {e}"})
 
         return json.dumps({
             "stored": len(stored),
