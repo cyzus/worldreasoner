@@ -3,11 +3,22 @@
 Extracted from db_manager.py for use by the unified CLI.
 """
 
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set
 
 from src.core.database import GenericDatabase
 from src.domain.models import Article, Event, Question, CausalHypothesis
+
+
+@dataclass
+class QuestionFilter:
+    """Filter criteria for question selection."""
+    source: Optional[str] = None
+    domain: Optional[str] = None
+    resolved_only: bool = False
+    has_evidence: Optional[bool] = None
+    min_quality_score: Optional[float] = None
 
 
 class QuestionManager:
@@ -20,6 +31,62 @@ class QuestionManager:
             db: GenericDatabase instance to use
         """
         self.db = db
+
+    def has_evidence(self, question_id: str) -> bool:
+        """Check if question has evidence (causal hypotheses)."""
+        # Note: This is inefficient for loops, use get_evidence_status for bulk checks
+        hypotheses = self.db.get_many(CausalHypothesis)
+        return any(question_id in h.discovered_by_question_ids for h in hypotheses)
+
+    def get_evidence_status(self, questions: List[Question]) -> Dict[str, bool]:
+        """Bulk check if questions have evidence.
+        
+        Returns:
+            Dictionary mapping question_id to boolean (True if has evidence)
+        """
+        all_hypotheses = self.db.get_many(CausalHypothesis)
+        
+        # Build a set of question IDs that have evidence
+        questions_with_evidence = set()
+        for h in all_hypotheses:
+            questions_with_evidence.update(h.discovered_by_question_ids)
+            
+        return {q.id: q.id in questions_with_evidence for q in questions}
+
+    def query_questions(self, filter_obj: QuestionFilter, limit: int = 50) -> List[Question]:
+        """Query questions with advanced filtering."""
+        filters = {}
+        if filter_obj.source:
+            filters['source'] = filter_obj.source
+        if filter_obj.domain:
+            filters['domain'] = filter_obj.domain
+
+        # Reuse database layer for efficient querying
+        questions = self.db.get_many(Question, filters=filters)
+
+        # Apply additional filters
+        filtered_questions = []
+        for q in questions:
+            if filter_obj.resolved_only and q.ground_truth is None:
+                continue
+            if filter_obj.min_quality_score is not None and (q.quality_score or 0.0) < filter_obj.min_quality_score:
+                continue
+            if filter_obj.has_evidence is not None:
+                has_ev = self.has_evidence(q.id)
+                if (filter_obj.has_evidence and not has_ev) or (not filter_obj.has_evidence and has_ev):
+                    continue
+            filtered_questions.append(q)
+
+        # Sort by quality score descending, then by resolution date
+        filtered_questions.sort(
+            key=lambda q: (
+                -(q.quality_score or 0.0),
+                q.resolution_date or datetime.min.replace(tzinfo=timezone.utc),
+            ),
+            reverse=True,
+        )
+
+        return filtered_questions[:limit]
 
     def get_stats(self) -> Dict[str, int]:
         """Get counts for all tables."""

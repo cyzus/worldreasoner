@@ -18,7 +18,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from src.cli.commands import db
+from src.cli.commands import db, evidence, forecast
 
 # Create the main Typer app
 app = typer.Typer(
@@ -32,11 +32,11 @@ console = Console()
 
 # Register command groups
 app.add_typer(db.app, name="db", help="Database management commands")
+app.add_typer(evidence.app, name="evidence", help="Evidence pipeline commands")
+app.add_typer(forecast.app, name="forecast", help="Forecasting commands")
 
 # Phase 2+ will add:
 # app.add_typer(collect.app, name="collect", help="Question collection commands")
-# app.add_typer(evidence.app, name="evidence", help="Evidence pipeline commands")
-# app.add_typer(forecast.app, name="forecast", help="Forecasting commands")
 # app.add_typer(evaluate.app, name="evaluate", help="Evaluation commands")
 # app.add_typer(benchmark.app, name="benchmark", help="LLM benchmark research commands")
 # app.add_typer(temporal.app, name="temporal", help="Temporal forecast analysis")

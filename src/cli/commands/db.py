@@ -13,7 +13,8 @@ from rich import print as rprint
 import json
 
 from src.core.database import GenericDatabase
-from src.cli.core.question_manager import QuestionManager
+from src.cli.core.question_manager import QuestionManager, QuestionFilter
+from src.cli.ui.tables import display_question_table, display_event_table, display_article_table
 from src.domain.models import Event, Article
 
 app = typer.Typer(help="Database management commands")
@@ -59,68 +60,24 @@ def list_items(
     db, manager = get_db_and_manager(db_path)
 
     if item_type == "questions":
-        results = manager.list_questions(
-            domain=domain,
-            limit=limit,
-            show_related=show_related
-        )
-
-        table = Table(title=f"Questions (showing {len(results)})", show_header=True)
-        table.add_column("ID", style="cyan", no_wrap=True, max_width=16)
-        table.add_column("Question", style="white", overflow="ellipsis", max_width=50)
-        table.add_column("Domain", style="yellow", no_wrap=True)
-        table.add_column("Type", style="magenta", no_wrap=True)
-        table.add_column("Quality", justify="right", style="green")
-        if show_related:
-            table.add_column("Events", justify="right", style="blue")
-
-        for item in results:
-            row = [
-                item["id"][:14] + "...",
-                item["question_text"][:47] + "..." if len(item["question_text"]) > 50 else item["question_text"],
-                item["domain"],
-                item["type"],
-                f"{item['quality_score']:.2f}" if item['quality_score'] else "N/A",
-            ]
-            if show_related:
-                row.append(str(item.get("related_event_count", 0)))
-            table.add_row(*row)
-
-        console.print(table)
+        # Use shared UI component for consistent display
+        filter_obj = QuestionFilter(domain=domain)
+        questions = manager.query_questions(filter_obj, limit=limit)
+        
+        # Calculate evidence map if needed (or pass None if we don't want to show it, 
+        # but consistent display is better)
+        evidence_map = manager.get_evidence_status(questions)
+        
+        display_question_table(questions, evidence_map, console)
+        return
 
     elif item_type == "events":
         events = db.get_many(Event)[:limit]
-
-        table = Table(title=f"Events (showing {len(events)})", show_header=True)
-        table.add_column("ID", style="cyan", no_wrap=True, max_width=16)
-        table.add_column("Title", style="white", overflow="ellipsis", max_width=60)
-        table.add_column("Domain", style="yellow")
-
-        for event in events:
-            table.add_row(
-                event.id[:14] + "...",
-                event.title[:57] + "..." if len(event.title) > 60 else event.title,
-                event.domain.value if hasattr(event.domain, 'value') else str(event.domain)
-            )
-
-        console.print(table)
+        display_event_table(events, console)
 
     elif item_type == "articles":
         articles = db.get_many(Article)[:limit]
-
-        table = Table(title=f"Articles (showing {len(articles)})", show_header=True)
-        table.add_column("ID", style="cyan", no_wrap=True, max_width=16)
-        table.add_column("Title", style="white", overflow="ellipsis", max_width=60)
-        table.add_column("Source", style="green")
-
-        for article in articles:
-            table.add_row(
-                article.id[:14] + "...",
-                article.title[:57] + "..." if len(article.title) > 60 else article.title,
-                article.source or "N/A"
-            )
-
-        console.print(table)
+        display_article_table(articles, console)
     else:
         console.print(f"[red]Unknown item type: {item_type}[/red]")
         console.print("Valid types: questions, events, articles")
