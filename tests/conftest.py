@@ -31,7 +31,38 @@ Option 4: Print the database path in your test:
 """
 import pytest
 from pathlib import Path
+from datetime import datetime, timezone
 from src.core.database import GenericDatabase
+from src.domain.models import Question
+from src.domain.models.domain import Domain
+
+
+def create_test_question(**kwargs) -> Question:
+    """Create a valid test question with all required fields.
+    
+    Args:
+        **kwargs: Override default values. Use 'source_name' which will
+        be mapped to 'source' field internally.
+        
+    Returns:
+        Question: Valid question instance for testing
+    """
+    # Handle source_name -> source mapping
+    if "source_name" in kwargs:
+        kwargs["source"] = kwargs.pop("source_name")
+    
+    defaults = {
+        "id": "test_q_1",
+        "question_text": "This is a test question with at least 20 characters?",
+        "question_type": "boolean",
+        "domain": Domain.GENERAL,
+        "source": "test",
+        "difficulty": 3,
+        "cutoff_date": datetime.now(timezone.utc),
+        "resolution_date": datetime.now(timezone.utc),
+    }
+    defaults.update(kwargs)
+    return Question(**defaults)
 
 
 @pytest.fixture
