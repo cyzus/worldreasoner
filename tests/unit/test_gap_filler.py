@@ -17,7 +17,7 @@ def sample_goal():
     return CollectionGoal(
         total_questions=100,
         type_distribution={"boolean": 50, "mcq": 50},
-        source_quotas={"source1": 60, "source2": 40}
+        source_minimums={"source1": 60, "source2": 40}
     )
 
 

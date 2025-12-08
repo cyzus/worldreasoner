@@ -94,29 +94,23 @@ class CollectionProgress(BaseModel):
             )
             return False
 
-        # Check type distribution (with tolerance)
-        for qtype, target in goal.type_distribution.items():
+        # Check type distribution (exact minimums)
+        for qtype, minimum in goal.type_distribution.items():
             actual = self.by_type.get(qtype, 0)
-            # Use max(1, ...) to ensure at least 1 required when target > 0
-            min_required = max(1, int(target * goal.distribution_tolerance)) if target > 0 else 0
 
-            if actual < min_required:
+            if actual < minimum:
                 logger.debug(
-                    f"Type '{qtype}' not met: {actual}/{target} "
-                    f"(min: {min_required})"
+                    f"Type '{qtype}' not met: {actual}/{minimum}"
                 )
                 return False
 
-        # Check category distribution (with tolerance)
-        for category, target in goal.category_distribution.items():
+        # Check category distribution (exact minimums)
+        for category, minimum in goal.category_distribution.items():
             actual = self.by_category.get(category, 0)
-            # Use max(1, ...) to ensure at least 1 required when target > 0
-            min_required = max(1, int(target * goal.distribution_tolerance)) if target > 0 else 0
 
-            if actual < min_required:
+            if actual < minimum:
                 logger.debug(
-                    f"Category '{category}' not met: {actual}/{target} "
-                    f"(min: {min_required})"
+                    f"Category '{category}' not met: {actual}/{minimum}"
                 )
                 return False
 

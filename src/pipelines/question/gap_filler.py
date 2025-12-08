@@ -57,6 +57,15 @@ class GapFiller:
             logger.info("No gaps to fill")
             return []
 
+        # Skip distribution gap filling if we haven't met minimum total yet
+        # Distribution gaps only matter once we have the minimum number of questions
+        if analysis.total_needed > 0:
+            logger.info(
+                f"Still need {analysis.total_needed} more questions to meet minimum, "
+                f"skipping distribution gap filling"
+            )
+            return []
+
         collected_questions = []
 
         # Fill type gaps
@@ -115,11 +124,12 @@ class GapFiller:
             # Check if source can provide this type
             can_provide = await runner.can_provide(question_type=qtype)
             if not can_provide:
+                logger.debug(f"  Skipping '{source_name}' (cannot provide '{qtype}')")
                 continue
 
-            # Check quota
-            if not self._has_quota_available(source_name, progress):
-                continue
+            # NOTE: We intentionally skip quota checks here
+            # Distribution gap filling is allowed to exceed source quotas
+            # to improve the overall distribution quality
 
             # Collect
             logger.info(
@@ -176,11 +186,12 @@ class GapFiller:
             # Check if source can provide this category
             can_provide = await runner.can_provide(category=category)
             if not can_provide:
+                logger.debug(f"  Skipping '{source_name}' (cannot provide '{category}')")
                 continue
 
-            # Check quota
-            if not self._has_quota_available(source_name, progress):
-                continue
+            # NOTE: We intentionally skip quota checks here
+            # Distribution gap filling is allowed to exceed source quotas
+            # to improve the overall distribution quality
 
             # Collect
             logger.info(
@@ -218,8 +229,8 @@ class GapFiller:
     ) -> bool:
         """Check if source has quota remaining."""
         already_collected = progress.by_source.get(source_name, 0)
-        source_quota = self.goal.source_quotas.get(source_name, 100)
-        return already_collected < source_quota
+        source_minimum = self.goal.source_minimums.get(source_name, 1)
+        return already_collected < source_minimum
 
     def reset_exhausted(self):
         """Reset exhausted sources (for next iteration)."""

@@ -16,7 +16,6 @@ from .progress import CollectionProgress
 from .source_coordinator import SourceCoordinator, SourceRequest
 from .gap_analyzer import GapAnalyzer, GapAnalysis
 from .gap_filler import GapFiller
-from .quota_manager import QuotaManager
 from ..stages.question_quality import QuestionQualityRankingStage
 from src.domain.models import Question
 from src.core.database import GenericDatabase
@@ -106,7 +105,6 @@ class QuestionCollectionOrchestrator:
         # Initialize services
         self.coordinator = SourceCoordinator(parallel=self.config.parallel_sources)
         self.gap_analyzer = GapAnalyzer()
-        self.quota_manager = QuotaManager(goal)
         self.gap_filler = GapFiller(sources, self.coordinator, goal)
 
         # Initialize the quality ranking stage if enabled
@@ -264,9 +262,16 @@ class QuestionCollectionOrchestrator:
         # Build requests for each source
         requests = []
         for source_name, runner in self.sources.items():
-            needed = self.quota_manager.calculate_needed_from_source(
-                source_name, self.progress
-            )
+            # Calculate how many needed from this source
+            already_from_source = self.progress.by_source.get(source_name, 0)
+            source_minimum = self.goal.source_minimums.get(source_name, 1)
+            source_remaining = max(0, source_minimum - already_from_source)
+            
+            # Overall remaining to reach total
+            overall_remaining = max(0, self.goal.total_questions - self.progress.total)
+            
+            # Request minimum of source minimum and overall remaining
+            needed = min(source_remaining, overall_remaining)
 
             if needed <= 0:
                 logger.debug(f"No more questions needed from '{source_name}'")
