@@ -57,18 +57,23 @@ class GapFiller:
             logger.info("No gaps to fill")
             return []
 
-        # Skip distribution gap filling if we haven't met minimum total yet
-        # Distribution gaps only matter once we have the minimum number of questions
-        if analysis.total_needed > 0:
-            logger.info(
-                f"Still need {analysis.total_needed} more questions to meet minimum, "
-                f"skipping distribution gap filling"
-            )
-            return []
-
         collected_questions = []
 
-        # Fill type gaps
+        # If we need more questions to meet total, prioritize that over distribution
+        if analysis.total_needed > 0:
+            logger.info(
+                f"Filling total gap: need {analysis.total_needed} more questions to reach goal"
+            )
+            questions = await self._fill_total_gap(
+                needed_count=analysis.total_needed,
+                progress=progress,
+                existing_question_ids=existing_question_ids,
+            )
+            collected_questions.extend(questions)
+            # After filling total gap, check if we still need distribution fixes
+            # (don't return early - we might have collected some but not all)
+
+        # Fill type gaps (only if we've met total or as secondary priority)
         for qtype, needed_count in analysis.type_gaps.items():
             if needed_count <= 0:
                 continue
@@ -206,6 +211,56 @@ class GapFiller:
                     count=remaining,
                     type_filter=type_hints,
                     category_filter={category: remaining},
+                    quality_requirements=self.goal.quality,
+                    existing_question_ids=existing_question_ids,
+                )
+            )
+
+            if result.success and result.questions:
+                collected.extend(result.questions)
+                remaining -= len(result.questions)
+                logger.info(f"    ✓ Got {len(result.questions)} questions")
+            else:
+                # Mark as exhausted
+                logger.debug(f"    ✗ '{source_name}': no questions, marking exhausted")
+                self.exhausted_sources.add(source_name)
+
+        return collected
+
+    async def _fill_total_gap(
+        self,
+        needed_count: int,
+        progress: CollectionProgress,
+        existing_question_ids: set,
+    ) -> List[Question]:
+        """Fill gap in total question count without specific type/category requirements.
+        
+        Makes broad collection requests to reach the total goal.
+        """
+        logger.info(f"Filling total gap: need {needed_count} questions (any type/category)")
+
+        collected = []
+        remaining = needed_count
+
+        for source_name, runner in self.sources.items():
+            if remaining <= 0:
+                break
+
+            # Skip exhausted sources
+            if source_name in self.exhausted_sources:
+                logger.debug(f"  Skipping '{source_name}' (exhausted)")
+                continue
+
+            # Collect without specific type/category filters
+            logger.info(f"  Trying '{source_name}' for {remaining} questions (any type/category)...")
+
+            result = await self.coordinator._collect_from_source(
+                SourceRequest(
+                    source_name=source_name,
+                    runner=runner,
+                    count=remaining,
+                    type_filter=None,  # Accept any type
+                    category_filter=None,  # Accept any category
                     quality_requirements=self.goal.quality,
                     existing_question_ids=existing_question_ids,
                 )

@@ -18,7 +18,7 @@ class GapAnalysis:
     @property
     def has_gaps(self) -> bool:
         """Check if any gaps exist."""
-        return bool(self.type_gaps or self.category_gaps)
+        return bool(self.total_needed > 0 or self.type_gaps or self.category_gaps)
 
     @property
     def type_gaps_list(self) -> List[str]:
