@@ -6,6 +6,8 @@ Defines targets for question collection with distribution requirements.
 from typing import Dict, Optional
 from pydantic import BaseModel, Field
 import yaml
+from ..domain.models.question import QuestionType
+from ..domain.models.domain import Domain
 
 
 class QualityRequirements(BaseModel):
@@ -57,25 +59,25 @@ class CollectionGoal(BaseModel):
     )
 
     # Distribution by question type (minimum counts)
-    type_distribution: Dict[str, int] = Field(
+    type_distribution: Dict[QuestionType, int] = Field(
         default={
-            "boolean": 40,
-            "multiple_choice": 30,
-            "quantity": 20,
-            "timeframe": 10
+            QuestionType.BOOLEAN: 40,
+            QuestionType.MCQ: 30,
+            QuestionType.QUANTITY: 20,
+            QuestionType.TIMEFRAME: 10
         },
         description="Minimum count for each question type (can collect more to reach total)"
     )
 
     # Distribution by category/domain
-    category_distribution: Dict[str, int] = Field(
+    category_distribution: Dict[Domain, int] = Field(
         default={
-            "finance": 25,
-            "technology": 25,
-            "politics": 20,
-            "science": 15,
-            "sports": 10,
-            "other": 5
+            Domain.FINANCE: 25,
+            Domain.TECH: 25,
+            Domain.POLITICS: 20,
+            Domain.SCIENCE: 15,
+            Domain.SPORTS: 10,
+            Domain.GENERAL: 5
         },
         description="Minimum count for each category (can collect more to reach total)"
     )
