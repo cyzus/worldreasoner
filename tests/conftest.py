@@ -31,7 +31,7 @@ Option 4: Print the database path in your test:
 """
 import pytest
 from pathlib import Path
-from src.core.database import Database, GenericDatabase
+from src.core.database import GenericDatabase
 
 
 @pytest.fixture
@@ -106,48 +106,33 @@ def persistent_test_db_path(request):
 
 @pytest.fixture
 def test_db(tmp_path):
-    """Provide a temporary Database instance that auto-cleans.
+    """Provide a temporary GenericDatabase instance that auto-cleans.
 
-    Creates a fully initialized Database instance in a temporary directory.
+    Creates a fully initialized GenericDatabase instance in a temporary directory.
     All tables (articles, events, questions) are created automatically.
 
     Usage:
         def test_something(test_db):
-            test_db.save_article(article)
-            test_db.save_event(event)
+            test_db.save(Article, article_instance)
+            test_db.save(Event, event_instance)
             # Database will be cleaned up automatically
 
     Args:
         tmp_path: pytest's built-in temporary directory fixture
 
     Returns:
-        Database: Initialized database instance
+        GenericDatabase: Initialized database instance
     """
     db_path = tmp_path / "test.db"
-    return Database(str(db_path))
+    db = GenericDatabase(str(db_path))
+    # Initialize schema
+    from src.domain.models import Article, Event, Question, CausalHypothesis
+    db.create_table(Article)
+    db.create_table(Event)
+    db.create_table(Question)
+    db.create_table(CausalHypothesis)
+    return db
 
-
-@pytest.fixture
-def generic_test_db(tmp_path):
-    """Provide a temporary GenericDatabase instance.
-
-    For tests that need lower-level database access without
-    the high-level Database wrapper.
-
-    Usage:
-        def test_something(generic_test_db):
-            from src.domain.models import Article
-            generic_test_db.create_table(Article)
-            generic_test_db.save(Article, article_instance)
-
-    Args:
-        tmp_path: pytest's built-in temporary directory fixture
-
-    Returns:
-        GenericDatabase: Generic database instance
-    """
-    db_path = tmp_path / "test.db"
-    return GenericDatabase(str(db_path))
 
 
 @pytest.fixture(scope="session", autouse=True)

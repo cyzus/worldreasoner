@@ -35,8 +35,8 @@ import asyncio
 from datetime import datetime, timezone
 from src.agents.hindsight_agent import HindsightAgent
 from src.pipelines.prompts import HindsightCausalAnalysisPrompts
-from src.domain.models import Question, QuestionType, Domain
-from src.core.database import Database, GenericDatabase
+from src.domain.models import Question, QuestionType, Domain, Event, Article, CausalHypothesis
+from src.core.database import GenericDatabase
 from src.config import get_config
 from src.utils.logging import logger
 from src.utils.enums import enum_to_list
@@ -106,12 +106,17 @@ async def run_deep_causal_analysis(args):
     """
     # Load configuration
     app_config = get_config()
-    db = Database(args.db)
+    db = GenericDatabase(args.db)
+    # Ensure schema is initialized
+    db.create_table(Question)
+    db.create_table(Event)
+    db.create_table(Article)
+    db.create_table(CausalHypothesis)
 
     # Get or create question
     if args.question_id:
         # Load from database
-        question = db.db.get(Question, args.question_id)
+        question = db.get(Question, args.question_id)
         if not question:
             logger.error(f"Question '{args.question_id}' not found in database")
             return
@@ -151,7 +156,7 @@ async def run_deep_causal_analysis(args):
         )
 
         # Save to database
-        db.save_question(question)
+        db.save(Question, question)
         logger.info(f"Created custom question: {question_id}")
 
     # Log configuration

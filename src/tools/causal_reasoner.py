@@ -118,8 +118,10 @@ class CausalReasonerTool(Tool):
         # Database for persistence
         self.db = None
         if db_path:
-            from src.core.database import Database
-            self.db = Database(db_path)
+            from src.core.database import GenericDatabase
+            self.db = GenericDatabase(db_path)
+            # Ensure schema is initialized
+            self.db.create_table(CausalHypothesis)
 
     def forward(
         self,
@@ -194,7 +196,7 @@ class CausalReasonerTool(Tool):
 
         # Persist to database if available
         if self.db is not None:
-            self.db.save_causal_hypothesis(hypothesis)
+            self.db.save(CausalHypothesis, hypothesis)
             from src.utils.logging import logger
             logger.debug(f"Hypothesis {hypothesis_id} persisted to database")
 

@@ -99,9 +99,10 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             self.db = db
         elif db_path:
             # Lazy import to avoid circular dependency
-            # Use Database wrapper which auto-creates schema
-            from src.core.database import Database
-            self.db = Database(db_path)
+            from src.core.database import GenericDatabase
+            self.db = GenericDatabase(db_path)
+            # Ensure schema is initialized
+            self.db.create_table(Article)
     
     def setup(self):
         """Load configuration (called on first use)."""
@@ -136,8 +137,8 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             # Normalize URL for better matching (remove trailing slash, fragments)
             normalized_url = self._normalize_url(url)
             
-            # Use Database wrapper's get_articles method
-            existing_articles = self.db.db.get_many(
+            # Use GenericDatabase's get_many with filter
+            existing_articles = self.db.get_many(
                 Article,
                 filters={'url': normalized_url}
             )
@@ -247,7 +248,7 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
 
         # Persist to database if available
         if self.db:
-            self.db.save_article(article)
+            self.db.save(Article, article)
             logger.debug(f"Article {article.id} persisted to database")
 
         # Convert to JSON and return a SUMMARY to save tokens

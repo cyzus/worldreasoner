@@ -146,7 +146,7 @@ def get_config(reload: bool = False) -> Config:
 
     Example:
         config = get_config()
-        db = Database(config.database.db_path)
+        db = GenericDatabase(config.database.db_path)
     """
     global _config
     if _config is None or reload:

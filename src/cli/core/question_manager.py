@@ -6,7 +6,7 @@ Extracted from db_manager.py for use by the unified CLI.
 from datetime import datetime
 from typing import Dict, List, Optional, Set
 
-from src.core.database import Database, GenericDatabase
+from src.core.database import GenericDatabase
 from src.domain.models import Article, Event, Question, CausalHypothesis
 
 
@@ -20,8 +20,6 @@ class QuestionManager:
             db: GenericDatabase instance to use
         """
         self.db = db
-        # Legacy Database instance for methods that need it
-        self.legacy_db = Database(db.db_path)
 
     def get_stats(self) -> Dict[str, int]:
         """Get counts for all tables."""
@@ -39,7 +37,8 @@ class QuestionManager:
         show_related: bool = False
     ) -> List[Dict]:
         """List questions with optional filtering."""
-        questions = self.legacy_db.get_questions(domain=domain)[:limit]
+        filters = {'domain': domain} if domain else {}
+        questions = self.db.get_many(Question, filters=filters)[:limit]
 
         results = []
         for q in questions:
@@ -60,7 +59,7 @@ class QuestionManager:
 
     def show_question(self, question_id: str) -> Optional[Dict]:
         """Show detailed question info with all related entities."""
-        question = self.legacy_db.get_question(question_id)
+        question = self.db.get(Question, question_id)
         if not question:
             return None
 
@@ -73,7 +72,7 @@ class QuestionManager:
         events = []
         article_ids = set()
         for eid in event_ids:
-            event = self.legacy_db.get_event(eid)
+            event = self.db.get(Event, eid)
             if event:
                 events.append({
                     "id": event.id,
@@ -115,7 +114,7 @@ class QuestionManager:
         Returns:
             Dict with 'orphaned' (will delete) and 'shared' (will keep) items
         """
-        question = self.legacy_db.get_question(question_id)
+        question = self.db.get(Question, question_id)
         if not question:
             return {"error": f"Question {question_id} not found"}
 
@@ -287,7 +286,7 @@ class QuestionManager:
 
     def delete_event(self, event_id: str, cascade: bool = True, dry_run: bool = False) -> Dict:
         """Delete an event and cascade to related hypotheses/articles."""
-        event = self.legacy_db.get_event(event_id)
+        event = self.db.get(Event, event_id)
         if not event:
             return {"error": f"Event {event_id} not found"}
 
@@ -302,7 +301,7 @@ class QuestionManager:
         all_questions = self.db.get_many(Question)
         referencing_questions = [
             q.id for q in all_questions
-            if q.target_event_id == event_id or event_id in q.related_event_ids
+            if q.target_event_id == event_id or event_id in (q.related_event_ids or [])
         ]
 
         if referencing_questions:
@@ -360,7 +359,7 @@ class QuestionManager:
         Returns:
             Summary of deletions performed
         """
-        question = self.legacy_db.get_question(question_id)
+        question = self.db.get(Question, question_id)
         if not question:
             return {"error": f"Question {question_id} not found"}
 
@@ -455,7 +454,7 @@ class QuestionManager:
 
     def update_question(self, question_id: str, updates: Dict) -> Dict:
         """Update specific fields on a question."""
-        question = self.legacy_db.get_question(question_id)
+        question = self.db.get(Question, question_id)
         if not question:
             return {"error": f"Question {question_id} not found"}
 
@@ -468,6 +467,6 @@ class QuestionManager:
         # Rebuild and save
         updated_question = Question(**data)
         updated_question.updated_at = datetime.now()
-        self.legacy_db.save_question(updated_question)
+        self.db.save(Question, updated_question)
 
         return {"success": True, "updated": list(updates.keys())}
