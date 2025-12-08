@@ -164,10 +164,8 @@ class QuestionCollectionOrchestrator:
                 # Collect from sources
                 await self._collect_from_sources()
 
-                # If we're close but not quite there, try targeted collection
-                if self.progress.total >= self.goal.total_questions * 0.8:
-                    logger.info("Attempting targeted gap filling...")
-                    await self._fill_gaps()
+                logger.info("Attempting targeted gap filling...")
+                await self._fill_gaps()
 
                 # Run incremental quality ranking after collection AND gap filling
                 # This ensures all questions (including gap-filled ones) get scored
@@ -270,8 +268,16 @@ class QuestionCollectionOrchestrator:
             # Overall remaining to reach total
             overall_remaining = max(0, self.goal.total_questions - self.progress.total)
             
-            # Request minimum of source minimum and overall remaining
-            needed = min(source_remaining, overall_remaining)
+            # If source minimum not met, request that amount
+            # Otherwise, if overall goal not met, distribute remaining across active sources
+            if source_remaining > 0:
+                needed = min(source_remaining, overall_remaining)
+            elif overall_remaining > 0:
+                # Source minimum met, but total goal not met - keep collecting
+                # Distribute remaining evenly across all sources
+                needed = max(1, overall_remaining // len(self.sources))
+            else:
+                needed = 0
 
             if needed <= 0:
                 logger.debug(f"No more questions needed from '{source_name}'")

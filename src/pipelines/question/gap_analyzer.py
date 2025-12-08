@@ -76,12 +76,16 @@ class GapAnalyzer:
             total_needed=total_needed
         )
 
-        if analysis.has_gaps:
-            logger.info("Gaps identified:")
+        # Report gaps if we need more questions OR have distribution gaps
+        if total_needed > 0:
+            logger.info(f"Gap analysis: need {total_needed} more questions to reach total goal")
+            if analysis.has_gaps:
+                logger.info(f"  Distribution gaps - Types: {analysis.type_gaps}, Categories: {analysis.category_gaps}")
+        elif analysis.has_gaps:
+            logger.info("Total goal met, but distribution gaps remain:")
             logger.info(f"  Types: {analysis.type_gaps}")
             logger.info(f"  Categories: {analysis.category_gaps}")
-            logger.info(f"  Total needed: {analysis.total_needed}")
         else:
-            logger.info("No gaps detected")
+            logger.info("No gaps detected - goal fully met")
 
         return analysis
