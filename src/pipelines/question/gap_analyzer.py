@@ -48,21 +48,27 @@ class GapAnalyzer:
         Returns:
             Gap analysis with missing types and categories
         """
+        # Calculate minimum total needed to reach goal
+        total_needed = max(0, goal.total_questions - progress.total)
+
+        # Get distribution gaps (types and categories)
         gaps = progress.get_gaps(goal)
 
-        type_gaps = {
-            qtype: count
-            for qtype, count in gaps["types"].items()
-            if count > 0
-        }
+        # Only report distribution gaps if we've met the minimum total
+        # Distribution gaps are only meaningful once we have enough questions
+        type_gaps = {}
+        category_gaps = {}
+        
+        if total_needed == 0:
+            # We've met the minimum total - now check distribution gaps
+            for qtype, count in gaps["types"].items():
+                if count > 0:
+                    type_gaps[qtype] = count
 
-        category_gaps = {
-            category: count
-            for category, count in gaps["categories"].items()
-            if count > 0
-        }
-
-        total_needed = goal.total_questions - progress.total
+            for category, count in gaps["categories"].items():
+                if count > 0:
+                    category_gaps[category] = count
+        # else: Still need more questions to meet minimum - no distribution gaps yet
 
         analysis = GapAnalysis(
             type_gaps=type_gaps,
