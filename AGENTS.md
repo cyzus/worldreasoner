@@ -143,6 +143,17 @@ WorldReasoner uses **two complementary pipelines**:
 - Achieves 98% token reduction
 - Example: `ArticleCollectorTool` fetches full HTML internally, returns JSON summary
 
+**Question Collection Orchestrator** (`src/pipelines/question/orchestrator.py`):
+- Refactored from 660 lines to 366 lines (44.5% reduction)
+- Uses service-based architecture with dependency injection
+- **Services** (flat hierarchy in `src/pipelines/question/`):
+  - `SourceCoordinator` - Parallel/sequential source execution
+  - `GapAnalyzer` - Identifies gaps in type/category distribution
+  - `GapFiller` - Targeted collection to fill specific gaps
+  - `QuotaManager` - Calculates source quotas and budgets
+- Maintains same public API - no breaking changes
+- See `docs/ORCHESTRATOR_REFACTORING.md` for design details
+
 ### Directory Structure
 
 ```
@@ -172,6 +183,13 @@ worldreasoner/
 │   ├── pipelines/    # Data processing pipelines
 │   │   ├── base.py  # PipelineStage, Pipeline base classes
 │   │   ├── question/  # Question generation pipeline
+│   │   │   ├── orchestrator.py       # Slim coordinator (366 lines)
+│   │   │   ├── source_coordinator.py # Parallel/sequential execution
+│   │   │   ├── gap_analyzer.py       # Gap identification
+│   │   │   ├── gap_filler.py         # Targeted gap filling
+│   │   │   ├── quota_manager.py      # Source quota management
+│   │   │   ├── progress.py           # Progress tracking
+│   │   │   └── sources/              # Question sources
 │   │   ├── evidence/  # Evidence & causal reasoning pipeline
 │   │   ├── stages/    # Reusable pipeline stages
 │   └── prompts/       # Agent prompt templates
@@ -463,6 +481,7 @@ article = db.get(Article, "art_123")
 4. **Event/Article separation**: Events are causal nodes (graph), articles are documentation (info)
 5. **Token optimization**: Tools minimize token usage by processing internally
 6. **Generic type safety**: `PipelineStage[TInput, TOutput]` ensures compile-time correctness
+7. **Service extraction over monoliths**: QuestionCollectionOrchestrator refactored from 660→366 lines by extracting focused services (`SourceCoordinator`, `GapAnalyzer`, `GapFiller`, `QuotaManager`) while maintaining flat hierarchy (max 2 levels)
 
 ## Testing Strategy
 
