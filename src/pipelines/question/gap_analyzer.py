@@ -54,20 +54,17 @@ class GapAnalyzer:
         # Get distribution gaps (types and categories)
         gaps = progress.get_gaps(goal)
 
-        # Only report distribution gaps if we've met the minimum total
-        # Distribution gaps are only meaningful once we have enough questions
         type_gaps = {}
         category_gaps = {}
         
-        if total_needed == 0:
-            # We've met the minimum total - now check distribution gaps
-            for qtype, count in gaps["types"].items():
-                if count > 0:
-                    type_gaps[qtype] = count
+        # Always check distribution gaps, even if total not met
+        for qtype, count in gaps["types"].items():
+            if count > 0:
+                type_gaps[qtype] = count
 
-            for category, count in gaps["categories"].items():
-                if count > 0:
-                    category_gaps[category] = count
+        for category, count in gaps["categories"].items():
+            if count > 0:
+                category_gaps[category] = count
         # else: Still need more questions to meet minimum - no distribution gaps yet
 
         analysis = GapAnalysis(

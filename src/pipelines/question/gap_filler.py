@@ -59,21 +59,7 @@ class GapFiller:
 
         collected_questions = []
 
-        # If we need more questions to meet total, prioritize that over distribution
-        if analysis.total_needed > 0:
-            logger.info(
-                f"Filling total gap: need {analysis.total_needed} more questions to reach goal"
-            )
-            questions = await self._fill_total_gap(
-                needed_count=analysis.total_needed,
-                progress=progress,
-                existing_question_ids=existing_question_ids,
-            )
-            collected_questions.extend(questions)
-            # After filling total gap, check if we still need distribution fixes
-            # (don't return early - we might have collected some but not all)
-
-        # Fill type gaps (only if we've met total or as secondary priority)
+        # Fill type gaps
         for qtype, needed_count in analysis.type_gaps.items():
             if needed_count <= 0:
                 continue
@@ -95,6 +81,18 @@ class GapFiller:
                 category=category,
                 needed_count=needed_count,
                 type_hints=analysis.type_gaps_list,
+                progress=progress,
+                existing_question_ids=existing_question_ids,
+            )
+            collected_questions.extend(questions)
+
+        # If no specific gaps were identified but we still need questions for the total
+        if analysis.total_needed > 0 and not analysis.type_gaps and not analysis.category_gaps:
+            logger.info(
+                f"Filling total gap: need {analysis.total_needed} more questions to reach goal"
+            )
+            questions = await self._fill_total_gap(
+                needed_count=analysis.total_needed,
                 progress=progress,
                 existing_question_ids=existing_question_ids,
             )
