@@ -8,12 +8,14 @@ import asyncio
 from typing import List, Optional
 import typer
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 from rich.panel import Panel
+from rich.table import Table
 
 from src.core.database import GenericDatabase
 from src.cli.core.question_selector import QuestionSelector
 from src.cli.core.question_manager import QuestionManager
+from src.cli.core.pipeline_runner import PipelineRunner, PipelineType, PipelineProgress
 from src.domain.models import Question
 from src.utils.logging import logger
 
@@ -149,33 +151,41 @@ def run(
     console.print("\n[bold cyan]Starting evidence pipeline...[/bold cyan]")
 
     try:
-        _run_evidence_pipeline(
+        # Use PipelineRunner to execute the pipeline
+        result = asyncio.run(_run_evidence_pipeline_async(
             questions_to_process,
             db_path,
             force_reprocess,
-        )
-        console.print("\n[green]Evidence pipeline completed successfully[/green]")
+        ))
+        
+        # Display results
+        _display_pipeline_results(result)
+        
+        if result.failure_count > 0:
+            raise typer.Exit(1)
+            
     except Exception as e:
         logger.error(f"Evidence pipeline failed: {e}")
         console.print(f"\n[red]Evidence pipeline failed: {e}[/red]")
         raise typer.Exit(1)
 
 
-def _run_evidence_pipeline(
+async def _run_evidence_pipeline_async(
     questions: List[Question],
     db_path: str,
     force_reprocess: bool = False,
 ):
-    """Execute the evidence pipeline on selected questions.
-    
-    This is a placeholder that will be updated to integrate with
-    the actual EvidencePipeline once PipelineRunner is ready.
-    """
-    from src.utils.logging import logger
+    """Execute the evidence pipeline on selected questions using PipelineRunner."""
+    runner = PipelineRunner(db_path=db_path)
+    question_ids = [q.id for q in questions]
 
+    # Create progress display
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TimeElapsedColumn(),
         console=console,
     ) as progress:
         task = progress.add_task(
@@ -183,21 +193,56 @@ def _run_evidence_pipeline(
             total=len(questions),
         )
 
-        for i, question in enumerate(questions, 1):
+        def on_progress(p: PipelineProgress):
             progress.update(
                 task,
-                description=f"[cyan]Processing {i}/{len(questions)}: {question.id}",
+                completed=p.current,
+                description=f"[cyan]{p.stage}: {p.message}",
             )
 
-            try:
-                # TODO: Integrate with actual EvidencePipeline
-                # For now, just log and simulate processing
-                logger.info(f"Would process question: {question.id}")
-                progress.advance(task)
+        # Run pipeline with progress callback
+        result = await runner.run(
+            PipelineType.EVIDENCE,
+            question_ids=question_ids,
+            on_progress=on_progress,
+            force_reprocess=force_reprocess,
+        )
 
-            except Exception as e:
-                logger.error(f"Failed to process {question.id}: {e}")
-                console.print(f"[red]Failed to process {question.id}: {e}[/red]")
+    return result
+
+
+def _display_pipeline_results(result):
+    """Display formatted pipeline results."""
+    console.print(f"\n[bold]Pipeline Results:[/bold]")
+    console.print(f"  Duration: {result.duration_seconds:.1f}s")
+    console.print(f"  [green]Succeeded: {result.success_count}[/green]")
+    console.print(f"  [yellow]Skipped: {result.skip_count}[/yellow]")
+    console.print(f"  [red]Failed: {result.failure_count}[/red]")
+
+    if result.processed:
+        console.print("\n[bold green]Successfully Processed:[/bold green]")
+        table = Table(show_header=True, header_style="bold cyan")
+        table.add_column("Question ID")
+        table.add_column("Articles", justify="right")
+        table.add_column("Hypotheses", justify="right")
+
+        for item in result.processed:
+            table.add_row(
+                item["id"],
+                str(item.get("articles", 0)),
+                str(item.get("hypotheses", 0)),
+            )
+        console.print(table)
+
+    if result.skipped:
+        console.print("\n[bold yellow]Skipped:[/bold yellow]")
+        for item in result.skipped:
+            console.print(f"  {item['id']}: {item.get('reason', 'Unknown')}")
+
+    if result.failed:
+        console.print("\n[bold red]Failed:[/bold red]")
+        for item in result.failed:
+            console.print(f"  {item['id']}: {item.get('error', 'Unknown error')}")
 
 
 @app.command()

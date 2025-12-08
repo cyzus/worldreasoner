@@ -4,15 +4,17 @@ Provides commands to run LLM forecasts on selected questions
 with interactive question selection.
 """
 
+import asyncio
 from typing import List, Optional
 import typer
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 from rich.panel import Panel
 from rich.table import Table
 
 from src.core.database import GenericDatabase
 from src.cli.core.question_selector import QuestionSelector
+from src.cli.core.pipeline_runner import PipelineRunner, PipelineType, PipelineProgress
 from src.domain.models import Question
 from src.utils.logging import logger
 
@@ -147,32 +149,39 @@ def run(
     console.print("\n[bold cyan]Running forecast...[/bold cyan]")
 
     try:
-        _run_forecast(
-            question,
+        # Use PipelineRunner to execute the forecast
+        result = asyncio.run(_run_forecast_async(
+            [question],
             db_path,
             model,
             knowledge_only,
             offset_days,
-        )
-        console.print("\n[green]Forecast completed successfully[/green]")
+        ))
+        
+        # Display result
+        _display_forecast_result(result, question)
+        
+        if result.failure_count > 0:
+            raise typer.Exit(1)
+            
     except Exception as e:
         logger.error(f"Forecast failed: {e}")
         console.print(f"\n[red]Forecast failed: {e}[/red]")
         raise typer.Exit(1)
 
 
-def _run_forecast(
-    question: Question,
+async def _run_forecast_async(
+    questions: List[Question],
     db_path: str,
     model: Optional[str] = None,
     knowledge_only: bool = False,
     offset_days: int = 7,
 ):
-    """Execute forecast on a question.
-    
-    This is a placeholder that will be updated to integrate with
-    the actual forecasting agent infrastructure.
-    """
+    """Execute forecast on questions using PipelineRunner."""
+    runner = PipelineRunner(db_path=db_path)
+    question_ids = [q.id for q in questions]
+
+    # Create progress display
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -180,30 +189,46 @@ def _run_forecast(
     ) as progress:
         task = progress.add_task(
             "[cyan]Generating forecast...",
+            total=len(questions),
         )
 
-        try:
-            # TODO: Integrate with actual forecasting infrastructure
-            # This would use ForecastAgent or similar
-            logger.info(
-                f"Would forecast on question {question.id} "
-                f"using model={model}, knowledge_only={knowledge_only}"
+        def on_progress(p: PipelineProgress):
+            progress.update(
+                task,
+                completed=p.current,
+                description=f"[cyan]{p.stage}: {p.message}",
             )
-            progress.stop()
 
-            # Show mock result
-            panel = Panel(
-                f"[green]Forecast generated[/green]\n"
-                f"Question: {question.question_text}\n"
-                f"Status: Saved to database",
-                title="Forecast Result",
-                border_style="green",
-            )
-            console.print(panel)
+        # Run forecast pipeline
+        result = await runner.run(
+            PipelineType.FORECAST,
+            question_ids=question_ids,
+            on_progress=on_progress,
+            model=model,
+            knowledge_only=knowledge_only,
+            offset_days=offset_days,
+        )
 
-        except Exception as e:
-            progress.stop()
-            raise
+    return result
+
+
+def _display_forecast_result(result, question: Question):
+    """Display formatted forecast result for single question."""
+    if result.processed:
+        item = result.processed[0]
+        panel = Panel(
+            f"[green]Forecast generated[/green]\n"
+            f"Question: {question.question_text}\n"
+            f"Prediction: {item.get('prediction', 'N/A')}\n"
+            f"Confidence: {item.get('confidence', 'N/A')}\n"
+            f"Forecast ID: {item.get('forecast_id', 'N/A')}",
+            title="Forecast Result",
+            border_style="green",
+        )
+        console.print(panel)
+    elif result.failed:
+        item = result.failed[0]
+        console.print(f"[red]Forecast failed: {item.get('error', 'Unknown error')}[/red]")
 
 
 @app.command()
@@ -297,29 +322,50 @@ def batch(
     # Run batch forecasts
     console.print("\n[bold cyan]Running batch forecasts...[/bold cyan]")
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task(
-            "[cyan]Processing questions...",
-            total=len(questions_to_process),
-        )
+    try:
+        result = asyncio.run(_run_forecast_async(
+            questions_to_process,
+            db_path,
+            model,
+            knowledge_only,
+        ))
+        
+        # Display results
+        _display_batch_forecast_results(result)
+        
+        if result.failure_count > 0:
+            raise typer.Exit(1)
+            
+    except Exception as e:
+        logger.error(f"Batch forecast failed: {e}")
+        console.print(f"\n[red]Batch forecast failed: {e}[/red]")
+        raise typer.Exit(1)
 
-        for i, question in enumerate(questions_to_process, 1):
-            progress.update(
-                task,
-                description=f"[cyan]Forecasting {i}/{len(questions_to_process)}: {question.id}",
+
+def _display_batch_forecast_results(result):
+    """Display formatted batch forecast results."""
+    console.print(f"\n[bold]Forecast Results:[/bold]")
+    console.print(f"  Duration: {result.duration_seconds:.1f}s")
+    console.print(f"  [green]Succeeded: {result.success_count}[/green]")
+    console.print(f"  [yellow]Skipped: {result.skip_count}[/yellow]")
+    console.print(f"  [red]Failed: {result.failure_count}[/red]")
+
+    if result.processed:
+        console.print("\n[bold green]Successfully Forecasted:[/bold green]")
+        table = Table(show_header=True, header_style="bold cyan")
+        table.add_column("Question ID")
+        table.add_column("Prediction")
+        table.add_column("Confidence", justify="right")
+
+        for item in result.processed:
+            table.add_row(
+                item["id"],
+                str(item.get("prediction", "N/A")),
+                f"{item.get('confidence', 0):.2f}",
             )
+        console.print(table)
 
-            try:
-                # TODO: Integrate with actual forecasting infrastructure
-                logger.info(f"Would forecast on question: {question.id}")
-                progress.advance(task)
-
-            except Exception as e:
-                logger.error(f"Failed to forecast on {question.id}: {e}")
-                console.print(f"[red]Failed to forecast on {question.id}: {e}[/red]")
-
-    console.print("\n[green]Batch forecasting completed[/green]")
+    if result.failed:
+        console.print("\n[bold red]Failed:[/bold red]")
+        for item in result.failed:
+            console.print(f"  {item['id']}: {item.get('error', 'Unknown error')}")
