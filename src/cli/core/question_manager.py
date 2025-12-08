@@ -9,6 +9,10 @@ from typing import Dict, List, Optional, Set
 
 from src.core.database import GenericDatabase
 from src.domain.models import Article, Event, Question, CausalHypothesis
+from src.utils.question_filters import (
+    filter_resolved_questions,
+    filter_by_quality_score,
+)
 
 
 @dataclass
@@ -65,17 +69,23 @@ class QuestionManager:
         questions = self.db.get_many(Question, filters=filters)
 
         # Apply additional filters
-        filtered_questions = []
-        for q in questions:
-            if filter_obj.resolved_only and q.ground_truth is None:
-                continue
-            if filter_obj.min_quality_score is not None and (q.quality_score or 0.0) < filter_obj.min_quality_score:
-                continue
-            if filter_obj.has_evidence is not None:
-                has_ev = self.has_evidence(q.id)
-                if (filter_obj.has_evidence and not has_ev) or (not filter_obj.has_evidence and has_ev):
-                    continue
-            filtered_questions.append(q)
+        filtered_questions = questions
+
+        # Filter by resolution status
+        if filter_obj.resolved_only:
+            filtered_questions = filter_resolved_questions(filtered_questions, resolved_only=True)
+
+        # Filter by quality score
+        if filter_obj.min_quality_score is not None:
+            filtered_questions = filter_by_quality_score(filtered_questions, filter_obj.min_quality_score)
+
+        # Filter by evidence status (requires iteration for has_evidence check)
+        if filter_obj.has_evidence is not None:
+            filtered_questions = [
+                q for q in filtered_questions
+                if (filter_obj.has_evidence and self.has_evidence(q.id))
+                or (not filter_obj.has_evidence and not self.has_evidence(q.id))
+            ]
 
         # Sort by quality score descending, then by resolution date
         filtered_questions.sort(

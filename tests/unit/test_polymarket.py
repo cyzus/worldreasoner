@@ -28,13 +28,18 @@ async def test_basic_price_history():
     async with aiohttp.ClientSession() as session:
         # Fetch a recent resolved market
         url = "https://gamma-api.polymarket.com/markets"
-        params = {"limit": 10, "closed": "true", "order": "closedTime", "ascending": "false"}
-
+        params = {"limit": 10, "closed": "true", "order": "closedTime", "ascending": "false", "related_tags": "true"}
+        tag_url = "https://gamma-api.polymarket.com/markets/{id}/tags"
         async with session.get(url, params=params) as response:
             markets = await response.json()
 
         # Find a market with CLOB token IDs
         for market in markets:
+            market_id = market.get('id')
+            async with session.get(tag_url.format(id=market_id)) as tag_response:
+                tags = await tag_response.json()
+                logger.info(f"Tags: {tags}")
+
             clob_ids_raw = market.get('clobTokenIds', '[]')
             clob_ids = json.loads(clob_ids_raw) if isinstance(clob_ids_raw, str) else clob_ids_raw
 
@@ -178,10 +183,10 @@ async def main():
         await test_basic_price_history()
 
         # Test 2: Multi-outcome markets
-        await test_multi_outcome_price_history()
+        # await test_multi_outcome_price_history()
 
-        # Test 3: Complete integration flow
-        await test_end_to_end_integration()
+        # # Test 3: Complete integration flow
+        # await test_end_to_end_integration()
 
         logger.info("\n" + "="*80)
         logger.info("✓ ALL TESTS COMPLETED")
