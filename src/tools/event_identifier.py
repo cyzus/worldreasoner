@@ -38,7 +38,7 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
     """
     
     name = "event_identifier"
-    description = """Stores identified event data into structured Event format.
+    description = f"""Stores identified event data into structured Event format.
 
     Use this tool AFTER you've analyzed articles and identified specific events.
     Call this tool once for EACH event you identify (not all at once).
@@ -50,9 +50,9 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
     Args:
         title (str): Short descriptive title of the event
         description (str): Detailed description of what happened/will happen
-        domain (str): Event domain (finance|politics|tech|health|climate|general)
-        occurred_date (str, optional): When the event occurred (ISO format)
-        event_type (str, optional): Type of event (decision|outcome|indicator|milestone|external_shock)
+        domain (str): Event domain - one of: {', '.join(enum_to_list(Domain))}
+        occurred_date (str, optional): When the event occurred (ISO format with time zone)
+        event_type (str, optional): Type of event - one of: {', '.join(enum_to_list(EventType))}
         source_article_ids (str, optional): Comma-separated article IDs mentioning this event
 
     Returns:

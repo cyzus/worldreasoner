@@ -35,7 +35,7 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
     """
     
     name = "article_collector"
-    description = """Fetches and stores article data from a URL.
+    description = f"""Fetches and stores article data from a URL.
     
     Use this tool AFTER you've found article URLs using web_search.
     Pass ONLY the URL and metadata (title, source, etc.) - do NOT pass article content.
@@ -45,7 +45,7 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         url (str): Source URL to fetch the article from
         title (str): Article headline/title from search results
         source (str): Publication name (e.g., "TechCrunch", "BBC News")
-        domain (str): Article domain category - one of: finance, politics, tech, health, climate, general
+        domain (str): Article domain category - one of: {', '.join(enum_to_list(Domain))}
         published_date (str, optional): Publication date in ISO format if available
         author (str, optional): Author name if available
     

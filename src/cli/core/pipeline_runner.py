@@ -179,8 +179,10 @@ class PipelineRunner:
             goal = CollectionGoal.from_yaml(goal_path)
             goal.validate_distributions()
 
-            # Initialize database
+            # Initialize database tables
             self.db.create_table(Question)
+            self.db.create_table(Article)
+            self.db.create_table(Event)
 
             # Initialize sources
             if on_progress:

@@ -3,8 +3,9 @@
 import json
 from typing import List, Dict, Any, Optional
 
-from src.domain.models import Event, Question
+from src.domain.models import Event, Question, Domain, QuestionType
 from src.utils.logging import logger
+from src.utils.enums import enum_to_list
 from src.tools.question_generator import QuestionGeneratorTool
 
 
@@ -22,7 +23,7 @@ class BatchQuestionGeneratorTool(QuestionGeneratorTool):
     """
 
     name = "batch_question_generator"
-    description = """Stores multiple generated forecast questions into structured Question format.
+    description = f"""Stores multiple generated forecast questions into structured Question format.
 
     Use this tool AFTER you've generated all questions.
     Call this tool ONCE with a JSON array containing ALL questions you generated.
@@ -30,8 +31,8 @@ class BatchQuestionGeneratorTool(QuestionGeneratorTool):
     Args:
         questions_json (str): JSON array of question objects. Each question should have:
             - question_text (str): The actual question text
-            - question_type (str): Type (boolean|mcq|quantity|timeframe)
-            - domain (str): Question domain (finance|politics|tech|health|climate|sports|science|business|general)
+            - question_type (str): Type - one of: {', '.join(enum_to_list(QuestionType))}
+            - domain (str): Question domain - one of: {', '.join(enum_to_list(Domain))}
             - difficulty (int): Difficulty level 1-5
             - resolution_date (str): When question can be resolved (ISO format)
             - resolution_criteria (str): Objective rules for verification
@@ -45,7 +46,7 @@ class BatchQuestionGeneratorTool(QuestionGeneratorTool):
 
     Example:
         [
-          {
+          {{
             "question_text": "Will Bitcoin exceed $100K by end of 2025?",
             "question_type": "boolean",
             "domain": "finance",
@@ -56,7 +57,7 @@ class BatchQuestionGeneratorTool(QuestionGeneratorTool):
             "resolution_reasoning": "Bitcoin closed at $105,432 on Dec 31, 2025 per CoinMarketCap",
             "context": "Bitcoin has been volatile in 2025...",
             "related_event_ids": "evt_finance_20251201_001"
-          }
+          }}
         ]
 
     Returns:

@@ -31,7 +31,12 @@ def parse_iso_datetime(
     try:
         # Handle 'Z' suffix by replacing with +00:00
         normalized = date_str.replace('Z', '+00:00')
-        return datetime.fromisoformat(normalized)
+        dt = datetime.fromisoformat(normalized)
+        # Ensure result is timezone-aware (treat naive as UTC)
+        if dt.tzinfo is None:
+            logger.debug(f"Datetime string '{date_str}' missing timezone, assuming UTC")
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
     except (ValueError, AttributeError) as e:
         logger.warning(f"Failed to parse datetime '{date_str}': {e}")
         return fallback or datetime.now(timezone.utc)

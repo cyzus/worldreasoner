@@ -4,8 +4,8 @@ import json
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 
-from src.domain.models import Event, Domain
-from src.utils.enums import parse_domain, parse_event_type
+from src.domain.models import Event, Domain, EventType
+from src.utils.enums import enum_to_list, parse_domain, parse_event_type
 from src.utils.id_generator import generate_event_id
 from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
 from src.utils.logging import logger
@@ -22,11 +22,11 @@ class BatchEventIdentifierTool(EventIdentifierTool):
     4. Set proper event types and status
 
     Use this instead of calling event_identifier multiple times to avoid
-    JSON concatenation issues with Gemini models.
+    JSON concatenation issues with some LLM models.
     """
 
     name = "batch_event_identifier"
-    description = """Stores multiple identified events into structured Event format.
+    description = f"""Stores multiple identified events into structured Event format.
 
     Use this tool AFTER you've analyzed all articles and identified events.
     Call this tool ONCE with a JSON array containing ALL events you identified.
@@ -35,29 +35,29 @@ class BatchEventIdentifierTool(EventIdentifierTool):
         events_json (str): JSON array of event objects. Each event should have:
             - title (str): Short descriptive title
             - description (str): Detailed description
-            - domain (str): Event domain (finance|politics|tech|health|climate|general)
+            - domain (str): Event domain - one of: {', '.join(enum_to_list(Domain))}
             - occurred_date (str, optional): When event occurred (ISO 8601 WITH timezone)
-            - event_type (str, optional): Type (decision|outcome|indicator|milestone|external_shock)
+            - event_type (str, optional): Type - one of: {', '.join(enum_to_list(EventType))}
             - source_article_ids (str, optional): Comma-separated article IDs
 
     Example:
         [
-          {
+          {{
             "title": "Fed raises rates",
             "description": "Federal Reserve raises interest rates by 0.25%",
             "domain": "finance",
             "occurred_date": "2025-11-26T14:30:00+00:00",
             "event_type": "decision",
             "source_article_ids": "art_123,art_456"
-          },
-          {
+          }},
+          {{
             "title": "New iPhone announced",
             "description": "Apple announces iPhone 17 launch",
             "domain": "tech",
             "occurred_date": "2025-11-27T09:15:00Z",
             "event_type": "indicator",
             "source_article_ids": "art_789"
-          }
+          }}
         ]
 
     Returns:
