@@ -225,10 +225,6 @@ from src.core import TemporalContext
 with TemporalContext(cutoff_date=cutoff):
     db = GenericDatabase('worldreasoner.db')  # Automatically uses cutoff from context
     articles = db.get_many(Article)  # Temporally filtered
-
-# High-level wrapper (for application code)
-db = Database('worldreasoner.db')
-db.save_article(article_instance)
 ```
 
 ### Temporal Gateway (Forecasting Validity)
