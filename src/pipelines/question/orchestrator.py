@@ -156,8 +156,14 @@ class QuestionCollectionOrchestrator:
                 # Collect from sources
                 await self._collect_from_sources()
 
-                # Run incremental quality ranking after collection
-                # This filters out low-quality questions before expensive gap-filling
+                # If we're close but not quite there, try targeted collection
+                if self.progress.total >= self.goal.total_questions * 0.8:
+                    logger.info("Attempting targeted gap filling...")
+                    await self._fill_gaps()
+
+                # Run incremental quality ranking after collection AND gap filling
+                # This ensures all questions (including gap-filled ones) get scored
+                # Already-scored questions will be skipped automatically
                 if self.quality_stage and self.progress.get_questions():
                     logger.info("--- Running Incremental Quality Ranking ---")
                     all_questions = self.progress.get_questions()
@@ -175,11 +181,6 @@ class QuestionCollectionOrchestrator:
                 # Save intermediate results
                 if self.config.save_intermediate_results and self.db:
                     self._save_to_database()
-
-                # If we're close but not quite there, try targeted collection
-                if self.progress.total >= self.goal.total_questions * 0.8:
-                    logger.info("Attempting targeted gap filling...")
-                    await self._fill_gaps()
 
             # Final check
             goal_met = self.progress.is_goal_met(self.goal)

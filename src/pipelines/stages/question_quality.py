@@ -30,10 +30,10 @@ class QuestionQualityRankingStage(PipelineStage[Question, Question]):
     async def process(self, inputs: List[Question]) -> List[Question]:
         """
         Process a list of questions to assess and attach quality scores.
-        
+
         Args:
             inputs: A list of Question objects.
-            
+
         Returns:
             A list of Question objects with quality_score and quality_dimensions populated,
             sorted in descending order of quality_score.
@@ -44,10 +44,23 @@ class QuestionQualityRankingStage(PipelineStage[Question, Question]):
 
         logger.info(f"Starting quality assessment for {len(inputs)} questions...")
 
-        # Batch questions
+        # Separate already-scored from unscored questions
+        already_scored = [q for q in inputs if q.quality_score is not None]
+        unscored = [q for q in inputs if q.quality_score is None]
+
+        if already_scored:
+            logger.info(f"Skipping {len(already_scored)} questions that already have quality scores")
+
+        if not unscored:
+            logger.info("All questions already have quality scores, skipping assessment")
+            return inputs
+
+        logger.info(f"Assessing {len(unscored)} unscored questions...")
+
+        # Batch unscored questions only
         batches = [
-            inputs[i:i + self.config.batch_size]
-            for i in range(0, len(inputs), self.config.batch_size)
+            unscored[i:i + self.config.batch_size]
+            for i in range(0, len(unscored), self.config.batch_size)
         ]
 
         logger.info(f"Processing in {len(batches)} batches of size up to {self.config.batch_size}.")
@@ -63,8 +76,9 @@ class QuestionQualityRankingStage(PipelineStage[Question, Question]):
 
         logger.info(f"Received {len(assessments)} quality assessments.")
 
-        scored_questions = []
-        for question in inputs:
+        # Process newly scored questions
+        newly_scored = []
+        for question in unscored:
             if question.id in assessment_map:
                 assessment = assessment_map[question.id]
                 question.quality_score = assessment.composite_score
@@ -103,24 +117,27 @@ class QuestionQualityRankingStage(PipelineStage[Question, Question]):
                         question.quality_warning = f"Low critical dimensions: {dim_scores}"
                         logger.debug(f"Question {question.id} flagged with warning: {question.quality_warning}")
 
-                scored_questions.append(question)
+                newly_scored.append(question)
                 logger.debug(f"Question '{question.id}' scored: {question.quality_score:.2f}")
             else:
                 # If a question wasn't scored for some reason, keep it but log a warning
                 logger.warning(f"Question '{question.id}' was not found in assessment results.")
-                scored_questions.append(question) # Keep the question
+                newly_scored.append(question) # Keep the question
 
-        # Sort questions by quality score in descending order
-        scored_questions.sort(key=lambda q: q.quality_score or 0.0, reverse=True)
+        # Combine already-scored and newly-scored questions
+        all_questions = already_scored + newly_scored
 
-        logger.success(f"Successfully scored and ranked {len(scored_questions)} questions.")
+        # Sort all questions by quality score in descending order
+        all_questions.sort(key=lambda q: q.quality_score or 0.0, reverse=True)
 
-        # Log statistics
-        if scored_questions:
-            scores = [q.quality_score for q in scored_questions if q.quality_score is not None]
-            total = len(scored_questions)
-            skipped = sum(1 for q in scored_questions if q.skip_evidence)
-            warned = sum(1 for q in scored_questions if q.quality_warning)
+        logger.success(f"Successfully scored and ranked {len(all_questions)} questions ({len(newly_scored)} newly scored, {len(already_scored)} previously scored).")
+
+        # Log statistics for newly scored questions only
+        if newly_scored:
+            scores = [q.quality_score for q in newly_scored if q.quality_score is not None]
+            total = len(newly_scored)
+            skipped = sum(1 for q in newly_scored if q.skip_evidence)
+            warned = sum(1 for q in newly_scored if q.quality_warning)
 
             if scores:
                 avg_score = sum(scores) / len(scores)
@@ -134,4 +151,4 @@ class QuestionQualityRankingStage(PipelineStage[Question, Question]):
                 f"{warned} warnings ({warned/total*100:.1f}%)"
             )
 
-        return scored_questions
+        return all_questions
