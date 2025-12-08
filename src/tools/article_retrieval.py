@@ -3,6 +3,7 @@
 import json
 from typing import Optional, List
 from smolagents import Tool
+from src.domain.models import Article
 
 
 class ArticleRetrievalTool(Tool):
