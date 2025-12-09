@@ -179,12 +179,16 @@ class GraphInspectorTool(Tool):
         target: str,
         visited: Optional[Set[str]] = None
     ) -> int:
-        """Find length of path from start to target using BFS.
+        """Find length of causal path from start to target.
+
+        The graph structure is graph[target_event] = [source_events], where
+        sources CAUSE the target. To find path length from start to target,
+        we need to traverse in the causal direction: start causes X causes target.
 
         Args:
             graph: Adjacency list (target -> sources)
-            start: Starting node
-            target: Target node
+            start: Starting node (source event)
+            target: Target node (final effect)
             visited: Set of visited nodes to prevent cycles
 
         Returns:
@@ -201,29 +205,22 @@ class GraphInspectorTool(Tool):
 
         visited.add(start)
 
-        # Check if start points to target
-        if start in graph:
-            if target in graph[start]:
-                return 1
-
-            # Recursively search through sources
-            max_path = 0
-            for source in graph[start]:
-                path_len = self._find_path_length(graph, source, target, visited.copy())
-                if path_len > 0:
-                    max_path = max(max_path, 1 + path_len)
-            return max_path
-
-        # Search in reverse - if target points to start
+        # Find all nodes that have 'start' as a source (i.e., events that 'start' causes)
+        # Since graph[node] = sources, we need to check if start is in any node's sources
+        max_path = 0
         for node, sources in graph.items():
-            if node == start:
-                continue
             if start in sources:
-                path_len = self._find_path_length(graph, node, target, visited.copy())
-                if path_len > 0:
-                    return 1 + path_len
+                # start causes node, so we can traverse this edge
+                if node == target:
+                    # Direct causal link to target
+                    return 1
+                else:
+                    # Recursively find path from node to target
+                    path_len = self._find_path_length(graph, node, target, visited.copy())
+                    if path_len > 0:
+                        max_path = max(max_path, 1 + path_len)
 
-        return 0
+        return max_path
 
     def _find_max_depth_from_node(
         self,
