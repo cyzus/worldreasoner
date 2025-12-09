@@ -49,64 +49,7 @@ class PolymarketRunner(QuestionSourceRunner):
     # Default type mapping (maps market types to QuestionType enum values)
     DEFAULT_TYPE_MAP = {
         "binary": QuestionType.BINARY,
-        "multiple_choice": QuestionType.MCQ,
-    }
-
-    # Map Polymarket API categories to our Domain enum
-    # Based on actual Polymarket category field values from the API
-    DEFAULT_CATEGORY_MAP = {
-        # Politics
-        "US-current-affairs": Domain.POLITICS,
-        "Global Politics": Domain.POLITICS,
-        "politics": Domain.POLITICS,
-        # Finance/Crypto
-        "Crypto": Domain.FINANCE,
-        "crypto": Domain.FINANCE,
-        "defi": Domain.FINANCE,
-        "finance": Domain.FINANCE,
-        "NFTs": Domain.FINANCE,
-        "Business": Domain.BUSINESS,
-        "business": Domain.BUSINESS,
-        # Sports
-        "Sports": Domain.SPORTS,
-        "sports": Domain.SPORTS,
-        "NBA Playoffs": Domain.SPORTS,
-        "Olympics": Domain.SPORTS,
-        # Tech
-        "Tech": Domain.TECH,
-        "tech": Domain.TECH,
-        "technology": Domain.TECH,
-        "ai": Domain.TECH,
-        "Space": Domain.SCIENCE,
-        # Culture
-        "Pop-Culture ": Domain.CULTURE,  # Note: Polymarket has trailing space!
-        "Pop-Culture": Domain.CULTURE,
-        "culture": Domain.CULTURE,
-        "entertainment": Domain.CULTURE,
-        "Art": Domain.CULTURE,
-        "Chess": Domain.CULTURE,
-        # Health/Science
-        "Coronavirus": Domain.HEALTH,
-        "health": Domain.HEALTH,
-        "Science": Domain.SCIENCE,
-        "science": Domain.SCIENCE,
-        # Other
-        "climate": Domain.CLIMATE,
-        "other": Domain.GENERAL,
-    }
-
-    # Reverse map: Domain -> Polymarket categories (for client-side filtering)
-    DOMAIN_TO_CATEGORY_MAP = {
-        Domain.POLITICS: ["US-current-affairs", "Global Politics", "politics"],
-        Domain.FINANCE: ["Crypto", "crypto", "defi", "finance", "NFTs"],
-        Domain.SPORTS: ["Sports", "sports", "NBA Playoffs", "Olympics"],
-        Domain.TECH: ["Tech", "tech", "technology", "ai"],
-        Domain.CULTURE: ["Pop-Culture ", "Pop-Culture", "culture", "entertainment", "Art", "Chess"],
-        Domain.HEALTH: ["Coronavirus", "health"],
-        Domain.SCIENCE: ["Science", "science", "Space"],
-        Domain.BUSINESS: ["Business", "business"],
-        Domain.CLIMATE: ["climate"],
-        Domain.GENERAL: [],  # Accept any category
+        "mcq": QuestionType.MCQ,
     }
 
     # Map domains to Polymarket tag slugs for API filtering
@@ -129,7 +72,6 @@ class PolymarketRunner(QuestionSourceRunner):
         min_volume_usd: float = 0.0,  # Relaxed - many markets lack volume data
         require_ground_truth: bool = True,
         type_map: Optional[Dict[str, QuestionType]] = None,
-        category_map: Optional[Dict[str, Domain]] = None,
     ):
         """Initialize Polymarket runner.
 
@@ -137,13 +79,11 @@ class PolymarketRunner(QuestionSourceRunner):
             min_volume_usd: Minimum trading volume filter (0 = no filter)
             require_ground_truth: If True, fetch resolved markets with outcomes. If False, fetch active future markets.
             type_map: Custom mapping from market question types to QuestionType enum values (uses DEFAULT_TYPE_MAP if not provided)
-            category_map: Custom mapping from market categories to Domain enum values (uses DEFAULT_CATEGORY_MAP if not provided)
         """
         super().__init__(source_name="polymarket")
         self.min_volume_usd = min_volume_usd
         self.require_ground_truth = require_ground_truth
         self.type_map = type_map or self.DEFAULT_TYPE_MAP
-        self.category_map = category_map or self.DEFAULT_CATEGORY_MAP
         
         # Initialize utilities
         self.client = PolymarketClient()
@@ -277,7 +217,7 @@ class PolymarketRunner(QuestionSourceRunner):
                 if len(outcomes) == 2:
                     question_type = "binary"
                 else:
-                    question_type = "multiple_choice"
+                    question_type = "mcq"
             elif market_type == "scalar":
                 # Skip scalar markets (price predictions)
                 return None
@@ -286,7 +226,7 @@ class PolymarketRunner(QuestionSourceRunner):
                 if len(outcomes) == 2:
                     question_type = "binary"
                 else:
-                    question_type = "multiple_choice"
+                    question_type = "mcq"
 
             # Extract ground truth for resolved markets
             ground_truth, resolution_reasoning = self.parser.extract_ground_truth(market, outcomes)
@@ -617,10 +557,6 @@ class PolymarketRunner(QuestionSourceRunner):
             except ValueError:
                 domain = Domain.GENERAL
                 category = "general"
-        # Fallback to category field mapping
-        elif mq.category:
-            domain = self.category_map.get(mq.category, Domain.GENERAL)
-            category = mq.category
         else:
             domain = Domain.GENERAL
             category = "general"
@@ -660,6 +596,7 @@ class PolymarketRunner(QuestionSourceRunner):
             resolution_criteria=mq.resolution_criteria,
             target_event_id=None,
             related_event_ids=[],
+            options=mq.options,
             metadata=metadata_dict,  # Store all extra fields in metadata
         )
 
