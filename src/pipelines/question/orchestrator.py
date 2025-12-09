@@ -259,8 +259,8 @@ class QuestionCollectionOrchestrator:
 
     async def _collect_from_sources(self) -> None:
         """Collect from all sources based on quotas and needs."""
-        # Use GapAnalyzer for consistent gap calculation
-        analysis = self.gap_analyzer.analyze(self.progress, self.goal)
+        # Use GapAnalyzer for consistent gap calculation (exclude skip_evidence)
+        analysis = self.gap_analyzer.analyze(self.progress, self.goal, include_skipped=False)
         
         requests = []
         for source_name, runner in self.sources.items():
@@ -314,7 +314,7 @@ class QuestionCollectionOrchestrator:
 
     async def _fill_gaps(self) -> None:
         """Targeted collection to fill distribution gaps."""
-        analysis = self.gap_analyzer.analyze(self.progress, self.goal)
+        analysis = self.gap_analyzer.analyze(self.progress, self.goal, include_skipped=False)
         
         if not analysis.has_gaps:
             return
@@ -411,8 +411,8 @@ class QuestionCollectionOrchestrator:
         Returns:
             Dict with missing types and categories
         """
-        # Use GapAnalyzer for consistent gap analysis
-        analysis = self.gap_analyzer.analyze(self.progress, self.goal)
+        # Use GapAnalyzer for consistent gap analysis (exclude skip_evidence)
+        analysis = self.gap_analyzer.analyze(self.progress, self.goal, include_skipped=False)
 
         missing = {
             "types": analysis.type_gaps,

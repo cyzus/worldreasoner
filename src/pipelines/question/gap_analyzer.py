@@ -37,39 +37,53 @@ class GapAnalyzer:
     def analyze(
         self,
         progress: CollectionProgress,
-        goal: CollectionGoal
+        goal: CollectionGoal,
+        include_skipped: bool = False
     ) -> GapAnalysis:
         """Analyze gaps between progress and goal.
 
         Args:
             progress: Current collection progress
             goal: Target collection goal
+            include_skipped: If False, exclude questions with skip_evidence=True
 
         Returns:
             Gap analysis with missing types and categories
         """
-        # Calculate minimum total needed to reach goal
-        total_needed = max(0, goal.total_questions - progress.total)
+        # Filter questions if needed (consistent with is_goal_met)
+        if include_skipped:
+            questions = progress.questions_list
+        else:
+            questions = [q for q in progress.questions_list if not q.skip_evidence]
 
-        # Get distribution gaps (types and categories)
-        gaps = progress.get_gaps(goal)
+        # Calculate minimum total needed to reach goal (using filtered count)
+        total_needed = max(0, goal.total_questions - len(questions))
 
-        type_gaps = {}
-        category_gaps = {}
-        
-        # Always check distribution gaps, even if total not met
-        for qtype, count in gaps["types"].items():
-            if count > 0:
-                type_gaps[qtype] = count
+        # Recalculate distributions from filtered questions
+        by_type = {}
+        by_category = {}
+        for q in questions:
+            by_type[q.question_type] = by_type.get(q.question_type, 0) + 1
+            by_category[q.domain] = by_category.get(q.domain, 0) + 1
 
-        for category, count in gaps["categories"].items():
-            if count > 0:
-                category_gaps[category] = count
-        # else: Still need more questions to meet minimum - no distribution gaps yet
+        # Calculate gaps based on filtered distributions
+        type_gaps_dict = {}
+        for qtype, target in goal.type_distribution.items():
+            actual = by_type.get(qtype, 0)
+            gap = max(0, target - actual)
+            if gap > 0:
+                type_gaps_dict[qtype] = gap
+
+        category_gaps_dict = {}
+        for category, target in goal.category_distribution.items():
+            actual = by_category.get(category, 0)
+            gap = max(0, target - actual)
+            if gap > 0:
+                category_gaps_dict[category] = gap
 
         analysis = GapAnalysis(
-            type_gaps=type_gaps,
-            category_gaps=category_gaps,
+            type_gaps=type_gaps_dict,
+            category_gaps=category_gaps_dict,
             total_needed=total_needed
         )
 
