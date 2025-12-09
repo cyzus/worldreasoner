@@ -71,6 +71,22 @@ def run(
         "-f",
         help="Force reprocessing even if evidence exists",
     ),
+    adaptive: bool = typer.Option(
+        False,
+        "--adaptive",
+        "-a",
+        help="Use adaptive multi-agent evidence pipeline for deep analysis",
+    ),
+    agent_max_steps: int = typer.Option(
+        30,
+        "--max-steps",
+        help="Maximum agent steps for adaptive pipeline",
+    ),
+    min_graph_depth: int = typer.Option(
+        3,
+        "--min-depth",
+        help="Minimum graph depth for adaptive pipeline",
+    ),
     db_path: str = typer.Option(
         "worldreasoner.db",
         "--db",
@@ -91,6 +107,12 @@ def run(
 
         # Process questions with interactive filtering
         wr evidence run -i --domain politics --limit 20
+
+        # Use adaptive multi-agent pipeline for deep analysis
+        wr evidence run -q q_abc123 --adaptive
+
+        # Adaptive pipeline with custom parameters
+        wr evidence run -q q_abc123 --adaptive --max-steps 50 --min-depth 5
     """
     db = GenericDatabase(db_path)
     selector = QuestionSelector(db_path)
@@ -143,12 +165,19 @@ def run(
 
     # Confirm before running
     console.print(f"\n[bold]Will process {len(questions_to_process)} question(s)[/bold]")
-    
+    if adaptive:
+        console.print(f"[bold cyan]Mode:[/bold cyan] Adaptive multi-agent pipeline")
+        console.print(f"  Max agent steps: {agent_max_steps}")
+        console.print(f"  Min graph depth: {min_graph_depth}")
+    else:
+        console.print(f"[bold cyan]Mode:[/bold cyan] Standard evidence pipeline")
+
     if not typer.confirm("Continue?"):
         raise typer.Exit(0)
 
     # Run evidence pipeline
-    console.print("\n[bold cyan]Starting evidence pipeline...[/bold cyan]")
+    pipeline_name = "adaptive evidence" if adaptive else "evidence"
+    console.print(f"\n[bold cyan]Starting {pipeline_name} pipeline...[/bold cyan]")
 
     try:
         # Use PipelineRunner to execute the pipeline
@@ -156,6 +185,9 @@ def run(
             questions_to_process,
             db_path,
             force_reprocess,
+            adaptive,
+            agent_max_steps,
+            min_graph_depth,
         ))
         
         # Display results
@@ -174,10 +206,16 @@ async def _run_evidence_pipeline_async(
     questions: List[Question],
     db_path: str,
     force_reprocess: bool = False,
+    adaptive: bool = False,
+    agent_max_steps: int = 30,
+    min_graph_depth: int = 3,
 ):
     """Execute the evidence pipeline on selected questions using PipelineRunner."""
     runner = PipelineRunner(db_path=db_path)
     question_ids = [q.id for q in questions]
+
+    # Select pipeline type based on adaptive flag
+    pipeline_type = PipelineType.ADAPTIVE_EVIDENCE if adaptive else PipelineType.EVIDENCE
 
     # Create progress display
     with Progress(
@@ -200,12 +238,24 @@ async def _run_evidence_pipeline_async(
                 description=f"[cyan]{p.stage}: {p.message}",
             )
 
+        # Build kwargs for pipeline execution
+        pipeline_kwargs = {"on_progress": on_progress}
+
+        if adaptive:
+            # Adaptive pipeline parameters
+            pipeline_kwargs.update({
+                "agent_max_steps": agent_max_steps,
+                "min_graph_depth": min_graph_depth,
+            })
+        else:
+            # Standard pipeline parameters
+            pipeline_kwargs["force_reprocess"] = force_reprocess
+
         # Run pipeline with progress callback
         result = await runner.run(
-            PipelineType.EVIDENCE,
+            pipeline_type,
             question_ids=question_ids,
-            on_progress=on_progress,
-            force_reprocess=force_reprocess,
+            **pipeline_kwargs,
         )
 
     return result

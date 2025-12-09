@@ -16,6 +16,7 @@ from src.config.pipeline import EvidencePipelineConfig
 from src.config import DatabaseConfig
 from src.core.database import GenericDatabase
 from src.domain.models import Question, Forecast, Article, CausalHypothesis, Event
+from src.pipelines.base import PipelineStageStatus
 from src.utils.logging import logger
 
 
@@ -183,6 +184,7 @@ class PipelineRunner:
             self.db.create_table(Question)
             self.db.create_table(Article)
             self.db.create_table(Event)
+            self.db.create_table(CausalHypothesis)
 
             # Initialize sources
             if on_progress:
@@ -363,10 +365,8 @@ class PipelineRunner:
 
                 if not force_reprocess:
                     # Check if evidence already exists
-                    hypotheses = self.db.get_many(
-                        CausalHypothesis,
-                        filters={"question_id": qid}
-                    )
+                    all_hypotheses = self.db.get_many(CausalHypothesis)
+                    hypotheses = [h for h in all_hypotheses if qid in h.discovered_by_question_ids]
                     if hypotheses:
                         logger.info(f"Question {qid} already has {len(hypotheses)} hypotheses, skipping")
                         results.skipped.append({
@@ -377,13 +377,17 @@ class PipelineRunner:
 
                 # Run pipeline on single question
                 logger.info(f"Running evidence pipeline on question: {qid}")
-                pipeline_result = await pipeline.run([question])
+                pipeline_results = await pipeline.run([question])
 
-                if pipeline_result.status == "COMPLETED":
+                # Check if pipeline succeeded (no FAILED stages and at least one result)
+                has_failure = any(r.status == PipelineStageStatus.FAILED for r in pipeline_results)
+
+                if pipeline_results and not has_failure:
                     # Count generated artifacts
-                    articles = self.db.get_many(Article, filters={"question_id": qid})
-                    hypotheses = self.db.get_many(CausalHypothesis, filters={"question_id": qid})
-                    
+                    articles = self.db.get_many(Article, filters={"collected_for_question_id": qid})
+                    all_hypotheses = self.db.get_many(CausalHypothesis)
+                    hypotheses = [h for h in all_hypotheses if qid in h.discovered_by_question_ids]
+
                     results.processed.append({
                         "id": qid,
                         "articles": len(articles),
@@ -391,7 +395,9 @@ class PipelineRunner:
                     })
                     logger.info(f"Successfully processed {qid}: {len(articles)} articles, {len(hypotheses)} hypotheses")
                 else:
-                    error_msg = pipeline_result.metadata.get("error", "Unknown error")
+                    # Find error message from failed stages
+                    error_msgs = [r.error_message for r in pipeline_results if r.error_message]
+                    error_msg = "; ".join(error_msgs) if error_msgs else "Pipeline failed with no error message"
                     results.failed.append({"id": qid, "error": error_msg})
                     logger.error(f"Failed to process {qid}: {error_msg}")
 
@@ -405,7 +411,7 @@ class PipelineRunner:
         self,
         question_ids: List[str],
         on_progress: Optional[Callable],
-        max_agent_steps: int = 30,
+        agent_max_steps: int = 30,
         min_graph_depth: int = 3,
         **kwargs
     ) -> PipelineResult:
@@ -419,7 +425,7 @@ class PipelineRunner:
             evidence_config=evidence_config,
             database_config=database_config,
             enable_persistence=True,
-            max_agent_steps=max_agent_steps,
+            agent_max_steps=agent_max_steps,
             min_graph_depth=min_graph_depth,
         )
 
@@ -442,16 +448,22 @@ class PipelineRunner:
                     continue
 
                 logger.info(f"Running adaptive evidence pipeline on question: {qid}")
-                pipeline_result = await pipeline.run([question])
+                pipeline_results = await pipeline.run([question])
 
-                if pipeline_result.status == "COMPLETED":
-                    hypotheses = self.db.get_many(CausalHypothesis, filters={"question_id": qid})
+                # Check if pipeline succeeded (no FAILED stages and at least one result)
+                has_failure = any(r.status == PipelineStageStatus.FAILED for r in pipeline_results)
+
+                if pipeline_results and not has_failure:
+                    all_hypotheses = self.db.get_many(CausalHypothesis)
+                    hypotheses = [h for h in all_hypotheses if qid in h.discovered_by_question_ids]
                     results.processed.append({
                         "id": qid,
                         "hypotheses": len(hypotheses),
                     })
                 else:
-                    error_msg = pipeline_result.metadata.get("error", "Unknown error")
+                    # Find error message from failed stages
+                    error_msgs = [r.error_message for r in pipeline_results if r.error_message]
+                    error_msg = "; ".join(error_msgs) if error_msgs else "Pipeline failed with no error message"
                     results.failed.append({"id": qid, "error": error_msg})
 
             except Exception as e:
