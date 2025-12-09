@@ -263,16 +263,12 @@ class EvidencePipeline(Pipeline):
             self._aggregate_stage_usage()
 
             # Log pipeline-level summary
-            logger.info("=" * 60)
-            logger.info("EVIDENCE PIPELINE SUMMARY")
-            logger.info("=" * 60)
+            logger.info("Evidence pipeline summary:")
             logger.info(f"Questions processed: {len(self.resolved_questions)}")
             logger.info(f"Evidence articles collected: {len(self.evidence_articles)}")
             logger.info(f"Causal hypotheses generated: {len(self.causal_hypotheses)}")
             self.usage_tracker.log_summary(context="EvidencePipeline TOTAL")
-            logger.info("=" * 60)
-
-            logger.info("Evidence Pipeline completed successfully!")
+            logger.info("Evidence pipeline completed successfully!")
 
         except Exception as e:
             if self._results:

@@ -98,7 +98,7 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
         all_hypotheses = []
 
         for idx, (question, evidence_articles) in enumerate(inputs, 1):
-            logger.info(f"[{idx}/{len(inputs)}] Analyzing: {question.id}")
+            logger.debug(f"[{idx}/{len(inputs)}] Analyzing: {question.id}")
 
             # Validate input
             if not evidence_articles:

@@ -65,8 +65,7 @@ class CollectionProgress(BaseModel):
 
         logger.debug(
             f"Progress: {self.total} total | "
-            f"Types: {dict(self.by_type)} | "
-            f"Categories: {dict(self.by_category)}"
+            f"{len(self.by_type)} types, {len(self.by_category)} categories"
         )
 
     def add_questions(self, questions: List[Question]) -> None:
@@ -223,34 +222,25 @@ class CollectionProgress(BaseModel):
         """
         summary = self.get_summary(goal)
 
-        logger.info("=" * 60)
-        logger.info("COLLECTION PROGRESS SUMMARY")
-        logger.info("=" * 60)
+        logger.info("Collection progress summary:")
         logger.info(f"Total: {summary['total']}/{summary['target']} "
-                   f"({summary['completion_pct']:.1f}%)")
-        logger.info(f"Goal met: {summary['goal_met']}")
-        logger.info("")
+                   f"({summary['completion_pct']:.1f}%) - Goal met: {summary['goal_met']}")
 
         logger.info("By Type:")
         for qtype, count in summary['by_type'].items():
             target = summary['type_targets'].get(qtype, 0)
             logger.info(f"  {qtype:15} {count:3}/{target:3}")
 
-        logger.info("")
         logger.info("By Category:")
         for category, count in summary['by_category'].items():
             target = summary['category_targets'].get(category, 0)
             logger.info(f"  {category:15} {count:3}/{target:3}")
 
-        logger.info("")
         logger.info("By Source:")
         for source, count in summary['by_source'].items():
             logger.info(f"  {source:15} {count:3}")
 
-        logger.info("")
-        logger.info(f"Avg Difficulty: {summary['avg_difficulty']:.2f}")
-        logger.info(f"With Criteria: {summary['questions_with_criteria']}/{summary['total']}")
-        logger.info("=" * 60)
+        logger.info(f"Avg Difficulty: {summary['avg_difficulty']:.2f}, With Criteria: {summary['questions_with_criteria']}/{summary['total']}")
 
     def get_questions(self) -> List[Question]:
         """Get all collected questions.

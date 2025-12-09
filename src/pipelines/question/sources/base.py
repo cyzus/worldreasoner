@@ -199,9 +199,7 @@ class QuestionSourceRunner(ABC):
             return questions
 
         except Exception as e:
-            import traceback
-            logger.error(f"Categorization error: {e}")
-            logger.error(f"Full traceback:\n{traceback.format_exc()}")
+            logger.exception(f"Categorization error: {e}")
             # Return questions with default domain
             for question in questions:
                 if not hasattr(question, 'domain') or question.domain is None:

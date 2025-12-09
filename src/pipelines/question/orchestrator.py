@@ -139,14 +139,11 @@ class QuestionCollectionOrchestrator:
         if self.db:
             await self._load_existing_questions()
 
-        logger.info("=" * 60)
-        logger.info("STARTING GOAL-ORIENTED QUESTION COLLECTION")
-        logger.info("=" * 60)
+        logger.info("Starting goal-oriented question collection")
         logger.info(f"Target: {self.goal.total_questions} questions")
         logger.info(f"Type distribution: {self.goal.type_distribution}")
         logger.info(f"Category distribution: {self.goal.category_distribution}")
         logger.info(f"Sources: {list(self.sources.keys())}")
-        logger.info("=" * 60)
 
         iterations = 0
         questions_before_iteration = 0
@@ -203,14 +200,10 @@ class QuestionCollectionOrchestrator:
             # Report missing items
             missing = self._report_missing_items()
 
-            logger.info("=" * 60)
-            logger.info("COLLECTION COMPLETE")
-            logger.info("=" * 60)
-            # Don't log detailed summary here - main script will do it
+            logger.info("Collection complete")
             logger.info(f"Duration: {(completed_at - started_at).total_seconds():.1f}s")
             if self.duplicates_skipped > 0:
                 logger.info(f"Duplicates skipped: {self.duplicates_skipped}")
-            logger.info("=" * 60)
 
             return OrchestrationResult(
                 goal_met=goal_met,
@@ -359,9 +352,7 @@ class QuestionCollectionOrchestrator:
             logger.info(f"Saved {saved_count} questions to database ({self.db_path})")
             logger.debug(f"Sample saved IDs: {[q.id for q in questions[:3]]}")
         except Exception as e:
-            logger.error(f"Error saving to database: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+            logger.exception(f"Error saving to database: {e}")
             self.errors.append(f"Database save error: {e}")
 
     async def _load_existing_questions(self) -> None:
@@ -385,9 +376,7 @@ class QuestionCollectionOrchestrator:
             else:
                 logger.info("No existing questions found in database")
         except Exception as e:
-            logger.warning(f"Could not load existing questions: {e}")
-            import traceback
-            logger.debug(traceback.format_exc())
+            logger.opt(exception=True).warning(f"Could not load existing questions: {e}")
 
     def _filter_duplicates(self, questions: List[Question]) -> List[Question]:
         """Filter out questions that already exist in database.
@@ -431,9 +420,7 @@ class QuestionCollectionOrchestrator:
         }
 
         if missing["types"] or missing["categories"]:
-            logger.info("=" * 60)
-            logger.info("MISSING ITEMS REPORT")
-            logger.info("=" * 60)
+            logger.info("Missing items report:")
 
             if missing["types"]:
                 logger.info("Missing question types:")
@@ -448,7 +435,5 @@ class QuestionCollectionOrchestrator:
                     target = self.goal.category_distribution.get(cat, 0)
                     collected = target - count
                     logger.info(f"  {cat:15} {collected:3}/{target:3} ({count} short)")
-
-            logger.info("=" * 60)
 
         return missing

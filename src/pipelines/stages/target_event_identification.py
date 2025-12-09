@@ -113,7 +113,7 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
                 updated_questions.append(question)
                 continue
 
-            logger.info(f"[{idx}/{len(inputs)}] Identifying target event for: {question.id}")
+            logger.debug(f"[{idx}/{len(inputs)}] Identifying target event for: {question.id}")
 
             try:
                 # Identify or create target event

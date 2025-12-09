@@ -113,7 +113,7 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
         all_articles = []
 
         for idx, question in enumerate(inputs, 1):
-            logger.info(f"[{idx}/{len(inputs)}] Processing question: {question.id}")
+            logger.debug(f"[{idx}/{len(inputs)}] Processing question: {question.id}")
 
             # Validate question is resolved
             if not question.resolution_date:
