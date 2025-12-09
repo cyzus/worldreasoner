@@ -8,10 +8,16 @@ from fastapi import APIRouter, HTTPException, Query
 
 from src.core.database import GenericDatabase
 from src.domain.models import Event, Article, Question
+from backend.api.routes.database import get_current_db_path
 from src.utils.logging import logger
 
 
 router = APIRouter()
+
+
+def get_db() -> GenericDatabase:
+    """Get database instance with current database path."""
+    return GenericDatabase(get_current_db_path())
 
 
 @router.get("/{event_id}")
@@ -25,7 +31,7 @@ async def get_event(event_id: str):
         Full event data including causal links
     """
     try:
-        db = GenericDatabase("worldreasoner.db")
+        db = get_db()
         event = db.get(Event, event_id)
 
         if not event:
@@ -57,7 +63,7 @@ async def list_events(
         List of events
     """
     try:
-        db = GenericDatabase("worldreasoner.db")
+        db = get_db()
 
         filters = {}
         if domain:
@@ -92,7 +98,7 @@ async def get_event_articles(event_id: str):
         List of articles that document or discuss this event
     """
     try:
-        db = GenericDatabase("worldreasoner.db")
+        db = get_db()
         event = db.get(Event, event_id)
 
         if not event:
@@ -135,7 +141,7 @@ async def get_event_questions(event_id: str):
     try:
         from src.domain.models import CausalHypothesis
         
-        db = GenericDatabase("worldreasoner.db")
+        db = get_db()
         event = db.get(Event, event_id)
 
         if not event:

@@ -1,0 +1,147 @@
+.database-selector {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.selector-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.selector-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.refresh-btn {
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.2s;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: #e0e0e0;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.error-message {
+  background: #fee;
+  border: 1px solid #fcc;
+  color: #c00;
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.success-message {
+  background: #efe;
+  border: 1px solid #cfc;
+  color: #060;
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.loading-state {
+  text-align: center;
+  padding: 16px;
+  color: #666;
+  font-style: italic;
+}
+
+.database-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+
+.no-databases {
+  padding: 16px;
+  text-align: center;
+  color: #999;
+  font-style: italic;
+}
+
+.database-item {
+  padding: 12px;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background-color 0.2s;
+}
+
+.database-item:last-child {
+  border-bottom: none;
+}
+
+.database-item:not(.current):not(.missing):hover {
+  background: #f8f9fa;
+}
+
+.database-item.current {
+  background: #e8f4f8;
+  border-left: 3px solid #2196F3;
+}
+
+.database-item.missing {
+  opacity: 0.5;
+  background: #fafafa;
+}
+
+.db-name {
+  font-weight: 500;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.current-badge {
+  color: #2196F3;
+  font-weight: bold;
+}
+
+.db-info {
+  font-size: 12px;
+  color: #666;
+}
+
+.db-size {
+  color: #666;
+}
+
+.db-missing {
+  color: #c00;
+  font-style: italic;
+}
+
+.current-db-footer {
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #555;
+  word-break: break-all;
+}
+
+.current-db-footer strong {
+  color: #333;
+  margin-right: 6px;
+}

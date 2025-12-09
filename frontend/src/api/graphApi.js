@@ -133,3 +133,29 @@ export async function fetchQuestionPriceHistory(questionId, interval = '1d') {
   )
   return response.data
 }
+
+/**
+ * Fetch current database information
+ */
+export async function fetchCurrentDatabase() {
+  const response = await axios.get(`${API_BASE_URL}/database/current`)
+  return response.data
+}
+
+/**
+ * Fetch list of available database files
+ */
+export async function fetchDatabaseList() {
+  const response = await axios.get(`${API_BASE_URL}/database/list`)
+  return response.data
+}
+
+/**
+ * Switch to a different database file
+ */
+export async function switchDatabase(dbPath) {
+  const response = await axios.post(`${API_BASE_URL}/database/switch`, {
+    db_path: dbPath
+  })
+  return response.data
+}

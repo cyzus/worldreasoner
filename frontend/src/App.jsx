@@ -5,6 +5,7 @@ import EventDetails from './components/EventDetails'
 import QuestionList from './components/QuestionList'
 import Timeline from './components/Timeline'
 import TimeSeriesChart from './components/TimeSeriesChart'
+import DatabaseSelector from './components/DatabaseSelector'
 import { fetchGraph, fetchStatistics, fetchQuestions, fetchQuestionEvents, fetchQuestionPriceHistory } from './api/graphApi'
 import './App.css'
 
@@ -191,6 +192,29 @@ function App() {
     setFilters(newFilters)
     loadGraph(newFilters)
   }
+
+  // Handle database change
+  const handleDatabaseChange = useCallback(async (dbPath) => {
+    console.log('Database changed to:', dbPath)
+    // Reload all data from the new database
+    setLoading(true)
+    setError(null)
+    setSelectedNode(null)
+    setSelectedQuestionId(null)
+    setPriceHistoryData(null)
+    setQuestionRelatedEvents([])
+
+    try {
+      // Reload graph, statistics, and questions
+      await Promise.all([
+        loadGraph(filters),
+        loadStatistics(),
+        loadQuestions()
+      ])
+    } catch (err) {
+      setError('Failed to load data from new database: ' + err.message)
+    }
+  }, [filters, loadGraph, loadStatistics, loadQuestions])
 
   // Handle node selection
   const handleNodeClick = (node) => {
@@ -548,14 +572,17 @@ function App() {
           
           <div className="sidebar-content">
             {leftPanelTab === 'controls' ? (
-              <ControlPanel
-                filters={filters}
-                onFilterChange={handleFilterChange}
-                onRefresh={() => loadGraph(filters)}
-                loading={loading}
-                questions={questions}
-                onQuestionFilter={handleQuestionFilter}
-              />
+              <>
+                <DatabaseSelector onDatabaseChange={handleDatabaseChange} />
+                <ControlPanel
+                  filters={filters}
+                  onFilterChange={handleFilterChange}
+                  onRefresh={() => loadGraph(filters)}
+                  loading={loading}
+                  questions={questions}
+                  onQuestionFilter={handleQuestionFilter}
+                />
+              </>
             ) : (
               <QuestionList
                 questions={questions}

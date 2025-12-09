@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from src.core.database import GenericDatabase
 from src.domain.models import Question, CausalHypothesis
+from backend.api.routes.database import get_current_db_path
 from src.utils.logging import logger
 from src.utils.polymarket import get_price_history_for_market
 
@@ -19,7 +20,7 @@ router = APIRouter()
 # Dependency for getting database
 def get_database() -> GenericDatabase:
     """Dependency to get database instance."""
-    return GenericDatabase("worldreasoner.db")
+    return GenericDatabase(get_current_db_path())
 
 
 class QuestionListItem(BaseModel):
@@ -96,6 +97,7 @@ async def get_question(
 
         if not question:
             raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
+
         return QuestionListItem(
             id=question.id,
             question_text=question.question_text,

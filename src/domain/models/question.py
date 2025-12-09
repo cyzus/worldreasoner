@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from ...core.database import register_model
 from .domain import Domain
 
@@ -139,6 +139,14 @@ class Question(BaseModel):
             }
         }
     )
+
+    @field_validator('question_type', mode='before')
+    @classmethod
+    def normalize_question_type(cls, v):
+        """Normalize legacy 'boolean' question type to 'binary' for backwards compatibility."""
+        if v == 'boolean':
+            return 'binary'
+        return v
 
     def validate_prediction(self, prediction: Any) -> bool:
         """Validate that a prediction matches the expected type for this question.
