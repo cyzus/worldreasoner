@@ -26,6 +26,8 @@ def filter_questions_by_type(
     Returns:
         Filtered list of questions
     """
+    logger.warning(f"Filtering by types: {allowed_types}")
+    logger.warning(f"Question types in input: {set(q.question_type for q in questions)}")
     return [q for q in questions if q.question_type in allowed_types]
 
 
@@ -51,7 +53,8 @@ def filter_questions_by_category(
         allowed_categories = category_filter.keys()
     else:
         allowed_categories = category_filter
-    
+    logger.warning(f"Filtering by categories: {allowed_categories}")
+    logger.warning(f"Question categories in input: {set(q.domain for q in questions)}")
     # Convert Domain enums to strings for comparison
     allowed_categories_strs = set()
     for cat in allowed_categories:
@@ -62,7 +65,7 @@ def filter_questions_by_category(
 
     return [
         q for q in questions
-        if q.metadata.get("category", "other") in allowed_categories_strs
+        if q.domain in allowed_categories_strs
     ]
 
 
@@ -161,7 +164,7 @@ def filter_questions(
         Filtered list of questions
     """
     filtered = questions
-
+    logger.info(f"category_filter: {category_filter}, type_filter: {type_filter}, quality_requirements: {quality_requirements}")
     # Filter by type
     if type_filter:
         filtered = filter_questions_by_type(filtered, type_filter)

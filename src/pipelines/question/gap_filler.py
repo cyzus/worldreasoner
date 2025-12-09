@@ -175,10 +175,13 @@ class GapFiller:
                 )
             )
 
-            if result.success and result.questions:
-                collected.extend(result.questions)
-                remaining -= len(result.questions)
+            if result.success:
+                if result.questions:
+                    collected.extend(result.questions)
+                    remaining -= len(result.questions)
+                # Don't mark as exhausted if no questions - may work with different filters
             else:
+                # Only mark exhausted on actual failure
                 self.exhausted_sources.add(source_name)
 
         return collected
@@ -194,10 +197,11 @@ class GapFiller:
     ) -> List[Question]:
         """Fill gap for specific question type."""
         logger.info(f"Filling type gap: {needed_count} '{qtype}' questions")
+        # Don't restrict by category when filling type gaps - fetch broadly
         return await self._collect_with_filters(
             remaining=needed_count,
             type_filter=all_type_hints,
-            category_filter=category_hints,
+            category_filter=None,  # No category restriction for type gaps
             existing_question_ids=existing_question_ids,
             description=f"of type '{qtype}'"
         )
@@ -214,7 +218,7 @@ class GapFiller:
         logger.info(f"Filling category gap: {needed_count} '{category}' questions")
         return await self._collect_with_filters(
             remaining=needed_count,
-            type_filter=type_hints or None,
+            type_filter=None,
             category_filter={category: needed_count},
             existing_question_ids=existing_question_ids,
             description=f"in category '{category}'"

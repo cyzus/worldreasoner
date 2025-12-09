@@ -112,15 +112,18 @@ class PolymarketRunner(QuestionSourceRunner):
             return await self._fetch_markets(limit=limit, quality_requirements=quality_requirements)
 
         # Parse requested domains and determine per-category limits
+        # Use high multiplier to account for deduplication during gap filling
         if isinstance(category_filter, dict):
             requested_domains = [Domain(cat) if isinstance(cat, str) else cat
                                 for cat in category_filter.keys()]
-            category_limits = {domain: count * 3 for domain, count in
-                              zip(requested_domains, category_filter.values())}
+            # Use the full limit per category (already multiplied by 20x in collect method)
+            # This ensures we fetch enough to have unique questions after deduplication
+            category_limits = {domain: limit for domain in requested_domains}
         else:
             requested_domains = [Domain(cat) if isinstance(cat, str) else cat
                                 for cat in category_filter]
-            per_domain = max(1, limit // len(requested_domains)) * 3
+            # Distribute the limit evenly across categories
+            per_domain = max(1, limit // len(requested_domains))
             category_limits = {domain: per_domain for domain in requested_domains}
 
         all_markets = []
@@ -348,6 +351,7 @@ class PolymarketRunner(QuestionSourceRunner):
                 category_filter=category_filter,
                 quality_requirements=quality_requirements,
             )
+            logger.info(f"Filtered from {len(questions)} down to {len(filtered)} questions after applying type/category/quality filters")
 
             # Smart sampling by type and/or category if filters specified
             if (type_filter or category_filter) and len(filtered) > count:
