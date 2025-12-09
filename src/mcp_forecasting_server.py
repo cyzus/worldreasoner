@@ -554,7 +554,7 @@ def submit_forecast(
         from src.domain.models.question import QuestionType
 
         try:
-            if question.question_type == QuestionType.BOOLEAN:
+            if question.question_type == QuestionType.BINARY:
                 parsed_prediction = prediction.lower() in ['true', 'yes', '1']
             elif question.question_type == QuestionType.MCQ:
                 parsed_prediction = prediction

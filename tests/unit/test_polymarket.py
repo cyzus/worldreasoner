@@ -28,7 +28,7 @@ async def test_basic_price_history():
     async with aiohttp.ClientSession() as session:
         # Fetch a recent resolved market
         url = "https://gamma-api.polymarket.com/markets"
-        params = {"limit": 10, "closed": "true", "order": "closedTime", "ascending": "false", "related_tags": "true"}
+        params = {"limit": 10, "closed": "true", "order": "closedTime", "ascending": "false", "related_tags": "true", "tag_id": "2"}
         tag_url = "https://gamma-api.polymarket.com/markets/{id}/tags"
         async with session.get(url, params=params) as response:
             markets = await response.json()

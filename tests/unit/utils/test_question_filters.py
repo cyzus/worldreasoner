@@ -25,7 +25,7 @@ def sample_questions():
         Question(
             id="q_001",
             question_text="Will technology stocks rise this year based on current market trends?",
-            question_type=QuestionType.BOOLEAN,
+            question_type=QuestionType.BINARY,
             domain=Domain.TECH,
             difficulty=2,
             resolution_date=now + timedelta(days=30),
@@ -47,7 +47,7 @@ def sample_questions():
         Question(
             id="q_003",
             question_text="Will the election results be announced within the expected timeframe?",
-            question_type=QuestionType.BOOLEAN,
+            question_type=QuestionType.BINARY,
             domain=Domain.POLITICS,
             difficulty=3,
             resolution_date=now + timedelta(days=90),
@@ -67,7 +67,7 @@ def test_filter_questions_by_type(sample_questions):
     )
     
     assert len(filtered) == 2
-    assert all(q.question_type == QuestionType.BOOLEAN for q in filtered)
+    assert all(q.question_type == QuestionType.BINARY for q in filtered)
 
 
 def test_filter_questions_by_category_dict(sample_questions):
@@ -129,7 +129,7 @@ def test_filter_questions_combined(sample_questions):
     # Should keep q_003 (boolean, politics, difficulty 3)
     # Should filter q_002 (not boolean)
     assert len(filtered) == 2
-    assert all(q.question_type == QuestionType.BOOLEAN for q in filtered)
+    assert all(q.question_type == QuestionType.BINARY for q in filtered)
 
 
 def test_filter_resolved_questions(sample_questions):

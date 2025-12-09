@@ -16,7 +16,7 @@ def sample_questions():
         Question(
             id="q_001",
             question_text="Will AI sentience be achieved by 2030?",
-            question_type=QuestionType.BOOLEAN,
+            question_type=QuestionType.BINARY,
             domain=Domain.TECH,
             source="test",
             difficulty=5,

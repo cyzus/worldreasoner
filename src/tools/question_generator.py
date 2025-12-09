@@ -283,8 +283,8 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
 
         ground_truth_str = str(ground_truth).strip()
 
-        if question_type == QuestionType.BOOLEAN:
-            # Convert to boolean
+        if question_type == QuestionType.BINARY:
+            # Convert to boolean for binary questions
             # Accept: YES, yes, Yes, TRUE, true, True, 1, etc.
             positive_values = {'yes', 'true', '1', 'y', 't'}
             negative_values = {'no', 'false', '0', 'n', 'f'}
@@ -295,7 +295,7 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             elif lower in negative_values:
                 return False
             else:
-                print(f"Warning: Could not parse boolean ground_truth '{ground_truth}', expected YES/NO, TRUE/FALSE, etc. Storing as None.")
+                print(f"Warning: Could not parse binary ground_truth '{ground_truth}', expected YES/NO, TRUE/FALSE, etc. Storing as None.")
                 return None
 
         elif question_type == QuestionType.QUANTITY:

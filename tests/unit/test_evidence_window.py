@@ -9,7 +9,7 @@ def make_question(resolution_date: datetime) -> Question:
     return Question(
         id="q_test_001",
         question_text="Is this a test question that is long enough?",
-        question_type=QuestionType.BOOLEAN,
+        question_type=QuestionType.BINARY,
         domain=Domain.TECH,
         source="test",
         difficulty=1,

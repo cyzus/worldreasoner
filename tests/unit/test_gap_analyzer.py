@@ -69,7 +69,7 @@ def test_analyze_partial_progress(gap_analyzer, sample_goal):
     for i in range(25):
         q = create_test_question(
             id=f"q_bool_{i}",
-            question_type="boolean",
+            question_type = "binary",
             category="tech",
             source_name="polymarket"
         )
@@ -101,7 +101,7 @@ def test_analyze_goal_met(gap_analyzer, sample_goal):
     for i in range(50):
         q = create_test_question(
             id=f"q_bool_{i}",
-            question_type="boolean",
+            question_type = "binary",
             category="tech" if i < 20 else "politics",
             source_name="polymarket"
         )
@@ -145,7 +145,7 @@ def test_analyze_filters_negative_gaps(gap_analyzer):
     for i in range(30):
         q = create_test_question(
             id=f"q_bool_{i}",
-            question_type="boolean",
+            question_type = "binary",
             source_name="polymarket"
         )
         progress.add_question(q)
@@ -176,7 +176,7 @@ def test_type_gaps_list_property(gap_analyzer, sample_goal):
     for i in range(10):
         q = create_test_question(
             id=f"q_{i}",
-            question_type="boolean",
+            question_type = "binary",
             source_name="polymarket"
         )
         progress.add_question(q)
@@ -196,7 +196,7 @@ def test_category_gaps_list_property(gap_analyzer, sample_goal):
     for i in range(10):
         q = create_test_question(
             id=f"q_{i}",
-            question_type="boolean",
+            question_type = "binary",
             category="tech",
             source_name="polymarket"
         )

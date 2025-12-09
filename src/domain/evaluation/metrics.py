@@ -22,7 +22,7 @@ def calculate_accuracy(prediction: Any, ground_truth: Any, question_type: Questi
     Returns:
         1.0 if correct, 0.0 if incorrect
     """
-    if question_type == QuestionType.BOOLEAN:
+    if question_type == QuestionType.BINARY:
         return 1.0 if prediction == ground_truth else 0.0
 
     elif question_type == QuestionType.MCQ:
@@ -76,7 +76,7 @@ def calculate_brier_score(
         - https://en.wikipedia.org/wiki/Brier_score
         - Brier, G. W. (1950). "Verification of forecasts expressed in terms of probability"
     """
-    if question_type == QuestionType.BOOLEAN:
+    if question_type == QuestionType.BINARY:
         # Convert prediction to probability
         if prediction is True:
             forecast_prob = confidence
@@ -134,7 +134,7 @@ def calculate_log_score(
     References:
         - https://en.wikipedia.org/wiki/Scoring_rule#Logarithmic_scoring_rule
     """
-    if question_type == QuestionType.BOOLEAN:
+    if question_type == QuestionType.BINARY:
         # Convert prediction to probability
         if prediction is True:
             forecast_prob = confidence

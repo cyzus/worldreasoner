@@ -24,7 +24,7 @@ async def test_orchestrator_with_quality_ranking(persistent_test_db_path):
 
     goal = CollectionGoal(
         total_questions=2,
-        type_distribution={QuestionType.BOOLEAN: 2},
+        type_distribution={QuestionType.BINARY: 2},
         category_distribution={Domain.TECH: 2},
     )
 
@@ -35,7 +35,7 @@ async def test_orchestrator_with_quality_ranking(persistent_test_db_path):
                 Question(
                     id=f"q_mock_{i}",
                     question_text=f"This is a mock question of sufficient length {i}",
-                    question_type=QuestionType.BOOLEAN,
+                    question_type=QuestionType.BINARY,
                     domain=Domain.TECH,
                     source="mock",
                     difficulty=1,

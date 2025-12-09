@@ -17,7 +17,7 @@ def resolved_questions_with_scores():
         Question(
             id="resolved_q_1",
             question_text="Q1",
-            question_type=QuestionType.BOOLEAN,
+            question_type=QuestionType.BINARY,
             domain=Domain.TECH,
             difficulty=3,
             resolution_date=now - timedelta(days=10),
@@ -27,7 +27,7 @@ def resolved_questions_with_scores():
         Question(
             id="resolved_q_2",
             question_text="Q2",
-            question_type=QuestionType.BOOLEAN,
+            question_type=QuestionType.BINARY,
             domain=Domain.TECH,
             difficulty=3,
             resolution_date=now - timedelta(days=10),
@@ -37,7 +37,7 @@ def resolved_questions_with_scores():
         Question(
             id="resolved_q_3",
             question_text="Q3",
-            question_type=QuestionType.BOOLEAN,
+            question_type=QuestionType.BINARY,
             domain=Domain.TECH,
             difficulty=3,
             resolution_date=now - timedelta(days=10),
@@ -47,7 +47,7 @@ def resolved_questions_with_scores():
         Question(
             id="unscored_q",
             question_text="Q4",
-            question_type=QuestionType.BOOLEAN,
+            question_type=QuestionType.BINARY,
             domain=Domain.TECH,
             difficulty=3,
             resolution_date=now - timedelta(days=10),

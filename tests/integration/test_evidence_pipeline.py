@@ -159,7 +159,7 @@ async def test_evidence_pipeline_with_mock_resolved_question(test_db_path):
     question = Question(
         id="q_test_001",
         question_text="Will the Federal Reserve raise interest rates in June 2024?",
-        question_type=QuestionType.BOOLEAN,
+        question_type=QuestionType.BINARY,
         domain="finance",
         difficulty=3,
         resolution_date=datetime.now(timezone.utc) - timedelta(days=10),

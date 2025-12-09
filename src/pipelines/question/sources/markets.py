@@ -48,8 +48,7 @@ class PolymarketRunner(QuestionSourceRunner):
 
     # Default type mapping (maps market types to QuestionType enum values)
     DEFAULT_TYPE_MAP = {
-        "boolean": QuestionType.BOOLEAN,
-        "binary": QuestionType.BOOLEAN,
+        "binary": QuestionType.BINARY,
         "multiple_choice": QuestionType.MCQ,
     }
 
@@ -114,7 +113,7 @@ class PolymarketRunner(QuestionSourceRunner):
     # Use proper slugs that can be resolved to tag IDs
     DOMAIN_TO_TAG_SLUG = {
         Domain.POLITICS: "politics",
-        Domain.FINANCE: "crypto",
+        Domain.FINANCE: "finance",
         Domain.SPORTS: "sports",
         Domain.TECH: "tech",
         Domain.CULTURE: "entertainment",
@@ -122,6 +121,7 @@ class PolymarketRunner(QuestionSourceRunner):
         Domain.SCIENCE: "science",
         Domain.BUSINESS: "business",
         Domain.CLIMATE: "climate",
+        Domain.GENERAL: "all",
     }
 
     def __init__(
@@ -273,9 +273,9 @@ class PolymarketRunner(QuestionSourceRunner):
             # Determine question type based on market type and outcomes content
             market_type = market.get("marketType", "normal")
             if market_type == "normal":
-                # Treat binary outcomes as boolean (Yes/No, Up/Down, Win/Lose, etc.)
+                # Treat binary outcomes as binary (Yes/No, Up/Down, Win/Lose, etc.)
                 if len(outcomes) == 2:
-                    question_type = "boolean"
+                    question_type = "binary"
                 else:
                     question_type = "multiple_choice"
             elif market_type == "scalar":
@@ -284,7 +284,7 @@ class PolymarketRunner(QuestionSourceRunner):
             else:
                 # Unknown market type, check outcomes as fallback
                 if len(outcomes) == 2:
-                    question_type = "boolean"
+                    question_type = "binary"
                 else:
                     question_type = "multiple_choice"
 
@@ -648,7 +648,7 @@ class PolymarketRunner(QuestionSourceRunner):
         return Question(
             id=f"polymarket_{mq.market_id}",
             question_text=mq.question_text,
-            question_type=self.type_map.get(mq.question_type, QuestionType.BOOLEAN),
+            question_type=self.type_map.get(mq.question_type, QuestionType.BINARY),
             domain=domain,
             source="polymarket",
             difficulty=self._estimate_difficulty(mq),
@@ -703,9 +703,9 @@ class PolymarketRunner(QuestionSourceRunner):
         Returns:
             True if type/category is supported
         """
-        # Type support: Polymarket has boolean and MCQ, but NOT quantity/timeframe
+        # Type support: Polymarket has binary and MCQ, but NOT quantity/timeframe
         if question_type:
-            supported = ["boolean", "mcq"]
+            supported = ["binary", "mcq"]
             return question_type.lower() in supported
 
         # Category support: check if we have a tag slug mapping

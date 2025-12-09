@@ -78,7 +78,7 @@ async def test_fill_type_gap(sample_goal, coordinator, mock_runner):
     # Setup mock
     sample_q = create_test_question(
         id="q_1",
-        question_type="boolean",
+        question_type = "binary",
         source_name="source1"
     )
     mock_runner.collect.return_value = CollectionResult(
@@ -102,7 +102,7 @@ async def test_fill_type_gap(sample_goal, coordinator, mock_runner):
     
     assert len(questions) == 1
     assert questions[0].id == "q_1"
-    mock_runner.can_provide.assert_called_with(question_type="boolean")
+    mock_runner.can_provide.assert_called_with(question_type = "binary")
 
 
 @pytest.mark.asyncio
@@ -114,7 +114,7 @@ async def test_fill_category_gap(sample_goal, coordinator, mock_runner):
     # Setup mock
     sample_q = create_test_question(
         id="q_1",
-        question_type="boolean",
+        question_type = "binary",
         category="tech",
         source_name="source1"
     )
@@ -202,7 +202,7 @@ async def test_fill_gaps_quota_exceeded(sample_goal, coordinator, mock_runner):
     for i in range(60):  # source1 quota is 60
         q = create_test_question(
             id=f"q_{i}",
-            question_type="boolean",
+            question_type = "binary",
             source_name="source1"
         )
         progress.add_question(q)
@@ -280,15 +280,15 @@ async def test_fill_multiple_gaps_incrementally(sample_goal, coordinator):
     
     # Setup runner1 to return 3 questions
     q1 = create_test_question(
-        id="q_1", question_type="boolean",
+        id="q_1", question_type = "binary",
         source_name="source1"
     )
     q2 = create_test_question(
-        id="q_2", question_type="boolean",
+        id="q_2", question_type = "binary",
         source_name="source1"
     )
     q3 = create_test_question(
-        id="q_3", question_type="boolean",
+        id="q_3", question_type = "binary",
         source_name="source1"
     )
     runner1.collect.return_value = CollectionResult(
@@ -298,11 +298,11 @@ async def test_fill_multiple_gaps_incrementally(sample_goal, coordinator):
     
     # Setup runner2 to return 2 questions
     q4 = create_test_question(
-        id="q_4", question_type="boolean",
+        id="q_4", question_type = "binary",
         source_name="source2"
     )
     q5 = create_test_question(
-        id="q_5", question_type="boolean",
+        id="q_5", question_type = "binary",
         source_name="source2"
     )
     runner2.collect.return_value = CollectionResult(

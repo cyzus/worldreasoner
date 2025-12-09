@@ -62,7 +62,7 @@ class QuestionSourceRunner(ABC):
 
         Args:
             count: Target number of questions to collect
-            type_filter: Only collect these question types (e.g., ["boolean", "mcq"])
+            type_filter: Only collect these question types (e.g., ["binary", "mcq"])
             category_filter: Dict mapping categories to number still needed (e.g., {"finance": 1, "tech": 2})
             quality_requirements: Quality constraints for collected questions
             existing_question_ids: Set of existing IDs to skip (for deduplication)
@@ -80,7 +80,7 @@ class QuestionSourceRunner(ABC):
         """Check if this source can provide questions of given type/category.
 
         Args:
-            question_type: Question type to check (e.g., "boolean")
+            question_type: Question type to check (e.g., "binary")
             category: Category to check (e.g., "finance")
 
         Returns:

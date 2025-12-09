@@ -6,8 +6,8 @@ total_questions: 10
 
 # Distribution by question type (minimum counts, can exceed to reach total)
 type_distribution:
-  boolean: 4          # Binary yes/no questions
-  mcq: 2  # Multiple choice questions
+  binary: 4           # Binary yes/no questions (e.g., Yes/No, Up/Down)
+  mcq: 2              # Multiple choice questions
   quantity: 2         # Numeric/quantity questions
   timeframe: 2        # Date/timeframe questions
 
