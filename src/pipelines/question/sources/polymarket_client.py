@@ -62,7 +62,7 @@ class PolymarketClient:
         limit: int = 1000,
         require_ground_truth: bool = True,
         quality_requirements: Optional[QualityRequirements] = None,
-        tag_slug: Optional[str] = None,
+        tag_slugs: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """Fetch markets from Polymarket API.
 
@@ -70,7 +70,7 @@ class PolymarketClient:
             limit: Maximum markets to fetch
             require_ground_truth: If True, fetch resolved markets. If False, fetch active markets.
             quality_requirements: Quality constraints (used for lookback calculation)
-            tag_slug: Optional tag slug to filter markets by (e.g., 'politics', 'crypto')
+            tag_slugs: Optional tag slugs to filter markets by (e.g., ['politics', 'crypto'])
 
         Returns:
             List of market dictionaries from API
@@ -83,13 +83,14 @@ class PolymarketClient:
 
         # Add tag filter if specified (for domain-specific fetching)
         # Convert slug to numeric ID first
-        if tag_slug:
-            tag_id = await self.get_tag_id(tag_slug)
-            if tag_id:
-                params["tag_id"] = tag_id
-                logger.info(f"Using tag filter: slug='{tag_slug}' -> id='{tag_id}'")
-            else:
-                logger.warning(f"Could not resolve tag slug '{tag_slug}', fetching without tag filter")
+        if tag_slugs:
+            tag_ids = []
+            for slug in tag_slugs:
+                tag_id = await self.get_tag_id(slug)
+                if tag_id:
+                    tag_ids.append(tag_id)
+                else:
+                    logger.warning(f"Could not resolve tag slug '{slug}', fetching without tag filter")
         
         # For ground truth, query closed markets sorted by resolution time
         if require_ground_truth:
@@ -97,10 +98,43 @@ class PolymarketClient:
             
             # Query only closed markets, sorted by closedTime (most recent first)
             params["closed"] = "true"
-            params["order"] = "closedTime"
+            params["order"] = "volume,closedTime"
             params["ascending"] = "false"
             logger.info(f"API filtering for closed markets sorted by closedTime (most recent first)")
+        market_list = []
+        if tag_slugs and tag_ids:
+            params_list = [params.copy() for _ in tag_ids]
+            for i, tag_id in enumerate(tag_ids):
+                params_list[i]["tag_id"] = tag_id
+                markets = await self.call_api(
+                    url=url,
+                    params=params_list[i],
+                )
+                market_list.extend(markets)
+        else:
+            markets = await self.call_api(
+                url=url,
+                params=params,
+            )
+            market_list.extend(markets)
+
+        # Log filtering criteria for ground truth
+        if require_ground_truth:
+            lookback_days = self._get_lookback_days(quality_requirements)
+            min_date = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+            logger.info(f"Client-side filter: {min_date.strftime('%Y-%m-%d')} <= closedTime <= now ({lookback_days} days)")
         
+        # Debug: Check sample market
+        if market_list:
+            sample = market_list[0]
+            logger.info(f"Sample: closed={sample.get('closed')}, endDate={sample.get('endDate')}, umaEndDate={sample.get('umaEndDate')}, closedTime={sample.get('closedTime')}, question={sample.get('question', 'N/A')[:60]}")
+
+        return market_list
+    
+
+
+    async def call_api(self, url: str, params: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+  
         async with aiohttp.ClientSession() as session:
             async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
                 if response.status != 200:
@@ -116,16 +150,6 @@ class PolymarketClient:
                 
                 logger.info(f"Polymarket Gamma API returned {len(market_list)} markets")
                 
-                # Log filtering criteria for ground truth
-                if require_ground_truth:
-                    lookback_days = self._get_lookback_days(quality_requirements)
-                    min_date = datetime.now(timezone.utc) - timedelta(days=lookback_days)
-                    logger.info(f"Client-side filter: {min_date.strftime('%Y-%m-%d')} <= closedTime <= now ({lookback_days} days)")
-                
-                # Debug: Check sample market
-                if market_list:
-                    sample = market_list[0]
-                    logger.info(f"Sample: closed={sample.get('closed')}, endDate={sample.get('endDate')}, umaEndDate={sample.get('umaEndDate')}, closedTime={sample.get('closedTime')}, question={sample.get('question', 'N/A')[:60]}")
                 
                 return market_list
     

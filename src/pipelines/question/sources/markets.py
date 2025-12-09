@@ -54,17 +54,17 @@ class PolymarketRunner(QuestionSourceRunner):
 
     # Map domains to Polymarket tag slugs for API filtering
     # Use proper slugs that can be resolved to tag IDs
-    DOMAIN_TO_TAG_SLUG = {
-        Domain.POLITICS: "politics",
-        Domain.FINANCE: "finance",
-        Domain.SPORTS: "sports",
-        Domain.TECH: "tech",
-        Domain.CULTURE: "entertainment",
-        Domain.HEALTH: "health",
-        Domain.SCIENCE: "science",
-        Domain.BUSINESS: "business",
-        Domain.CLIMATE: "climate",
-        Domain.GENERAL: "all",
+    DOMAIN_TO_TAG_SLUGS = {
+        Domain.POLITICS: ["politics", "geopolitics", "elections"],
+        Domain.FINANCE: ["finance", "economy"],
+        Domain.SPORTS: ["sports"],
+        Domain.TECH: ["tech", "ai"],
+        Domain.CULTURE: ["entertainment","music","movies"],
+        Domain.HEALTH: ["health", "pandemic"],
+        Domain.SCIENCE: ["science"],
+        Domain.BUSINESS: ["business"],
+        Domain.CLIMATE: ["climate","weather"],
+        Domain.GENERAL: ["all"],
     }
 
     def __init__(
@@ -130,20 +130,20 @@ class PolymarketRunner(QuestionSourceRunner):
 
         for domain in requested_domains:
             # Get tag slug for this domain
-            tag_slug = self.DOMAIN_TO_TAG_SLUG.get(domain)
-            if not tag_slug:
+            tag_slugs = self.DOMAIN_TO_TAG_SLUGS.get(domain)
+            if not tag_slugs:
                 logger.debug(f"No tag slug mapping for {domain.value}, skipping")
                 continue
 
             per_category_limit = category_limits.get(domain, limit)
-            logger.info(f"Fetching up to {per_category_limit} {domain.value} markets using tag '{tag_slug}'")
+            logger.info(f"Fetching up to {per_category_limit} {domain.value} markets using tag '{tag_slugs}'")
 
             # Fetch markets for this tag
             market_list = await self.client.fetch_markets(
                 limit=per_category_limit,
                 require_ground_truth=self.require_ground_truth,
                 quality_requirements=quality_requirements,
-                tag_slug=tag_slug  # Use tag_slug which will be converted to tag_id
+                tag_slugs=tag_slugs  # Use tag_slugs which will be converted to tag_id
             )
 
             # Parse markets up to the per-category limit
@@ -393,10 +393,10 @@ class PolymarketRunner(QuestionSourceRunner):
                             final.append(by_type[qtype].pop(0))
                         type_idx += 1
                 else:
-                    final = filtered[:count]
+                    final = filtered
             else:
                 # Return up to count
-                final = filtered[:count]
+                final = filtered
 
             logger.info(
                 f"Polymarket: {len(final)}/{count} questions collected "
@@ -655,6 +655,6 @@ class PolymarketRunner(QuestionSourceRunner):
                 domain = Domain(category) if isinstance(category, str) else category
             except ValueError:
                 return False
-            return domain in self.DOMAIN_TO_TAG_SLUG
+            return domain in self.DOMAIN_TO_TAG_SLUGS
 
         return True

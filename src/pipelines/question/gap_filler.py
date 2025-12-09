@@ -85,9 +85,6 @@ class GapFiller:
                 progress=progress,
                 existing_question_ids=existing_question_ids,
             )
-            # Update existing_question_ids to prevent collecting same market multiple times
-            for q in questions:
-                existing_question_ids.add(q.id)
             collected_questions.extend(questions)
 
         # Fill category gaps
@@ -110,9 +107,6 @@ class GapFiller:
                 progress=progress,
                 existing_question_ids=existing_question_ids,
             )
-            # Update existing_question_ids to prevent collecting same market multiple times
-            for q in questions:
-                existing_question_ids.add(q.id)
             collected_questions.extend(questions)
 
         # If no specific gaps were identified but we still need questions for the total
@@ -125,9 +119,6 @@ class GapFiller:
                 progress=progress,
                 existing_question_ids=existing_question_ids,
             )
-            # Update existing_question_ids to prevent collecting same market multiple times
-            for q in questions:
-                existing_question_ids.add(q.id)
             collected_questions.extend(questions)
 
         return collected_questions
