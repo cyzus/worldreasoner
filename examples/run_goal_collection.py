@@ -80,8 +80,8 @@ async def run_goal_collection(
         logger.info("  📊 Polymarket source")
         sources["polymarket"] = PolymarketRunner(
             min_volume_usd=0.0,  # No volume filter (relaxed)
-            use_agent_enhancement=True,  # Use LLM to categorize
             require_ground_truth=goal.require_ground_truth,  # Fetch resolved or active markets based on goal
+            # Note: Uses tag-based fetching - no LLM categorization needed!
         )
 
     # News-based source

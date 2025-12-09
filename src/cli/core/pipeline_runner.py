@@ -200,7 +200,6 @@ class PipelineRunner:
             if enable_polymarket:
                 sources["polymarket"] = PolymarketRunner(
                     min_volume_usd=0.0,
-                    use_agent_enhancement=True,
                     require_ground_truth=goal.require_ground_truth,
                 )
 
@@ -250,7 +249,7 @@ class PipelineRunner:
                 ))
 
             orchestrator_config = OrchestratorConfig(
-                max_iterations=1,
+                max_iterations=1,  # Allow multiple iterations to meet goal
                 parallel_sources=parallel_sources,
                 save_intermediate_results=True,
             )
