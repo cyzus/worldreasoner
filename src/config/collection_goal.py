@@ -61,7 +61,7 @@ class CollectionGoal(BaseModel):
     # Distribution by question type (minimum counts)
     type_distribution: Dict[QuestionType, int] = Field(
         default={
-            QuestionType.BOOLEAN: 40,
+            QuestionType.BINARY: 40,
             QuestionType.MCQ: 30,
             QuestionType.QUANTITY: 20,
             QuestionType.TIMEFRAME: 10

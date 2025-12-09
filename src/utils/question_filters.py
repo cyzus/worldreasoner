@@ -40,18 +40,29 @@ def filter_questions_by_category(
         category_filter: Either:
             - Dict mapping categories to counts (e.g., {"finance": 1, "tech": 2})
             - List of allowed categories (e.g., ["finance", "tech"])
+            - Can contain Domain enum objects (will be converted to strings)
 
     Returns:
         Filtered list of questions
     """
+    from src.domain.models.domain import Domain
+    
     if isinstance(category_filter, dict):
         allowed_categories = category_filter.keys()
     else:
         allowed_categories = category_filter
+    
+    # Convert Domain enums to strings for comparison
+    allowed_categories_strs = set()
+    for cat in allowed_categories:
+        if isinstance(cat, Domain):
+            allowed_categories_strs.add(cat.value)
+        else:
+            allowed_categories_strs.add(str(cat))
 
     return [
         q for q in questions
-        if q.metadata.get("category", "other") in allowed_categories
+        if q.metadata.get("category", "other") in allowed_categories_strs
     ]
 
 

@@ -57,11 +57,25 @@ class GapFiller:
             logger.info("No gaps to fill")
             return []
 
+        # Pre-compute which types/categories are actually supported to avoid futile requests
+        supported_types = {
+            qtype
+            for qtype in analysis.type_gaps.keys()
+            if any([await runner.can_provide(question_type=qtype) for runner in self.sources.values()])
+        }
+        unsupported_types = set(analysis.type_gaps.keys()) - supported_types
+        if unsupported_types:
+            logger.warning(
+                f"Skipping unsupported type gaps: {sorted(unsupported_types)} (no source can provide these types)"
+            )
+
         collected_questions = []
 
         # Fill type gaps
         for qtype, needed_count in analysis.type_gaps.items():
             if needed_count <= 0:
+                continue
+            if qtype in unsupported_types:
                 continue
             questions = await self._fill_type_gap(
                 qtype=qtype,
@@ -71,11 +85,23 @@ class GapFiller:
                 progress=progress,
                 existing_question_ids=existing_question_ids,
             )
+            # Update existing_question_ids to prevent collecting same market multiple times
+            for q in questions:
+                existing_question_ids.add(q.id)
             collected_questions.extend(questions)
 
         # Fill category gaps
         for category, needed_count in analysis.category_gaps.items():
             if needed_count <= 0:
+                continue
+            # Skip categories that no source can serve
+            can_serve_category = any([
+                await runner.can_provide(category=category) for runner in self.sources.values()
+            ])
+            if not can_serve_category:
+                logger.warning(
+                    f"Skipping unsupported category gap '{category}' (no source can provide it)"
+                )
                 continue
             questions = await self._fill_category_gap(
                 category=category,
@@ -84,6 +110,9 @@ class GapFiller:
                 progress=progress,
                 existing_question_ids=existing_question_ids,
             )
+            # Update existing_question_ids to prevent collecting same market multiple times
+            for q in questions:
+                existing_question_ids.add(q.id)
             collected_questions.extend(questions)
 
         # If no specific gaps were identified but we still need questions for the total
@@ -96,9 +125,63 @@ class GapFiller:
                 progress=progress,
                 existing_question_ids=existing_question_ids,
             )
+            # Update existing_question_ids to prevent collecting same market multiple times
+            for q in questions:
+                existing_question_ids.add(q.id)
             collected_questions.extend(questions)
 
         return collected_questions
+
+    async def _collect_with_filters(
+        self,
+        remaining: int,
+        type_filter: Optional[List[str]],
+        category_filter: Optional[Dict[str, int]],
+        existing_question_ids: set,
+        description: str = ""
+    ) -> List[Question]:
+        """Generic collection method with filters."""
+        collected = []
+        
+        for source_name, runner in self.sources.items():
+            if remaining <= 0:
+                break
+
+            if source_name in self.exhausted_sources:
+                continue
+
+            # Check capabilities
+            if type_filter and not any([await runner.can_provide(question_type=t) for t in type_filter]):
+                continue
+            if category_filter and not any([await runner.can_provide(category=c) for c in category_filter.keys()]):
+                continue
+
+            # Over-request to account for potential duplicates (2-3x more)
+            # This is especially important when fetching by category, as markets
+            # may be cross-tagged and appear in multiple categories
+            request_count = remaining * 3 if category_filter else remaining * 2
+            
+            logger.info(f"  {source_name}: requesting {request_count} {description} (to get {remaining} unique)")
+            
+            result = await self.coordinator._collect_from_source(
+                SourceRequest(
+                    source_name=source_name,
+                    runner=runner,
+                    count=request_count,
+                    type_filter=type_filter,
+                    category_filter=category_filter,
+                    quality_requirements=self.goal.quality,
+                    existing_question_ids=existing_question_ids,
+                )
+            )
+
+            if result.success and result.questions:
+                collected.extend(result.questions)
+                remaining -= len(result.questions)
+            else:
+                self.exhausted_sources.add(source_name)
+
+        return collected
 
     async def _fill_type_gap(
         self,
@@ -110,58 +193,14 @@ class GapFiller:
         existing_question_ids: set,
     ) -> List[Question]:
         """Fill gap for specific question type."""
-        logger.info(f"Filling gap: need {needed_count} '{qtype}' questions")
-
-        collected = []
-        remaining = needed_count
-
-        for source_name, runner in self.sources.items():
-            if remaining <= 0:
-                break
-
-            # Skip exhausted sources
-            if source_name in self.exhausted_sources:
-                logger.debug(f"  Skipping '{source_name}' (exhausted)")
-                continue
-
-            # Check if source can provide this type
-            can_provide = await runner.can_provide(question_type=qtype)
-            if not can_provide:
-                logger.debug(f"  Skipping '{source_name}' (cannot provide '{qtype}')")
-                continue
-
-            # NOTE: We intentionally skip quota checks here
-            # Distribution gap filling is allowed to exceed source quotas
-            # to improve the overall distribution quality
-
-            # Collect
-            logger.info(
-                f"  Trying '{source_name}' for '{qtype}' "
-                f"(all type hints: {all_type_hints})..."
-            )
-
-            result = await self.coordinator._collect_from_source(
-                SourceRequest(
-                    source_name=source_name,
-                    runner=runner,
-                    count=remaining,
-                    type_filter=all_type_hints,  # Hint at ALL gaps
-                    category_filter=category_hints,
-                    quality_requirements=self.goal.quality,
-                    existing_question_ids=existing_question_ids,
-                )
-            )
-
-            if result.success and result.questions:
-                collected.extend(result.questions)
-                remaining -= len(result.questions)
-                logger.info(f"    ✓ Got {len(result.questions)} questions")
-            else:
-                # Mark as exhausted
-                logger.debug(f"    ✗ '{source_name}': no questions, marking exhausted")
-                self.exhausted_sources.add(source_name)
-
-        return collected
+        logger.info(f"Filling type gap: {needed_count} '{qtype}' questions")
+        return await self._collect_with_filters(
+            remaining=needed_count,
+            type_filter=all_type_hints,
+            category_filter=category_hints,
+            existing_question_ids=existing_question_ids,
+            description=f"of type '{qtype}'"
+        )
 
     async def _fill_category_gap(
         self,
@@ -172,58 +211,14 @@ class GapFiller:
         existing_question_ids: set,
     ) -> List[Question]:
         """Fill gap for specific category."""
-        logger.info(f"Filling gap: need {needed_count} '{category}' questions")
-
-        collected = []
-        remaining = needed_count
-
-        for source_name, runner in self.sources.items():
-            if remaining <= 0:
-                break
-
-            # Skip exhausted sources
-            if source_name in self.exhausted_sources:
-                logger.debug(f"  Skipping '{source_name}' (exhausted)")
-                continue
-
-            # Check if source can provide this category
-            can_provide = await runner.can_provide(category=category)
-            if not can_provide:
-                logger.debug(f"  Skipping '{source_name}' (cannot provide '{category}')")
-                continue
-
-            # NOTE: We intentionally skip quota checks here
-            # Distribution gap filling is allowed to exceed source quotas
-            # to improve the overall distribution quality
-
-            # Collect
-            logger.info(
-                f"  Trying '{source_name}' for '{category}' "
-                f"(all type hints: {type_hints})..."
-            )
-
-            result = await self.coordinator._collect_from_source(
-                SourceRequest(
-                    source_name=source_name,
-                    runner=runner,
-                    count=remaining,
-                    type_filter=type_hints,
-                    category_filter={category: remaining},
-                    quality_requirements=self.goal.quality,
-                    existing_question_ids=existing_question_ids,
-                )
-            )
-
-            if result.success and result.questions:
-                collected.extend(result.questions)
-                remaining -= len(result.questions)
-                logger.info(f"    ✓ Got {len(result.questions)} questions")
-            else:
-                # Mark as exhausted
-                logger.debug(f"    ✗ '{source_name}': no questions, marking exhausted")
-                self.exhausted_sources.add(source_name)
-
-        return collected
+        logger.info(f"Filling category gap: {needed_count} '{category}' questions")
+        return await self._collect_with_filters(
+            remaining=needed_count,
+            type_filter=type_hints or None,
+            category_filter={category: needed_count},
+            existing_question_ids=existing_question_ids,
+            description=f"in category '{category}'"
+        )
 
     async def _fill_total_gap(
         self,
@@ -231,59 +226,15 @@ class GapFiller:
         progress: CollectionProgress,
         existing_question_ids: set,
     ) -> List[Question]:
-        """Fill gap in total question count without specific type/category requirements.
-        
-        Makes broad collection requests to reach the total goal.
-        """
-        logger.info(f"Filling total gap: need {needed_count} questions (any type/category)")
-
-        collected = []
-        remaining = needed_count
-
-        for source_name, runner in self.sources.items():
-            if remaining <= 0:
-                break
-
-            # Skip exhausted sources
-            if source_name in self.exhausted_sources:
-                logger.debug(f"  Skipping '{source_name}' (exhausted)")
-                continue
-
-            # Collect without specific type/category filters
-            logger.info(f"  Trying '{source_name}' for {remaining} questions (any type/category)...")
-
-            result = await self.coordinator._collect_from_source(
-                SourceRequest(
-                    source_name=source_name,
-                    runner=runner,
-                    count=remaining,
-                    type_filter=None,  # Accept any type
-                    category_filter=None,  # Accept any category
-                    quality_requirements=self.goal.quality,
-                    existing_question_ids=existing_question_ids,
-                )
-            )
-
-            if result.success and result.questions:
-                collected.extend(result.questions)
-                remaining -= len(result.questions)
-                logger.info(f"    ✓ Got {len(result.questions)} questions")
-            else:
-                # Mark as exhausted
-                logger.debug(f"    ✗ '{source_name}': no questions, marking exhausted")
-                self.exhausted_sources.add(source_name)
-
-        return collected
-
-    def _has_quota_available(
-        self,
-        source_name: str,
-        progress: CollectionProgress
-    ) -> bool:
-        """Check if source has quota remaining."""
-        already_collected = progress.by_source.get(source_name, 0)
-        source_minimum = self.goal.source_minimums.get(source_name, 1)
-        return already_collected < source_minimum
+        """Fill gap in total question count without specific type/category requirements."""
+        logger.info(f"Filling total gap: {needed_count} questions (any type/category)")
+        return await self._collect_with_filters(
+            remaining=needed_count,
+            type_filter=None,
+            category_filter=None,
+            existing_question_ids=existing_question_ids,
+            description="(any type/category)"
+        )
 
     def reset_exhausted(self):
         """Reset exhausted sources (for next iteration)."""

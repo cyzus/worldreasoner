@@ -22,6 +22,13 @@ class SourceRequest:
     existing_question_ids: Optional[set] = None
 
 
+@dataclass  
+class CoordinatorResult:
+    """Result from coordinator with collected questions and errors."""
+    results: List[CollectionResult]
+    errors: List[str]
+
+
 class SourceCoordinator:
     """Coordinates collection from multiple question sources.
 
@@ -35,8 +42,6 @@ class SourceCoordinator:
             parallel: Whether to run sources in parallel
         """
         self.parallel = parallel
-        self.results: List[CollectionResult] = []
-        self.errors: List[str] = []
 
     async def collect_from_sources(
         self,
@@ -60,20 +65,22 @@ class SourceCoordinator:
         requests: List[SourceRequest]
     ) -> List[CollectionResult]:
         """Run sources in parallel."""
-        tasks = [
-            self._collect_from_source(req)
-            for req in requests
-        ]
-
+        tasks = [self._collect_from_source(req) for req in requests]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Filter out exceptions
         valid_results = []
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                error = f"{requests[i].source_name}: {result}"
-                logger.error(error)
-                self.errors.append(error)
+                logger.error(f"{requests[i].source_name}: {result}")
+                # Create failed result with error
+                valid_results.append(CollectionResult(
+                    success=False,
+                    questions=[],
+                    source_name=requests[i].source_name,
+                    requested_count=requests[i].count,
+                    actual_count=0,
+                    errors=[str(result)]
+                ))
             else:
                 valid_results.append(result)
 
@@ -90,9 +97,15 @@ class SourceCoordinator:
                 result = await self._collect_from_source(req)
                 results.append(result)
             except Exception as e:
-                error = f"{req.source_name}: {e}"
-                logger.error(error)
-                self.errors.append(error)
+                logger.error(f"{req.source_name}: {e}")
+                results.append(CollectionResult(
+                    success=False,
+                    questions=[],
+                    source_name=req.source_name,
+                    requested_count=req.count,
+                    actual_count=0,
+                    errors=[str(e)]
+                ))
 
         return results
 

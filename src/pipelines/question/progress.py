@@ -78,40 +78,49 @@ class CollectionProgress(BaseModel):
         for question in questions:
             self.add_question(question)
 
-    def is_goal_met(self, goal: CollectionGoal) -> bool:
+    def is_goal_met(self, goal: CollectionGoal, include_skipped: bool = False) -> bool:
         """Check if we've satisfied the collection goal.
 
         Args:
             goal: Target collection goal
+            include_skipped: If False, exclude questions marked skip_evidence
 
         Returns:
             True if goal is met (with tolerance), False otherwise
         """
+        # Filter out skip_evidence questions if requested
+        if include_skipped:
+            questions = self.questions_list
+        else:
+            questions = [q for q in self.questions_list if not q.skip_evidence]
+        
+        total = len(questions)
+        
         # Check total
-        if self.total < goal.total_questions:
-            logger.debug(
-                f"Total not met: {self.total}/{goal.total_questions}"
-            )
+        if total < goal.total_questions:
+            logger.debug(f"Total not met: {total}/{goal.total_questions}")
             return False
+
+        # Recalculate distributions from filtered questions
+        by_type = {}
+        by_category = {}
+        for q in questions:
+            # Store as enum for consistent comparison
+            by_type[q.question_type] = by_type.get(q.question_type, 0) + 1
+            by_category[q.domain] = by_category.get(q.domain, 0) + 1
 
         # Check type distribution (exact minimums)
         for qtype, minimum in goal.type_distribution.items():
-            actual = self.by_type.get(qtype, 0)
-
+            actual = by_type.get(qtype, 0)
             if actual < minimum:
-                logger.debug(
-                    f"Type '{qtype}' not met: {actual}/{minimum}"
-                )
+                logger.debug(f"Type '{qtype}' not met: {actual}/{minimum}")
                 return False
 
         # Check category distribution (exact minimums)
         for category, minimum in goal.category_distribution.items():
-            actual = self.by_category.get(category, 0)
-
+            actual = by_category.get(category, 0)
             if actual < minimum:
-                logger.debug(
-                    f"Category '{category}' not met: {actual}/{minimum}"
-                )
+                logger.debug(f"Category '{category}' not met: {actual}/{minimum}")
                 return False
 
         logger.info("Goal met!")

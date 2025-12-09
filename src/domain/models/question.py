@@ -12,10 +12,10 @@ from .domain import Domain
 class QuestionType(str, Enum):
     """Types of forecast questions."""
 
-    BOOLEAN = "boolean"
-    MCQ = "mcq"
-    QUANTITY = "quantity"
-    TIMEFRAME = "timeframe"
+    BINARY = "binary"  # Two-outcome questions (Yes/No, Up/Down, Win/Lose)
+    MCQ = "mcq"  # Multiple choice (3+ outcomes)
+    QUANTITY = "quantity"  # Numeric predictions
+    TIMEFRAME = "timeframe"  # Date/time predictions
 
 
 @register_model('questions', indexes=['domain', 'difficulty', 'source'])
@@ -128,7 +128,7 @@ class Question(BaseModel):
             "example": {
                 "id": "q_pol_2024_001",
                 "question_text": "Will the Republican candidate win the 2024 US Presidential Election?",
-                "question_type": "boolean",
+                "question_type": "binary",
                 "domain": "politics",
                 "difficulty": 4,
                 "resolution_date": "2024-11-06T00:00:00Z",
@@ -149,7 +149,7 @@ class Question(BaseModel):
         Returns:
             True if valid, False otherwise
         """
-        if self.question_type == QuestionType.BOOLEAN:
+        if self.question_type == QuestionType.BINARY:
             return isinstance(prediction, bool)
         elif self.question_type == QuestionType.MCQ:
             if self.options:

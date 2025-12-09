@@ -149,47 +149,44 @@ class QuestionCollectionOrchestrator:
         logger.info("=" * 60)
 
         iterations = 0
+        questions_before_iteration = 0
 
         try:
-            # Phase 1: Broad collection from all sources
+            # Main collection loop
             while iterations < self.config.max_iterations:
                 iterations += 1
                 logger.info(f"--- Iteration {iterations}/{self.config.max_iterations} ---")
 
-                # Check if goal already met
-                if self.progress.is_goal_met(self.goal):
+                # Check if goal met (excluding skip_evidence questions)
+                if self.progress.is_goal_met(self.goal, include_skipped=False):
                     logger.success("Goal met!")
                     break
 
-                # Collect from sources
+                questions_before = self.progress.total
+
+                # 1. Broad collection from sources
                 await self._collect_from_sources()
 
-                logger.info("Attempting targeted gap filling...")
+                # 2. Score new questions immediately
+                await self._score_new_questions()
+
+                # 3. Gap filling with quality-aware selection
                 await self._fill_gaps()
 
-                # Run incremental quality ranking after collection AND gap filling
-                # This ensures all questions (including gap-filled ones) get scored
-                # Already-scored questions will be skipped automatically
-                if self.quality_stage and self.progress.get_questions():
-                    logger.info("--- Running Incremental Quality Ranking ---")
-                    all_questions = self.progress.get_questions()
-                    ranked_questions_result = await self.quality_stage.execute(all_questions)
-                    if ranked_questions_result.status == "completed":
-                        # Update progress with scored questions
-                        self.progress.set_questions(ranked_questions_result.outputs)
-                        # Count how many are marked to skip
-                        skip_count = sum(1 for q in ranked_questions_result.outputs if q.skip_evidence)
-                        keep_count = len(ranked_questions_result.outputs) - skip_count
-                        logger.info(f"Quality filter: keeping {keep_count}, skipping {skip_count} low-quality questions")
-                    else:
-                        logger.warning("Incremental quality ranking failed, continuing without it")
+                # 4. Score gap-filled questions
+                await self._score_new_questions()
 
                 # Save intermediate results
                 if self.config.save_intermediate_results and self.db:
                     self._save_to_database()
 
-            # Final check
-            goal_met = self.progress.is_goal_met(self.goal)
+                # Check progress
+                if self.progress.total == questions_before:
+                    logger.warning(f"No new questions in iteration {iterations}. Sources exhausted.")
+                    break
+
+            # Final check (exclude skip_evidence questions)
+            goal_met = self.progress.is_goal_met(self.goal, include_skipped=False)
 
             if not goal_met:
                 logger.warning(
@@ -244,43 +241,45 @@ class QuestionCollectionOrchestrator:
                 completed_at=datetime.now(timezone.utc),
             )
 
+    async def _score_new_questions(self) -> None:
+        """Score unscored questions and update skip_evidence flags."""
+        if not self.quality_stage:
+            return
+        
+        all_questions = self.progress.get_questions()
+        if not all_questions:
+            return
+        
+        unscored = [q for q in all_questions if q.quality_score is None]
+        if not unscored:
+            return
+        
+        logger.info(f"Scoring {len(unscored)} new questions...")
+        result = await self.quality_stage.execute(all_questions)
+        
+        if result.status == "completed":
+            self.progress.set_questions(result.outputs)
+            skipped = sum(1 for q in result.outputs if q.skip_evidence)
+            logger.info(f"Quality: {len(result.outputs) - skipped} kept, {skipped} skipped")
+        else:
+            logger.warning("Quality scoring failed")
+
     async def _collect_from_sources(self) -> None:
         """Collect from all sources based on quotas and needs."""
-
-        # Calculate needed categories and types once for all sources
-        category_gaps = self.progress.get_category_gaps(self.goal)
-        type_gaps = self.progress.get_type_gaps(self.goal)
-        needed_types = [qtype for qtype, gap in type_gaps.items() if gap > 0] if type_gaps else None
-
-        if category_gaps:
-            logger.debug(f"Category gaps to fill: {category_gaps}")
-        else:
-            logger.debug("No category gaps - all categories satisfied")
-
-        # Build requests for each source
+        # Use GapAnalyzer for consistent gap calculation
+        analysis = self.gap_analyzer.analyze(self.progress, self.goal)
+        
         requests = []
         for source_name, runner in self.sources.items():
-            # Calculate how many needed from this source
-            already_from_source = self.progress.by_source.get(source_name, 0)
-            source_minimum = self.goal.source_minimums.get(source_name, 1)
-            source_remaining = max(0, source_minimum - already_from_source)
+            # Calculate quota: source minimum or fair share of remaining
+            collected = self.progress.by_source.get(source_name, 0)
+            source_min = self.goal.source_minimums.get(source_name, 0)
             
-            # Overall remaining to reach total
-            overall_remaining = max(0, self.goal.total_questions - self.progress.total)
-            
-            # If source minimum not met, request that amount
-            # Otherwise, if overall goal not met, distribute remaining across active sources
-            if source_remaining > 0:
-                needed = min(source_remaining, overall_remaining)
-            elif overall_remaining > 0:
-                # Source minimum met, but total goal not met - keep collecting
-                # Distribute remaining evenly across all sources
-                needed = max(1, overall_remaining // len(self.sources))
+            if collected < source_min:
+                needed = source_min - collected
+            elif analysis.total_needed > 0:
+                needed = max(1, analysis.total_needed // len(self.sources))
             else:
-                needed = 0
-
-            if needed <= 0:
-                logger.debug(f"No more questions needed from '{source_name}'")
                 continue
 
             requests.append(
@@ -288,30 +287,31 @@ class QuestionCollectionOrchestrator:
                     source_name=source_name,
                     runner=runner,
                     count=needed,
-                    type_filter=needed_types,
-                    category_filter=category_gaps or None,
+                    type_filter=analysis.type_gaps_list or None,
+                    category_filter=analysis.category_gaps if analysis.category_gaps else None,
                     quality_requirements=self.goal.quality,
                     existing_question_ids=self.existing_question_ids,
                 )
             )
 
-        # Execute collection through coordinator
+        # Execute and process results
         results = await self.coordinator.collect_from_sources(requests)
-
-        # Process results
+        
         for result in results:
             self.source_results[result.source_name].append(result)
-
             if result.success and result.questions:
-                # Filter duplicates
-                unique_questions = self._filter_duplicates(result.questions)
-                if unique_questions:
-                    self.progress.add_questions(unique_questions)
-
-        # Collect any errors from coordinator
-        if self.coordinator.errors:
-            self.errors.extend(self.coordinator.errors)
-            self.coordinator.errors.clear()  # Clear for next iteration
+                unique = self._filter_duplicates(result.questions)
+                if unique:
+                    self.progress.add_questions(unique)
+                elif result.questions:
+                    # All questions were duplicates - log for debugging
+                    logger.debug(
+                        f"{result.source_name}: Filtered out {len(result.questions)} duplicates "
+                        f"(consider increasing request count to account for duplicates)"
+                    )
+            # CollectionResult has errors field (optional)
+            if hasattr(result, 'errors') and result.errors:
+                self.errors.extend(result.errors)
 
 
 
@@ -320,16 +320,12 @@ class QuestionCollectionOrchestrator:
 
 
     async def _fill_gaps(self) -> None:
-        """Targeted collection to fill specific gaps in distribution."""
-
-        # Analyze gaps
+        """Targeted collection to fill distribution gaps."""
         analysis = self.gap_analyzer.analyze(self.progress, self.goal)
-
+        
         if not analysis.has_gaps:
-            logger.info("No gaps to fill")
             return
 
-        # Fill gaps using GapFiller service
         gap_questions = await self.gap_filler.fill_gaps(
             analysis=analysis,
             progress=self.progress,
@@ -337,13 +333,11 @@ class QuestionCollectionOrchestrator:
         )
 
         if gap_questions:
-            # Filter duplicates and add to progress
-            unique_questions = self._filter_duplicates(gap_questions)
-            if unique_questions:
-                self.progress.add_questions(unique_questions)
-                logger.info(f"Gap filling collected {len(unique_questions)} questions")
+            unique = self._filter_duplicates(gap_questions)
+            if unique:
+                self.progress.add_questions(unique)
+                logger.info(f"Gap filling: +{len(unique)} questions")
 
-        # Reset exhausted sources for next iteration
         self.gap_filler.reset_exhausted()
 
     def _save_to_database(self) -> None:
