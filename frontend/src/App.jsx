@@ -4,6 +4,7 @@ import ControlPanel from './components/ControlPanel'
 import EventDetails from './components/EventDetails'
 import QuestionList from './components/QuestionList'
 import PipelinePage from './components/PipelinePage'
+import QuestionCollectionPage from './components/QuestionCollectionPage'
 import Timeline from './components/Timeline'
 import TimeSeriesChart from './components/TimeSeriesChart'
 import DatabaseSelector from './components/DatabaseSelector'
@@ -26,7 +27,7 @@ function App() {
   const [timeFilter, setTimeFilter] = useState(null) // { start: Date, end: Date }
   const [questions, setQuestions] = useState([]) // List of all questions
   const [selectedQuestionId, setSelectedQuestionId] = useState(null) // Currently selected question filter
-  const [leftPanelTab, setLeftPanelTab] = useState('controls') // 'controls', 'questions', or 'pipelines'
+  const [leftPanelTab, setLeftPanelTab] = useState('controls') // 'controls', 'questions', 'pipelines', or 'collection'
   const [priceHistoryData, setPriceHistoryData] = useState(null) // Price history for selected question
   const [loadingPriceHistory, setLoadingPriceHistory] = useState(false) // Loading state for price history
   const [questionRelatedEvents, setQuestionRelatedEvents] = useState([]) // All events related to selected question
@@ -549,6 +550,12 @@ function App() {
     loadStatistics()
   }, [filters, loadGraph, loadStatistics])
 
+  // Handle questions added from collection page
+  const handleQuestionsAdded = useCallback((count) => {
+    console.log(`${count} questions added, refreshing...`)
+    loadQuestions() // Reload questions list
+  }, [loadQuestions])
+
   return (
     <div className="app">
       <header className="app-header">
@@ -578,6 +585,12 @@ function App() {
             📋 Questions ({questions.length})
           </button>
           <button
+            className={`top-tab-btn ${leftPanelTab === 'collection' ? 'active' : ''}`}
+            onClick={() => setLeftPanelTab('collection')}
+          >
+            🔍 Collection
+          </button>
+          <button
             className={`top-tab-btn ${leftPanelTab === 'pipelines' ? 'active' : ''}`}
             onClick={() => setLeftPanelTab('pipelines')}
           >
@@ -591,6 +604,11 @@ function App() {
             questions={questions}
             onJobComplete={handleJobComplete}
             onDatabaseChange={handleDatabaseChange}
+          />
+        ) : leftPanelTab === 'collection' ? (
+          /* Full-width collection page */
+          <QuestionCollectionPage
+            onQuestionsAdded={handleQuestionsAdded}
           />
         ) : (
           /* Sidebar + Graph layout for controls and questions */

@@ -4,14 +4,22 @@ Provides REST API for querying forecast questions.
 """
 
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Query, HTTPException, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, Query, HTTPException, Depends, Body
+from pydantic import BaseModel, Field
 
 from src.core.database import GenericDatabase
 from src.domain.models import Question, CausalHypothesis
+from src.domain.models.domain import Domain
+from src.domain.models.question import QuestionType
 from backend.api.routes.database import get_current_db_path
 from src.utils.logging import logger
 from src.utils.polymarket import get_price_history_for_market
+from src.config.collection_goal import CollectionGoal, QualityRequirements
+from src.config.pipeline import QuestionQualityConfig
+from src.pipelines.question.orchestrator import (
+    QuestionCollectionOrchestrator,
+    OrchestratorConfig,
+)
 
 
 router = APIRouter()
@@ -33,6 +41,334 @@ class QuestionListItem(BaseModel):
     source: str
     target_event_id: Optional[str]
     related_event_ids: List[str]
+    quality_score: Optional[float] = None
+    resolution_date: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class QuestionPreviewRequest(BaseModel):
+    """Request parameters for previewing questions from sources."""
+    source: str = Field(description="Source to collect from: 'polymarket' or 'news'")
+    count: int = Field(default=20, ge=1, le=100, description="Number of questions to fetch (1-100)")
+    domains: Optional[List[str]] = Field(default=None, description="Filter by domains")
+    question_types: Optional[List[str]] = Field(default=None, description="Filter by question types")
+    min_difficulty: Optional[int] = Field(default=None, ge=1, le=5, description="Minimum difficulty (1-5)")
+    max_difficulty: Optional[int] = Field(default=None, ge=1, le=5, description="Maximum difficulty (1-5)")
+    tags: Optional[List[str]] = Field(default=None, description="Polymarket tags (e.g., 'politics', 'crypto')")
+    include_resolved: Optional[bool] = Field(default=True, description="Include resolved markets (Polymarket only)")
+
+
+class QuestionPreviewResponse(BaseModel):
+    """Response containing previewed questions."""
+    success: bool
+    questions: List[Dict[str, Any]]
+    total: int
+    source: str
+    errors: List[str] = Field(default_factory=list)
+
+
+class BatchSaveRequest(BaseModel):
+    """Request to save selected questions to database."""
+    question_ids: List[str] = Field(description="IDs of questions to save")
+    questions: List[Dict[str, Any]] = Field(description="Full question data to save")
+
+
+@router.post("/preview", response_model=QuestionPreviewResponse)
+async def preview_questions(request: QuestionPreviewRequest):
+    """Preview questions from a source without saving to database.
+
+    This endpoint allows fetching questions from Polymarket or news sources
+    for manual review before adding them to the database.
+
+    Args:
+        request: Preview request with source and filtering parameters
+
+    Returns:
+        Preview response with questions and metadata
+    """
+    try:
+        logger.info(f"Previewing questions from {request.source} (count={request.count})")
+
+        # Initialize the appropriate source runner
+        from src.pipelines.question.sources.markets import PolymarketRunner
+        from src.pipelines.question.sources.news import NewsBasedRunner
+
+        errors = []
+        questions_list = []
+
+        if request.source == "polymarket":
+            # Create quality requirements
+            quality = QualityRequirements()
+            if request.min_difficulty:
+                quality.min_difficulty = request.min_difficulty
+            if request.max_difficulty:
+                quality.max_difficulty = request.max_difficulty
+
+            # Initialize runner with require_ground_truth based on include_resolved
+            # require_ground_truth=True fetches resolved markets with ground truth
+            # require_ground_truth=False fetches active prediction markets
+            runner = PolymarketRunner(
+                require_ground_truth=request.include_resolved if request.include_resolved is not None else True
+            )
+
+            # Map domains to tag-based category filter
+            # If domains are specified, use them; otherwise if tags specified, map tags to domains
+            category_filter = None
+            if request.domains:
+                category_filter = request.domains
+            elif request.tags:
+                # Map Polymarket tags to domains
+                tag_to_domain = {
+                    'politics': 'politics',
+                    'geopolitics': 'politics',
+                    'elections': 'politics',
+                    'crypto': 'finance',
+                    'finance': 'finance',
+                    'economy': 'finance',
+                    'sports': 'sports',
+                    'tech': 'technology',
+                    'ai': 'technology',
+                    'pop culture': 'culture',
+                    'entertainment': 'culture',
+                    'science': 'science',
+                    'business': 'business',
+                    'health': 'health',
+                    'pandemic': 'health',
+                }
+                mapped_domains = []
+                for tag in request.tags:
+                    domain = tag_to_domain.get(tag.lower(), tag.lower())
+                    if domain not in mapped_domains:
+                        mapped_domains.append(domain)
+                category_filter = mapped_domains if mapped_domains else None
+
+            # Convert question type strings to enum values
+            type_filter_enums = None
+            if request.question_types:
+                type_filter_enums = []
+                for qt in request.question_types:
+                    try:
+                        # Handle both lowercase and uppercase enum values
+                        type_filter_enums.append(QuestionType[qt.upper()])
+                    except KeyError:
+                        logger.warning(f"Unknown question type: {qt}")
+
+            # Collect questions
+            result = await runner.collect(
+                count=request.count,
+                type_filter=type_filter_enums,
+                category_filter=category_filter,
+                quality_requirements=quality,
+            )
+
+            if result.success:
+                questions_list = result.questions
+                logger.info(f"Collected {len(questions_list)} questions from Polymarket")
+            else:
+                error_msg = result.error_message if hasattr(result, 'error_message') else str(result)
+                errors.append(f"Polymarket collection failed: {error_msg}")
+
+        elif request.source == "news":
+            # Initialize runner with required configurations
+            from src.pipelines.stages import ArticleCollectionConfig, EventIdentificationConfig, ArticleSource
+            from src.config.pipeline import QuestionPipelineConfig
+            from datetime import datetime, timedelta, timezone
+            import yaml
+            from pathlib import Path
+
+            # Load article sources from config file
+            sources_file = Path("config/sources.yaml")
+
+            with open(sources_file, 'r') as f:
+                config_data = yaml.safe_load(f)
+                article_sources = [ArticleSource(**source_data) for source_data in config_data.get('sources', [])]
+
+            logger.info(f"Loaded {len(article_sources)} article sources from config")
+
+            # Filter sources by requested domains if specified
+            if request.domains:
+                filtered_sources = [s for s in article_sources if s.domain in request.domains]
+                if filtered_sources:
+                    article_sources = filtered_sources
+                    logger.info(f"Filtered to {len(article_sources)} sources matching domains: {request.domains}")
+
+            if not article_sources:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No article sources available for the requested domains"
+                )
+
+            # Create default configurations
+            # Collect articles from the past 7 days
+            end_date = datetime.now(timezone.utc)
+            start_date = end_date - timedelta(days=7)
+
+            article_config = ArticleCollectionConfig(
+                sources=article_sources,
+                start_date=start_date,
+                end_date=end_date,
+                max_articles_per_source=10,  # Limit for preview
+            )
+
+            event_config = EventIdentificationConfig(
+                max_events_per_article=5,
+            )
+
+            question_config = QuestionPipelineConfig()
+
+            # Get database path
+            db_path = get_current_db_path()
+
+            # Initialize runner
+            runner = NewsBasedRunner(
+                article_config=article_config,
+                event_config=event_config,
+                question_config=question_config,
+                db_path=db_path,
+            )
+
+            # Create quality requirements
+            quality = QualityRequirements()
+            if request.min_difficulty:
+                quality.min_difficulty = request.min_difficulty
+            if request.max_difficulty:
+                quality.max_difficulty = request.max_difficulty
+
+            # Convert question type strings to enum values
+            type_filter_enums = None
+            if request.question_types:
+                type_filter_enums = []
+                for qt in request.question_types:
+                    try:
+                        type_filter_enums.append(QuestionType[qt.upper()])
+                    except KeyError:
+                        logger.warning(f"Unknown question type: {qt}")
+
+            # Collect questions
+            result = await runner.collect(
+                count=request.count,
+                type_filter=type_filter_enums,
+                category_filter=request.domains,
+                quality_requirements=quality,
+            )
+
+            if result.success:
+                questions_list = result.questions
+                logger.info(f"Collected {len(questions_list)} questions from news")
+            else:
+                error_msg = result.error_message if hasattr(result, 'error_message') else str(result)
+                errors.append(f"News collection failed: {error_msg}")
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid source: {request.source}. Must be 'polymarket' or 'news'"
+            )
+
+        # Convert questions to dictionaries
+        questions_dicts = []
+        for q in questions_list:
+            q_dict = {
+                "id": q.id,
+                "question_text": q.question_text,
+                "question_type": q.question_type.value,
+                "domain": q.domain.value,
+                "difficulty": q.difficulty,
+                "source": q.source,
+                "target_event_id": q.target_event_id,
+                "related_event_ids": q.related_event_ids,
+                "quality_score": q.quality_score,
+                "resolution_date": q.resolution_date.isoformat() if q.resolution_date else None,
+                "resolution_criteria": q.resolution_criteria,
+                "ground_truth": q.ground_truth,
+                "metadata": q.metadata,
+            }
+            questions_dicts.append(q_dict)
+
+        return QuestionPreviewResponse(
+            success=len(questions_list) > 0,
+            questions=questions_dicts,
+            total=len(questions_list),
+            source=request.source,
+            errors=errors,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to preview questions: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/batch-save")
+async def batch_save_questions(
+    request: BatchSaveRequest,
+    db: GenericDatabase = Depends(get_database),
+):
+    """Save selected questions to database.
+
+    Args:
+        request: Batch save request with question IDs and data
+        db: Database instance
+
+    Returns:
+        Save result with statistics
+    """
+    try:
+        logger.info(f"Batch saving {len(request.questions)} questions")
+
+        saved_count = 0
+        skipped_count = 0
+        errors = []
+
+        for q_dict in request.questions:
+            try:
+                # Reconstruct Question object from dict
+                question = Question(
+                    id=q_dict["id"],
+                    question_text=q_dict["question_text"],
+                    question_type=QuestionType[q_dict["question_type"].upper()],
+                    domain=Domain[q_dict["domain"].upper()],
+                    difficulty=q_dict["difficulty"],
+                    source=q_dict["source"],
+                    target_event_id=q_dict.get("target_event_id"),
+                    related_event_ids=q_dict.get("related_event_ids", []),
+                    quality_score=q_dict.get("quality_score"),
+                    resolution_date=q_dict.get("resolution_date"),
+                    resolution_criteria=q_dict.get("resolution_criteria"),
+                    ground_truth=q_dict.get("ground_truth"),
+                    metadata=q_dict.get("metadata", {}),
+                )
+
+                # Check if question already exists
+                existing = db.get(Question, question.id)
+                if existing:
+                    logger.info(f"Skipping duplicate: {question.id}")
+                    skipped_count += 1
+                    continue
+
+                # Save to database
+                db.save(Question, question)
+                saved_count += 1
+
+            except Exception as e:
+                logger.error(f"Error saving question {q_dict.get('id')}: {e}")
+                errors.append(f"Question {q_dict.get('id')}: {str(e)}")
+
+        logger.info(f"Batch save complete: {saved_count} saved, {skipped_count} skipped, {len(errors)} errors")
+
+        return {
+            "success": saved_count > 0,
+            "saved_count": saved_count,
+            "skipped_count": skipped_count,
+            "total_requested": len(request.questions),
+            "errors": errors,
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to batch save questions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/", response_model=List[QuestionListItem])
@@ -67,6 +403,9 @@ async def get_questions(
                 source=q.source,
                 target_event_id=q.target_event_id,
                 related_event_ids=q.related_event_ids,
+                quality_score=q.quality_score,
+                resolution_date=q.resolution_date.isoformat() if q.resolution_date else None,
+                metadata=q.metadata,
             )
             for q in questions
         ]
@@ -107,6 +446,9 @@ async def get_question(
             source=question.source,
             target_event_id=question.target_event_id,
             related_event_ids=question.related_event_ids,
+            quality_score=question.quality_score,
+            resolution_date=question.resolution_date.isoformat() if question.resolution_date else None,
+            metadata=question.metadata,
         )
 
     except HTTPException:
