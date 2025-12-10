@@ -17,6 +17,12 @@ const PipelineControl = ({ selectedQuestions, onJobComplete }) => {
       `${protocol}//${host}:${port}/api/pipelines/jobs/${activeJob}/ws`
     )
 
+    let connected = false
+
+    ws.onopen = () => {
+      connected = true
+    }
+
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data)
       setJobStatus(data)
@@ -37,8 +43,19 @@ const PipelineControl = ({ selectedQuestions, onJobComplete }) => {
       }
     }
 
-    ws.onerror = () => {
-      setError('WebSocket connection failed')
+    ws.onerror = (event) => {
+      // Only show error if we never connected successfully
+      if (!connected) {
+        console.error('WebSocket connection error:', event)
+        setError('Failed to connect to job progress stream')
+      }
+    }
+
+    ws.onclose = (event) => {
+      // Only show error if connection closed unexpectedly before we got any data
+      if (!connected && !event.wasClean) {
+        console.error('WebSocket closed unexpectedly:', event)
+      }
     }
 
     return () => ws.close()

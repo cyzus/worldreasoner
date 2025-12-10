@@ -506,18 +506,19 @@ class QuestionManager:
             }
         }
 
-    def clear_evidence_simple(self, question_id: str) -> Dict[str, int]:
+    def clear_evidence_simple(self, question_id: str, cascade: bool = True) -> Dict[str, int]:
         """Simplified evidence clearing for pipeline use (no dry-run, returns counts).
 
         This is the core clearing logic used by both the CLI and the evidence pipeline.
 
         Args:
             question_id: Question to clear evidence for
+            cascade: Whether to cascade delete orphaned events/articles (default: True)
 
         Returns:
             Dictionary with counts: {"articles": int, "events": int, "hypotheses": int}
         """
-        result = self.clear_evidence(question_id, cascade=True, dry_run=False)
+        result = self.clear_evidence(question_id, cascade=cascade, dry_run=False)
 
         if "error" in result:
             return {"articles": 0, "events": 0, "hypotheses": 0}
