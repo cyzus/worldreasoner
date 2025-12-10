@@ -523,6 +523,18 @@ def fetch_article(
         logger.error(f"Error fetching article: {e}")
         return json.dumps({"error": str(e)})
 
+def graph_reasoning(ctx: Context,
+                    source_event: str,
+                    target_event: str,
+                    relation: str,
+                    reasoning: str) -> str:
+    pass
+
+def inspect_graph(ctx: Context) -> str:
+    pass
+
+
+
 
 @mcp.tool()
 def submit_forecast(
@@ -554,7 +566,7 @@ def submit_forecast(
         from src.domain.models.question import QuestionType
 
         try:
-            if question.question_type == QuestionType.BOOLEAN:
+            if question.question_type == QuestionType.BINARY:
                 parsed_prediction = prediction.lower() in ['true', 'yes', '1']
             elif question.question_type == QuestionType.MCQ:
                 parsed_prediction = prediction

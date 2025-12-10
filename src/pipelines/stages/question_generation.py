@@ -45,7 +45,8 @@ class QuestionGenerationStage(PipelineStage[Event, Question]):
         self.question_tool = BatchQuestionGeneratorTool(
             collector=self.collector,
             require_ground_truth=config.require_ground_truth,
-            existing_question_ids=self.existing_question_ids
+            existing_question_ids=self.existing_question_ids,
+            db_path=db_path
         )
 
         # Prompt generator

@@ -1,6 +1,7 @@
 """Evidence generation pipeline for WorldReasoner.
 
 This pipeline builds causal explanations with hindsight:
+0. Identify target events for all questions (batch processing)
 1. Collect evidence articles AFTER outcomes are known (per question)
 2. Identify causal relationships using hindsight (per question)
 3. Build validated causal graphs
@@ -14,8 +15,6 @@ from datetime import datetime, timezone, timedelta
 
 from ..base import Pipeline, PipelineStageResult, PipelineStageStatus
 from ..stages import (
-    DatabasePersistenceStage,
-    DatabasePersistenceConfig,
     HindsightEvidenceCollectionStage,
     EvidenceCollectionConfig,
     TargetEventIdentificationStage,
@@ -36,9 +35,10 @@ from src.utils.usage_tracking import UsageTracker
 class EvidencePipeline(Pipeline):
     """Pipeline for building causal explanations with hindsight.
 
-    Flow: Resolved Questions → Evidence Articles → Causal Hypotheses → Graph
+    Flow: Resolved Questions → Target Events (batch) → Evidence Articles → Causal Hypotheses → Graph
 
     This pipeline:
+    - Identifies target events for all questions upfront (batch processing)
     - Collects evidence articles AFTER outcomes are known
     - Uses hindsight to identify true causal factors
     - Saves causal hypotheses to the graph database
@@ -126,15 +126,6 @@ class EvidencePipeline(Pipeline):
         self.add_stage(self.reasoning_stage)
         self.add_stage(self.graph_stage)
 
-        # Persistence stages
-        if enable_persistence:
-            persist_config = DatabasePersistenceConfig(
-                batch_size=database_config.batch_size,
-                db_path=db_path
-            )
-            self.article_persist = DatabasePersistenceStage(persist_config, "article")
-            self.hypothesis_persist = DatabasePersistenceStage(persist_config, "causal_hypothesis")
-
         # Storage for pipeline outputs
         self.resolved_questions: List[Question] = []
         self.evidence_articles: List[Article] = []
@@ -184,6 +175,28 @@ class EvidencePipeline(Pipeline):
                 f"Processing {len(self.resolved_questions)} questions "
                 f"with max {self.max_concurrent_questions} in parallel"
             )
+
+            # Stage 0: Batch identify target events for questions that don't have them
+            # This happens BEFORE evidence collection so all questions have target events
+            questions_needing_events = [q for q in self.resolved_questions if not q.target_event_id]
+            if questions_needing_events:
+                logger.info(f"Identifying target events for {len(questions_needing_events)} questions (batch processing)...")
+                # Pass empty article lists since we haven't collected evidence yet
+                question_article_pairs = [(q, []) for q in questions_needing_events]
+                target_event_result = await self.target_event_stage.execute(question_article_pairs)
+
+                # Update questions in the main list with the returned questions
+                if target_event_result.outputs:
+                    updated_questions_map = {q.id: q for q in target_event_result.outputs}
+                    for i, question in enumerate(self.resolved_questions):
+                        if question.id in updated_questions_map:
+                            self.resolved_questions[i] = updated_questions_map[question.id]
+
+                    self._results.append(target_event_result)
+                    identified_count = sum(1 for q in target_event_result.outputs if q.target_event_id)
+                    logger.info(f"Target events identified: {identified_count}/{len(questions_needing_events)}")
+                else:
+                    logger.warning("Target event identification returned no results")
 
             # Process each question through the pipeline (stages 1-2)
             # Stage 3 (graph building) happens after collecting all hypotheses
@@ -250,16 +263,12 @@ class EvidencePipeline(Pipeline):
             self._aggregate_stage_usage()
 
             # Log pipeline-level summary
-            logger.info("=" * 60)
-            logger.info("EVIDENCE PIPELINE SUMMARY")
-            logger.info("=" * 60)
+            logger.info("Evidence pipeline summary:")
             logger.info(f"Questions processed: {len(self.resolved_questions)}")
             logger.info(f"Evidence articles collected: {len(self.evidence_articles)}")
             logger.info(f"Causal hypotheses generated: {len(self.causal_hypotheses)}")
             self.usage_tracker.log_summary(context="EvidencePipeline TOTAL")
-            logger.info("=" * 60)
-
-            logger.info("Evidence Pipeline completed successfully!")
+            logger.info("Evidence pipeline completed successfully!")
 
         except Exception as e:
             if self._results:
@@ -316,24 +325,8 @@ class EvidencePipeline(Pipeline):
 
                 logger.info(f"[{question.id}] Collected {len(evidence_articles)} evidence articles")
 
-                # Persist evidence articles immediately
-                if self.enable_persistence:
-                    await self.article_persist.execute(evidence_articles)
-                # Stage 1.5: Identify target event if missing
-                if not question.target_event_id:
-                    logger.debug(f"[{question.id}] Identifying target event...")
-                    question_evidence_pair = (question, evidence_articles)
-                    target_event_result = await self.target_event_stage.execute([question_evidence_pair])
-                    # Update question with target event (target_event_stage returns updated questions)
-                    if target_event_result.outputs:
-                        question = target_event_result.outputs[0]
-                        stage_results.append(target_event_result)
-                        logger.info(f"[{question.id}] Target event identified: {question.target_event_id}")
-                    else:
-                        logger.warning(f"[{question.id}] Could not identify target event")
-
-
                 # Stage 2: Causal reasoning with collected evidence
+                # Note: Target event identification now happens in batch before evidence collection
                 logger.debug(f"[{question.id}] Performing causal reasoning...")
                 question_evidence_pair = (question, evidence_articles)
                 reasoning_result = await self.reasoning_stage.execute([question_evidence_pair])
@@ -355,10 +348,6 @@ class EvidencePipeline(Pipeline):
                     }
 
                 logger.info(f"[{question.id}] Generated {len(causal_hypotheses)} causal hypotheses")
-
-                # Persist hypotheses immediately
-                if self.enable_persistence:
-                    await self.hypothesis_persist.execute(causal_hypotheses)
 
                 logger.info(f"[{question.id}] Processing complete")
 
@@ -397,17 +386,17 @@ class EvidencePipeline(Pipeline):
         self.db_resolved_questions = len(resolved_with_ground_truth)
 
         # Get all existing causal hypotheses to check which questions were already processed
+        # Always load this - needed both for skip mode AND force-reprocess mode
         processed_question_ids = set()
-        if self.evidence_config.skip_already_processed:
-            try:
-                existing_hypotheses = db.get_many(CausalHypothesis, filters={})
-                # Collect all question IDs from discovered_by_question_ids lists
-                for h in existing_hypotheses:
-                    processed_question_ids.update(h.discovered_by_question_ids)
-            except Exception as e:
-                # Table might not exist on first run - that's okay
-                logger.debug(f"Could not load existing hypotheses (first run?): {e}")
-                processed_question_ids = set()
+        try:
+            existing_hypotheses = db.get_many(CausalHypothesis, filters={})
+            # Collect all question IDs from discovered_by_question_ids lists
+            for h in existing_hypotheses:
+                processed_question_ids.update(h.discovered_by_question_ids)
+        except Exception as e:
+            # Table might not exist on first run - that's okay
+            logger.debug(f"Could not load existing hypotheses (first run?): {e}")
+            processed_question_ids = set()
 
         # Count unprocessed: resolved questions that haven't been processed yet
         unprocessed_count = 0
@@ -419,6 +408,7 @@ class EvidencePipeline(Pipeline):
         # Filter for resolved questions in date range
         resolved = []
         skipped_already_processed = 0
+        skipped_low_quality = 0
 
         for q in all_questions:
             # Must have resolution date and ground truth
@@ -445,22 +435,45 @@ class EvidencePipeline(Pipeline):
                 if q.quality_score is None or q.quality_score < self.min_quality_score:
                     continue
 
-            # Skip if already processed by evidence pipeline (if configured)
-            if self.evidence_config.skip_already_processed and q.id in processed_question_ids:
-                skipped_already_processed += 1
-                logger.debug(f"Skipping already processed question: {q.id}")
+            # Skip if marked to skip evidence processing (low quality, noisy, etc.)
+            if q.skip_evidence:
+                skipped_low_quality += 1
+                logger.debug(f"Skipping question marked for skip_evidence: {q.id} - {q.skip_reason}")
                 continue
+
+            # Handle already-processed questions (but don't clear yet)
+            if q.id in processed_question_ids:
+                if self.evidence_config.skip_already_processed:
+                    # Skip mode: don't reprocess
+                    skipped_already_processed += 1
+                    logger.debug(f"Skipping already processed question: {q.id}")
+                    continue
+                # else: include in candidates for reprocessing (will clear after applying limits)
 
             resolved.append(q)
 
-        # Sort by quality score (descending) if threshold is applied
-        if self.min_quality_score is not None:
+        # Sort questions based on mode
+        if not self.evidence_config.skip_already_processed:
+            # Force-reprocess mode: prioritize already-processed questions first
+            # (the whole point is to reprocess them!)
+            resolved.sort(key=lambda q: (q.id not in processed_question_ids, -(q.quality_score or 0.0)))
+            logger.info("Prioritizing already-processed questions for reprocessing")
+        elif self.min_quality_score is not None:
+            # Normal mode with quality filter: sort by quality score only
             resolved.sort(key=lambda q: q.quality_score or 0.0, reverse=True)
             logger.info(f"Prioritizing questions by quality score (min_score={self.min_quality_score}).")
 
         # Apply max_questions limit if configured
         if self.evidence_config.max_questions is not None:
             resolved = resolved[:self.evidence_config.max_questions]
+
+        # Now clear evidence for any questions being reprocessed (after applying limits)
+        for q in resolved:
+            if q.id in processed_question_ids:
+                self._clear_evidence_for_question(q.id, db)
+                # Remove from processed set so it gets reprocessed
+                processed_question_ids.discard(q.id)
+                logger.info(f"Cleared old evidence for reprocessing: {q.id}")
 
         logger.info(
             f"Loaded {len(resolved)} resolved questions "
@@ -479,7 +492,35 @@ class EvidencePipeline(Pipeline):
         if skipped_already_processed > 0:
             logger.info(f"Skipped {skipped_already_processed} already processed questions")
 
+        if skipped_low_quality > 0:
+            logger.info(f"Skipped {skipped_low_quality} low-quality questions (marked skip_evidence)")
+
         return resolved
+
+    def _clear_evidence_for_question(self, question_id: str, db: GenericDatabase) -> dict:
+        """Clear evidence pipeline data for a question before reprocessing.
+
+        This uses the QuestionManager to avoid code duplication.
+
+        Args:
+            question_id: Question ID to clear evidence for
+            db: Database instance
+
+        Returns:
+            Summary of deleted items with counts
+        """
+        from src.cli.core.question_manager import QuestionManager
+
+        manager = QuestionManager(db)
+        deleted = manager.clear_evidence_simple(question_id)
+
+        logger.debug(
+            f"Cleared evidence for {question_id}: "
+            f"{deleted['articles']} articles, {deleted['events']} events, "
+            f"{deleted['hypotheses']} hypotheses"
+        )
+
+        return deleted
 
     def get_summary(self) -> dict:
         """Get a summary of pipeline results.

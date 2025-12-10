@@ -65,8 +65,7 @@ class CollectionProgress(BaseModel):
 
         logger.debug(
             f"Progress: {self.total} total | "
-            f"Types: {dict(self.by_type)} | "
-            f"Categories: {dict(self.by_category)}"
+            f"{len(self.by_type)} types, {len(self.by_category)} categories"
         )
 
     def add_questions(self, questions: List[Question]) -> None:
@@ -78,46 +77,49 @@ class CollectionProgress(BaseModel):
         for question in questions:
             self.add_question(question)
 
-    def is_goal_met(self, goal: CollectionGoal) -> bool:
+    def is_goal_met(self, goal: CollectionGoal, include_skipped: bool = False) -> bool:
         """Check if we've satisfied the collection goal.
 
         Args:
             goal: Target collection goal
+            include_skipped: If False, exclude questions marked skip_evidence
 
         Returns:
             True if goal is met (with tolerance), False otherwise
         """
+        # Filter out skip_evidence questions if requested
+        if include_skipped:
+            questions = self.questions_list
+        else:
+            questions = [q for q in self.questions_list if not q.skip_evidence]
+        
+        total = len(questions)
+        
         # Check total
-        if self.total < goal.total_questions:
-            logger.debug(
-                f"Total not met: {self.total}/{goal.total_questions}"
-            )
+        if total < goal.total_questions:
+            logger.debug(f"Total not met: {total}/{goal.total_questions}")
             return False
 
-        # Check type distribution (with tolerance)
-        for qtype, target in goal.type_distribution.items():
-            actual = self.by_type.get(qtype, 0)
-            # Use max(1, ...) to ensure at least 1 required when target > 0
-            min_required = max(1, int(target * goal.distribution_tolerance)) if target > 0 else 0
+        # Recalculate distributions from filtered questions
+        by_type = {}
+        by_category = {}
+        for q in questions:
+            # Store as enum for consistent comparison
+            by_type[q.question_type] = by_type.get(q.question_type, 0) + 1
+            by_category[q.domain] = by_category.get(q.domain, 0) + 1
 
-            if actual < min_required:
-                logger.debug(
-                    f"Type '{qtype}' not met: {actual}/{target} "
-                    f"(min: {min_required})"
-                )
+        # Check type distribution (exact minimums)
+        for qtype, minimum in goal.type_distribution.items():
+            actual = by_type.get(qtype, 0)
+            if actual < minimum:
+                logger.debug(f"Type '{qtype}' not met: {actual}/{minimum}")
                 return False
 
-        # Check category distribution (with tolerance)
-        for category, target in goal.category_distribution.items():
-            actual = self.by_category.get(category, 0)
-            # Use max(1, ...) to ensure at least 1 required when target > 0
-            min_required = max(1, int(target * goal.distribution_tolerance)) if target > 0 else 0
-
-            if actual < min_required:
-                logger.debug(
-                    f"Category '{category}' not met: {actual}/{target} "
-                    f"(min: {min_required})"
-                )
+        # Check category distribution (exact minimums)
+        for category, minimum in goal.category_distribution.items():
+            actual = by_category.get(category, 0)
+            if actual < minimum:
+                logger.debug(f"Category '{category}' not met: {actual}/{minimum}")
                 return False
 
         logger.info("Goal met!")
@@ -220,34 +222,25 @@ class CollectionProgress(BaseModel):
         """
         summary = self.get_summary(goal)
 
-        logger.info("=" * 60)
-        logger.info("COLLECTION PROGRESS SUMMARY")
-        logger.info("=" * 60)
+        logger.info("Collection progress summary:")
         logger.info(f"Total: {summary['total']}/{summary['target']} "
-                   f"({summary['completion_pct']:.1f}%)")
-        logger.info(f"Goal met: {summary['goal_met']}")
-        logger.info("")
+                   f"({summary['completion_pct']:.1f}%) - Goal met: {summary['goal_met']}")
 
         logger.info("By Type:")
         for qtype, count in summary['by_type'].items():
             target = summary['type_targets'].get(qtype, 0)
             logger.info(f"  {qtype:15} {count:3}/{target:3}")
 
-        logger.info("")
         logger.info("By Category:")
         for category, count in summary['by_category'].items():
             target = summary['category_targets'].get(category, 0)
             logger.info(f"  {category:15} {count:3}/{target:3}")
 
-        logger.info("")
         logger.info("By Source:")
         for source, count in summary['by_source'].items():
             logger.info(f"  {source:15} {count:3}")
 
-        logger.info("")
-        logger.info(f"Avg Difficulty: {summary['avg_difficulty']:.2f}")
-        logger.info(f"With Criteria: {summary['questions_with_criteria']}/{summary['total']}")
-        logger.info("=" * 60)
+        logger.info(f"Avg Difficulty: {summary['avg_difficulty']:.2f}, With Criteria: {summary['questions_with_criteria']}/{summary['total']}")
 
     def get_questions(self) -> List[Question]:
         """Get all collected questions.

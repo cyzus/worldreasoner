@@ -14,14 +14,18 @@ from src.config.pipeline import QuestionQualityConfig
 @pytest.mark.asyncio
 async def test_orchestrator_with_quality_ranking(persistent_test_db_path):
     """Test that the orchestrator runs the quality ranking stage and saves scores."""
-    # Setup
+    # Setup - use a fresh database
+    import os
+    if os.path.exists(persistent_test_db_path):
+        os.remove(persistent_test_db_path)
+    
     db = GenericDatabase(persistent_test_db_path)
     db.create_table(Question)
 
     goal = CollectionGoal(
         total_questions=2,
-        type_distribution={"boolean": 2},
-        category_distribution={"tech": 2},
+        type_distribution={QuestionType.BINARY: 2},
+        category_distribution={Domain.TECH: 2},
     )
 
     # Mock sources
@@ -31,7 +35,7 @@ async def test_orchestrator_with_quality_ranking(persistent_test_db_path):
                 Question(
                     id=f"q_mock_{i}",
                     question_text=f"This is a mock question of sufficient length {i}",
-                    question_type=QuestionType.BOOLEAN,
+                    question_type=QuestionType.BINARY,
                     domain=Domain.TECH,
                     source="mock",
                     difficulty=1,
@@ -63,8 +67,19 @@ async def test_orchestrator_with_quality_ranking(persistent_test_db_path):
     from src.tools.question_quality_scorer import QualityAssessment
     async def mock_forward(questions):
         for q in questions:
+            # Provide high scores that won't trigger skip_evidence
             orchestrator.quality_stage.scorer.collector.add(
-                QualityAssessment(question_id=q.id, composite_score=0.88, dimensions={}, reasoning="mocked")
+                QualityAssessment(
+                    question_id=q.id, 
+                    composite_score=0.88, 
+                    dimensions={
+                        "verifiability": 0.9,
+                        "interestingness": 0.85,
+                        "clarity": 0.9,
+                        "temporal_validity": 0.85,
+                    }, 
+                    reasoning="mocked"
+                )
             )
         return "{}"
     orchestrator.quality_stage.scorer.forward = mock_forward

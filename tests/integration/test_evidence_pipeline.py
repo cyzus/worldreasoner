@@ -60,10 +60,13 @@ async def test_evidence_pipeline_initialization(test_db_path):
     # Validate pipeline structure
     print("\n2. Validating pipeline structure...")
     assert pipeline.name == "EvidencePipeline"
-    assert len(pipeline.stages) == 3, "Should have 3 stages"
+    assert len(pipeline.stages) == 4, "Should have 4 stages"
 
     print("   - Stage 1: HindsightEvidenceCollection")
     assert pipeline.evidence_stage.name == "HindsightEvidenceCollection"
+
+    print("   - Stage 1.5: TargetEventIdentification")
+    assert pipeline.target_event_stage.name == "TargetEventIdentification"
 
     print("   - Stage 2: CausalReasoning")
     assert pipeline.reasoning_stage.name == "CausalReasoning"
@@ -156,12 +159,13 @@ async def test_evidence_pipeline_with_mock_resolved_question(test_db_path):
     question = Question(
         id="q_test_001",
         question_text="Will the Federal Reserve raise interest rates in June 2024?",
-        question_type=QuestionType.BOOLEAN,
+        question_type=QuestionType.BINARY,
         domain="finance",
         difficulty=3,
         resolution_date=datetime.now(timezone.utc) - timedelta(days=10),
         ground_truth=True,
         target_event_id=event.id,
+        source="test",  # Required field for test
     )
     db.save(Question, question)
     print(f"   - Created question: {question.id}")

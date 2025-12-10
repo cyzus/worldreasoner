@@ -149,7 +149,7 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
         Returns:
             Number of articles collected
         """
-        logger.info(f"[RSS] Fetching feed: {source.name} -> {source.url}")
+        logger.debug(f"[RSS] Fetching feed: {source.name} -> {source.url}")
         
         try:
             # Fetch RSS feed (synchronous, but fast)
@@ -174,7 +174,7 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
             logger.info(f"[RSS] Feed returned {len(items)} items for {source.name}")
             
             # Fetch all items concurrently using asyncio.gather
-            logger.info(f"[RSS] Fetching {len(items)} items concurrently...")
+            logger.debug(f"[RSS] Fetching {len(items)} items concurrently...")
             tasks = [self._fetch_rss_item_async(item, source) for item in items]
             results = await asyncio.gather(*tasks, return_exceptions=True)
             
@@ -245,7 +245,7 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
             articles_before = self.collector.count()
             
             # Run the agent with the instruction
-            logger.info(f"[AGENT] Running agent for: {source.name}")
+            logger.debug(f"[AGENT] Running agent for: {source.name}")
             result = self.web_agent.run(instruction)
 
             # Track token usage

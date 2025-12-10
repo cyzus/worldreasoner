@@ -2,11 +2,11 @@
 
 import json
 from typing import List, Optional
-from smolagents import Tool
 from src.utils.logging import logger
+from src.tools.article_retrieval import ArticleRetrievalTool
 
 
-class BatchArticleRetrievalTool(Tool):
+class BatchArticleRetrievalTool(ArticleRetrievalTool):
     """Tool that retrieves full content for multiple articles in a single call.
 
     Use this when you need to read multiple articles at once.
@@ -44,17 +44,7 @@ class BatchArticleRetrievalTool(Tool):
             db: Optional Database instance
             db_path: Optional path to database file
         """
-        super().__init__()
-
-        # Database setup
-        if db:
-            self.db = db
-        elif db_path:
-            from src.core.database import Database
-            self.db = Database(db_path)
-        else:
-            from src.core.database import Database
-            self.db = Database("worldreasoner.db")
+        super().__init__(db=db, db_path=db_path)
 
     def forward(self, article_ids: str) -> str:
         """Retrieve multiple articles by IDs.
@@ -65,8 +55,6 @@ class BatchArticleRetrievalTool(Tool):
         Returns:
             JSON string with array of article content
         """
-        from src.domain.models import Article
-
         # Parse article IDs
         ids = [aid.strip() for aid in article_ids.split(',')]
 
@@ -83,30 +71,14 @@ class BatchArticleRetrievalTool(Tool):
 
         for article_id in ids:
             try:
-                # Fetch article from database
-                try:
-                    article = self.db.get_article(article_id)
-                except AttributeError:
-                    article = self.db.get(Article, article_id)
-
-                if not article:
+                # Use parent class forward method to retrieve single article
+                result_json = super().forward(article_id)
+                result = json.loads(result_json)
+                
+                if "error" in result:
                     not_found.append(article_id)
-                    continue
-
-                # Add full article content
-                articles_data.append({
-                    "id": article.id,
-                    "title": article.title,
-                    "url": article.url,
-                    "source": article.source,
-                    "domain": article.domain.value if hasattr(article.domain, 'value') else article.domain,
-                    "published_date": article.published_date.isoformat(),
-                    "author": article.author,
-                    "word_count": article.word_count,
-                    "tags": article.tags,
-                    "content": article.content,  # Full content!
-                    "event_ids": article.event_ids
-                })
+                else:
+                    articles_data.append(result)
 
             except Exception as e:
                 logger.warning(f"Error retrieving article {article_id}: {e}")
@@ -120,14 +92,6 @@ class BatchArticleRetrievalTool(Tool):
         }
 
         if not_found:
-            # Get available articles for helpful error message
-            try:
-                all_articles = self.db.get_articles()
-                available_ids = [a.id for a in all_articles[:10]]
-            except:
-                all_articles = self.db.get_many(Article)
-                available_ids = [a.id for a in all_articles[:10]]
-
-            result["suggestion"] = f"Available articles: {', '.join(available_ids)}"
+            result["suggestion"] = "Use article_retrieval tool for individual articles to get error details"
 
         return json.dumps(result, indent=2)

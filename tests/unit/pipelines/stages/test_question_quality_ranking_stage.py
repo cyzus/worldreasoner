@@ -13,9 +13,9 @@ from datetime import datetime, timezone
 def sample_questions():
     """Returns a list of sample Question objects for testing."""
     return [
-        Question(id="q_001", question_text="Q1", question_type=QuestionType.BOOLEAN, domain=Domain.TECH, difficulty=1, resolution_date=datetime.now(timezone.utc)),
-        Question(id="q_002", question_text="Q2", question_type=QuestionType.BOOLEAN, domain=Domain.TECH, difficulty=1, resolution_date=datetime.now(timezone.utc)),
-        Question(id="q_003", question_text="Q3", question_type=QuestionType.BOOLEAN, domain=Domain.TECH, difficulty=1, resolution_date=datetime.now(timezone.utc)),
+        Question(id="q_001", question_text="Q1", question_type=QuestionType.BINARY, domain=Domain.TECH, difficulty=1, resolution_date=datetime.now(timezone.utc)),
+        Question(id="q_002", question_text="Q2", question_type=QuestionType.BINARY, domain=Domain.TECH, difficulty=1, resolution_date=datetime.now(timezone.utc)),
+        Question(id="q_003", question_text="Q3", question_type=QuestionType.BINARY, domain=Domain.TECH, difficulty=1, resolution_date=datetime.now(timezone.utc)),
     ]
 
 @pytest.mark.asyncio

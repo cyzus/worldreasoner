@@ -3,6 +3,7 @@
 import json
 from typing import Optional, List
 from smolagents import Tool
+from src.domain.models import Article
 
 
 class ArticleRetrievalTool(Tool):
@@ -37,8 +38,8 @@ class ArticleRetrievalTool(Tool):
         """Initialize the article retrieval tool.
 
         Args:
-            db: Optional Database instance
-            db_path: Optional path to database file (creates new Database if provided)
+            db: Optional GenericDatabase instance
+            db_path: Optional path to database file (creates new GenericDatabase if provided)
 
         Note:
             If neither db nor db_path is provided, will use default database path
@@ -49,12 +50,14 @@ class ArticleRetrievalTool(Tool):
         if db:
             self.db = db
         elif db_path:
-            from src.core.database import Database
-            self.db = Database(db_path)
+            from src.core.database import GenericDatabase
+            self.db = GenericDatabase(db_path)
+            # Ensure schema is initialized
+            self.db.create_table(Article)
         else:
             # Use default database path
-            from src.core.database import Database
-            self.db = Database("worldreasoner.db")
+            from src.core.database import GenericDatabase
+            self.db = GenericDatabase("worldreasoner.db")
     
     def forward(self, article_id: str) -> str:
         """Retrieve article by ID.
@@ -68,20 +71,12 @@ class ArticleRetrievalTool(Tool):
         from src.domain.models import Article
 
         # Fetch article from database
-        try:
-            article = self.db.get_article(article_id)
-        except AttributeError:
-            # Fallback if db doesn't have get_article method
-            article = self.db.get(Article, article_id)
+        article = self.db.get(Article, article_id)
 
         if not article:
             # Get available articles for helpful error message
-            try:
-                all_articles = self.db.get_articles()
-                available_ids = [a.id for a in all_articles[:10]]
-            except:
-                all_articles = self.db.get_many(Article)
-                available_ids = [a.id for a in all_articles[:10]]
+            all_articles = self.db.get_many(Article)
+            available_ids = [a.id for a in all_articles[:10]]
 
             return json.dumps({
                 "error": f"Article '{article_id}' not found in database",

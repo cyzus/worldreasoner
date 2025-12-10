@@ -35,7 +35,7 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
     """
     
     name = "article_collector"
-    description = """Fetches and stores article data from a URL.
+    description = f"""Fetches and stores article data from a URL.
     
     Use this tool AFTER you've found article URLs using web_search.
     Pass ONLY the URL and metadata (title, source, etc.) - do NOT pass article content.
@@ -45,7 +45,7 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         url (str): Source URL to fetch the article from
         title (str): Article headline/title from search results
         source (str): Publication name (e.g., "TechCrunch", "BBC News")
-        domain (str): Article domain category - one of: finance, politics, tech, health, climate, general
+        domain (str): Article domain category - one of: {', '.join(enum_to_list(Domain))}
         published_date (str, optional): Publication date in ISO format if available
         author (str, optional): Author name if available
     
@@ -69,7 +69,13 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
     }
     output_type = "string"  # JSON string
     
-    def __init__(self, db=None, db_path: str = None, collector=None):
+    def __init__(
+        self,
+        db=None,
+        db_path: str = None,
+        collector=None,
+        question_id: Optional[str] = None,
+    ):
         """Initialize the article collector.
 
         Args:
@@ -77,23 +83,26 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             db_path: Optional path to database file (creates new Database with schema if provided)
             collector: Optional ResultCollector[Article] for storing results.
                       If provided, articles are added to the collector instead of internal storage.
+            question_id: Question ID for provenance tracking (sets collected_for_question_id)
         """
         super().__init__(collector)
         self.config = None
         self.seen_hashes = set()  # For in-memory deduplication within this run
         self.web_visitor = WebFetchTool()  # Internal tool for fetching content
+        self.question_id = question_id  # Provenance context
 
-        logger.info(f"ArticleCollectorTool initialized with collector: {collector is not None}")
-        
+        logger.info(f"ArticleCollectorTool initialized with collector: {collector is not None}, question_id: {question_id}")
+
         # Database for cross-run deduplication (optional)
         self.db = None
         if db:
             self.db = db
         elif db_path:
             # Lazy import to avoid circular dependency
-            # Use Database wrapper which auto-creates schema
-            from src.core.database import Database
-            self.db = Database(db_path)
+            from src.core.database import GenericDatabase
+            self.db = GenericDatabase(db_path)
+            # Ensure schema is initialized
+            self.db.create_table(Article)
     
     def setup(self):
         """Load configuration (called on first use)."""
@@ -128,8 +137,8 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             # Normalize URL for better matching (remove trailing slash, fragments)
             normalized_url = self._normalize_url(url)
             
-            # Use Database wrapper's get_articles method
-            existing_articles = self.db.db.get_many(
+            # Use GenericDatabase's get_many with filter
+            existing_articles = self.db.get_many(
                 Article,
                 filters={'url': normalized_url}
             )
@@ -206,6 +215,12 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         # Store normalized URL for consistency
         normalized_url = self._normalize_url(url)
 
+        # Build metadata with provenance info
+        metadata = {}
+        if self.question_id:
+            metadata['evidence_type'] = 'hindsight'
+            metadata['related_question_ids'] = [self.question_id]
+
         # Create Article object
         article = Article(
             id=article_id,
@@ -220,6 +235,8 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             event_ids=[],  # Initialize with empty list (will be populated later in pipeline)
             is_synthetic=False,
             language='en',
+            collected_for_question_id=self.question_id,  # Provenance tracking
+            metadata=metadata,
         )
         
         # Calculate metadata
@@ -228,7 +245,12 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         
         # Store article using unified collector interface
         self.store_result(article, context=f"Article {article.id}")
-        
+
+        # Persist to database if available
+        if self.db:
+            self.db.save(Article, article)
+            logger.debug(f"Article {article.id} persisted to database")
+
         # Convert to JSON and return a SUMMARY to save tokens
         # Return only metadata, NOT the full content
         summary = {

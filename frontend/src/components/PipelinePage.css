@@ -1,0 +1,284 @@
+.pipeline-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #f5f5f5;
+  overflow: hidden;
+}
+
+.pipeline-page-header {
+  padding: 16px 32px;
+  background: white;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.pipeline-page-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+}
+
+.pipeline-page-content {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 500px;
+  gap: 20px;
+  padding: 20px;
+  overflow: hidden;
+}
+
+/* Left Section: Question Selection */
+.pipeline-questions-section {
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #fafafa;
+}
+
+.section-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.selected-badge {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4a90e2;
+  padding: 4px 12px;
+  background: #f0f7ff;
+  border-radius: 12px;
+}
+
+/* Right Section: Pipeline Actions & Job History */
+.pipeline-actions-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+}
+
+.section-card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.refresh-btn {
+  padding: 6px 12px;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  background: white;
+  color: #333;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: #f0f0f0;
+  border-color: #4a90e2;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Jobs List */
+.jobs-list {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.jobs-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: #999;
+}
+
+.jobs-empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.job-item {
+  padding: 16px 20px;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background 0.2s;
+}
+
+.job-item:last-child {
+  border-bottom: none;
+}
+
+.job-item:hover {
+  background: #fafafa;
+}
+
+.job-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.job-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.job-status-icon {
+  font-size: 16px;
+}
+
+.job-id {
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  color: #666;
+}
+
+.job-type-badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  background: #e3f2fd;
+  color: #1976d2;
+  text-transform: uppercase;
+}
+
+.job-time {
+  font-size: 12px;
+  color: #999;
+}
+
+.job-progress {
+  margin-top: 8px;
+}
+
+.job-progress-bar-container {
+  width: 100%;
+  height: 6px;
+  background: #e0e0e0;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.job-progress-bar {
+  height: 100%;
+  transition: width 0.3s ease;
+  border-radius: 3px;
+}
+
+.job-progress-text {
+  font-size: 11px;
+  color: #666;
+}
+
+.job-results {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.result-stat {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.result-stat.success {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.result-stat.failed {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.result-stat.skipped {
+  background: #fff3e0;
+  color: #f57c00;
+}
+
+.result-stat.duration {
+  background: #f5f5f5;
+  color: #666;
+}
+
+.job-error {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #ffebee;
+  border-left: 3px solid #f44336;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #c62828;
+}
+
+.job-message {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #666;
+  font-style: italic;
+}
+
+/* Scrollbar styling */
+.pipeline-actions-section::-webkit-scrollbar,
+.jobs-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.pipeline-actions-section::-webkit-scrollbar-track,
+.jobs-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.pipeline-actions-section::-webkit-scrollbar-thumb,
+.jobs-list::-webkit-scrollbar-thumb {
+  background: #c0c0c0;
+  border-radius: 4px;
+}
+
+.pipeline-actions-section::-webkit-scrollbar-thumb:hover,
+.jobs-list::-webkit-scrollbar-thumb:hover {
+  background: #a0a0a0;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .pipeline-page-content {
+    grid-template-columns: 1fr 400px;
+  }
+}
+
+@media (max-width: 900px) {
+  .pipeline-page-content {
+    grid-template-columns: 1fr;
+  }
+
+  .pipeline-actions-section {
+    max-height: none;
+  }
+}

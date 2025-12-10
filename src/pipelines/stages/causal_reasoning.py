@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from src.pipelines.base import PipelineStage
 from src.domain.models import Question, Article, CausalHypothesis, Event
 from src.agents.factory import AgentFactory
-from src.tools import ArticleRetrievalTool, CausalReasonerTool
+from src.tools import ArticleRetrievalTool, CausalReasonerTool, GraphInspectorTool
 from src.core.collectors import ResultCollector
 from src.pipelines.prompts import HindsightAnalysisPrompts
 from src.utils.logging import logger
@@ -98,7 +98,7 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
         all_hypotheses = []
 
         for idx, (question, evidence_articles) in enumerate(inputs, 1):
-            logger.info(f"[{idx}/{len(inputs)}] Analyzing: {question.id}")
+            logger.debug(f"[{idx}/{len(inputs)}] Analyzing: {question.id}")
 
             # Validate input
             if not evidence_articles:
@@ -144,9 +144,13 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
         """
         # Create a per-analysis collector and agent to avoid cross-talk when running concurrently
         collector = ResultCollector[CausalHypothesis]()
-        causal_tool = CausalReasonerTool(collector=collector)
+        causal_tool = CausalReasonerTool(
+            collector=collector,
+            db_path=self.db.db_path,
+            question_id=question.id
+        )
         agent = AgentFactory.create_base_agent(
-            tools=[causal_tool, self.article_retrieval_tool]
+            tools=[causal_tool, self.article_retrieval_tool], is_code=True
         )
 
         # Load related events from database to provide valid event IDs

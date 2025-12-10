@@ -6,6 +6,8 @@ Defines targets for question collection with distribution requirements.
 from typing import Dict, Optional
 from pydantic import BaseModel, Field
 import yaml
+from ..domain.models.question import QuestionType
+from ..domain.models.domain import Domain
 
 
 class QualityRequirements(BaseModel):
@@ -56,28 +58,28 @@ class CollectionGoal(BaseModel):
         description="Total number of questions to collect"
     )
 
-    # Distribution by question type (exact counts)
-    type_distribution: Dict[str, int] = Field(
+    # Distribution by question type (minimum counts)
+    type_distribution: Dict[QuestionType, int] = Field(
         default={
-            "boolean": 40,
-            "multiple_choice": 30,
-            "quantity": 20,
-            "timeframe": 10
+            QuestionType.BINARY: 40,
+            QuestionType.MCQ: 30,
+            QuestionType.QUANTITY: 20,
+            QuestionType.TIMEFRAME: 10
         },
-        description="Target count for each question type"
+        description="Minimum count for each question type (can collect more to reach total)"
     )
 
     # Distribution by category/domain
-    category_distribution: Dict[str, int] = Field(
+    category_distribution: Dict[Domain, int] = Field(
         default={
-            "finance": 25,
-            "technology": 25,
-            "politics": 20,
-            "science": 15,
-            "sports": 10,
-            "other": 5
+            Domain.FINANCE: 25,
+            Domain.TECH: 25,
+            Domain.POLITICS: 20,
+            Domain.SCIENCE: 15,
+            Domain.SPORTS: 10,
+            Domain.GENERAL: 5
         },
-        description="Target count for each category"
+        description="Minimum count for each category (can collect more to reach total)"
     )
 
     # Quality constraints
@@ -92,37 +94,28 @@ class CollectionGoal(BaseModel):
         description="If true, collect resolved questions with known outcomes. If false, collect future predictions."
     )
 
-    # Tolerance (allow 90% of target as "good enough")
-    distribution_tolerance: float = Field(
-        default=0.9,
-        ge=0.0,
-        le=1.0,
-        description="Tolerance for distribution matching (0.9 = accept 90% of target)"
-    )
-
-    # Source priorities and quotas
-    source_quotas: Dict[str, int] = Field(
+    # Source priorities and minimums
+    source_minimums: Dict[str, int] = Field(
         default={
             "polymarket": 40,
-            "metaculus": 30,
             "news": 30
         },
-        description="Maximum questions to collect from each source"
+        description="Minimum questions to collect from each source during initial collection phase"
     )
 
     def validate_distributions(self) -> bool:
-        """Validate that distributions sum to total_questions."""
+        """Validate that distribution minimums don't exceed total_questions."""
         type_sum = sum(self.type_distribution.values())
         category_sum = sum(self.category_distribution.values())
 
-        if type_sum != self.total_questions:
+        if type_sum > self.total_questions:
             raise ValueError(
-                f"Type distribution sums to {type_sum}, expected {self.total_questions}"
+                f"Type distribution minimums sum to {type_sum}, which exceeds total_questions {self.total_questions}"
             )
 
-        if category_sum != self.total_questions:
+        if category_sum > self.total_questions:
             raise ValueError(
-                f"Category distribution sums to {category_sum}, expected {self.total_questions}"
+                f"Category distribution minimums sum to {category_sum}, which exceeds total_questions {self.total_questions}"
             )
 
         return True

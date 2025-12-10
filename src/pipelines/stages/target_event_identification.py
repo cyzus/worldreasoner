@@ -9,12 +9,15 @@ import hashlib
 from pydantic import BaseModel, Field
 
 from src.pipelines.base import PipelineStage
+from src.pipelines.prompts.target_event_identification import TargetEventIdentificationPrompts
 from src.domain.models import Question, Event, Article
 from src.domain.models.domain import Domain
 from src.domain.models.event import EventType, EventStatus
 from src.core.database import GenericDatabase
 from src.utils.logging import logger
 from src.utils.usage_tracking import UsageTracker, log_usage
+from src.utils.llm_utils import parse_json_response
+from src.utils.similarity import SimilarityMatcher
 from src.llm import LiteLLMClient
 from src.config import get_config
 
@@ -65,10 +68,21 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
         super().__init__(name="TargetEventIdentification", config=config)
         self.db = GenericDatabase(db_path)
         self.usage_tracker = UsageTracker()
-        
+
         # Initialize LLM client
         app_config = get_config()
         self.llm_client = LiteLLMClient(app_config.llm)
+
+        # Initialize prompts generator
+        self.prompts = TargetEventIdentificationPrompts()
+        
+        # Initialize similarity matcher for event deduplication
+        self._matcher = SimilarityMatcher(
+            db=self.db,
+            model_class=Event,
+            text_fields=[("title", 0.5), ("description", 0.5)],
+            similarity_threshold=config.similarity_threshold,
+        )
 
     async def process(
         self,
@@ -99,7 +113,7 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
                 updated_questions.append(question)
                 continue
 
-            logger.info(f"[{idx}/{len(inputs)}] Identifying target event for: {question.id}")
+            logger.debug(f"[{idx}/{len(inputs)}] Identifying target event for: {question.id}")
 
             try:
                 # Identify or create target event
@@ -163,9 +177,22 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
             new_event = self._create_target_event(
                 event_description, question, evidence_articles
             )
-            self.db.save(Event, new_event)
-            logger.info(f"Created new target event: {new_event.id} for question {question.id}")
-            return new_event.id
+            logger.debug(f"About to save event: {new_event.id} with domain={new_event.domain}, occurred_date={new_event.occurred_date}")
+            try:
+                save_result = self.db.save(Event, new_event)
+                logger.info(f"Created new target event: {new_event.id} for question {question.id} (save_result={save_result})")
+                
+                # Verify the event was actually saved
+                verify = self.db.get(Event, new_event.id)
+                if verify:
+                    logger.debug(f"Verified event {new_event.id} exists in database")
+                else:
+                    logger.error(f"ERROR: Event {new_event.id} was NOT found after save! Database save may have failed.")
+                
+                return new_event.id
+            except Exception as e:
+                logger.error(f"Exception saving event {new_event.id}: {e}", exc_info=True)
+                raise
 
         return None
 
@@ -178,97 +205,37 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
         Returns:
             Event description or None
         """
-        # Create instruction
-        instruction = self._build_extraction_instruction(question)
-
         try:
+            # Create instruction using prompts module
+            instruction = self.prompts.get_instruction(question)
+
             # Call LLM using the client
             messages = [{"role": "user", "content": instruction}]
             result = await self.llm_client.acomplete(messages)
-            
-            # Parse result
-            event_description = self._parse_event_description(result)
-            return event_description
 
-        except Exception as e:
-            logger.error(f"Failed to extract event description: {e}")
-            return Nonet_description
+            # Parse JSON response
+            parsed = parse_json_response(result)
+
+            # Extract and validate event description
+            event_description = parsed.get("event_description")
+            if not event_description:
+                logger.warning("No 'event_description' field in LLM response")
+                return None
+
+            # Validate length
+            description = event_description.strip()
+            if len(description) < 10:
+                logger.warning(f"Event description too short: {len(description)} chars")
+                return None
+            if len(description) > 200:
+                logger.warning(f"Event description too long ({len(description)} chars), truncating")
+                description = description[:200]
+
+            return description
 
         except Exception as e:
             logger.error(f"Failed to extract event description: {e}")
             return None
-
-    def _build_extraction_instruction(self, question: Question) -> str:
-        """Build instruction for event extraction.
-
-        Args:
-            question: Question to analyze
-
-        Returns:
-            Instruction string
-        """
-        ground_truth_str = str(question.ground_truth)
-        
-        return f"""You are analyzing a resolved forecast question to identify the target event (what actually happened).
-
-Question: {question.question_text}
-Question Type: {question.question_type.value}
-Ground Truth: {ground_truth_str}
-Resolution Date: {question.resolution_date.strftime('%Y-%m-%d')}
-Domain: {question.domain.value}
-
-Based on this information, describe the EVENT that occurred (or didn't occur) in a clear, factual way.
-
-Guidelines:
-- Be specific and concrete
-- Use past tense (the event already happened or didn't happen)
-- Focus on WHAT happened, not WHY
-- Keep it under 150 characters
-- If ground_truth is False/No, phrase it as "X did NOT happen" or describe what happened instead
-
-Examples:
-Question: "Will Bitcoin reach $100,000 by Dec 31, 2024?"
-Ground Truth: True
-→ "Bitcoin reaches $100,000 USD"
-
-Question: "Will Donald Trump win the 2024 US Presidential Election?"
-Ground Truth: True
-→ "Donald Trump wins 2024 US Presidential Election"
-
-Question: "Will there be a recession in 2024?"
-Ground Truth: False
-→ "No recession occurs in 2024"
-
-Now extract the target event for the given question. Respond with ONLY the event description, nothing else.
-"""
-
-    def _parse_event_description(self, result: str) -> Optional[str]:
-        """Parse event description from LLM result.
-
-        Args:
-            result: LLM output
-
-        Returns:
-            Event description or None
-        """
-        # Clean up the result
-        description = result.strip()
-        
-        # Remove common prefixes
-        prefixes = [
-            "Event description:", "Target event:", "Event:", 
-            "The event is:", "Output:"
-        ]
-        for prefix in prefixes:
-            if description.lower().startswith(prefix.lower()):
-                description = description[len(prefix):].strip()
-
-        # Validate length
-        if len(description) < 10 or len(description) > 200:
-            logger.warning(f"Event description has invalid length: {len(description)}")
-            return None
-
-        return description
 
     def _find_matching_event(
         self,
@@ -278,6 +245,8 @@ Now extract the target event for the given question. Respond with ONLY the event
     ) -> Optional[Event]:
         """Find existing event matching the description.
 
+        Uses the generic SimilarityMatcher with temporal filtering.
+
         Args:
             event_description: Event description to match
             question: Question being analyzed
@@ -286,62 +255,27 @@ Now extract the target event for the given question. Respond with ONLY the event
         Returns:
             Matching event or None
         """
-        # Get all events in same domain
-        all_events = self.db.get_many(Event, filters={'domain': question.domain})
-
-        # Filter by temporal proximity (within 30 days of resolution)
+        # Define temporal filter - events within 30 days of resolution
         time_window_days = 30
-        candidates = []
         
-        for event in all_events:
+        def temporal_filter(event: Event) -> bool:
             if not event.occurred_date:
-                continue
-                
-            # Check if event occurred near question resolution
+                return False
             time_diff = abs((event.occurred_date - question.resolution_date).days)
-            if time_diff <= time_window_days:
-                candidates.append(event)
+            return time_diff <= time_window_days
 
-        if not candidates:
-            logger.debug(f"No temporal candidates found for {question.id}")
-            return None
+        # Use the generic matcher with domain filter and temporal filter
+        match = self._matcher.find_match(
+            filters={"domain": question.domain.value if hasattr(question.domain, 'value') else question.domain},
+            additional_filter=temporal_filter,
+            title=event_description,
+            description=event_description,
+        )
 
-        # Simple text similarity matching
-        best_match = None
-        best_score = 0.0
+        if match:
+            logger.info(f"Found matching event: {match.id} for question {question.id}")
 
-        for event in candidates:
-            score = self._calculate_similarity(event_description, event.title)
-            if score > best_score and score >= self.config.similarity_threshold:
-                best_score = score
-                best_match = event
-
-        if best_match:
-            logger.info(f"Found match with score {best_score:.2f}: {best_match.id}")
-
-        return best_match
-
-    def _calculate_similarity(self, text1: str, text2: str) -> float:
-        """Calculate simple text similarity.
-
-        Args:
-            text1: First text
-            text2: Second text
-
-        Returns:
-            Similarity score 0.0-1.0
-        """
-        # Simple word overlap similarity
-        words1 = set(text1.lower().split())
-        words2 = set(text2.lower().split())
-        
-        if not words1 or not words2:
-            return 0.0
-
-        intersection = words1.intersection(words2)
-        union = words1.union(words2)
-
-        return len(intersection) / len(union) if union else 0.0
+        return match
 
     def _create_target_event(
         self,
@@ -354,7 +288,7 @@ Now extract the target event for the given question. Respond with ONLY the event
         Args:
             event_description: Event description
             question: Question being analyzed
-            evidence_articles: Evidence articles
+            evidence_articles: Evidence articles (can be empty if called before evidence collection)
 
         Returns:
             New Event instance
@@ -363,12 +297,12 @@ Now extract the target event for the given question. Respond with ONLY the event
         event_hash = hashlib.sha256(
             f"{event_description}_{question.resolution_date}".encode()
         ).hexdigest()[:8]
-        
+
         event_id = f"evt_{question.domain.value}_{question.resolution_date.strftime('%Y%m%d')}_{event_hash}"
 
         # Determine event type based on question type and domain
         event_type = EventType.OUTCOME  # Most forecast questions are about outcomes
-        
+
         # Determine status based on ground truth
         if question.ground_truth is False:
             status = EventStatus.CANCELLED  # Event didn't happen
@@ -385,7 +319,7 @@ Now extract the target event for the given question. Respond with ONLY the event
             status=status,
             occurred_date=question.resolution_date if question.ground_truth is not False else None,
             resolution_date=question.resolution_date,
-            article_ids=[a.id for a in evidence_articles[:5]],  # Link to evidence
+            article_ids=[a.id for a in evidence_articles[:5]] if evidence_articles else [],  # Link to evidence if available
             metadata={
                 'created_from_question': question.id,
                 'source': 'target_event_identification',

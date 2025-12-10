@@ -18,23 +18,19 @@ export default function TimeSeriesChart({
   const svgRef = useRef()
   const [hoveredEvent, setHoveredEvent] = useState(null)
   const [hoveredPrice, setHoveredPrice] = useState(null)
+  const [isExpanded, setIsExpanded] = useState(true)
 
   useEffect(() => {
+    if (!isExpanded) return
     if (!priceHistory || Object.keys(priceHistory).length === 0) return
 
     // Clear previous chart
     const svg = d3.select(svgRef.current)
     svg.selectAll('*').remove()
 
-    // Margins
+    // Base Margins
     const margin = { top: 40, right: 150, bottom: 50, left: 60 }
     const innerWidth = width - margin.left - margin.right
-    const innerHeight = height - margin.top - margin.bottom
-
-    // Create main group
-    const g = svg
-      .append('g')
-      .attr('transform', `translate(${margin.left},${margin.top})`)
 
     // Prepare data - flatten price history for all tokens
     // NOTE: Polymarket timestamps are in SECONDS, multiply by 1000 for JavaScript Date
@@ -55,9 +51,10 @@ export default function TimeSeriesChart({
 
     if (allData.length === 0) {
       // Show "No data" message
+      const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
       g.append('text')
         .attr('x', innerWidth / 2)
-        .attr('y', innerHeight / 2)
+        .attr('y', (height - margin.top - margin.bottom) / 2)
         .attr('text-anchor', 'middle')
         .style('fill', '#6c757d')
         .style('font-size', '14px')
@@ -65,11 +62,73 @@ export default function TimeSeriesChart({
       return
     }
 
-    // Create scales
+    // Create X scale first to calculate event positions
     const xExtent = d3.extent(allData, d => d.timestamp)
     const xScale = d3.scaleTime()
       .domain([new Date(xExtent[0]), new Date(xExtent[1])])
       .range([0, innerWidth])
+
+    // Calculate event stacking to adjust top margin
+    let eventsInTimeRange = []
+    let maxLevel = 0
+    const levelHeight = 20 // Vertical space per stacked event
+
+    if (events && events.length > 0) {
+      eventsInTimeRange = events.filter(event => {
+        if (!event.occurred_date && !event.predicted_date) return false
+        const eventDate = new Date(event.occurred_date || event.predicted_date)
+        return eventDate >= xScale.domain()[0] && eventDate <= xScale.domain()[1]
+      })
+
+      // Sort by date/position
+      const eventNodes = eventsInTimeRange.map(event => {
+        const date = new Date(event.occurred_date || event.predicted_date)
+        return {
+          ...event,
+          xPos: xScale(date),
+          level: 0
+        }
+      }).sort((a, b) => a.xPos - b.xPos)
+
+      // Assign levels to avoid overlap
+      const lanes = [] // stores max x for each lane
+      const minNodeDist = 15 // pixels between centers to consider overlap
+
+      eventNodes.forEach(node => {
+        let laneIdx = 0
+        while (true) {
+          // Check if this lane is free at this x position
+          // We add a small buffer to minNodeDist
+          if (!lanes[laneIdx] || node.xPos >= lanes[laneIdx] + minNodeDist) {
+            lanes[laneIdx] = node.xPos
+            node.level = laneIdx
+            break
+          }
+          laneIdx++
+        }
+      })
+
+      maxLevel = Math.max(0, ...eventNodes.map(n => n.level))
+      
+      // Update eventsInTimeRange with level info
+      // We need to map back to the original events or use the enriched nodes
+      // Let's replace the array with our enriched nodes
+      eventsInTimeRange = eventNodes
+    }
+
+    // Adjust top margin based on max level
+    // Base top is 40, add space for levels. 
+    // Level 0 is at -15. Level 1 at -35, etc.
+    // We need enough space above 0.
+    const requiredTop = 40 + (maxLevel * levelHeight)
+    margin.top = Math.max(margin.top, requiredTop)
+    
+    const innerHeight = height - margin.top - margin.bottom
+
+    // Create main group with updated margins
+    const g = svg
+      .append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`)
 
     const yScale = d3.scaleLinear()
       .domain([0, 1])
@@ -187,34 +246,29 @@ export default function TimeSeriesChart({
     })
 
     // Add event markers (if events provided)
-    if (events && events.length > 0) {
-      const eventsInTimeRange = events.filter(event => {
-        if (!event.occurred_date && !event.predicted_date) return false
-        const eventDate = new Date(event.occurred_date || event.predicted_date)
-        return eventDate >= xScale.domain()[0] && eventDate <= xScale.domain()[1]
-      })
-
+    if (eventsInTimeRange.length > 0) {
       eventsInTimeRange.forEach((event, idx) => {
-        const eventDate = new Date(event.occurred_date || event.predicted_date)
-        const x = xScale(eventDate)
+        const x = event.xPos
         const isTarget = event.id === targetEventId
+        const level = event.level || 0
+        const yOffset = -15 - (level * levelHeight)
 
         // Event marker line (vertical line at event time)
         g.append('line')
           .attr('x1', x)
           .attr('x2', x)
-          .attr('y1', 0)
+          .attr('y1', yOffset + 6) // Start just below the circle
           .attr('y2', innerHeight)
           .attr('stroke', isTarget ? '#f59e0b' : '#4a90e2')
-          .attr('stroke-width', isTarget ? 3 : 2)
+          .attr('stroke-width', isTarget ? 2 : 1) // Thinner lines for stacked events
           .attr('stroke-dasharray', isTarget ? '0' : '5,5')
-          .attr('opacity', 0.5)
+          .attr('opacity', 0.4)
           .style('pointer-events', 'none')
 
-        // Event marker circle at top
+        // Event marker circle at top (stacked)
         const markerCircle = g.append('circle')
           .attr('cx', x)
-          .attr('cy', -15)
+          .attr('cy', yOffset)
           .attr('r', isTarget ? 8 : 6)
           .attr('fill', isTarget ? '#f59e0b' : '#4a90e2')
           .attr('stroke', '#ffffff')
@@ -238,7 +292,7 @@ export default function TimeSeriesChart({
         if (isTarget) {
           const pulseCircle = g.append('circle')
             .attr('cx', x)
-            .attr('cy', -15)
+            .attr('cy', yOffset)
             .attr('r', 8)
             .attr('fill', 'none')
             .attr('stroke', '#f59e0b')
@@ -264,7 +318,7 @@ export default function TimeSeriesChart({
         if (isTarget) {
           g.append('text')
             .attr('x', x)
-            .attr('y', -28)
+            .attr('y', yOffset - 13)
             .attr('text-anchor', 'middle')
             .style('fill', '#f59e0b')
             .style('font-size', '10px')
@@ -274,11 +328,12 @@ export default function TimeSeriesChart({
         }
 
         // Add small label for regular events (show first 3 letters only)
-        if (!isTarget && eventsInTimeRange.length <= 10) {
+        // Only show if not too cluttered (low level) or if it's the target
+        if (!isTarget && eventsInTimeRange.length <= 15 && level < 2) {
           const shortTitle = event.title.substring(0, 3).toUpperCase()
           g.append('text')
             .attr('x', x)
-            .attr('y', -28)
+            .attr('y', yOffset - 10)
             .attr('text-anchor', 'middle')
             .style('fill', '#4a90e2')
             .style('font-size', '9px')
@@ -403,7 +458,7 @@ export default function TimeSeriesChart({
         setHoveredPrice(null)
       })
 
-  }, [priceHistory, events, targetEventId, outcomes, width, height])
+  }, [priceHistory, events, targetEventId, outcomes, width, height, isExpanded])
 
   // Count events in time range for title
   const eventsInRange = events ? events.filter(event => {
@@ -424,24 +479,42 @@ export default function TimeSeriesChart({
 
   return (
     <div style={{ position: 'relative', background: '#ffffff', padding: '20px', borderRadius: '8px', border: '1px solid #dee2e6' }}>
-      <h3 style={{ color: '#212529', marginTop: 0, marginBottom: '10px', fontSize: '16px', fontWeight: 600 }}>
-        Market Price History
-        {eventsInRange.length > 0 && (
-          <span style={{ fontSize: '13px', color: '#6c757d', marginLeft: '10px', fontWeight: 400 }}>
-            ({eventsInRange.length} event{eventsInRange.length !== 1 ? 's' : ''} marked)
-          </span>
-        )}
-      </h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <h3 style={{ color: '#212529', margin: 0, fontSize: '16px', fontWeight: 600 }}>
+          Market Price History
+          {eventsInRange.length > 0 && (
+            <span style={{ fontSize: '13px', color: '#6c757d', marginLeft: '10px', fontWeight: 400 }}>
+              ({eventsInRange.length} event{eventsInRange.length !== 1 ? 's' : ''} marked)
+            </span>
+          )}
+        </h3>
+        <button 
+          onClick={() => setIsExpanded(!isExpanded)}
+          style={{
+            background: 'none',
+            border: '1px solid #dee2e6',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            padding: '4px 8px',
+            fontSize: '12px',
+            color: '#6c757d'
+          }}
+        >
+          {isExpanded ? 'Hide Graph' : 'Show Graph'}
+        </button>
+      </div>
 
-      <svg
-        ref={svgRef}
-        width={width}
-        height={height}
-        style={{ display: 'block' }}
-      />
+      {isExpanded && (
+        <svg
+          ref={svgRef}
+          width={width}
+          height={height}
+          style={{ display: 'block' }}
+        />
+      )}
 
       {/* Hover tooltips */}
-      {hoveredPrice && (
+      {isExpanded && hoveredPrice && (
         <div style={{
           position: 'absolute',
           top: '60px',
@@ -473,7 +546,7 @@ export default function TimeSeriesChart({
         </div>
       )}
 
-      {hoveredEvent && (
+      {isExpanded && hoveredEvent && (
         <div style={{
           position: 'absolute',
           top: '60px',

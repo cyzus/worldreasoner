@@ -24,9 +24,7 @@ async def auto_index_articles(
     Returns:
         Dictionary with indexing statistics
     """
-    logger.info("=" * 60)
     logger.info("Auto-indexing articles for search...")
-    logger.info("=" * 60)
 
     # Initialize database and search
     db = GenericDatabase(db_path)
@@ -87,13 +85,9 @@ async def auto_index_articles(
         # Get final stats
         final_stats = search.get_index_stats()
 
-        logger.info("=" * 60)
-        logger.info("✓ Search indexing complete!")
-        logger.info("=" * 60)
-        logger.info(f"FTS5 indexed: {final_stats['fts_indexed']}")
-        logger.info(f"Embeddings indexed: {final_stats['embeddings_indexed']}")
+        logger.info("Search indexing complete!")
+        logger.info(f"FTS5 indexed: {final_stats['fts_indexed']}, Embeddings indexed: {final_stats['embeddings_indexed']}")
         logger.info(f"Embedding model: {search.embedding_model}")
-        logger.info("=" * 60)
 
         return {
             "total_articles": len(all_articles),

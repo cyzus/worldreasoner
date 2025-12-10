@@ -32,7 +32,7 @@ async def test_target_event_identification():
         Question(
             id="test_polymarket_001",
             question_text="Will Bitcoin reach $100,000 by December 31, 2024?",
-            question_type=QuestionType.BOOLEAN,
+            question_type=QuestionType.BINARY,
             domain=Domain.FINANCE,
             source="polymarket",
             difficulty=3,
@@ -45,7 +45,7 @@ async def test_target_event_identification():
         Question(
             id="test_polymarket_002",
             question_text="Will Donald Trump win the 2024 US Presidential Election?",
-            question_type=QuestionType.BOOLEAN,
+            question_type=QuestionType.BINARY,
             domain=Domain.POLITICS,
             source="polymarket",
             difficulty=4,
@@ -58,7 +58,7 @@ async def test_target_event_identification():
         Question(
             id="test_polymarket_003",
             question_text="Will there be a global recession in 2024?",
-            question_type=QuestionType.BOOLEAN,
+            question_type=QuestionType.BINARY,
             domain=Domain.FINANCE,
             source="polymarket",
             difficulty=5,

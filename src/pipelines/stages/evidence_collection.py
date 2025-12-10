@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 from src.pipelines.base import PipelineStage
 from src.domain.models import Question, Article, Event
 from src.agents.factory import AgentFactory
-from src.tools import BatchArticleCollectorTool, BatchEventIdentifierTool
+from src.tools import BatchArticleCollectorTool, BatchEventIdentifierTool, ArticleRetrievalTool
 from src.core.collectors import ResultCollector
 from src.pipelines.prompts import HindsightAnalysisPrompts
 from src.utils.logging import logger
@@ -113,7 +113,7 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
         all_articles = []
 
         for idx, question in enumerate(inputs, 1):
-            logger.info(f"[{idx}/{len(inputs)}] Processing question: {question.id}")
+            logger.debug(f"[{idx}/{len(inputs)}] Processing question: {question.id}")
 
             # Validate question is resolved
             if not question.resolution_date:
@@ -202,15 +202,29 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
         # Get articles collected during this run (isolated collector)
         new_articles = article_collector.get_all()
 
-        # Tag articles with evidence metadata
-        for article in new_articles:
-            # Mark as hindsight evidence
-            article.metadata['evidence_type'] = 'hindsight'
-            article.metadata['related_question_ids'] = [question.id]
+        # Tag articles with provenance and persist updates
+        if new_articles:
+            from src.core.database import GenericDatabase
+            db = GenericDatabase(self.db_path)
 
-            # Link to target event if possible
-            if question.target_event_id and question.target_event_id not in article.event_ids:
-                article.event_ids.append(question.target_event_id)
+            for article in new_articles:
+                # Set explicit provenance field (indexed, queryable)
+                article.collected_for_question_id = question.id
+
+                # Also store in metadata for backward compatibility
+                article.metadata['evidence_type'] = 'hindsight'
+                article.metadata['related_question_ids'] = [question.id]
+
+                # Link to target event if possible
+                if question.target_event_id and question.target_event_id not in article.event_ids:
+                    article.event_ids.append(question.target_event_id)
+
+                # Persist updated article with provenance and event links
+                try:
+                    db.save(Article, article)
+                    logger.debug(f"Updated article {article.id} with question provenance")
+                except Exception as e:
+                    logger.warning(f"Failed to update article {article.id}: {e}")
 
         # Extract intermediate events from articles using LLM
         await self._extract_events_from_articles(new_articles, question)
@@ -281,8 +295,9 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
 
         # Instantiate per-question event collector, tool, and agent
         event_collector = ResultCollector[Event]()
-        event_tool = BatchEventIdentifierTool(collector=event_collector)
-        event_agent = AgentFactory.create_base_agent(tools=[event_tool])
+        event_tool = BatchEventIdentifierTool(collector=event_collector, db_path=self.db_path)
+        article_retrieval_tool = ArticleRetrievalTool(db_path=self.db_path)
+        event_agent = AgentFactory.create_base_agent(tools=[event_tool, article_retrieval_tool])
 
         # Generate event extraction instruction using centralized prompt
         current_date = datetime.now(timezone.utc)
@@ -317,13 +332,18 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
             db = GenericDatabase(self.db_path)
 
             for event in new_events:
-                # Link event to the question
+                # Set explicit provenance field (indexed, queryable)
+                event.extracted_for_question_id = question.id
+
+                # Link to source article if possible (first article in event's article_ids)
+                if event.article_ids:
+                    event.source_article_id = event.article_ids[0]
+
+                # Also store in metadata for backward compatibility
                 if 'related_question_ids' not in event.metadata:
                     event.metadata['related_question_ids'] = []
                 if question.id not in event.metadata['related_question_ids']:
                     event.metadata['related_question_ids'].append(question.id)
-
-                # Mark as extracted from evidence articles
                 event.metadata['extracted_for_evidence'] = True
 
                 # Save event to database

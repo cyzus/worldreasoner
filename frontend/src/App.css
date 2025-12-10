@@ -66,9 +66,49 @@
 
 .app-content {
   display: flex;
+  flex-direction: column;
   flex: 1;
   overflow: hidden;
   position: relative;
+}
+
+.top-tabs {
+  display: flex;
+  gap: 0;
+  background: #ffffff;
+  border-bottom: 2px solid #dee2e6;
+  padding: 0 2rem;
+}
+
+.top-tab-btn {
+  padding: 0.875rem 1.5rem;
+  border: none;
+  background: transparent;
+  color: #6c757d;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 3px solid transparent;
+  position: relative;
+  top: 2px;
+}
+
+.top-tab-btn:hover {
+  color: #495057;
+  background: #f8f9fa;
+}
+
+.top-tab-btn.active {
+  color: #4a90e2;
+  border-bottom-color: #4a90e2;
+  background: #f0f7ff;
+}
+
+.main-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
 }
 
 .left-sidebar {

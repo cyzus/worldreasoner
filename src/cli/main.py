@@ -1,0 +1,84 @@
+"""Main entry point for the WorldReasoner unified CLI.
+
+This module provides the `wr` command with subcommands for:
+- Database management (wr db)
+- Evidence pipeline (wr evidence) - to be added in Phase 3
+- Forecasting (wr forecast) - to be added in Phase 3
+- Benchmarking (wr benchmark) - to be added in Phase 3
+- And more...
+
+Usage:
+    wr --help
+    wr db stats
+    wr db list questions --domain politics
+"""
+
+from typing import Optional
+from pathlib import Path
+import typer
+from rich.console import Console
+
+from src.cli.commands import db, evidence, forecast, question
+
+# Create the main Typer app
+app = typer.Typer(
+    name="wr",
+    help="WorldReasoner CLI - LLM Forecasting Research & Pipeline Management",
+    add_completion=False,
+    no_args_is_help=True,
+)
+
+console = Console()
+
+# Register command groups
+app.add_typer(db.app, name="db", help="Database management commands")
+app.add_typer(question.app, name="question", help="Question collection commands")
+app.add_typer(evidence.app, name="evidence", help="Evidence pipeline commands")
+app.add_typer(forecast.app, name="forecast", help="Forecasting commands")
+
+# Phase 4+ will add:
+# app.add_typer(evaluate.app, name="evaluate", help="Evaluation commands")
+# app.add_typer(benchmark.app, name="benchmark", help="LLM benchmark research commands")
+# app.add_typer(temporal.app, name="temporal", help="Temporal forecast analysis")
+# app.add_typer(research.app, name="research", help="Research session management")
+
+
+@app.callback()
+def main(
+    ctx: typer.Context,
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Enable verbose output",
+    ),
+):
+    """WorldReasoner CLI for forecasting research and pipeline management.
+
+    The unified CLI consolidates all example scripts and database management
+    into a single command-line interface with consistent UX.
+
+    Examples:
+        wr db stats
+        wr db list questions --domain politics
+        wr db show question q_abc123
+        wr db clear-evidence q_abc123 --dry-run
+
+    For help on any command:
+        wr <command> --help
+    """
+    # Store verbose flag in context for subcommands to access
+    ctx.ensure_object(dict)
+    ctx.obj["verbose"] = verbose
+
+    if verbose:
+        console.print("[dim]Verbose mode enabled[/dim]")
+
+
+def cli():
+    """Entry point for the CLI when installed via pip."""
+    app()
+
+
+if __name__ == "__main__":
+    app()

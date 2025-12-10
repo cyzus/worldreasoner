@@ -18,6 +18,8 @@ from .event_identification import EventIdentificationPrompts
 from .question_generation import QuestionGenerationPrompts
 from .hindsight_analysis import HindsightAnalysisPrompts
 from .question_categorization import QuestionCategorizationPrompts
+from .target_event_identification import TargetEventIdentificationPrompts
+from .hindsight_causal_analysis import HindsightCausalAnalysisPrompts
 
 __all__ = [
     # Base classes
@@ -30,4 +32,6 @@ __all__ = [
     "QuestionGenerationPrompts",
     "HindsightAnalysisPrompts",
     "QuestionCategorizationPrompts",
+    "TargetEventIdentificationPrompts",
+    "HindsightCausalAnalysisPrompts",
 ]

@@ -11,6 +11,8 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
   const previousNodesRef = useRef(new Map())
   const hasZoomedRef = useRef(false) // Track if we've done initial zoom
   const draggedNodeRef = useRef(null) // Track currently dragged node
+  const pulseTimeRef = useRef(Date.now()) // Cache time for pulsing animation
+  const pulseAnimationRef = useRef(null) // Track pulsing animation frame
 
   // D3 force controls (Obsidian-style adjustable)
   const [forceSettings, setForceSettings] = useState({
@@ -143,7 +145,47 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
 
   }, [graphData, forceSettings])
 
-  // Trigger continuous repainting for pulsing animation on outcome nodes
+  // Update pulse time for outcome nodes at reduced frequency (30 fps instead of 60)
+  // This prevents calling Date.now() on every paint call
+  useEffect(() => {
+    const hasOutcomeNode = graphData.nodes.some(node => node.isOutcome)
+    if (!hasOutcomeNode) {
+      if (pulseAnimationRef.current) {
+        cancelAnimationFrame(pulseAnimationRef.current)
+        pulseAnimationRef.current = null
+      }
+      return
+    }
+
+    let lastUpdate = 0
+    const updateInterval = 1000 / 30 // 30 fps for smooth pulsing
+
+    const updatePulseTime = (timestamp) => {
+      if (timestamp - lastUpdate >= updateInterval) {
+        pulseTimeRef.current = Date.now()
+        lastUpdate = timestamp
+        // Trigger a single repaint
+        if (graphRef.current) {
+          graphRef.current.refresh()
+        }
+      }
+      pulseAnimationRef.current = requestAnimationFrame(updatePulseTime)
+    }
+
+    pulseAnimationRef.current = requestAnimationFrame(updatePulseTime)
+
+    return () => {
+      if (pulseAnimationRef.current) {
+        cancelAnimationFrame(pulseAnimationRef.current)
+        pulseAnimationRef.current = null
+      }
+    }
+  }, [graphData.nodes])
+
+  // DISABLED: Trigger continuous repainting for pulsing animation on outcome nodes
+  // This was causing performance issues by repainting the entire canvas at 60fps
+  // TODO: Re-implement with throttling if pulsing animation is needed
+  /*
   useEffect(() => {
     const hasOutcomeNode = graphData.nodes.some(node => node.isOutcome)
     if (!hasOutcomeNode) return
@@ -165,6 +207,7 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
       }
     }
   }, [graphData.nodes])
+  */
 
 
   // Node canvas rendering with glow effect
@@ -186,7 +229,7 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
 
     // Draw pulsing glow for outcome node
     if (isOutcome) {
-      const time = Date.now() / 1000
+      const time = pulseTimeRef.current / 1000
       const pulse = 0.7 + Math.sin(time * 2) * 0.3 // Pulsing between 0.4 and 1.0
       ctx.beginPath()
       ctx.arc(node.x, node.y, nodeSize + 12 / globalScale, 0, 2 * Math.PI, false)
@@ -408,11 +451,8 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
           onNodeClick(node)
         }}
         onNodeDrag={(node) => {
-          // Wake up simulation gently only when drag starts (not on every drag event)
-          if (!draggedNodeRef.current && graphRef.current?.d3ReheatSimulation) {
-            // Restart simulation at low energy for forces to apply
-            graphRef.current.d3ReheatSimulation()
-          }
+          // Track dragged node without reheating simulation during drag
+          // This prevents performance issues from continuous simulation updates
           draggedNodeRef.current = node
         }}
         onNodeDragEnd={(node) => {
@@ -420,6 +460,11 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
           node.fx = undefined
           node.fy = undefined
           draggedNodeRef.current = null
+
+          // Only reheat simulation after drag ends for smooth settling
+          if (graphRef.current?.d3ReheatSimulation) {
+            graphRef.current.d3ReheatSimulation()
+          }
         }}
         onBackgroundClick={() => {
           // If there was a dragged node that didn't get released, release it now
@@ -432,11 +477,11 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
         backgroundColor="#ffffff"
         linkDirectionalArrowLength={0} // We draw custom arrows
         linkDirectionalArrowRelPos={1}
-        cooldownTicks={200}
+        cooldownTicks={50} // Reduced from 200 for faster settling after drag
         warmupTicks={0}
-        d3AlphaDecay={0.01} // Slower decay for longer settling
-        d3VelocityDecay={0.3} // Lower friction for more fluid movement
-        d3AlphaMin={0.001}
+        d3AlphaDecay={0.02} // Increased from 0.01 for faster stopping
+        d3VelocityDecay={0.4} // Increased friction for quicker settling
+        d3AlphaMin={0.005} // Higher threshold to stop simulation sooner
         onEngineStop={() => {
           // Let simulation rest when not interacting
         }}

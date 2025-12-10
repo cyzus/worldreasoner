@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import GraphVisualization from './components/GraphVisualization'
 import ControlPanel from './components/ControlPanel'
 import EventDetails from './components/EventDetails'
 import QuestionList from './components/QuestionList'
+import PipelinePage from './components/PipelinePage'
 import Timeline from './components/Timeline'
 import TimeSeriesChart from './components/TimeSeriesChart'
+import DatabaseSelector from './components/DatabaseSelector'
 import { fetchGraph, fetchStatistics, fetchQuestions, fetchQuestionEvents, fetchQuestionPriceHistory } from './api/graphApi'
 import './App.css'
 
@@ -24,7 +26,7 @@ function App() {
   const [timeFilter, setTimeFilter] = useState(null) // { start: Date, end: Date }
   const [questions, setQuestions] = useState([]) // List of all questions
   const [selectedQuestionId, setSelectedQuestionId] = useState(null) // Currently selected question filter
-  const [leftPanelTab, setLeftPanelTab] = useState('controls') // 'controls' or 'questions'
+  const [leftPanelTab, setLeftPanelTab] = useState('controls') // 'controls', 'questions', or 'pipelines'
   const [priceHistoryData, setPriceHistoryData] = useState(null) // Price history for selected question
   const [loadingPriceHistory, setLoadingPriceHistory] = useState(false) // Loading state for price history
   const [questionRelatedEvents, setQuestionRelatedEvents] = useState([]) // All events related to selected question
@@ -88,18 +90,25 @@ function App() {
 
   // Client-side temporal filtering
   const applyTimeFilter = useCallback((startDate, endDate) => {
+    console.log('[TimeFilter] Called with:', { 
+      start: startDate?.toISOString(), 
+      end: endDate?.toISOString(),
+      totalNodes: fullGraphData.nodes.length 
+    })
+
     if (!startDate || !endDate) {
       // No filter, show all data and clear outcome markers
-      const resetNodes = fullGraphData.nodes.map(node => ({
-        ...node,
-        isOutcome: false
-      }))
+      // Reuse original objects to maintain reference identity
+      const resetNodes = fullGraphData.nodes
+      resetNodes.forEach(node => {
+        node.isOutcome = false
+      })
 
-      // Filter out synthetic links
+      // Filter out synthetic links - reuse original objects
       const resetLinks = fullGraphData.links
         .filter(link => !link.isSynthetic && link.type !== 'potentially_relevant')
-        .map(link => ({...link}))
 
+      console.log('[TimeFilter] Resetting to full data:', resetNodes.length, 'nodes')
       setGraphData({
         nodes: resetNodes,
         links: resetLinks
@@ -111,7 +120,7 @@ function App() {
 
     setTimeFilter({ start: startDate, end: endDate })
 
-    // Filter nodes by date, clear outcome markers
+    // Filter nodes by date - reuse original objects to maintain reference identity
     const filteredNodes = fullGraphData.nodes
       .filter(node => {
         const eventDate = node.properties?.occurred_date || node.properties?.predicted_date
@@ -120,29 +129,24 @@ function App() {
         const date = new Date(eventDate)
         return date >= startDate && date <= endDate
       })
-      .map(node => ({
-        ...node,
-        isOutcome: false
-      }))
+
+    // Reset isOutcome on filtered nodes directly
+    filteredNodes.forEach(node => {
+      node.isOutcome = false
+    })
+
+    console.log('[TimeFilter] Filtered to', filteredNodes.length, 'nodes')
 
     const nodeIds = new Set(filteredNodes.map(n => n.id))
 
     // Filter links to only include those between visible nodes (exclude synthetic)
+    // Reuse original link objects to maintain reference identity
     const filteredLinks = fullGraphData.links
-      .filter(link => !link.isSynthetic && link.type !== 'potentially_relevant')
       .filter(link => {
+        if (link.isSynthetic || link.type === 'potentially_relevant') return false
         const sourceId = typeof link.source === 'object' ? link.source.id : link.source
         const targetId = typeof link.target === 'object' ? link.target.id : link.target
         return nodeIds.has(sourceId) && nodeIds.has(targetId)
-      })
-      .map(link => {
-        // Create a shallow copy to avoid mutating the original link object
-        // This forces react-force-graph to re-process the link
-        return {
-          ...link,
-          source: typeof link.source === 'object' ? link.source.id : link.source,
-          target: typeof link.target === 'object' ? link.target.id : link.target
-        }
       })
 
     // Update with new filtered data
@@ -189,6 +193,29 @@ function App() {
     setFilters(newFilters)
     loadGraph(newFilters)
   }
+
+  // Handle database change
+  const handleDatabaseChange = useCallback(async (dbPath) => {
+    console.log('Database changed to:', dbPath)
+    // Reload all data from the new database
+    setLoading(true)
+    setError(null)
+    setSelectedNode(null)
+    setSelectedQuestionId(null)
+    setPriceHistoryData(null)
+    setQuestionRelatedEvents([])
+
+    try {
+      // Reload graph, statistics, and questions
+      await Promise.all([
+        loadGraph(filters),
+        loadStatistics(),
+        loadQuestions()
+      ])
+    } catch (err) {
+      setError('Failed to load data from new database: ' + err.message)
+    }
+  }, [filters, loadGraph, loadStatistics, loadQuestions])
 
   // Handle node selection
   const handleNodeClick = (node) => {
@@ -514,6 +541,14 @@ function App() {
     }
   }, [fullGraphData, questions])
 
+  // Handle pipeline job completion
+  const handleJobComplete = useCallback((results) => {
+    console.log('Pipeline job completed:', results)
+    // Refresh graph data after pipeline completion
+    loadGraph(filters)
+    loadStatistics()
+  }, [filters, loadGraph, loadStatistics])
+
   return (
     <div className="app">
       <header className="app-header">
@@ -528,47 +563,69 @@ function App() {
       </header>
 
       <div className="app-content">
-        <div className="left-sidebar">
-          <div className="sidebar-tabs">
-            <button
-              className={`tab-btn ${leftPanelTab === 'controls' ? 'active' : ''}`}
-              onClick={() => setLeftPanelTab('controls')}
-            >
-              ⚙️ Controls
-            </button>
-            <button
-              className={`tab-btn ${leftPanelTab === 'questions' ? 'active' : ''}`}
-              onClick={() => setLeftPanelTab('questions')}
-            >
-              📋 Questions ({questions.length})
-            </button>
-          </div>
-          
-          <div className="sidebar-content">
-            {leftPanelTab === 'controls' ? (
-              <ControlPanel
-                filters={filters}
-                onFilterChange={handleFilterChange}
-                onRefresh={() => loadGraph(filters)}
-                loading={loading}
-                questions={questions}
-                onQuestionFilter={handleQuestionFilter}
-              />
-            ) : (
-              <QuestionList
-                questions={questions}
-                selectedQuestionId={selectedQuestionId}
-                onQuestionSelect={(questionId) => {
-                  setSelectedQuestionId(questionId)
-                  handleQuestionFilter(questionId)
-                }}
-                onClose={() => setLeftPanelTab('controls')}
-              />
-            )}
-          </div>
+        {/* Top navigation tabs */}
+        <div className="top-tabs">
+          <button
+            className={`top-tab-btn ${leftPanelTab === 'controls' ? 'active' : ''}`}
+            onClick={() => setLeftPanelTab('controls')}
+          >
+            ⚙️ Controls
+          </button>
+          <button
+            className={`top-tab-btn ${leftPanelTab === 'questions' ? 'active' : ''}`}
+            onClick={() => setLeftPanelTab('questions')}
+          >
+            📋 Questions ({questions.length})
+          </button>
+          <button
+            className={`top-tab-btn ${leftPanelTab === 'pipelines' ? 'active' : ''}`}
+            onClick={() => setLeftPanelTab('pipelines')}
+          >
+            🔄 Pipelines
+          </button>
         </div>
 
-        <div className="graph-main">
+        {leftPanelTab === 'pipelines' ? (
+          /* Full-width pipeline page */
+          <PipelinePage
+            questions={questions}
+            onJobComplete={handleJobComplete}
+            onDatabaseChange={handleDatabaseChange}
+          />
+        ) : (
+          /* Sidebar + Graph layout for controls and questions */
+          <div className="main-layout">
+            <div className="left-sidebar">
+              <div className="sidebar-content">
+                {leftPanelTab === 'controls' && (
+                  <>
+                    <DatabaseSelector onDatabaseChange={handleDatabaseChange} />
+                    <ControlPanel
+                      filters={filters}
+                      onFilterChange={handleFilterChange}
+                      onRefresh={() => loadGraph(filters)}
+                      loading={loading}
+                      questions={questions}
+                      onQuestionFilter={handleQuestionFilter}
+                    />
+                  </>
+                )}
+
+                {leftPanelTab === 'questions' && (
+                  <QuestionList
+                    questions={questions}
+                    selectedQuestionId={selectedQuestionId}
+                    onQuestionSelect={(questionId) => {
+                      setSelectedQuestionId(questionId)
+                      handleQuestionFilter(questionId)
+                    }}
+                    onClose={() => setLeftPanelTab('controls')}
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="graph-main">
           <div className="graph-container">
             {loading && <div className="loading">Loading graph...</div>}
             {error && <div className="error">{error}</div>}
@@ -685,14 +742,16 @@ function App() {
               )}
             </div>
           )}
-        </div>
+            </div>
 
-        {selectedNode && (
-          <EventDetails
-            node={selectedNode}
-            onClose={() => setSelectedNode(null)}
-            onShowNeighborhood={handleShowNeighborhood}
-          />
+            {selectedNode && (
+              <EventDetails
+                node={selectedNode}
+                onClose={() => setSelectedNode(null)}
+                onShowNeighborhood={handleShowNeighborhood}
+              />
+            )}
+          </div>
         )}
       </div>
     </div>

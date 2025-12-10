@@ -101,8 +101,9 @@ _quality_assessment_template = dedent("""
 
     1.  Carefully review each question in the batch.
     2.  For each question, score all 7 dimensions from 0.0 to 1.0.
-    3.  Calculate a composite score, which should be the unweighted average of the 7 dimension scores.
-    4.  Provide a brief, one-sentence reasoning for your composite score.
+    3.  Calculate a composite score as the unweighted average of the 7 dimension scores.
+        Note: The system will recalculate this using weighted averaging (verifiability=25%, interestingness=20%, clarity=20%, temporal_validity=15%, context_sufficiency=10%, difficulty_appropriateness=5%, format_consistency=5%).
+    4.  Provide a brief, one-sentence reasoning for your assessment, focusing on the most critical dimensions (verifiability, interestingness, clarity).
     5.  Return your assessment as a single JSON object matching the required schema. Do not add any commentary outside the JSON object.
     
     The output format MUST be a JSON object with a single key "assessments", which is a list of assessment objects.

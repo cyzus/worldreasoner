@@ -47,7 +47,7 @@ class EventIdentificationStage(PipelineStage[Article, Event]):
         self.collector = ResultCollector[Event]()
 
         # Create tools
-        self.event_tool = BatchEventIdentifierTool(collector=self.collector)
+        self.event_tool = BatchEventIdentifierTool(collector=self.collector, db_path=db_path)
         self.article_retrieval_tool = ArticleRetrievalTool(db_path=db_path)
 
         # Create BaseAgent using factory
@@ -99,20 +99,9 @@ class EventIdentificationStage(PipelineStage[Article, Event]):
 
             # Get identified events from the collector
             events = self.collector.get_all()
-            
-            # Update article.event_ids to create bidirectional links
-            # Events already have article_ids set by the agent via EventIdentifierTool
-            # Now we update the reverse direction: articles pointing to events
-            article_map = {article.id: article for article in inputs}
 
-            for event in events:
-                # For each article referenced by this event, add the event ID to that article
-                for article_id in event.article_ids:
-                    if article_id in article_map:
-                        article = article_map[article_id]
-                        if event.id not in article.event_ids:
-                            article.event_ids.append(event.id)
-                            logger.debug(f"Linked article {article_id} to event {event.id}")
+            # Note: Bidirectional article↔event links are now handled by BatchEventIdentifierTool
+            # The tool updates article.event_ids when creating/updating events
 
             # Log usage summary for this stage
             if self.usage_tracker.total_calls > 0:

@@ -8,6 +8,7 @@ from datetime import datetime
 from fastapi import APIRouter, Query, HTTPException, Depends
 
 from backend.services.graph import GraphQuery, GraphData, SQLiteGraphService
+from backend.api.routes.database import get_current_db_path
 from src.utils.logging import logger
 
 
@@ -17,7 +18,7 @@ router = APIRouter()
 # Dependency for getting graph service
 def get_graph_service() -> SQLiteGraphService:
     """Dependency to get graph service instance."""
-    return SQLiteGraphService("worldreasoner.db")
+    return SQLiteGraphService(get_current_db_path())
 
 
 @router.get("/", response_model=GraphData)

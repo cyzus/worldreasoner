@@ -5,7 +5,7 @@ from smolagents import Tool
 from src.domain.models import Event, Article
 
 if TYPE_CHECKING:
-    from src.core.database import Database
+    from src.core.database import GenericDatabase
 
 
 class EventDetailsTool(Tool):
@@ -41,12 +41,12 @@ class EventDetailsTool(Tool):
     }
     output_type = "string"
     
-    def __init__(self, db: Optional["Database"] = None, db_path: Optional[str] = None):
+    def __init__(self, db: Optional["GenericDatabase"] = None, db_path: Optional[str] = None):
         """Initialize tool with database.
 
         Args:
-            db: Optional Database instance
-            db_path: Optional path to database file (creates new Database if provided)
+            db: Optional GenericDatabase instance
+            db_path: Optional path to database file (creates new GenericDatabase if provided)
 
         Note:
             If neither db nor db_path is provided, will use default database path
@@ -58,12 +58,15 @@ class EventDetailsTool(Tool):
             self.db = db
         elif db_path:
             # Lazy import to avoid circular dependency
-            from src.core.database import Database
-            self.db = Database(db_path)
+            from src.core.database import GenericDatabase
+            self.db = GenericDatabase(db_path)
+            # Ensure schema is initialized
+            self.db.create_table(Event)
+            self.db.create_table(Article)
         else:
             # Use default database path
-            from src.core.database import Database
-            self.db = Database("worldreasoner.db")
+            from src.core.database import GenericDatabase
+            self.db = GenericDatabase("worldreasoner.db")
     
     def forward(self, event_id: str) -> str:
         """Get full details for an event.
@@ -77,10 +80,10 @@ class EventDetailsTool(Tool):
         import json
 
         # Fetch event from database
-        event = self.db.get_event(event_id)
+        event = self.db.get(Event, event_id)
         if not event:
             # Get available events for helpful error message
-            all_events = self.db.get_events()
+            all_events = self.db.get_many(Event)
             return json.dumps({
                 "error": f"Event '{event_id}' not found in database",
                 "available_events": [e.id for e in all_events[:10]]  # First 10
@@ -89,7 +92,7 @@ class EventDetailsTool(Tool):
         # Fetch linked articles from database
         linked_articles = []
         if event.article_ids:
-            articles = self.db.get_articles(event.article_ids)
+            articles = self.db.get_many(Article, ids=event.article_ids)
             for article in articles:
                 linked_articles.append({
                     "id": article.id,

@@ -1,33 +1,35 @@
 """Unified database layer for WorldReasoner.
 
-This module provides the ONLY database interface for the project:
+This module provides the database interface for the project:
 
-1. **GenericDatabase**: Low-level, type-safe interface for any Pydantic model
-   - Automatic schema generation from model decorators
+**GenericDatabase**: Type-safe interface for any Pydantic model
+   - Automatic schema generation from @register_model decorators
    - JSON serialization for complex types
    - Type-safe CRUD operations
-
-2. **Database**: High-level wrapper with convenience methods
-   - Article, Event, Question specific operations
-   - Built on top of GenericDatabase
-   - Use this for most application code
+   - Batch operations
+   - Temporal filtering support
 
 IMPORTANT: This is the single source of truth for database operations.
 All models must use @register_model decorator for automatic schema creation.
 
 Architecture:
     Models (@register_model) → GenericDatabase → SQLite
-                                      ↑
-                                   Database (wrapper)
 
 Usage:
-    # Low-level (for tools, direct operations)
-    db = GenericDatabase('worldreasoner.db')
-    db.save(Article, article_instance)
+    from src.core.database import GenericDatabase
+    from src.domain.models import Article
     
-    # High-level (for application code)
-    db = Database('worldreasoner.db')
-    db.save_article(article_instance)
+    # Create database instance
+    db = GenericDatabase('worldreasoner.db')
+    
+    # Ensure schema is initialized
+    db.create_table(Article)
+    
+    # CRUD operations
+    db.save(Article, article_instance)
+    article = db.get(Article, article_id)
+    articles = db.get_many(Article, filters={'domain': 'tech'})
+    db.delete(Article, article_id)
 """
 
 import json
@@ -565,158 +567,3 @@ class GenericDatabase(Generic[T]):
             cursor = conn.cursor()
             cursor.execute(f"DELETE FROM {table_name}")
             conn.commit()
-
-
-class Database:
-    """Unified database interface for all WorldReasoner models.
-    
-    Provides convenient methods for each model type while using
-    the generic database underneath.
-    """
-    
-    def __init__(self, db_path: str = "worldreasoner.db"):
-        """Initialize database.
-        
-        Args:
-            db_path: Path to SQLite database file
-        """
-        self.db = GenericDatabase(db_path)
-        self.db_path = db_path
-        self._init_schema()
-    
-    def _init_schema(self):
-        """Initialize database schema for all registered models."""
-        # Import models to ensure they're registered
-        from ..domain.models import Article, Event, Question, CausalHypothesis
-
-        # Create tables for all registered models
-        self.db.create_table(Article)
-        self.db.create_table(Event)
-        self.db.create_table(Question)
-        self.db.create_table(CausalHypothesis)
-    
-    # Article operations
-    def save_article(self, article) -> bool:
-        """Save or update an article."""
-        from ..domain.models import Article
-        return self.db.save(Article, article)
-    
-    def save_articles(self, articles: List) -> int:
-        """Save multiple articles."""
-        from ..domain.models import Article
-        return self.db.save_many(Article, articles)
-    
-    def get_article(self, article_id: str):
-        """Get article by ID."""
-        from ..domain.models import Article
-        return self.db.get(Article, article_id)
-    
-    def get_articles(self, article_ids: Optional[List[str]] = None) -> List:
-        """Get multiple articles."""
-        from ..domain.models import Article
-        return self.db.get_many(Article, ids=article_ids)
-    
-    # Event operations
-    def save_event(self, event) -> bool:
-        """Save or update an event."""
-        from ..domain.models import Event
-        return self.db.save(Event, event)
-    
-    def save_events(self, events: List) -> int:
-        """Save multiple events."""
-        from ..domain.models import Event
-        return self.db.save_many(Event, events)
-    
-    def get_event(self, event_id: str):
-        """Get event by ID."""
-        from ..domain.models import Event
-        return self.db.get(Event, event_id)
-    
-    def get_events(
-        self,
-        event_ids: Optional[List[str]] = None,
-        domain: Optional[str] = None,
-        status: Optional[str] = None
-    ) -> List:
-        """Get multiple events with optional filters."""
-        from ..domain.models import Event
-        filters = {}
-        if domain:
-            filters['domain'] = domain
-        if status:
-            filters['status'] = status
-        return self.db.get_many(Event, ids=event_ids, filters=filters)
-    
-    # Question operations
-    def save_question(self, question) -> bool:
-        """Save or update a question."""
-        from ..domain.models import Question
-        return self.db.save(Question, question)
-    
-    def save_questions(self, questions: List) -> int:
-        """Save multiple questions."""
-        from ..domain.models import Question
-        return self.db.save_many(Question, questions)
-    
-    def get_question(self, question_id: str):
-        """Get question by ID."""
-        from ..domain.models import Question
-        return self.db.get(Question, question_id)
-    
-    def get_questions(
-        self,
-        question_ids: Optional[List[str]] = None,
-        domain: Optional[str] = None
-    ) -> List:
-        """Get multiple questions with optional filters."""
-        from ..domain.models import Question
-        filters = {}
-        if domain:
-            filters['domain'] = domain
-        return self.db.get_many(Question, ids=question_ids, filters=filters)
-
-    # CausalHypothesis operations
-    def save_causal_hypothesis(self, hypothesis) -> bool:
-        """Save or update a causal hypothesis."""
-        from ..domain.models import CausalHypothesis
-        return self.db.save(CausalHypothesis, hypothesis)
-
-    def save_causal_hypotheses(self, hypotheses: List) -> int:
-        """Save multiple causal hypotheses."""
-        from ..domain.models import CausalHypothesis
-        return self.db.save_many(CausalHypothesis, hypotheses)
-
-    def get_causal_hypothesis(self, hypothesis_id: str):
-        """Get causal hypothesis by ID."""
-        from ..domain.models import CausalHypothesis
-        return self.db.get(CausalHypothesis, hypothesis_id)
-
-    def get_causal_hypotheses(
-        self,
-        hypothesis_ids: Optional[List[str]] = None,
-        question_id: Optional[str] = None
-    ) -> List:
-        """Get multiple causal hypotheses with optional filters."""
-        from ..domain.models import CausalHypothesis
-        filters = {}
-        if question_id:
-            filters['question_id'] = question_id
-        return self.db.get_many(CausalHypothesis, ids=hypothesis_ids, filters=filters)
-
-    # Utility operations
-    def clear_all(self):
-        """Clear all data (for testing)."""
-        from ..domain.models import Article, Event, Question, CausalHypothesis
-        self.db.clear_all(Article)
-        self.db.clear_all(Event)
-        self.db.clear_all(Question)
-        self.db.clear_all(CausalHypothesis)
-    
-    def get_stats(self) -> Dict[str, int]:
-        """Get database statistics."""
-        from ..domain.models import Article, Event, Question
-        return {
-            "articles": self.db.count(Article),
-            "events": self.db.count(Event),
-            "questions": self.db.count(Question)
-        }

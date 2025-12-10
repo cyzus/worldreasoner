@@ -15,7 +15,7 @@ from src.core.collectors import ResultCollector
 def sample_questions():
     """Provides a list of sample Question objects for testing."""
     return [
-        Question(id="q_001", question_text="Q1", question_type=QuestionType.BOOLEAN, domain=Domain.TECH, difficulty=3, resolution_date=datetime.now(timezone.utc)),
+        Question(id="q_001", question_text="Q1", question_type=QuestionType.BINARY, domain=Domain.TECH, difficulty=3, resolution_date=datetime.now(timezone.utc)),
         Question(id="q_002", question_text="Q2", question_type=QuestionType.MCQ, domain=Domain.POLITICS, difficulty=4, resolution_date=datetime.now(timezone.utc), options=["A", "B"]),
         Question(id="q_003", question_text="Q3", question_type=QuestionType.QUANTITY, domain=Domain.FINANCE, difficulty=5, resolution_date=datetime.now(timezone.utc)),
     ]

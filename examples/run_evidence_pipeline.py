@@ -37,6 +37,7 @@ from src.config.pipeline import EvidencePipelineConfig
 from src.config import DatabaseConfig, get_config
 from src.utils.logging import logger
 from src.utils.search_indexing import auto_index_articles, should_auto_index
+from src.utils.question_loader import load_specific_question
 
 
 def parse_args():
@@ -49,6 +50,7 @@ def parse_args():
     parser.add_argument('--db', type=str, default='worldreasoner.db', help='Path to database file (default: worldreasoner.db)')
 
     # Question filtering
+    parser.add_argument('--question-id', type=str, default='', help='Process specific question by ID (overrides other filters)')
     parser.add_argument('--max-questions', type=int, default=10, help='Maximum questions to process (0 = unlimited, default: 2)')
     parser.add_argument('--domains', type=str, default='', help='Comma-separated list of domains (e.g., tech,finance,politics)')
     parser.add_argument('--force-reprocess', action='store_true', help='Re-process questions even if they already have hypotheses')
@@ -88,6 +90,7 @@ async def run_pipeline(args):
     # Configure Evidence Pipeline
     max_questions = args.max_questions if args.max_questions > 0 else None
     domains = [d.strip() for d in args.domains.split(',') if d.strip()] if args.domains else []
+    question_id = args.question_id.strip() if args.question_id else None
 
     evidence_config = EvidencePipelineConfig(
         # Evidence collection settings
@@ -130,6 +133,8 @@ async def run_pipeline(args):
     logger.info("Evidence Pipeline - Causal Analysis with Hindsight")
     logger.info("=" * 80)
     logger.info(f"\nDatabase: {db_config.db_path}")
+    if question_id:
+        logger.info(f"Specific question: {question_id}")
     logger.info(f"Evidence window: {evidence_config.evidence_window_days} days before resolution")
     logger.info(f"Min evidence articles: {evidence_config.min_evidence_articles}")
     logger.info(f"Confidence threshold: {evidence_config.causal_confidence_threshold}")
@@ -142,6 +147,11 @@ async def run_pipeline(args):
         logger.info(f"Minimum quality score: {args.min_quality_score}")
     logger.info("")
 
+    # Handle specific question ID if provided
+    resolved_questions = load_specific_question(args.db, question_id) if question_id else None
+    if question_id and resolved_questions is None:
+        return  # Error already logged by helper
+
     # Create pipeline
     pipeline = EvidencePipeline(
         evidence_config=evidence_config,
@@ -152,7 +162,7 @@ async def run_pipeline(args):
 
     # Run pipeline
     try:
-        results = await pipeline.run()
+        results = await pipeline.run(resolved_questions=resolved_questions)
 
         # Display results
         summary = pipeline.get_summary()

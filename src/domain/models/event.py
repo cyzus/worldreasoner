@@ -38,7 +38,7 @@ class CausalRelationType(str, Enum):
     CONDITIONAL = "conditional"    # Causes only if conditions met
 
 
-@register_model('events', indexes=['domain', 'status', 'event_type'])
+@register_model('events', indexes=['domain', 'status', 'event_type', 'extracted_for_question_id'])
 class Event(BaseModel):
     """Discrete occurrence or state change in the world.
     
@@ -84,6 +84,16 @@ class Event(BaseModel):
     article_ids: List[str] = Field(
         default_factory=list,
         description="Articles that document or discuss this event"
+    )
+
+    # Provenance tracking (for evidence pipeline)
+    extracted_for_question_id: Optional[str] = Field(
+        None,
+        description="Question ID this event was extracted for during evidence pipeline (None if pre-existing)"
+    )
+    source_article_id: Optional[str] = Field(
+        None,
+        description="Article ID this event was extracted from (for events created during evidence pipeline)"
     )
 
     # Metadata

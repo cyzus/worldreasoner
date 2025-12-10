@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.utils.logging import logger
-from .routes import graph, events, websocket, questions
+from .routes import graph, events, websocket, questions, database, pipelines
 
 
 def create_app() -> FastAPI:
@@ -35,9 +35,11 @@ def create_app() -> FastAPI:
     )
 
     # Include routers
+    app.include_router(database.router, prefix="/api/database", tags=["database"])
     app.include_router(graph.router, prefix="/api/graph", tags=["graph"])
     app.include_router(events.router, prefix="/api/events", tags=["events"])
     app.include_router(questions.router, prefix="/api/questions", tags=["questions"])
+    app.include_router(pipelines.router, prefix="/api/pipelines", tags=["pipelines"])
     app.include_router(websocket.router, prefix="/ws", tags=["websocket"])
 
     @app.get("/")

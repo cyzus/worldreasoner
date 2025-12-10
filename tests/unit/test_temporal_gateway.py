@@ -216,7 +216,7 @@ class TestTemporalGateway:
         question = Question(
             id="q_test",
             question_text="Will the technology event occur as predicted in the next week?",
-            question_type=QuestionType.BOOLEAN,
+            question_type=QuestionType.BINARY,
             domain="tech",
             source="test",
             difficulty=3,
@@ -246,7 +246,7 @@ class TestTemporalGateway:
         question = Question(
             id="q_test",
             question_text="Will the technology event occur as predicted in the next week?",
-            question_type=QuestionType.BOOLEAN,
+            question_type=QuestionType.BINARY,
             domain="tech",
             source="test",
             difficulty=3,
@@ -277,7 +277,7 @@ class TestTemporalGateway:
         question = Question(
             id="q_test",
             question_text="Will the technology event occur as predicted in the next week?",
-            question_type=QuestionType.BOOLEAN,
+            question_type=QuestionType.BINARY,
             domain="tech",
             source="test",
             difficulty=3,

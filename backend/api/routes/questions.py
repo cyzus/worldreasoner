@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from src.core.database import GenericDatabase
 from src.domain.models import Question, CausalHypothesis
+from backend.api.routes.database import get_current_db_path
 from src.utils.logging import logger
 from src.utils.polymarket import get_price_history_for_market
 
@@ -19,7 +20,7 @@ router = APIRouter()
 # Dependency for getting database
 def get_database() -> GenericDatabase:
     """Dependency to get database instance."""
-    return GenericDatabase("worldreasoner.db")
+    return GenericDatabase(get_current_db_path())
 
 
 class QuestionListItem(BaseModel):
@@ -96,6 +97,7 @@ async def get_question(
 
         if not question:
             raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
+
         return QuestionListItem(
             id=question.id,
             question_text=question.question_text,
@@ -149,12 +151,17 @@ async def get_question_events(
 
         direct_event_count = len(event_ids)
 
-        # Find all events extracted during evidence collection (via metadata)
+        # Find all events extracted during evidence collection
+        # Use explicit provenance field with fallback to metadata
         all_events = db.get_many(Event)
         extracted_events = set()
         for event in all_events:
-            related_q_ids = event.metadata.get('related_question_ids', [])
-            if question_id in related_q_ids:
+            # Check explicit provenance field first
+            if event.extracted_for_question_id == question_id:
+                extracted_events.add(event.id)
+                event_ids.add(event.id)
+            # Fallback to metadata for pre-migration data
+            elif event.metadata.get('related_question_ids') and question_id in event.metadata['related_question_ids']:
                 extracted_events.add(event.id)
                 event_ids.add(event.id)
 

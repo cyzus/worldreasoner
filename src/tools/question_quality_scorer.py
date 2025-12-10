@@ -44,10 +44,22 @@ class QuestionQualityScorer(Tool):
         self,
         collector: Optional[ResultCollector[QualityAssessment]] = None,
         timeout: Optional[int] = None,
+        dimension_weights: Optional[Dict[str, float]] = None,
     ):
         super().__init__()
         self.collector = collector
+
         app_config = get_config()
+
+        # Use provided weights, or fall back to config defaults
+        if dimension_weights is not None:
+            self.dimension_weights = dimension_weights
+        else:
+            # Get default weights from config
+            from src.config.pipeline import QuestionQualityConfig
+            default_config = QuestionQualityConfig()
+            self.dimension_weights = default_config.dimension_weights
+
         # Override timeout if provided
         llm_config = app_config.llm.model_copy()
         if timeout is not None:
@@ -72,6 +84,23 @@ class QuestionQualityScorer(Tool):
             }
             question_list.append(question_data)
         return json.dumps(question_list, indent=2)
+
+    def _calculate_weighted_score(self, dimensions: Dict[str, float]) -> float:
+        """Calculate weighted composite score from dimension scores.
+
+        Args:
+            dimensions: Dictionary of dimension scores (0.0-1.0)
+
+        Returns:
+            Weighted composite score (0.0-1.0)
+        """
+        weighted_sum = 0.0
+        for dimension, weight in self.dimension_weights.items():
+            if dimension in dimensions:
+                weighted_sum += dimensions[dimension] * weight
+            else:
+                logger.warning(f"Dimension '{dimension}' missing from assessment, using 0.0")
+        return weighted_sum
 
     async def forward(self, questions: List[Question]) -> str:
         """
@@ -114,13 +143,28 @@ class QuestionQualityScorer(Tool):
         # Assuming response_json is a dict
         assessments_data = response_json.get("assessments", [])
 
-        # Parse and collect results
+        # Parse and collect results, recalculating composite scores with weights
         parsed_assessments = []
         for data in assessments_data:
+            # Recalculate composite score using weighted average instead of LLM's unweighted score
+            weighted_score = self._calculate_weighted_score(data['dimensions'])
+            data['composite_score'] = weighted_score
+
             assessment = QualityAssessment(**data)
             parsed_assessments.append(assessment)
             if self.collector is not None:
                 self.collector.add(assessment)
+
+        # Update response with recalculated scores
+        response_json['assessments'] = [
+            {
+                'question_id': a.question_id,
+                'composite_score': a.composite_score,
+                'dimensions': a.dimensions,
+                'reasoning': a.reasoning
+            }
+            for a in parsed_assessments
+        ]
 
         # Return the raw JSON string as per tool's output_type
         return json.dumps(response_json)
