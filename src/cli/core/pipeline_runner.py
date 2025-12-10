@@ -483,11 +483,12 @@ class PipelineRunner:
         model: Optional[str] = None,
         offset_days: int = 7,
         knowledge_only: bool = False,
+        min_context_items: int = 3,
         **kwargs
     ) -> PipelineResult:
         """Run forecasting on questions."""
         from src.agents.forecast_agent import ForecastAgent
-        from datetime import timedelta
+        from src.utils.llm_utils import get_knowledge_cutoff_date
 
         results = PipelineResult([], [], [], 0.0)
 
@@ -517,20 +518,20 @@ class PipelineRunner:
 
                 logger.info(f"Running forecast on question: {qid}")
 
-                # Calculate simulated date (offset_days before resolution)
-                if question.resolution_date:
-                    simulated_date = question.resolution_date - timedelta(days=offset_days)
-                else:
-                    simulated_date = datetime.now(timezone.utc) - timedelta(days=offset_days)
+                # Determine simulated date and knowledge cutoff
+                forecast_setup = question.prepare_forecast(
+                    db=self.db,
+                    offset_days_before_resolution=offset_days,
+                    min_context_items=min_context_items
+                )
 
-                # Use a reasonable knowledge cutoff (e.g., 6 months before simulated date)
-                knowledge_cutoff = simulated_date - timedelta(days=180)
+
 
                 # Create forecast agent with correct parameters
                 agent = ForecastAgent(
                     question=question,
-                    simulated_date=simulated_date.isoformat(),
-                    knowledge_cutoff=knowledge_cutoff.isoformat(),
+                    simulated_date=forecast_setup['simulated_date'].isoformat(),
+                    knowledge_cutoff=get_knowledge_cutoff_date(config.llm.model),
                     config=config,
                     knowledge_only=knowledge_only,
                 )

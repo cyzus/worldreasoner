@@ -25,16 +25,16 @@ def enum_to_list(enum_class: type[Enum]) -> List[str]:
     return [e.value for e in enum_class]
 
 
-def parse_domain(domain_str: Optional[str], default: Domain = Domain.GENERAL) -> Domain:
+def parse_domain(domain_str: Optional[str], default: Optional[Domain] = None) -> Optional[Domain]:
     """
     Parse domain string with fallback to default.
 
     Args:
         domain_str: Domain string to parse
-        default: Default domain if parsing fails
+        default: Default domain if parsing fails (None = no filter)
 
     Returns:
-        Parsed Domain enum or default
+        Parsed Domain enum, default, or None (no filter)
     """
     if not domain_str:
         return default
@@ -42,7 +42,7 @@ def parse_domain(domain_str: Optional[str], default: Domain = Domain.GENERAL) ->
     try:
         return Domain(domain_str.lower())
     except ValueError:
-        logger.warning(f"Invalid domain '{domain_str}', using '{default.value}'")
+        logger.warning(f"Invalid domain '{domain_str}', ignoring domain filter")
         return default
 
 

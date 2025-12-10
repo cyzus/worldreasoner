@@ -256,12 +256,22 @@ class HybridSearch:
         # Convert query to OR logic for less strict matching
         # Split on whitespace and join with OR
         query_terms = query.strip().split()
+
+        # Escape and quote each term to handle special FTS5 characters
+        # FTS5 special chars: . " * ( ) etc.
+        def quote_term(term: str) -> str:
+            """Quote a search term for FTS5, escaping internal quotes."""
+            # Escape any double quotes in the term
+            escaped = term.replace('"', '""')
+            # Wrap in quotes to treat as literal string
+            return f'"{escaped}"'
+
         if len(query_terms) > 1:
-            # Multi-word query: use OR
-            fts_query = " OR ".join(query_terms)
+            # Multi-word query: use OR with quoted terms
+            fts_query = " OR ".join(quote_term(term) for term in query_terms)
         else:
-            # Single word: use as-is
-            fts_query = query
+            # Single word: quote it
+            fts_query = quote_term(query_terms[0]) if query_terms else '""'
 
         with self._get_connection() as conn:
             cursor = conn.cursor()

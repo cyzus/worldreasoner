@@ -72,10 +72,9 @@ from fastmcp.server.middleware import Middleware, MiddlewareContext
 from src.core.database import GenericDatabase
 from src.core.temporal_gateway import TemporalGateway, TemporalContext
 from src.core.hybrid_search import HybridSearch
-from src.domain.models import Article, Question, Forecast, Event
-from src.domain.models.domain import Domain
+from src.domain.models import Article, Question, Forecast, Event, Domain
 from src.utils.logging import logger
-from src.utils.enums import parse_domain
+from src.utils.enums import parse_domain, enum_to_list
 from src.utils.date_utils import parse_flexible_datetime
 
 # Initialize MCP server
@@ -83,13 +82,8 @@ mcp = FastMCP("worldreasoner-forecasting")
 
 # Global database connection and search engine
 DB_PATH = os.getenv("WORLDREASONER_DB", "worldreasoner.db")
-db = GenericDatabase(DB_PATH)
-
-# Ensure forecasts table exists (idempotent)
-db.create_table(Forecast)
-
-# HybridSearch loads embedding_model from config.yaml by default
-hybrid_search = HybridSearch(DB_PATH)
+db: GenericDatabase = None  # Will be initialized in main()
+hybrid_search: HybridSearch = None  # Will be initialized in main()
 
 # Connection-level context storage (populated from request headers)
 # Captured by middleware during any request with the headers
@@ -272,7 +266,8 @@ def _get_temporal_db(cutoff_date: datetime) -> GenericDatabase:
     Returns:
         GenericDatabase instance with temporal filtering
     """
-    return GenericDatabase(DB_PATH, cutoff_date=cutoff_date)
+    # Use the same database path as the global db instance
+    return GenericDatabase(db.db_path, cutoff_date=cutoff_date)
 
 
 # ============================================================================
@@ -281,7 +276,7 @@ def _get_temporal_db(cutoff_date: datetime) -> GenericDatabase:
 
 class DomainFilter(BaseModel):
     """Domain filter parameter."""
-    value: str | None = Field(None, description="Optional domain filter (e.g., 'technology', 'politics')")
+    value: str | None = Field(None, description=f"Optional domain filter ({', '.join(enum_to_list(Domain))})")
 
 
 class MaxResults(BaseModel):
@@ -419,9 +414,9 @@ async def temporal_search_articles(
             article = temporal_db.get(Article, article_id)
             if article:
                 # Apply domain filter if specified
-                if domain.value:
+                if domain.value and len(article_ids) > max_results.value * 10:
                     domain_filter = parse_domain(domain.value)
-                    if article.domain != domain_filter:
+                    if domain_filter is not None and article.domain != domain_filter:
                         continue
                 matches.append(article)
 
@@ -683,6 +678,11 @@ Connection Metadata (provided by MCP client):
         """
     )
     parser.add_argument(
+        "--db",
+        default=DB_PATH,
+        help="Path to WorldReasoner database (default: worldreasoner.db)"
+    )
+    parser.add_argument(
         "--host",
         default="0.0.0.0",
         help="Bind host (default: 0.0.0.0)"
@@ -698,9 +698,17 @@ Connection Metadata (provided by MCP client):
         default="debug",
         help="Logging level: debug|info|warning|error (default: debug)"
     )
-    args = parser.parse_args()
+    global db, hybrid_search
 
-    logger.info(f"Launching MCP server (stream mode) db={DB_PATH}")
+    args = parser.parse_args()
+    db = GenericDatabase(args.db)
+    # Ensure forecasts table exists (idempotent)
+    db.create_table(Forecast)
+
+    # HybridSearch loads embedding_model from config.yaml by default
+    hybrid_search = HybridSearch(args.db)
+
+    logger.info(f"Launching MCP server (stream mode) db={args.db}")
     logger.info("Forecasting context will be provided by MCP client via headers:")
     logger.info("  - X-Question-ID (required)")
     logger.info("  - X-Knowledge-Cutoff (optional)")
