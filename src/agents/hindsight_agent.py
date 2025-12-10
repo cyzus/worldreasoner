@@ -63,6 +63,7 @@ class HindsightAgent(BaseAgent):
             ],
             max_steps=15,
             stream_outputs=True,
+            additional_authorized_imports=["json"], # Allow json imports in code agent
             name="evidence_collector",
             description="""Specialist agent for collecting evidence articles.
 
@@ -92,6 +93,7 @@ class HindsightAgent(BaseAgent):
             ],
             max_steps=30,  # More steps for iterative graph building
             stream_outputs=True,
+            additional_authorized_imports=["json"], # Allow json imports in code agent
             name="causal_analyzer",
             description="""Specialist agent for building deep causal graphs.
 

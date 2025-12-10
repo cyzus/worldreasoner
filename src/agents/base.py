@@ -26,6 +26,7 @@ class BaseAgent():
                 tools=tools or [],
                 max_steps=max_steps,  
                 stream_outputs=True,
+                additional_authorized_imports=["json"], # Allow json imports in code agent
                 **kwargs
             )
         self._last_usage: Optional[UsageMetrics] = None
