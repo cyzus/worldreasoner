@@ -450,6 +450,10 @@ class PipelineRunner:
                 logger.info(f"Running adaptive evidence pipeline on question: {qid}")
                 pipeline_results = await pipeline.run([question])
 
+                logger.info(f"Pipeline returned {len(pipeline_results)} results")
+                for r in pipeline_results:
+                    logger.info(f"  Stage: {r.stage_name}, Status: {r.status}, Error: {r.error_message}")
+
                 # Check if pipeline succeeded (no FAILED stages and at least one result)
                 has_failure = any(r.status == PipelineStageStatus.FAILED for r in pipeline_results)
 

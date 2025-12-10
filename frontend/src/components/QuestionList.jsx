@@ -1,11 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import './QuestionList.css'
 
-const QuestionList = ({ questions, selectedQuestionId, onQuestionSelect, onClose }) => {
+const QuestionList = ({
+  questions,
+  selectedQuestionId,
+  onQuestionSelect,
+  onClose,
+  multiSelectMode = false,
+  onQuestionsSelected = null
+}) => {
   const [searchTerm, setSearchTerm] = useState('')
   const [domainFilter, setDomainFilter] = useState('all')
   const [difficultyFilter, setDifficultyFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
+  const [selectedIds, setSelectedIds] = useState(new Set())
 
   // Extract unique values for filters
   const domains = useMemo(() => {
@@ -55,8 +63,73 @@ const QuestionList = ({ questions, selectedQuestionId, onQuestionSelect, onClose
 
   const hasActiveFilters = searchTerm || domainFilter !== 'all' || difficultyFilter !== 'all' || sourceFilter !== 'all'
 
+  // Multi-select handlers
+  const toggleSelection = (id, event) => {
+    if (!multiSelectMode) {
+      onQuestionSelect(id)
+      return
+    }
+
+    if (event) {
+      event.stopPropagation()
+    }
+
+    const newSelected = new Set(selectedIds)
+
+    if (newSelected.has(id)) {
+      newSelected.delete(id)
+    } else {
+      newSelected.add(id)
+    }
+
+    setSelectedIds(newSelected)
+    if (onQuestionsSelected) {
+      onQuestionsSelected(Array.from(newSelected))
+    }
+  }
+
+  const selectAll = () => {
+    const allIds = new Set(questions.map(q => q.id))
+    setSelectedIds(allIds)
+    if (onQuestionsSelected) {
+      onQuestionsSelected(Array.from(allIds))
+    }
+  }
+
+  const clearSelection = () => {
+    setSelectedIds(new Set())
+    if (onQuestionsSelected) {
+      onQuestionsSelected([])
+    }
+  }
+
+  const selectFiltered = () => {
+    const filteredIds = new Set(filteredQuestions.map(q => q.id))
+    setSelectedIds(filteredIds)
+    if (onQuestionsSelected) {
+      onQuestionsSelected(Array.from(filteredIds))
+    }
+  }
+
   return (
     <div className="question-list-panel">
+      {multiSelectMode && (
+        <div className="selection-controls">
+          <button onClick={selectAll} className="selection-btn" title="Select all questions">
+            Select All
+          </button>
+          <button onClick={selectFiltered} className="selection-btn" title="Select filtered questions">
+            Select Filtered ({filteredQuestions.length})
+          </button>
+          <button onClick={clearSelection} className="selection-btn" title="Clear selection">
+            Clear
+          </button>
+          <span className="selection-count">
+            {selectedIds.size} selected
+          </span>
+        </div>
+      )}
+
       <div className="question-list-filters">
         <input
           type="text"
@@ -123,19 +196,31 @@ const QuestionList = ({ questions, selectedQuestionId, onQuestionSelect, onClose
           filteredQuestions.map(q => (
             <div
               key={q.id}
-              className={`question-list-item ${selectedQuestionId === q.id ? 'selected' : ''}`}
-              onClick={() => onQuestionSelect(q.id)}
+              className={`question-list-item ${
+                selectedQuestionId === q.id ? 'selected' : ''
+              } ${selectedIds.has(q.id) ? 'multi-selected' : ''}`}
+              onClick={(e) => toggleSelection(q.id, e)}
             >
-              <div className="question-item-header">
-                <div className="question-item-badges">
-                  <span className="badge domain">{q.domain}</span>
-                  <span className={`badge difficulty difficulty-${q.difficulty}`}>
-                    Lvl {q.difficulty}
-                  </span>
+              {multiSelectMode && (
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(q.id)}
+                  onChange={(e) => toggleSelection(q.id, e)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="question-checkbox"
+                />
+              )}
+              <div className="question-item-content">
+                <div className="question-item-header">
+                  <div className="question-item-badges">
+                    <span className="badge domain">{q.domain}</span>
+                    <span className={`badge difficulty difficulty-${q.difficulty}`}>
+                      Lvl {q.difficulty}
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <div className="question-item-text">{q.question_text}</div>
-              <div className="question-item-meta">
+                <div className="question-item-text">{q.question_text}</div>
+                <div className="question-item-meta">
                 <div className="meta-item">
                   <span className="meta-label">Type:</span>
                   <span>{q.question_type}</span>
@@ -158,6 +243,7 @@ const QuestionList = ({ questions, selectedQuestionId, onQuestionSelect, onClose
                     <span>{q.related_event_ids.length} related</span>
                   </div>
                 )}
+                </div>
               </div>
             </div>
           ))

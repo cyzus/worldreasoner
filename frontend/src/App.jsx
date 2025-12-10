@@ -3,6 +3,7 @@ import GraphVisualization from './components/GraphVisualization'
 import ControlPanel from './components/ControlPanel'
 import EventDetails from './components/EventDetails'
 import QuestionList from './components/QuestionList'
+import PipelinePage from './components/PipelinePage'
 import Timeline from './components/Timeline'
 import TimeSeriesChart from './components/TimeSeriesChart'
 import DatabaseSelector from './components/DatabaseSelector'
@@ -25,7 +26,7 @@ function App() {
   const [timeFilter, setTimeFilter] = useState(null) // { start: Date, end: Date }
   const [questions, setQuestions] = useState([]) // List of all questions
   const [selectedQuestionId, setSelectedQuestionId] = useState(null) // Currently selected question filter
-  const [leftPanelTab, setLeftPanelTab] = useState('controls') // 'controls' or 'questions'
+  const [leftPanelTab, setLeftPanelTab] = useState('controls') // 'controls', 'questions', or 'pipelines'
   const [priceHistoryData, setPriceHistoryData] = useState(null) // Price history for selected question
   const [loadingPriceHistory, setLoadingPriceHistory] = useState(false) // Loading state for price history
   const [questionRelatedEvents, setQuestionRelatedEvents] = useState([]) // All events related to selected question
@@ -540,6 +541,14 @@ function App() {
     }
   }, [fullGraphData, questions])
 
+  // Handle pipeline job completion
+  const handleJobComplete = useCallback((results) => {
+    console.log('Pipeline job completed:', results)
+    // Refresh graph data after pipeline completion
+    loadGraph(filters)
+    loadStatistics()
+  }, [filters, loadGraph, loadStatistics])
+
   return (
     <div className="app">
       <header className="app-header">
@@ -554,50 +563,69 @@ function App() {
       </header>
 
       <div className="app-content">
-        <div className="left-sidebar">
-          <div className="sidebar-tabs">
-            <button
-              className={`tab-btn ${leftPanelTab === 'controls' ? 'active' : ''}`}
-              onClick={() => setLeftPanelTab('controls')}
-            >
-              ⚙️ Controls
-            </button>
-            <button
-              className={`tab-btn ${leftPanelTab === 'questions' ? 'active' : ''}`}
-              onClick={() => setLeftPanelTab('questions')}
-            >
-              📋 Questions ({questions.length})
-            </button>
-          </div>
-          
-          <div className="sidebar-content">
-            {leftPanelTab === 'controls' ? (
-              <>
-                <DatabaseSelector onDatabaseChange={handleDatabaseChange} />
-                <ControlPanel
-                  filters={filters}
-                  onFilterChange={handleFilterChange}
-                  onRefresh={() => loadGraph(filters)}
-                  loading={loading}
-                  questions={questions}
-                  onQuestionFilter={handleQuestionFilter}
-                />
-              </>
-            ) : (
-              <QuestionList
-                questions={questions}
-                selectedQuestionId={selectedQuestionId}
-                onQuestionSelect={(questionId) => {
-                  setSelectedQuestionId(questionId)
-                  handleQuestionFilter(questionId)
-                }}
-                onClose={() => setLeftPanelTab('controls')}
-              />
-            )}
-          </div>
+        {/* Top navigation tabs */}
+        <div className="top-tabs">
+          <button
+            className={`top-tab-btn ${leftPanelTab === 'controls' ? 'active' : ''}`}
+            onClick={() => setLeftPanelTab('controls')}
+          >
+            ⚙️ Controls
+          </button>
+          <button
+            className={`top-tab-btn ${leftPanelTab === 'questions' ? 'active' : ''}`}
+            onClick={() => setLeftPanelTab('questions')}
+          >
+            📋 Questions ({questions.length})
+          </button>
+          <button
+            className={`top-tab-btn ${leftPanelTab === 'pipelines' ? 'active' : ''}`}
+            onClick={() => setLeftPanelTab('pipelines')}
+          >
+            🔄 Pipelines
+          </button>
         </div>
 
-        <div className="graph-main">
+        {leftPanelTab === 'pipelines' ? (
+          /* Full-width pipeline page */
+          <PipelinePage
+            questions={questions}
+            onJobComplete={handleJobComplete}
+            onDatabaseChange={handleDatabaseChange}
+          />
+        ) : (
+          /* Sidebar + Graph layout for controls and questions */
+          <div className="main-layout">
+            <div className="left-sidebar">
+              <div className="sidebar-content">
+                {leftPanelTab === 'controls' && (
+                  <>
+                    <DatabaseSelector onDatabaseChange={handleDatabaseChange} />
+                    <ControlPanel
+                      filters={filters}
+                      onFilterChange={handleFilterChange}
+                      onRefresh={() => loadGraph(filters)}
+                      loading={loading}
+                      questions={questions}
+                      onQuestionFilter={handleQuestionFilter}
+                    />
+                  </>
+                )}
+
+                {leftPanelTab === 'questions' && (
+                  <QuestionList
+                    questions={questions}
+                    selectedQuestionId={selectedQuestionId}
+                    onQuestionSelect={(questionId) => {
+                      setSelectedQuestionId(questionId)
+                      handleQuestionFilter(questionId)
+                    }}
+                    onClose={() => setLeftPanelTab('controls')}
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="graph-main">
           <div className="graph-container">
             {loading && <div className="loading">Loading graph...</div>}
             {error && <div className="error">{error}</div>}
@@ -714,14 +742,16 @@ function App() {
               )}
             </div>
           )}
-        </div>
+            </div>
 
-        {selectedNode && (
-          <EventDetails
-            node={selectedNode}
-            onClose={() => setSelectedNode(null)}
-            onShowNeighborhood={handleShowNeighborhood}
-          />
+            {selectedNode && (
+              <EventDetails
+                node={selectedNode}
+                onClose={() => setSelectedNode(null)}
+                onShowNeighborhood={handleShowNeighborhood}
+              />
+            )}
+          </div>
         )}
       </div>
     </div>
