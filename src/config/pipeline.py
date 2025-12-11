@@ -110,11 +110,11 @@ class EvidencePipelineConfig(BaseModel):
 
     # Evidence collection settings
     evidence_window_days: int = Field(
-        default=30,
+        default=365,
         description="Days before resolution to collect evidence articles (causal factors)"
     )
     min_evidence_articles: int = Field(
-        default=5,
+        default=20,
         description="Minimum evidence articles per event"
     )
     include_expert_analysis: bool = Field(

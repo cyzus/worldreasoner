@@ -11,20 +11,23 @@ const PipelineControl = ({ selectedQuestions, onJobComplete }) => {
     if (!activeJob) return
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = window.location.hostname
-    const port = 8018 // Backend port
-    const ws = new WebSocket(
-      `${protocol}//${host}:${port}/api/pipelines/jobs/${activeJob}/ws`
-    )
+    const wsUrl = `${protocol}//localhost:8018/api/pipelines/jobs/${activeJob}/ws`
+
+    console.log('Connecting to WebSocket:', wsUrl)
+    const ws = new WebSocket(wsUrl)
 
     let connected = false
+    let hasReceivedData = false
 
     ws.onopen = () => {
       connected = true
+      console.log('WebSocket connected successfully')
     }
 
     ws.onmessage = (event) => {
+      hasReceivedData = true
       const data = JSON.parse(event.data)
+      console.log('WebSocket message:', data)
       setJobStatus(data)
 
       if (data.status === 'completed') {
@@ -44,22 +47,26 @@ const PipelineControl = ({ selectedQuestions, onJobComplete }) => {
     }
 
     ws.onerror = (event) => {
+      console.error('WebSocket error:', event)
       // Only show error if we never connected successfully
       if (!connected) {
-        console.error('WebSocket connection error:', event)
-        setError('Failed to connect to job progress stream')
+        setError(`Failed to connect to job progress stream. Is the backend running at ${wsUrl}?`)
       }
     }
 
     ws.onclose = (event) => {
+      console.log('WebSocket closed:', { code: event.code, reason: event.reason, wasClean: event.wasClean })
       // Only show error if connection closed unexpectedly before we got any data
-      if (!connected && !event.wasClean) {
-        console.error('WebSocket closed unexpectedly:', event)
+      if (!connected && !event.wasClean && !hasReceivedData) {
+        setError('WebSocket connection closed unexpectedly. Check the browser console for details.')
       }
     }
 
-    return () => ws.close()
-  }, [activeJob, onJobComplete])
+    return () => {
+      console.log('Closing WebSocket connection')
+      ws.close()
+    }
+  }, [activeJob])
 
   const startPipeline = async (pipelineType) => {
     if (!selectedQuestions.length) return

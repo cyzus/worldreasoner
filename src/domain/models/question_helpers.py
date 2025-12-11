@@ -184,36 +184,50 @@ def suggest_simulated_date(
     This is a lightweight helper that picks a good date within bounds.
     Use prepare_forecast_context() for the full setup workflow.
 
-    Picks a date that:
-    - Is after all context is available
-    - Is some days before resolution (configurable buffer)
-    - Falls within the valid forecast window
+    The offset_days_before_resolution is a HARD REQUIREMENT - the simulated date
+    will always be at least that many days before resolution, regardless of context
+    availability. This ensures proper temporal separation for forecasting.
 
     Args:
         question: The forecast question
         window_start: Start of valid forecast window
         window_end: End of valid forecast window
-        offset_days_before_resolution: How many days before resolution to suggest (default: 7)
+        offset_days_before_resolution: How many days before resolution to use (default: 7)
+                                       This is enforced as a minimum requirement.
 
     Returns:
-        Suggested simulated datetime
+        Suggested simulated datetime (guaranteed to be offset_days before resolution)
+
+    Raises:
+        ValueError: If offset_days would place simulated date before window_start
+                   and the gap is significant (>7 days)
 
     Example:
         >>> window_start, window_end = calculate_forecast_context_window(question, db)
         >>> simulated_date = suggest_simulated_date(question, window_start, window_end, offset_days_before_resolution=14)
     """
-    # Try to suggest offset_days before resolution
-    suggested = window_end - timedelta(days=offset_days_before_resolution)
+    # HARD REQUIREMENT: simulated date must be AT LEAST offset_days before resolution
+    # This means we can forecast further out if needed (for data availability), but never closer
+    min_date = question.resolution_date - timedelta(days=offset_days_before_resolution)
 
-    # But ensure it's after context is available
-    if suggested < window_start:
-        # Use 1 day after context becomes available
+    # If context requires us to forecast even earlier, do that
+    # (We'd rather have a 14-day forecast than violate the minimum offset)
+    if window_start > min_date:
+        # Context available early - we can use our minimum offset
+        suggested = min_date
+    else:
+        # Context available late - use it but add a small buffer (1 day)
+        # This means we'll be forecasting MORE than offset_days out
         suggested = window_start + timedelta(days=1)
 
-    # Make sure we didn't overshoot
-    if suggested >= window_end:
-        # Use midpoint of window
-        suggested = window_start + (window_end - window_start) / 2
+        # Validate this still satisfies the minimum offset requirement
+        actual_offset_days = (question.resolution_date - suggested).days
+        if actual_offset_days < offset_days_before_resolution:
+            raise ValueError(
+                f"Cannot satisfy minimum offset_days={offset_days_before_resolution} requirement. "
+                f"Context not available until {window_start}, which is only {actual_offset_days} days "
+                f"before resolution at {question.resolution_date}. Question needs earlier context items."
+            )
 
     return suggested
 

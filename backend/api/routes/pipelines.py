@@ -46,6 +46,7 @@ class PipelineJobResponse(BaseModel):
     """Pipeline job status response."""
     job_id: str
     status: JobStatus
+    pipeline_type: PipelineType
     progress: float  # 0.0 to 1.0
     current_question: Optional[str] = None
     processed_count: int = 0
@@ -86,6 +87,7 @@ async def create_pipeline_job(
     job = PipelineJobResponse(
         job_id=job_id,
         status=JobStatus.PENDING,
+        pipeline_type=request.pipeline_type,
         progress=0.0,
         total_count=len(request.question_ids),
         message="Job created, waiting to start",

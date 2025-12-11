@@ -5,6 +5,7 @@ import EventDetails from './components/EventDetails'
 import QuestionList from './components/QuestionList'
 import PipelinePage from './components/PipelinePage'
 import QuestionCollectionPage from './components/QuestionCollectionPage'
+import ForecastPage from './components/ForecastPage'
 import Timeline from './components/Timeline'
 import TimeSeriesChart from './components/TimeSeriesChart'
 import DatabaseSelector from './components/DatabaseSelector'
@@ -591,6 +592,12 @@ function App() {
             🔍 Collection
           </button>
           <button
+            className={`top-tab-btn ${leftPanelTab === 'forecast' ? 'active' : ''}`}
+            onClick={() => setLeftPanelTab('forecast')}
+          >
+            🎯 Forecast
+          </button>
+          <button
             className={`top-tab-btn ${leftPanelTab === 'pipelines' ? 'active' : ''}`}
             onClick={() => setLeftPanelTab('pipelines')}
           >
@@ -609,6 +616,12 @@ function App() {
           /* Full-width collection page */
           <QuestionCollectionPage
             onQuestionsAdded={handleQuestionsAdded}
+          />
+        ) : leftPanelTab === 'forecast' ? (
+          /* Full-width forecast page */
+          <ForecastPage
+            onQuestionSelect={handleQuestionFilter}
+            onDatabaseChange={handleDatabaseChange}
           />
         ) : (
           /* Sidebar + Graph layout for controls and questions */
