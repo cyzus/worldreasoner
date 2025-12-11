@@ -84,13 +84,14 @@ const ForecastPage = ({
 
 
   const handleQuestionClick = async (question) => {
-    setSelectedQuestion(question);
-    if (onQuestionSelect) {
-      onQuestionSelect(question);
-    }
+    try {
+      setSelectedQuestion(question);
 
-    if (question.source === 'polymarket') {
-      await loadPriceHistory(question.id);
+      if (question.source === 'polymarket') {
+        await loadPriceHistory(question.id);
+      }
+    } catch (error) {
+      console.error('Error handling question click:', error);
     }
   };
 
@@ -100,11 +101,14 @@ const ForecastPage = ({
       const data = await fetchQuestionPriceHistory(questionId, interval);
       setPriceHistoryData(data);
 
-      const events = await fetchQuestionEvents(questionId);
-      setQuestionRelatedEvents(events);
+      // Note: fetchQuestionEvents returns metadata (event_ids, counts), not full event objects
+      // For now, we'll pass an empty array to TimeSeriesChart
+      // TODO: Fetch full event details if needed for visualization
+      setQuestionRelatedEvents([]);
     } catch (error) {
       console.error('Error fetching price history:', error);
       setPriceHistoryData(null);
+      setQuestionRelatedEvents([]);
     } finally {
       setLoadingPriceHistory(false);
     }
@@ -353,11 +357,12 @@ const ForecastPage = ({
 
               {loadingPriceHistory ? (
                 <div className="loading">Loading price history...</div>
-              ) : priceHistoryData ? (
+              ) : priceHistoryData && priceHistoryData.price_history ? (
                 <TimeSeriesChart
-                  data={priceHistoryData}
+                  priceHistory={priceHistoryData.price_history}
                   events={questionRelatedEvents}
                   targetEventId={selectedQuestion.target_event_id}
+                  outcomes={priceHistoryData.outcomes || ['Yes', 'No']}
                 />
               ) : (
                 <div className="no-data">No price history available</div>

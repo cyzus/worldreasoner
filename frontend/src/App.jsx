@@ -620,7 +620,6 @@ function App() {
         ) : leftPanelTab === 'forecast' ? (
           /* Full-width forecast page */
           <ForecastPage
-            onQuestionSelect={handleQuestionFilter}
             onDatabaseChange={handleDatabaseChange}
           />
         ) : (
