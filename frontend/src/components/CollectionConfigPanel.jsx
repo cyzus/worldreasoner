@@ -20,6 +20,7 @@ function CollectionConfigPanel({ source, onFetch, loading }) {
     max_difficulty: 5,
     tags: [],
     include_resolved: true,
+    search_query: '',
   })
 
   // Available options (must match backend enums in src/domain/models/)
@@ -34,7 +35,7 @@ function CollectionConfigPanel({ source, onFetch, loading }) {
 
   const polymarketTags = [
     'politics', 'crypto', 'sports', 'pop culture', 'science',
-    'business', 'new', 'AI'
+    'business', 'new', 'ai'
   ]
 
   const handleInputChange = (field, value) => {
@@ -67,6 +68,9 @@ function CollectionConfigPanel({ source, onFetch, loading }) {
         cleanConfig.tags = config.tags
       }
       cleanConfig.include_resolved = config.include_resolved
+      if (config.search_query.trim()) {
+        cleanConfig.search_query = config.search_query.trim()
+      }
     }
 
     onFetch(cleanConfig)
@@ -75,6 +79,27 @@ function CollectionConfigPanel({ source, onFetch, loading }) {
   return (
     <div className="collection-config">
       <h3>⚙️ Collection Settings</h3>
+
+      {/* Polymarket Search (only show for Polymarket source) */}
+      {source === 'polymarket' && (
+        <div className="config-section">
+          <label className="config-label">
+            Search Markets
+            <span className="label-hint">(optional)</span>
+          </label>
+          <input
+            type="text"
+            value={config.search_query}
+            onChange={(e) => handleInputChange('search_query', e.target.value)}
+            className="config-input"
+            placeholder="e.g., Bitcoin, US Election, AI..."
+            disabled={loading}
+          />
+          <p className="config-description">
+            Search for specific markets by keywords. Leave empty to fetch all markets.
+          </p>
+        </div>
+      )}
 
       {/* Count */}
       <div className="config-section">
@@ -216,7 +241,10 @@ function CollectionConfigPanel({ source, onFetch, loading }) {
           <li>Leave filters empty to fetch all available questions</li>
           <li>Combine multiple filters to narrow results</li>
           {source === 'polymarket' && (
-            <li>Use tags to find specific market categories</li>
+            <>
+              <li>Use the search box to find specific markets by keywords</li>
+              <li>Use tags to filter by market categories</li>
+            </>
           )}
           {source === 'news' && (
             <li>News-based questions are generated from recent articles</li>

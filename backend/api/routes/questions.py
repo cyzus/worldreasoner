@@ -46,6 +46,25 @@ class QuestionListItem(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
 
+class PolymarketSearchRequest(BaseModel):
+    """Request parameters for searching Polymarket."""
+    query: str = Field(description="Search query term")
+    limit_per_type: int = Field(default=20, ge=1, le=100, description="Results limit per content type (1-100)")
+    events_tag: Optional[List[str]] = Field(default=None, description="Filter by event tags")
+    keep_closed_markets: bool = Field(default=True, description="Include closed markets in results")
+
+
+class PolymarketSearchResponse(BaseModel):
+    """Response from Polymarket search."""
+    success: bool
+    events: List[Dict[str, Any]] = Field(default_factory=list)
+    tags: List[Dict[str, Any]] = Field(default_factory=list)
+    profiles: List[Dict[str, Any]] = Field(default_factory=list)
+    total_events: int
+    total_tags: int
+    total_profiles: int
+
+
 class QuestionPreviewRequest(BaseModel):
     """Request parameters for previewing questions from sources."""
     source: str = Field(description="Source to collect from: 'polymarket' or 'news'")
@@ -56,6 +75,7 @@ class QuestionPreviewRequest(BaseModel):
     max_difficulty: Optional[int] = Field(default=None, ge=1, le=5, description="Maximum difficulty (1-5)")
     tags: Optional[List[str]] = Field(default=None, description="Polymarket tags (e.g., 'politics', 'crypto')")
     include_resolved: Optional[bool] = Field(default=True, description="Include resolved markets (Polymarket only)")
+    search_query: Optional[str] = Field(default=None, description="Search query for Polymarket markets (Polymarket only)")
 
 
 class QuestionPreviewResponse(BaseModel):
@@ -71,6 +91,53 @@ class BatchSaveRequest(BaseModel):
     """Request to save selected questions to database."""
     question_ids: List[str] = Field(description="IDs of questions to save")
     questions: List[Dict[str, Any]] = Field(description="Full question data to save")
+
+
+@router.post("/polymarket/search", response_model=PolymarketSearchResponse)
+async def search_polymarket(request: PolymarketSearchRequest):
+    """Search Polymarket markets, events, and profiles.
+
+    This endpoint uses Polymarket's public search API to find markets
+    matching a search query.
+
+    Args:
+        request: Search request with query and optional filters
+
+    Returns:
+        Search results including events, tags, and profiles
+    """
+    try:
+        logger.info(f"Searching Polymarket for: '{request.query}'")
+
+        from src.pipelines.question.sources.polymarket_client import PolymarketClient
+
+        client = PolymarketClient()
+        results = await client.search_markets(
+            query=request.query,
+            limit_per_type=request.limit_per_type,
+            events_tag=request.events_tag,
+            keep_closed_markets=request.keep_closed_markets,
+        )
+
+        events = results.get("events", [])
+        tags = results.get("tags", [])
+        profiles = results.get("profiles", [])
+
+        return PolymarketSearchResponse(
+            success=len(events) > 0 or len(tags) > 0 or len(profiles) > 0,
+            events=events,
+            tags=tags,
+            profiles=profiles,
+            total_events=len(events),
+            total_tags=len(tags),
+            total_profiles=len(profiles),
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to search Polymarket: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/preview", response_model=QuestionPreviewResponse)
@@ -153,13 +220,22 @@ async def preview_questions(request: QuestionPreviewRequest):
                     except KeyError:
                         logger.warning(f"Unknown question type: {qt}")
 
-            # Collect questions
-            result = await runner.collect(
-                count=request.count,
-                type_filter=type_filter_enums,
-                category_filter=category_filter,
-                quality_requirements=quality,
-            )
+            # Collect questions - use search if query provided, otherwise use standard collection
+            if request.search_query:
+                logger.info(f"Using search query: '{request.search_query}'")
+                result = await runner.collect_from_search(
+                    search_query=request.search_query,
+                    count=request.count,
+                    type_filter=type_filter_enums,
+                    quality_requirements=quality,
+                )
+            else:
+                result = await runner.collect(
+                    count=request.count,
+                    type_filter=type_filter_enums,
+                    category_filter=category_filter,
+                    quality_requirements=quality,
+                )
 
             if result.success:
                 questions_list = result.questions
