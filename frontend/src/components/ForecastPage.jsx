@@ -85,30 +85,37 @@ const ForecastPage = ({
 
   const handleQuestionClick = async (question) => {
     try {
+      const questionId = question.id;
       setSelectedQuestion(question);
 
       if (question.source === 'polymarket') {
-        await loadPriceHistory(question.id);
+        await loadPriceHistory(questionId, priceHistoryInterval, questionId);
       }
     } catch (error) {
       console.error('Error handling question click:', error);
     }
   };
 
-  const loadPriceHistory = async (questionId, interval = priceHistoryInterval) => {
+  const loadPriceHistory = async (questionId, interval = priceHistoryInterval, expectedQuestionId = null) => {
     setLoadingPriceHistory(true);
     try {
       const data = await fetchQuestionPriceHistory(questionId, interval);
-      setPriceHistoryData(data);
 
-      // Note: fetchQuestionEvents returns metadata (event_ids, counts), not full event objects
-      // For now, we'll pass an empty array to TimeSeriesChart
-      // TODO: Fetch full event details if needed for visualization
-      setQuestionRelatedEvents([]);
+      // Only update state if this is still the expected question
+      // This prevents race conditions when clicking multiple questions quickly
+      if (expectedQuestionId === null || expectedQuestionId === questionId) {
+        setPriceHistoryData(data);
+        // Note: fetchQuestionEvents returns metadata (event_ids, counts), not full event objects
+        // For now, we'll pass an empty array to TimeSeriesChart
+        // TODO: Fetch full event details if needed for visualization
+        setQuestionRelatedEvents([]);
+      }
     } catch (error) {
       console.error('Error fetching price history:', error);
-      setPriceHistoryData(null);
-      setQuestionRelatedEvents([]);
+      if (expectedQuestionId === null || expectedQuestionId === questionId) {
+        setPriceHistoryData(null);
+        setQuestionRelatedEvents([]);
+      }
     } finally {
       setLoadingPriceHistory(false);
     }
@@ -117,7 +124,7 @@ const ForecastPage = ({
   const handleIntervalChange = async (interval) => {
     setPriceHistoryInterval(interval);
     if (selectedQuestion) {
-      await loadPriceHistory(selectedQuestion.id, interval);
+      await loadPriceHistory(selectedQuestion.id, interval, selectedQuestion.id);
     }
   };
 
