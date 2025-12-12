@@ -28,7 +28,8 @@ PROCESS:
 1. COLLECT EVIDENCE:
    Call evidence_collector to gather relevant articles:
    - Time window: {evidence_window_days} days before resolution
-   - Need at least {min_evidence_articles} high-quality articles
+   - Need at least {min_evidence_articles} high-quality articles, more is better
+   - Collect articles at different dates/times to capture evolving context
    - If insufficient, ask agent to broaden search
 
 2. BUILD DEEP CAUSAL GRAPH:
