@@ -29,22 +29,22 @@ class WebSearchTool(Tool):
         },
         "categories": {
             "type": "string",
-            "description": "Optional categories to search (e.g., 'general', 'news', 'images'). SearXNG only.",
+            "description": "Optional categories to search (e.g., 'general', 'news', 'images')",
             "nullable": True
         },
         "language": {
             "type": "string",
-            "description": "Optional language code (e.g., 'en', 'fr'). SearXNG only.",
+            "description": "Optional language code (e.g., 'en', 'fr')",
             "nullable": True
         },
         "time_range": {
             "type": "string",
-            "description": "Optional time range filter (e.g., 'day', 'week', 'month', 'year'). SearXNG only.",
+            "description": "Optional time range filter (e.g., 'day', 'week', 'month', 'year')",
             "nullable": True
         },
         "page": {
             "type": "integer",
-            "description": "Optional page number for results (default: 1). SearXNG only.",
+            "description": "Optional page number for results (default: 1)",
             "nullable": True
         },
     }
