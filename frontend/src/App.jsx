@@ -587,16 +587,17 @@ function App() {
             🔍 Collection
           </button>
           <button
+            className={`top-tab-btn ${leftPanelTab === 'pipelines' ? 'active' : ''}`}
+            onClick={() => setLeftPanelTab('pipelines')}
+          >
+            🔬 Evidence
+          </button>
+
+          <button
             className={`top-tab-btn ${leftPanelTab === 'forecast' ? 'active' : ''}`}
             onClick={() => setLeftPanelTab('forecast')}
           >
             🎯 Forecast
-          </button>
-          <button
-            className={`top-tab-btn ${leftPanelTab === 'pipelines' ? 'active' : ''}`}
-            onClick={() => setLeftPanelTab('pipelines')}
-          >
-            🔄 Pipelines
           </button>
         </div>
 

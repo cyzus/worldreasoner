@@ -81,29 +81,12 @@ const PipelinePage = ({ questions, onJobComplete, onDatabaseChange }) => {
   return (
     <div className="pipeline-page">
       <div className="pipeline-page-header">
-        <h2>Pipeline Operations</h2>
+        <h2>Evidence Collection</h2>
       </div>
 
       <div className="pipeline-page-content">
-        {/* Left: Question Selection */}
-        <div className="pipeline-questions-section">
-          <div className="section-header">
-            <h3>Select Questions</h3>
-            <span className="selected-badge">
-              {selectedQuestions.length} selected
-            </span>
-          </div>
-          <QuestionList
-            questions={questions}
-            selectedQuestionId={null}
-            onQuestionSelect={() => {}} // Disabled in pipeline mode
-            multiSelectMode={true}
-            onQuestionsSelected={setSelectedQuestions}
-          />
-        </div>
-
-        {/* Right: Database + Pipeline Controls & Job History */}
-        <div className="pipeline-actions-section">
+        {/* Left Sidebar: Database + Pipeline Controls + Jobs */}
+        <div className="pipeline-sidebar">
           {/* Database Selector */}
           <div className="section-card">
             <DatabaseSelector onDatabaseChange={handleDatabaseChange} />
@@ -222,6 +205,25 @@ const PipelinePage = ({ questions, onJobComplete, onDatabaseChange }) => {
                 ))
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Right Main Content: Question Selection */}
+        <div className="pipeline-main-content">
+          <div className="pipeline-questions-section">
+            <div className="section-header">
+              <h3>Select Questions</h3>
+              <span className="selected-badge">
+                {selectedQuestions.length} selected
+              </span>
+            </div>
+            <QuestionList
+              questions={questions}
+              selectedQuestionId={null}
+              onQuestionSelect={() => {}} // Disabled in pipeline mode
+              multiSelectMode={true}
+              onQuestionsSelected={setSelectedQuestions}
+            />
           </div>
         </div>
       </div>

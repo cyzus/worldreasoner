@@ -184,79 +184,8 @@ const ForecastPage = ({
       </div>
 
       <div className="forecast-content">
-        {/* Left Panel - Question Selection */}
-        <div className="forecast-questions-panel">
-          <div className="questions-header">
-            <h3>Questions</h3>
-            <div className="selection-info">
-              {selectedQuestions.length} selected
-            </div>
-          </div>
-
-          <div className="questions-filters">
-            <input
-              type="text"
-              placeholder="Search questions..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="search-input"
-            />
-
-            <select
-              value={filterDomain}
-              onChange={(e) => setFilterDomain(e.target.value)}
-              className="filter-select"
-            >
-              <option value="all">All Domains</option>
-              {domains.map(domain => (
-                <option key={domain} value={domain}>{domain}</option>
-              ))}
-            </select>
-
-            <select
-              value={filterSource}
-              onChange={(e) => setFilterSource(e.target.value)}
-              className="filter-select"
-            >
-              <option value="all">All Sources</option>
-              {sources.map(source => (
-                <option key={source} value={source}>{source}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="questions-list">
-            {filteredQuestions.map(question => (
-              <div
-                key={question.id}
-                className={`question-item ${selectedQuestion?.id === question.id ? 'active' : ''}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedQuestions.includes(question.id)}
-                  onChange={() => toggleQuestionSelection(question.id)}
-                  onClick={(e) => e.stopPropagation()}
-                />
-                <div
-                  className="question-content"
-                  onClick={() => handleQuestionClick(question)}
-                >
-                  <div className="question-text">{question.question_text}</div>
-                  <div className="question-meta">
-                    <span className="badge source">{question.source}</span>
-                    {question.domain && <span className="badge domain">{question.domain}</span>}
-                    {question.difficulty && (
-                      <span className="badge difficulty">Diff: {question.difficulty}</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Right Panel - Forecast Configuration & Results */}
-        <div className="forecast-main-panel">
+        {/* Left Sidebar - Configuration, Jobs & Results */}
+        <div className="forecast-sidebar">
           {/* Database Selector */}
           <DatabaseSelector onDatabaseChange={handleDatabaseChange} />
 
@@ -337,40 +266,7 @@ const ForecastPage = ({
             </button>
           </div>
 
-          {/* Price History Visualization */}
-          {selectedQuestion && selectedQuestion.source === 'polymarket' && (
-            <div className="price-history-section">
-              <div className="price-history-header">
-                <h3>Price History - {selectedQuestion.question_text}</h3>
-                <div className="interval-selector">
-                  {['1h', '6h', '1d', '1w', 'max'].map(interval => (
-                    <button
-                      key={interval}
-                      className={`interval-btn ${priceHistoryInterval === interval ? 'active' : ''}`}
-                      onClick={() => handleIntervalChange(interval)}
-                    >
-                      {interval}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {loadingPriceHistory ? (
-                <div className="loading">Loading price history...</div>
-              ) : priceHistoryData && priceHistoryData.price_history ? (
-                <TimeSeriesChart
-                  priceHistory={priceHistoryData.price_history}
-                  events={questionRelatedEvents}
-                  targetEventId={selectedQuestion.target_event_id}
-                  outcomes={priceHistoryData.outcomes || ['Yes', 'No']}
-                />
-              ) : (
-                <div className="no-data">No price history available</div>
-              )}
-            </div>
-          )}
-
-          {/* Jobs & Results Section */}
+          {/* Jobs Section */}
           <div className="jobs-section">
             <h3>Recent Forecast Jobs</h3>
 
@@ -431,6 +327,113 @@ const ForecastPage = ({
                 <div className="results-content">
                   <pre>{JSON.stringify(forecastResults, null, 2)}</pre>
                 </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Right Main Content - Questions & Price History */}
+        <div className="forecast-main-content">
+          {/* Question Selection */}
+          <div className="forecast-questions-panel">
+          <div className="questions-header">
+            <h3>Questions</h3>
+            <div className="selection-info">
+              {selectedQuestions.length} selected
+            </div>
+          </div>
+
+          <div className="questions-filters">
+            <input
+              type="text"
+              placeholder="Search questions..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="search-input"
+            />
+
+            <select
+              value={filterDomain}
+              onChange={(e) => setFilterDomain(e.target.value)}
+              className="filter-select"
+            >
+              <option value="all">All Domains</option>
+              {domains.map(domain => (
+                <option key={domain} value={domain}>{domain}</option>
+              ))}
+            </select>
+
+            <select
+              value={filterSource}
+              onChange={(e) => setFilterSource(e.target.value)}
+              className="filter-select"
+            >
+              <option value="all">All Sources</option>
+              {sources.map(source => (
+                <option key={source} value={source}>{source}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="questions-list">
+            {filteredQuestions.map(question => (
+              <div
+                key={question.id}
+                className={`question-item ${selectedQuestion?.id === question.id ? 'active' : ''}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedQuestions.includes(question.id)}
+                  onChange={() => toggleQuestionSelection(question.id)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <div
+                  className="question-content"
+                  onClick={() => handleQuestionClick(question)}
+                >
+                  <div className="question-text">{question.question_text}</div>
+                  <div className="question-meta">
+                    <span className="badge source">{question.source}</span>
+                    {question.domain && <span className="badge domain">{question.domain}</span>}
+                    {question.difficulty && (
+                      <span className="badge difficulty">Diff: {question.difficulty}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+          {/* Price History Visualization */}
+          {selectedQuestion && selectedQuestion.source === 'polymarket' && (
+            <div className="price-history-section">
+              <div className="price-history-header">
+                <h3>Price History - {selectedQuestion.question_text}</h3>
+                <div className="interval-selector">
+                  {['1h', '6h', '1d', '1w', 'max'].map(interval => (
+                    <button
+                      key={interval}
+                      className={`interval-btn ${priceHistoryInterval === interval ? 'active' : ''}`}
+                      onClick={() => handleIntervalChange(interval)}
+                    >
+                      {interval}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {loadingPriceHistory ? (
+                <div className="loading">Loading price history...</div>
+              ) : priceHistoryData && priceHistoryData.price_history ? (
+                <TimeSeriesChart
+                  priceHistory={priceHistoryData.price_history}
+                  events={questionRelatedEvents}
+                  targetEventId={selectedQuestion.target_event_id}
+                  outcomes={priceHistoryData.outcomes || ['Yes', 'No']}
+                />
+              ) : (
+                <div className="no-data">No price history available</div>
               )}
             </div>
           )}

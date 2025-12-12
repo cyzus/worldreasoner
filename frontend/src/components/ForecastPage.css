@@ -32,7 +32,25 @@
   overflow: hidden;
 }
 
-/* Left Panel - Questions */
+/* Left Sidebar - Config, Jobs, Results */
+.forecast-sidebar {
+  overflow-y: auto;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Right Main Content - Questions & Price History */
+.forecast-main-content {
+  overflow-y: auto;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Questions Panel */
 .forecast-questions-panel {
   background: white;
   border-radius: 8px;
@@ -40,6 +58,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .questions-header {
@@ -177,17 +196,8 @@
   color: #e65100;
 }
 
-/* Right Panel - Main Content */
-.forecast-main-panel {
-  overflow-y: auto;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
 /* Database Selector - matches light theme */
-.forecast-main-panel .database-selector {
+.forecast-sidebar .database-selector {
   background: white;
   border: 1px solid #ddd;
   border-radius: 8px;
@@ -196,80 +206,80 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
-.forecast-main-panel .database-selector .selector-header h3 {
+.forecast-sidebar .database-selector .selector-header h3 {
   color: #333;
 }
 
-.forecast-main-panel .database-selector .refresh-btn {
+.forecast-sidebar .database-selector .refresh-btn {
   background: #f0f0f0;
   border: 1px solid #ddd;
   color: #333;
 }
 
-.forecast-main-panel .database-selector .refresh-btn:hover:not(:disabled) {
+.forecast-sidebar .database-selector .refresh-btn:hover:not(:disabled) {
   background: #e0e0e0;
 }
 
-.forecast-main-panel .database-selector .database-list {
+.forecast-sidebar .database-selector .database-list {
   background: white;
   border: 1px solid #e0e0e0;
 }
 
-.forecast-main-panel .database-selector .database-item {
+.forecast-sidebar .database-selector .database-item {
   background: white;
   border-bottom: 1px solid #f0f0f0;
   color: #333;
 }
 
-.forecast-main-panel .database-selector .database-item:not(.current):not(.missing):hover {
+.forecast-sidebar .database-selector .database-item:not(.current):not(.missing):hover {
   background: #f8f9fa;
 }
 
-.forecast-main-panel .database-selector .database-item.current {
+.forecast-sidebar .database-selector .database-item.current {
   background: #e8f4f8;
   border-left: 3px solid #2196F3;
 }
 
-.forecast-main-panel .database-selector .db-name {
+.forecast-sidebar .database-selector .db-name {
   color: #333;
 }
 
-.forecast-main-panel .database-selector .current-badge {
+.forecast-sidebar .database-selector .current-badge {
   color: #2196F3;
 }
 
-.forecast-main-panel .database-selector .db-info {
+.forecast-sidebar .database-selector .db-info {
   color: #666;
 }
 
-.forecast-main-panel .database-selector .db-size {
+.forecast-sidebar .database-selector .db-size {
   color: #666;
 }
 
-.forecast-main-panel .database-selector .current-db-footer {
+.forecast-sidebar .database-selector .current-db-footer {
   background: #f8f9fa;
   border: 1px solid #e0e0e0;
   color: #555;
 }
 
-.forecast-main-panel .database-selector .current-db-footer strong {
+.forecast-sidebar .database-selector .current-db-footer strong {
   color: #333;
 }
 
-.forecast-main-panel .database-selector .error-message {
+.forecast-sidebar .database-selector .error-message {
   background: #fee;
   border: 1px solid #fcc;
   color: #c00;
 }
 
-.forecast-main-panel .database-selector .success-message {
+.forecast-sidebar .database-selector .success-message {
   background: #efe;
   border: 1px solid #cfc;
   color: #060;
 }
 
-.forecast-main-panel .database-selector .loading-state,
-.forecast-main-panel .database-selector .no-databases {
+.forecast-sidebar .database-selector .loading-state,
+.forecast-sidebar .database-selector .no-databases {
   color: #666;
 }
 
@@ -577,31 +587,31 @@
 }
 
 /* Scrollbar Styling */
-.forecast-questions-panel::-webkit-scrollbar,
-.forecast-main-panel::-webkit-scrollbar,
+.forecast-sidebar::-webkit-scrollbar,
+.forecast-main-content::-webkit-scrollbar,
 .questions-list::-webkit-scrollbar,
 .results-content::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
-.forecast-questions-panel::-webkit-scrollbar-track,
-.forecast-main-panel::-webkit-scrollbar-track,
+.forecast-sidebar::-webkit-scrollbar-track,
+.forecast-main-content::-webkit-scrollbar-track,
 .questions-list::-webkit-scrollbar-track,
 .results-content::-webkit-scrollbar-track {
   background: #f1f1f1;
 }
 
-.forecast-questions-panel::-webkit-scrollbar-thumb,
-.forecast-main-panel::-webkit-scrollbar-thumb,
+.forecast-sidebar::-webkit-scrollbar-thumb,
+.forecast-main-content::-webkit-scrollbar-thumb,
 .questions-list::-webkit-scrollbar-thumb,
 .results-content::-webkit-scrollbar-thumb {
   background: #c0c0c0;
   border-radius: 4px;
 }
 
-.forecast-questions-panel::-webkit-scrollbar-thumb:hover,
-.forecast-main-panel::-webkit-scrollbar-thumb:hover,
+.forecast-sidebar::-webkit-scrollbar-thumb:hover,
+.forecast-main-content::-webkit-scrollbar-thumb:hover,
 .questions-list::-webkit-scrollbar-thumb:hover,
 .results-content::-webkit-scrollbar-thumb:hover {
   background: #a0a0a0;
