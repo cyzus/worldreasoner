@@ -191,15 +191,6 @@ const PipelineControl = ({ selectedQuestions, onJobComplete }) => {
           </button>
 
           <button
-            className="action-btn forecast"
-            onClick={() => startPipeline('forecast')}
-            disabled={!selectedQuestions.length}
-            title="Run forecast on selected questions"
-          >
-            🎯 Run Forecast
-          </button>
-
-          <button
             className="action-btn clear"
             onClick={clearEvidence}
             disabled={!selectedQuestions.length}
