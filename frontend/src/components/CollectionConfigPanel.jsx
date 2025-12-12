@@ -22,10 +22,10 @@ function CollectionConfigPanel({ source, onFetch, loading }) {
     include_resolved: true,
   })
 
-  // Available options
+  // Available options (must match backend enums in src/domain/models/)
   const availableDomains = [
-    'politics', 'technology', 'economics', 'health', 'science',
-    'sports', 'entertainment', 'environment', 'society', 'education'
+    'finance', 'politics', 'tech', 'health', 'climate',
+    'culture', 'business', 'science', 'sports', 'general'
   ]
 
   const availableQuestionTypes = [
