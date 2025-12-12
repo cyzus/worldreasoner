@@ -161,7 +161,7 @@ class PipelineRunner:
         from src.pipelines.question.sources.news import NewsBasedRunner
         from src.pipelines.stages import ArticleCollectionConfig, EventIdentificationConfig, ArticleSource
         from src.config.pipeline import QuestionPipelineConfig
-        from src.utils.search_indexing import auto_index_articles, should_auto_index
+        from src.utils.search_indexing import auto_index_articles
         import yaml
 
         results = PipelineResult([], [], [], 0.0)
@@ -276,7 +276,7 @@ class PipelineRunner:
                 ))
 
             # Auto-index articles if not skipped
-            if should_auto_index(skip_indexing):
+            if not skip_indexing:
                 if on_progress:
                     on_progress(PipelineProgress(
                         current=5,
@@ -323,6 +323,7 @@ class PipelineRunner:
         force_reprocess: bool = False,
         evidence_window_days: int = 365,
         min_evidence_articles: int = 5,
+        skip_indexing: bool = False,
         **kwargs
     ) -> PipelineResult:
         """Run basic evidence pipeline."""
@@ -405,6 +406,24 @@ class PipelineRunner:
                 logger.error(f"Error processing question {qid}: {e}")
                 results.failed.append({"id": qid, "error": str(e)})
 
+        # Auto-index articles if not skipped
+        if not skip_indexing:
+            from src.utils.search_indexing import auto_index_articles
+
+            try:
+                logger.info("Indexing articles for hybrid search...")
+                index_stats = await auto_index_articles(db_path=self.db_path)
+                if index_stats['status'] == 'success':
+                    logger.info(f"Indexed {index_stats['newly_indexed']} new articles (total: {index_stats['final_indexed']})")
+                elif index_stats['status'] == 'up_to_date':
+                    logger.info("Search index is up to date")
+                elif index_stats['status'] == 'no_articles':
+                    logger.warning("No articles to index")
+                else:
+                    logger.error(f"Indexing failed: {index_stats.get('error', 'Unknown error')}")
+            except Exception as e:
+                logger.error(f"Failed to auto-index articles: {e}")
+
         return results
 
     async def _run_adaptive_evidence(
@@ -413,6 +432,7 @@ class PipelineRunner:
         on_progress: Optional[Callable],
         agent_max_steps: int = 30,
         min_graph_depth: int = 3,
+        skip_indexing: bool = False,
         **kwargs
     ) -> PipelineResult:
         """Run adaptive multi-agent evidence pipeline."""
@@ -473,6 +493,24 @@ class PipelineRunner:
             except Exception as e:
                 logger.error(f"Error processing question {qid}: {e}")
                 results.failed.append({"id": qid, "error": str(e)})
+
+        # Auto-index articles if not skipped
+        if not skip_indexing:
+            from src.utils.search_indexing import auto_index_articles
+
+            try:
+                logger.info("Indexing articles for hybrid search...")
+                index_stats = await auto_index_articles(db_path=self.db_path)
+                if index_stats['status'] == 'success':
+                    logger.info(f"Indexed {index_stats['newly_indexed']} new articles (total: {index_stats['final_indexed']})")
+                elif index_stats['status'] == 'up_to_date':
+                    logger.info("Search index is up to date")
+                elif index_stats['status'] == 'no_articles':
+                    logger.warning("No articles to index")
+                else:
+                    logger.error(f"Indexing failed: {index_stats.get('error', 'Unknown error')}")
+            except Exception as e:
+                logger.error(f"Failed to auto-index articles: {e}")
 
         return results
 

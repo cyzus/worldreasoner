@@ -36,7 +36,7 @@ from src.pipelines.evidence import EvidencePipeline
 from src.config.pipeline import EvidencePipelineConfig
 from src.config import DatabaseConfig, get_config
 from src.utils.logging import logger
-from src.utils.search_indexing import auto_index_articles, should_auto_index
+from src.utils.search_indexing import auto_index_articles
 from src.utils.question_loader import load_specific_question
 
 
@@ -214,7 +214,7 @@ async def run_pipeline(args):
                     logger.info(f"     Discovered by: {len(hyp.discovered_by_question_ids)} question(s)")
 
         # Auto-index articles for search if not skipped
-        if should_auto_index(args.skip_indexing):
+        if not args.skip_indexing:
             logger.info("")
             logger.info("Indexing articles for hybrid search...")
             index_stats = await auto_index_articles(db_path=args.db)

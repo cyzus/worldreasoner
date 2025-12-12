@@ -30,7 +30,7 @@ from src.config import get_config
 from src.utils.logging import logger
 from src.core.database import GenericDatabase
 from src.domain.models import Question
-from src.utils.search_indexing import auto_index_articles, should_auto_index
+from src.utils.search_indexing import auto_index_articles
 
 
 async def run_goal_collection(
@@ -268,7 +268,7 @@ async def run_goal_collection(
     logger.info("")
 
     # Auto-index articles for search if not skipped
-    if should_auto_index(skip_indexing):
+    if not skip_indexing:
         logger.info("🔍 INDEXING ARTICLES")
         logger.info("-" * 30)
         index_stats = await auto_index_articles(db_path=db_path)
