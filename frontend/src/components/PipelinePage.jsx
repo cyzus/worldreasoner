@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import QuestionList from './QuestionList'
 import PipelineControl from './PipelineControl'
-import DatabaseSelector from './DatabaseSelector'
 import './PipelinePage.css'
 
-const PipelinePage = ({ questions, onJobComplete, onDatabaseChange }) => {
+const PipelinePage = ({ questions, onJobComplete }) => {
   const [selectedQuestions, setSelectedQuestions] = useState([])
   const [jobs, setJobs] = useState([])
   const [loadingJobs, setLoadingJobs] = useState(false)
@@ -33,15 +32,6 @@ const PipelinePage = ({ questions, onJobComplete, onDatabaseChange }) => {
   const handleJobComplete = (results) => {
     onJobComplete?.(results)
     loadJobs() // Refresh job list
-  }
-
-  const handleDatabaseChange = (dbPath) => {
-    // Clear selected questions when database changes
-    setSelectedQuestions([])
-    // Reload jobs for new database
-    loadJobs()
-    // Notify parent
-    onDatabaseChange?.(dbPath)
   }
 
   const getStatusColor = (status) => {
@@ -85,13 +75,8 @@ const PipelinePage = ({ questions, onJobComplete, onDatabaseChange }) => {
       </div>
 
       <div className="pipeline-page-content">
-        {/* Left Sidebar: Database + Pipeline Controls + Jobs */}
+        {/* Left Sidebar: Pipeline Controls + Jobs */}
         <div className="pipeline-sidebar">
-          {/* Database Selector */}
-          <div className="section-card">
-            <DatabaseSelector onDatabaseChange={handleDatabaseChange} />
-          </div>
-
           {/* Pipeline Controls */}
           <div className="section-card">
             <PipelineControl

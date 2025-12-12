@@ -9,7 +9,7 @@ import ForecastPage from './components/ForecastPage'
 import EventGraphsPage from './components/EventGraphsPage'
 import Timeline from './components/Timeline'
 import TimeSeriesChart from './components/TimeSeriesChart'
-import DatabaseSelector from './components/DatabaseSelector'
+import DatabaseDropdown from './components/DatabaseDropdown'
 import { fetchGraph, fetchStatistics, fetchQuestions, fetchQuestionEvents, fetchQuestionPriceHistory } from './api/graphApi'
 import './App.css'
 
@@ -561,14 +561,19 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>WorldReasoner</h1>
-        {statistics && (
-          <div className="stats-bar">
-            <span>{statistics.total_nodes} events</span>
-            <span>{statistics.total_edges} causal links</span>
-            <span>Avg degree: {statistics.average_out_degree?.toFixed(2)}</span>
-          </div>
-        )}
+        <div className="header-left">
+          <h1>WorldReasoner</h1>
+          {statistics && (
+            <div className="stats-bar">
+              <span>{statistics.total_nodes} events</span>
+              <span>{statistics.total_edges} causal links</span>
+              <span>Avg degree: {statistics.average_out_degree?.toFixed(2)}</span>
+            </div>
+          )}
+        </div>
+        <div className="header-right">
+          <DatabaseDropdown onDatabaseChange={handleDatabaseChange} />
+        </div>
       </header>
 
       <div className="app-content">
@@ -619,7 +624,6 @@ function App() {
               setSelectedQuestionId(questionId)
               handleQuestionFilter(questionId)
             }}
-            onDatabaseChange={handleDatabaseChange}
             onShowNeighborhood={handleShowNeighborhood}
             onTimeRangeChange={handleTimeRangeChange}
             priceHistoryData={priceHistoryData}
@@ -635,15 +639,12 @@ function App() {
           />
         ) : leftPanelTab === 'forecast' ? (
           /* Full-width forecast page */
-          <ForecastPage
-            onDatabaseChange={handleDatabaseChange}
-          />
+          <ForecastPage />
         ) : leftPanelTab === 'pipelines' ? (
           /* Full-width pipeline page */
           <PipelinePage
             questions={questions}
             onJobComplete={handleJobComplete}
-            onDatabaseChange={handleDatabaseChange}
           />
         ) : null}
       </div>

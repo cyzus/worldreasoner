@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import './ControlPanel.css'
 
-const ControlPanel = ({ filters, onFilterChange, onRefresh, loading, questions, onQuestionFilter }) => {
+const ControlPanel = ({ filters, onFilterChange, onRefresh, loading, questions, onQuestionFilter, forceSettings, onForceChange }) => {
   const [localFilters, setLocalFilters] = useState(filters)
   const [selectedQuestionId, setSelectedQuestionId] = useState('')
   const [questionSearch, setQuestionSearch] = useState('')
@@ -24,6 +24,23 @@ const ControlPanel = ({ filters, onFilterChange, onRefresh, loading, questions, 
     setQuestionSearch('')
     if (onQuestionFilter) {
       onQuestionFilter(null)
+    }
+  }
+
+  const handleResetForces = () => {
+    if (onForceChange) {
+      onForceChange({
+        linkDistance: 40,
+        linkStrength: 1,
+        chargeStrength: -200,
+        centerStrength: 0.05
+      })
+    }
+  }
+
+  const handleForceChange = (key, value) => {
+    if (onForceChange && forceSettings) {
+      onForceChange({ ...forceSettings, [key]: value })
     }
   }
 
@@ -179,13 +196,75 @@ const ControlPanel = ({ filters, onFilterChange, onRefresh, loading, questions, 
             />
           </div>
 
+          {/* Graph Force Controls */}
+          {forceSettings && onForceChange && (
+            <>
+              <div className="section-divider">
+                <span>Graph Forces</span>
+              </div>
+
+              <div className="filter-section">
+                <label>Center Gravity: {forceSettings.centerStrength.toFixed(2)}</label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={forceSettings.centerStrength}
+                  onChange={(e) => handleForceChange('centerStrength', parseFloat(e.target.value))}
+                />
+              </div>
+
+              <div className="filter-section">
+                <label>Node Repulsion: {Math.abs(forceSettings.chargeStrength)}</label>
+                <input
+                  type="range"
+                  min="-500"
+                  max="-50"
+                  step="10"
+                  value={forceSettings.chargeStrength}
+                  onChange={(e) => handleForceChange('chargeStrength', parseFloat(e.target.value))}
+                />
+              </div>
+
+              <div className="filter-section">
+                <label>Link Strength: {forceSettings.linkStrength.toFixed(1)}</label>
+                <input
+                  type="range"
+                  min="0"
+                  max="2"
+                  step="0.1"
+                  value={forceSettings.linkStrength}
+                  onChange={(e) => handleForceChange('linkStrength', parseFloat(e.target.value))}
+                />
+              </div>
+
+              <div className="filter-section">
+                <label>Link Distance: {forceSettings.linkDistance}</label>
+                <input
+                  type="range"
+                  min="10"
+                  max="150"
+                  step="5"
+                  value={forceSettings.linkDistance}
+                  onChange={(e) => handleForceChange('linkDistance', parseFloat(e.target.value))}
+                />
+              </div>
+            </>
+          )}
+
           <div className="button-group">
             <button onClick={handleApply} disabled={loading}>
               Apply Filters
             </button>
             <button onClick={handleReset} disabled={loading}>
-              Reset
+              Reset Filters
             </button>
+            {forceSettings && onForceChange && (
+              <button onClick={handleResetForces} disabled={loading}>
+                Reset Forces
+              </button>
+            )}
             <button onClick={onRefresh} disabled={loading}>
               Refresh
             </button>

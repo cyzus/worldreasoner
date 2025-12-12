@@ -1,7 +1,6 @@
 import React, { useState } from 'react'
 import ControlPanel from './ControlPanel'
 import QuestionList from './QuestionList'
-import DatabaseSelector from './DatabaseSelector'
 import GraphVisualization from './GraphVisualization'
 import EventDetails from './EventDetails'
 import Timeline from './Timeline'
@@ -24,7 +23,6 @@ function EventGraphsPage({
   questions,
   selectedQuestionId,
   onQuestionFilter,
-  onDatabaseChange,
   onShowNeighborhood,
   onTimeRangeChange,
   priceHistoryData,
@@ -34,6 +32,14 @@ function EventGraphsPage({
   setPriceHistoryInterval,
 }) {
   const [nestedTab, setNestedTab] = useState('controls') // 'controls' or 'questions'
+
+  // Graph force settings (moved from GraphVisualization)
+  const [forceSettings, setForceSettings] = useState({
+    linkDistance: 40,        // Shorter distance = tighter layout (was 70)
+    linkStrength: 1,         // Normal spring strength
+    chargeStrength: -200,    // Less repulsion = closer nodes (was -200)
+    centerStrength: 0.05     // Very gentle center force (like in examples)
+  })
 
   return (
     <div className="event-graphs-page">
@@ -58,17 +64,16 @@ function EventGraphsPage({
         <div className="left-sidebar">
           <div className="sidebar-content">
             {nestedTab === 'controls' && (
-              <>
-                <DatabaseSelector onDatabaseChange={onDatabaseChange} />
-                <ControlPanel
-                  filters={filters}
-                  onFilterChange={onFilterChange}
-                  onRefresh={onRefresh}
-                  loading={loading}
-                  questions={questions}
-                  onQuestionFilter={onQuestionFilter}
-                />
-              </>
+              <ControlPanel
+                filters={filters}
+                onFilterChange={onFilterChange}
+                onRefresh={onRefresh}
+                loading={loading}
+                questions={questions}
+                onQuestionFilter={onQuestionFilter}
+                forceSettings={forceSettings}
+                onForceChange={setForceSettings}
+              />
             )}
 
             {nestedTab === 'questions' && (
@@ -93,6 +98,7 @@ function EventGraphsPage({
                 graphData={graphData}
                 onNodeClick={onNodeClick}
                 selectedNode={selectedNode}
+                forceSettings={forceSettings}
               />
             )}
           </div>

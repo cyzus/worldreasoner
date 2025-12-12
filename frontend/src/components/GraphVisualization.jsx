@@ -1,10 +1,9 @@
-import React, { useRef, useEffect, useState } from 'react'
+import React, { useRef, useEffect } from 'react'
 import ForceGraph2D from 'react-force-graph-2d'
 import * as d3 from 'd3'
-import ForceControls from './ForceControls'
 import './GraphVisualization.css'
 
-const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
+const GraphVisualization = ({ graphData, onNodeClick, selectedNode, forceSettings }) => {
   const graphRef = useRef()
   const animationFrameRef = useRef()
   const timeRef = useRef(0)
@@ -13,14 +12,6 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
   const draggedNodeRef = useRef(null) // Track currently dragged node
   const pulseTimeRef = useRef(Date.now()) // Cache time for pulsing animation
   const pulseAnimationRef = useRef(null) // Track pulsing animation frame
-
-  // D3 force controls (Obsidian-style adjustable)
-  const [forceSettings, setForceSettings] = useState({
-    linkDistance: 40,        // Shorter distance = tighter layout (was 70)
-    linkStrength: 1,         // Normal spring strength
-    chargeStrength: -200,    // Less repulsion = closer nodes (was -200)
-    centerStrength: 0.05     // Very gentle center force (like in examples)
-  })
 
 
   // Preserve node positions when filtering to prevent jarring movements
@@ -431,10 +422,6 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode }) => {
 
   return (
     <div className="graph-visualization">
-      <ForceControls
-        forceSettings={forceSettings}
-        onForceChange={setForceSettings}
-      />
       <ForceGraph2D
         ref={graphRef}
         graphData={graphData}

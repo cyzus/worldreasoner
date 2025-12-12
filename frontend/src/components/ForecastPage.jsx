@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { fetchQuestions, fetchQuestionPriceHistory, fetchQuestionEvents } from '../api/graphApi';
 import TimeSeriesChart from './TimeSeriesChart';
-import DatabaseSelector from './DatabaseSelector';
 import './ForecastPage.css';
 
 const ForecastPage = ({
-  onQuestionSelect,
-  onDatabaseChange
+  onQuestionSelect
 }) => {
   const [questions, setQuestions] = useState([]);
   const [selectedQuestion, setSelectedQuestion] = useState(null);
@@ -46,18 +44,6 @@ const ForecastPage = ({
     const interval = setInterval(fetchRecentJobs, 5000);
     return () => clearInterval(interval);
   }, []);
-
-  const handleDatabaseChange = (dbPath) => {
-    console.log('Database changed to:', dbPath);
-    // Clear selections and reload data
-    setSelectedQuestion(null);
-    setSelectedQuestions([]);
-    setPriceHistoryData(null);
-    loadQuestions();
-    fetchRecentJobs();
-    onDatabaseChange?.(dbPath);
-  };
-
 
   const loadQuestions = async () => {
     try {
@@ -193,9 +179,6 @@ const ForecastPage = ({
       <div className="forecast-content">
         {/* Left Sidebar - Configuration, Jobs & Results */}
         <div className="forecast-sidebar">
-          {/* Database Selector */}
-          <DatabaseSelector onDatabaseChange={handleDatabaseChange} />
-
           {/* Configuration Section */}
           <div className="forecast-config-section">
             <h3>Forecast Configuration</h3>

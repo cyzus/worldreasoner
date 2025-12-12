@@ -9,7 +9,7 @@ import './CollectionConfigPanel.css'
  * - Domain/category filters
  * - Question type filters
  * - Difficulty range
- * - Source-specific options (e.g., Polymarket tags, resolved markets)
+ * - Source-specific options (e.g., search query, resolved markets)
  */
 function CollectionConfigPanel({ source, onFetch, loading }) {
   const [config, setConfig] = useState({
@@ -18,7 +18,6 @@ function CollectionConfigPanel({ source, onFetch, loading }) {
     question_types: [],
     min_difficulty: 1,
     max_difficulty: 5,
-    tags: [],
     include_resolved: true,
     search_query: '',
   })
@@ -31,11 +30,6 @@ function CollectionConfigPanel({ source, onFetch, loading }) {
 
   const availableQuestionTypes = [
     'binary', 'mcq', 'quantity', 'timeframe'
-  ]
-
-  const polymarketTags = [
-    'politics', 'crypto', 'sports', 'pop culture', 'science',
-    'business', 'new', 'ai'
   ]
 
   const handleInputChange = (field, value) => {
@@ -64,9 +58,6 @@ function CollectionConfigPanel({ source, onFetch, loading }) {
 
     // Add source-specific options
     if (source === 'polymarket') {
-      if (config.tags.length > 0) {
-        cleanConfig.tags = config.tags
-      }
       cleanConfig.include_resolved = config.include_resolved
       if (config.search_query.trim()) {
         cleanConfig.search_query = config.search_query.trim()
@@ -191,38 +182,17 @@ function CollectionConfigPanel({ source, onFetch, loading }) {
 
       {/* Polymarket-specific options */}
       {source === 'polymarket' && (
-        <>
-          <div className="config-section">
-            <label className="config-label">
-              Polymarket Tags
-              <span className="label-hint">(optional)</span>
-            </label>
-            <div className="multi-select-grid">
-              {polymarketTags.map(tag => (
-                <button
-                  key={tag}
-                  className={`chip ${config.tags.includes(tag) ? 'selected' : ''}`}
-                  onClick={() => handleMultiSelect('tags', tag)}
-                  disabled={loading}
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="config-section">
-            <label className="config-checkbox">
-              <input
-                type="checkbox"
-                checked={config.include_resolved}
-                onChange={(e) => handleInputChange('include_resolved', e.target.checked)}
-                disabled={loading}
-              />
-              <span>Include resolved markets</span>
-            </label>
-          </div>
-        </>
+        <div className="config-section">
+          <label className="config-checkbox">
+            <input
+              type="checkbox"
+              checked={config.include_resolved}
+              onChange={(e) => handleInputChange('include_resolved', e.target.checked)}
+              disabled={loading}
+            />
+            <span>Include resolved markets</span>
+          </label>
+        </div>
       )}
 
       {/* Fetch button */}
@@ -241,10 +211,7 @@ function CollectionConfigPanel({ source, onFetch, loading }) {
           <li>Leave filters empty to fetch all available questions</li>
           <li>Combine multiple filters to narrow results</li>
           {source === 'polymarket' && (
-            <>
-              <li>Use the search box to find specific markets by keywords</li>
-              <li>Use tags to filter by market categories</li>
-            </>
+            <li>Use the search box to find specific markets by keywords</li>
           )}
           {source === 'news' && (
             <li>News-based questions are generated from recent articles</li>

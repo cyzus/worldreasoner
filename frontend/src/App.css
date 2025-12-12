@@ -18,6 +18,16 @@
   align-items: center;
 }
 
+.header-left {
+  display: flex;
+  flex-direction: column;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+}
+
 .header-content {
   display: flex;
   flex-direction: column;
