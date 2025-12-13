@@ -95,6 +95,13 @@
   overflow: hidden;
 }
 
+/* Manual form wrapper */
+.manual-form-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
 .config-panel {
   flex: 0 0 350px;
   min-width: 350px;
@@ -116,23 +123,27 @@
 
 /* Scrollbar styling */
 .config-panel::-webkit-scrollbar,
-.preview-panel::-webkit-scrollbar {
+.preview-panel::-webkit-scrollbar,
+.manual-form-wrapper::-webkit-scrollbar {
   width: 8px;
 }
 
 .config-panel::-webkit-scrollbar-track,
-.preview-panel::-webkit-scrollbar-track {
+.preview-panel::-webkit-scrollbar-track,
+.manual-form-wrapper::-webkit-scrollbar-track {
   background: #f1f1f1;
   border-radius: 4px;
 }
 
 .config-panel::-webkit-scrollbar-thumb,
-.preview-panel::-webkit-scrollbar-thumb {
+.preview-panel::-webkit-scrollbar-thumb,
+.manual-form-wrapper::-webkit-scrollbar-thumb {
   background: #c0c0c0;
   border-radius: 4px;
 }
 
 .config-panel::-webkit-scrollbar-thumb:hover,
-.preview-panel::-webkit-scrollbar-thumb:hover {
+.preview-panel::-webkit-scrollbar-thumb:hover,
+.manual-form-wrapper::-webkit-scrollbar-thumb:hover {
   background: #a0a0a0;
 }

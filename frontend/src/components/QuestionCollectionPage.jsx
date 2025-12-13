@@ -1,19 +1,21 @@
 import React, { useState, useCallback } from 'react'
 import CollectionConfigPanel from './CollectionConfigPanel'
 import QuestionPreviewList from './QuestionPreviewList'
+import ManualQuestionForm from './ManualQuestionForm'
 import './QuestionCollectionPage.css'
 
 /**
  * QuestionCollectionPage - Full-width page for collecting questions from various sources
  *
  * Features:
- * - Source selection (Polymarket, News)
+ * - Source selection (Polymarket, News, Manual)
  * - Configuration panel for filtering and collection parameters
  * - Preview list with manual selection
+ * - Manual question creation form
  * - Batch save to database
  */
 function QuestionCollectionPage({ onQuestionsAdded }) {
-  const [sourceTab, setSourceTab] = useState('polymarket') // 'polymarket' or 'news'
+  const [sourceTab, setSourceTab] = useState('polymarket') // 'polymarket', 'news', or 'manual'
   const [previewQuestions, setPreviewQuestions] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -59,6 +61,18 @@ function QuestionCollectionPage({ onQuestionsAdded }) {
       setLoading(false)
     }
   }, [sourceTab])
+
+  /**
+   * Handle manual question creation
+   */
+  const handleManualQuestionCreated = useCallback((question) => {
+    setSuccess(`Question created: ${question.id}`)
+
+    // Notify parent if callback provided
+    if (onQuestionsAdded) {
+      onQuestionsAdded(1)
+    }
+  }, [onQuestionsAdded])
 
   /**
    * Handle saving selected questions to database
@@ -144,6 +158,17 @@ function QuestionCollectionPage({ onQuestionsAdded }) {
         >
           📰 News
         </button>
+        <button
+          className={`source-tab ${sourceTab === 'manual' ? 'active' : ''}`}
+          onClick={() => {
+            setSourceTab('manual')
+            setPreviewQuestions([])
+            setError(null)
+            setSuccess(null)
+          }}
+        >
+          ✏️ Manual
+        </button>
       </div>
 
       {/* Status messages */}
@@ -158,26 +183,33 @@ function QuestionCollectionPage({ onQuestionsAdded }) {
         </div>
       )}
 
-      <div className="collection-content">
-        {/* Left panel: Configuration */}
-        <div className="config-panel">
-          <CollectionConfigPanel
-            source={sourceTab}
-            onFetch={handleFetchPreview}
-            loading={loading}
-          />
+      {/* Manual tab shows form, other tabs show collection interface */}
+      {sourceTab === 'manual' ? (
+        <div className="manual-form-wrapper">
+          <ManualQuestionForm onQuestionCreated={handleManualQuestionCreated} />
         </div>
+      ) : (
+        <div className="collection-content">
+          {/* Left panel: Configuration */}
+          <div className="config-panel">
+            <CollectionConfigPanel
+              source={sourceTab}
+              onFetch={handleFetchPreview}
+              loading={loading}
+            />
+          </div>
 
-        {/* Right panel: Preview and selection */}
-        <div className="preview-panel">
-          <QuestionPreviewList
-            questions={previewQuestions}
-            onSaveSelected={handleSaveSelected}
-            loading={loading}
-            source={sourceTab}
-          />
+          {/* Right panel: Preview and selection */}
+          <div className="preview-panel">
+            <QuestionPreviewList
+              questions={previewQuestions}
+              onSaveSelected={handleSaveSelected}
+              loading={loading}
+              source={sourceTab}
+            />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
