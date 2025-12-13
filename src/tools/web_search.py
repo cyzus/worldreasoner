@@ -19,7 +19,19 @@ class WebSearchTool(Tool):
     for privacy-focused meta-search. Otherwise, it uses the default smolagents WebSearchTool.
     """
     name: str = "WebSearchTool"
-    description: str = "Performs a web search using either SearXNG or default search. Returns search results formatted as markdown with titles, links, and descriptions."
+    description: str = (
+        "Performs a web search using either SearXNG or default search. "
+        "Returns search results formatted as markdown with titles, links, and descriptions.\n\n"
+        "TIME RANGE PARAMETER LIMITATIONS:\n"
+        "The time_range parameter only accepts predefined values: 'day', 'week', 'month', or 'year'. "
+        "It does NOT support custom start and end dates.\n\n"
+        "CUSTOM DATE RANGES:\n"
+        "To define a custom date range, include search operators directly in your query string:\n"
+        "  - after:YYYY-MM-DD  (e.g., after:2024-01-01)\n"
+        "  - before:YYYY-MM-DD (e.g., before:2024-12-31)\n"
+        "  - Example: 'AI news after:2024-11-01 before:2024-11-30'"
+    )
+
     is_initialized: bool = False
 
     inputs = {
