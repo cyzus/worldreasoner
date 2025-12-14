@@ -55,13 +55,38 @@ class MCPServerManager:
         """
         # Stop existing server if running
         if self.is_running and auto_restart:
-            logger.info(f"Stopping existing MCP server (PID: {self.process.pid})")
+            old_pid = self.process.pid
+            logger.info(f"Stopping existing MCP server (PID: {old_pid}, current_db: {self._current_db})")
             self.stop_server()
+            logger.info(f"Old MCP server (PID: {old_pid}) stopped")
+
+            # Give the OS time to release the port
+            import time
+            time.sleep(1)
+            logger.info("Waited 1s for port release")
+
+        # EXTRA SAFETY: Kill any rogue MCP server processes on our port
+        try:
+            import psutil
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    cmdline = proc.info.get('cmdline') or []
+                    # Check if it's a Python process running mcp_forecasting_server
+                    if ('python' in proc.info['name'].lower() and
+                        any('mcp_forecasting_server' in str(arg) for arg in cmdline)):
+                        logger.warning(f"Found orphaned MCP server process (PID: {proc.info['pid']}), terminating...")
+                        proc.terminate()
+                        proc.wait(timeout=3)
+                        logger.info(f"Terminated orphaned process {proc.info['pid']}")
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                    pass
+        except ImportError:
+            logger.debug("psutil not available, skipping orphaned process cleanup")
 
         # Resolve to absolute path
         db_abs_path = str(Path(db_path).resolve())
 
-        logger.info(f"Starting MCP server with database: {db_abs_path}")
+        logger.info(f"Starting NEW MCP server with database: {db_abs_path}")
 
         # Get the Python executable that's running this backend
         python_exe = sys.executable
@@ -79,13 +104,11 @@ class MCPServerManager:
                     "--log-level", "info"
                 ],
                 env={**os.environ, "WORLDREASONER_DB": db_abs_path},
-                # Capture output for debugging
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                # Don't capture output - let it go to console for debugging
+                # stdout=subprocess.PIPE,
+                # stderr=subprocess.PIPE,
                 # Ensure server runs in background
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
-                text=True,
-                bufsize=1  # Line buffered
             )
 
             self._current_db = db_abs_path
@@ -186,7 +209,17 @@ class MCPServerManager:
                 response = requests.get(health_url, timeout=2)
                 if response.status_code == 200:
                     data = response.json()
-                    logger.debug(f"Health check successful: {data}")
+                    reported_db = data.get('database', 'unknown')
+                    logger.info(f"Health check successful: {data}")
+
+                    # Verify the server is using the correct database
+                    if reported_db != self._current_db:
+                        logger.warning(
+                            f"DATABASE MISMATCH! Expected: {self._current_db}, "
+                            f"but server reports: {reported_db}"
+                        )
+                    else:
+                        logger.info(f"Database verified: {reported_db}")
                     return
             except requests.exceptions.RequestException as e:
                 logger.debug(f"Health check attempt {attempt}/{max_attempts} failed: {e}")
@@ -391,8 +424,9 @@ async def get_mcp_status():
 async def switch_database(request: DatabaseSwitchRequest):
     """Switch to a different database file.
 
-    This endpoint updates the backend's current database and automatically
-    restarts the MCP forecasting server with the new database.
+    This endpoint updates the backend's current database. The MCP server
+    supports per-request database switching via X-Database-Path headers,
+    so no server restart is needed (instant switching).
 
     Args:
         request: Database switch request with db_path
@@ -424,18 +458,11 @@ async def switch_database(request: DatabaseSwitchRequest):
 
         logger.info(f"Switched to database: {db_path}")
 
-        # Restart the MCP server with the new database
-        try:
-            mcp_manager.start_server(str(db_path), auto_restart=True)
-            logger.info(f"MCP server restarted with database: {db_path}")
-            message = f"Successfully switched to database: {db_path.name} (MCP server restarted)"
-        except Exception as mcp_error:
-            logger.error(f"Failed to restart MCP server: {mcp_error}")
-            # Database was switched but MCP server failed to restart
-            message = (
-                f"Database switched to {db_path.name}, but MCP server restart failed: {str(mcp_error)}. "
-                f"You may need to restart the MCP server manually."
-            )
+        # NO LONGER RESTARTING MCP SERVER!
+        # The MCP server now supports per-request database switching via X-Database-Path header
+        # This makes database switching instant and much more stable
+        logger.info(f"Database switch complete (MCP server supports per-request DB via headers)")
+        message = f"Successfully switched to database: {db_path.name} (instant - no restart needed)"
 
         return DatabaseSwitchResponse(
             success=True,

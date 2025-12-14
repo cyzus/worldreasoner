@@ -8,10 +8,16 @@ database:
   username: postgres
   password: ""  # Set via environment variable: WORLDREASONER__DATABASE__PASSWORD
 
-# MCP Server
+# Server Configuration
 server:
+  # Backend API server (FastAPI visualization backend)
   host: localhost
   port: 8018
+  
+  # MCP forecasting server (used by agents for forecasting)
+  mcp_host: localhost
+  mcp_port: 8110
+  
   reload: true
   log_level: info
 

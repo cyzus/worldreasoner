@@ -211,7 +211,7 @@ const ForecastPage = ({
                   min="0"
                   max="365"
                   value={forecastConfig.offset_days}
-                  onChange={(e) => setForecastConfig({...forecastConfig, offset_days: parseInt(e.target.value)})}
+                  onChange={(e) => setForecastConfig({...forecastConfig, offset_days: parseInt(e.target.value) || 0})}
                 />
               </div>
 
@@ -227,7 +227,7 @@ const ForecastPage = ({
                   min="1"
                   max="20"
                   value={forecastConfig.min_context_items}
-                  onChange={(e) => setForecastConfig({...forecastConfig, min_context_items: parseInt(e.target.value)})}
+                  onChange={(e) => setForecastConfig({...forecastConfig, min_context_items: parseInt(e.target.value) || 1})}
                 />
               </div>
 

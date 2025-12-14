@@ -35,7 +35,8 @@ async def lifespan(app: FastAPI):
             logger.info(f"Starting MCP server with database: {current_db}")
 
             try:
-                mcp_manager.start_server(current_db, auto_restart=False)
+                # Force cleanup of any orphaned processes from previous runs
+                mcp_manager.start_server(current_db, auto_restart=True)
                 logger.info("MCP server started successfully")
             except Exception as e:
                 logger.warning(f"Failed to start MCP server on startup: {e}")

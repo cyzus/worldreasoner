@@ -11,6 +11,7 @@ class ForecastAgent(BaseAgent):
                  simulated_date: str,
                  knowledge_cutoff: str,
                  config: Config,
+                 db_path: str = None,
                  tools: list = None,
                  max_steps: int = 15,
                  is_code: bool = False,
@@ -22,33 +23,39 @@ class ForecastAgent(BaseAgent):
             simulated_date: Simulated "today" date (ISO format)
             knowledge_cutoff: LLM training cutoff date (ISO format)
             config: Configuration object
+            db_path: Database path (enables per-request database switching)
             tools: Additional custom tools
             max_steps: Maximum agent steps
             knowledge_only: If True, only allow get_question and submit_forecast tools
                           (disable research tools to test inherent LLM knowledge)
         """
 
-        # Create a new list with web tools
+        # Create headers for MCP connection
+        headers = {
+            "X-Question-ID": question.id,
+            "X-Knowledge-Cutoff": knowledge_cutoff,
+            "X-Simulated-Date": simulated_date,
+            "X-Model-Name": config.llm.model
+        }
+
+        # Add database path if provided (enables per-request DB switching)
+        if db_path:
+            headers["X-Database-Path"] = db_path
+
+        # Create MCP server connection parameters
+        # Note: For streamable-http transport, URL should point to the /mcp endpoint
         mcp_server_parameters = [
             {
-                "url": f"http://{config.server.host}:{config.server.port}/mcp",
+                "url": f"http://{config.server.mcp_host}:{config.server.mcp_port}/mcp",
                 "transport": "streamable-http",
-                "headers": {
-                    "X-Question-ID": question.id,
-                    "X-Knowledge-Cutoff": knowledge_cutoff,
-                    "X-Simulated-Date": simulated_date,
-                    "X-Model-Name": config.llm.model  # Include model name for tracking
-                }
+                "headers": headers
             }
         ]
 
-        # Debug: Log what we're sending
+        # Debug: Log connection details
         from src.utils.logging import logger
-        logger.info(f"ForecastAgent connecting to MCP server with headers:")
-        logger.info(f"  X-Question-ID: {question.id}")
-        logger.info(f"  X-Simulated-Date: {simulated_date}")
-        logger.info(f"  X-Knowledge-Cutoff: {knowledge_cutoff}")
-        logger.info(f"  X-Model-Name: {config.llm.model}")
+        logger.info(f"ForecastAgent connecting to MCP server at http://{config.server.mcp_host}:{config.server.mcp_port}/mcp")
+        logger.debug(f"Headers: question_id={question.id}, simulated_date={simulated_date}, db_path={db_path or 'default'}")
 
         mcp_client = MCPClient(server_parameters=mcp_server_parameters)
         forecast_tools = mcp_client.get_tools()

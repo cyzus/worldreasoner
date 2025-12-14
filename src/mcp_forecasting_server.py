@@ -107,8 +107,8 @@ class ForecastContextMiddleware(Middleware):
     
     async def on_message(self, context: MiddlewareContext, call_next):
         """Called for all MCP messages to capture headers."""
-        logger.debug(f"Middleware triggered for method: {context.method}")
-        
+        logger.debug(f"Middleware processing: {context.method}")
+
         # Try to extract headers from FastMCP context if available
         if context.fastmcp_context:
             try:
@@ -118,77 +118,48 @@ class ForecastContextMiddleware(Middleware):
                 
                 if request and hasattr(request, 'headers'):
                     headers = request.headers
-                    logger.debug(f"Available headers: {list(headers.keys())}")
+                    logger.debug(f"Request headers available: {list(headers.keys())[:5]}...")  # Only first 5
 
                     question_id = headers.get('x-question-id') or headers.get('X-Question-ID')
                     knowledge_cutoff = headers.get('x-knowledge-cutoff') or headers.get('X-Knowledge-Cutoff')
                     simulated_date = headers.get('x-simulated-date') or headers.get('X-Simulated-Date')
                     model_name = headers.get('x-model-name') or headers.get('X-Model-Name')
+                    db_path = headers.get('x-database-path') or headers.get('X-Database-Path')
 
-                    logger.debug(f"Extracted - question_id: {question_id}, knowledge_cutoff: {knowledge_cutoff}, simulated_date: {simulated_date}, model: {model_name}")
+                    logger.debug(f"Extracted headers: question_id={question_id is not None}, simulated_date={simulated_date is not None}")
 
                     # If headers are present, store them globally
                     if question_id and simulated_date:
                         try:
-                            # Parse simulated date
-                            simulated_date_obj = parse_flexible_datetime(simulated_date)
+                            # IMPORTANT: Do NOT do any database operations here!
+                            # Database queries are SYNCHRONOUS and will block the async event loop
+                            # Just capture the raw header values - validation happens in tool functions
 
-                            # Parse knowledge cutoff (optional, but recommended)
+                            # Parse dates (fast, doesn't block)
+                            simulated_date_obj = parse_flexible_datetime(simulated_date)
                             knowledge_cutoff_obj = parse_flexible_datetime(knowledge_cutoff) if knowledge_cutoff else None
 
-                            # Validate question exists
-                            question = db.get(Question, question_id)
-                            if question:
-                                # Validate temporal constraints
-                                if simulated_date_obj >= question.resolution_date:
-                                    logger.error(
-                                        f"Invalid simulated date: {simulated_date_obj.date()} is not before "
-                                        f"resolution date {question.resolution_date.date()}"
-                                    )
-                                    raise ValueError(
-                                        f"Simulated date ({simulated_date_obj.date()}) must be BEFORE "
-                                        f"the question's resolution date ({question.resolution_date.date()}). "
-                                        f"The simulated date represents 'today' in the forecasting scenario."
-                                    )
+                            # Store raw values in context (no DB queries!)
+                            _connection_context['question_id'] = question_id
+                            _connection_context['knowledge_cutoff'] = knowledge_cutoff_obj.isoformat() if knowledge_cutoff_obj else None
+                            _connection_context['knowledge_cutoff_obj'] = knowledge_cutoff_obj
+                            _connection_context['simulated_date'] = simulated_date_obj.isoformat()
+                            _connection_context['simulated_date_obj'] = simulated_date_obj
+                            _connection_context['model_name'] = model_name or 'unknown'
+                            _connection_context['db_path'] = db_path
 
-                                # Validate knowledge cutoff < simulated date if provided
-                                if knowledge_cutoff_obj and knowledge_cutoff_obj >= simulated_date_obj:
-                                    logger.error(
-                                        f"Invalid dates: knowledge_cutoff {knowledge_cutoff_obj.date()} "
-                                        f"must be before simulated_date {simulated_date_obj.date()}"
-                                    )
-                                    raise ValueError(
-                                        f"Knowledge cutoff ({knowledge_cutoff_obj.date()}) must be BEFORE "
-                                        f"simulated date ({simulated_date_obj.date()}). "
-                                        f"The LLM must be 'deployed' after its training ends."
-                                    )
-
-                                _connection_context['question_id'] = question_id
-                                _connection_context['knowledge_cutoff'] = knowledge_cutoff_obj.isoformat() if knowledge_cutoff_obj else None
-                                _connection_context['knowledge_cutoff_obj'] = knowledge_cutoff_obj
-                                _connection_context['simulated_date'] = simulated_date_obj.isoformat()
-                                _connection_context['simulated_date_obj'] = simulated_date_obj
-                                _connection_context['model_name'] = model_name or 'unknown'
-                                _connection_context['question'] = question
-                                logger.info(
-                                    f"Context captured from headers: q={question_id}, "
-                                    f"model={model_name or 'unknown'}, "
-                                    f"knowledge_cutoff={knowledge_cutoff_obj.date() if knowledge_cutoff_obj else 'N/A'}, "
-                                    f"simulated_date={simulated_date_obj.date()}, "
-                                    f"resolution_date={question.resolution_date.date()}, "
-                                    f"forecast_horizon={(question.resolution_date - simulated_date_obj).days} days"
-                                )
-                            else:
-                                logger.warning(f"Question {question_id} not found in database")
+                            logger.debug(f"Context captured: q={question_id}, date={simulated_date_obj.date()}")
                         except Exception as e:
-                            logger.error(f"Error parsing context headers: {e}", exc_info=True)
+                            logger.error(f"Error parsing context headers: {e}")
                     else:
-                        logger.debug("No question_id or simulated_date in headers")
+                        logger.debug("Headers missing required fields")
                 else:
                     logger.debug("No HTTP request or headers available")
             except Exception as e:
                 logger.debug(f"Could not get HTTP request: {e}")
-        
+        else:
+            logger.debug("No fastmcp_context available")
+
         return await call_next(context)
 
 
@@ -203,15 +174,15 @@ mcp.add_middleware(ForecastContextMiddleware())
 def _get_context_from_mcp(ctx: Context) -> Dict[str, Any]:
     """Extract forecasting context from MCP request metadata/headers.
 
-    The context is automatically captured by middleware from request headers
-    and stored in _connection_context. This function retrieves it.
+    WORKAROUND: The middleware doesn't update the global cache for persistent connections,
+    so we try to extract headers directly from the context object.
 
     Returns TWO important dates:
         - knowledge_cutoff: The LLM's training data cutoff (optional)
         - simulated_date: The simulated "today" for forecasting (required)
 
     Args:
-        ctx: MCP context object (not used, kept for compatibility)
+        ctx: MCP context object
 
     Returns:
         Dict with:
@@ -224,10 +195,42 @@ def _get_context_from_mcp(ctx: Context) -> Dict[str, Any]:
     Raises:
         ValueError: If required context not found or invalid
     """
-    question_id = _connection_context.get('question_id')
-    knowledge_cutoff_obj = _connection_context.get('knowledge_cutoff_obj')
-    simulated_date_obj = _connection_context.get('simulated_date_obj')
-    question = _connection_context.get('question')
+    # Try to extract headers directly from ctx if possible
+    question_id = None
+    knowledge_cutoff_str = None
+    simulated_date_str = None
+    db_path_str = None
+
+    try:
+        # Try accessing the HTTP request from FastMCP context
+        if hasattr(ctx, 'fastmcp_context') and ctx.fastmcp_context:
+            request = ctx.fastmcp_context.get_http_request()
+            if request and hasattr(request, 'headers'):
+                headers = request.headers
+                question_id = headers.get('x-question-id') or headers.get('X-Question-ID')
+                knowledge_cutoff_str = headers.get('x-knowledge-cutoff') or headers.get('X-Knowledge-Cutoff')
+                simulated_date_str = headers.get('x-simulated-date') or headers.get('X-Simulated-Date')
+                db_path_str = headers.get('x-database-path') or headers.get('X-Database-Path')
+                logger.debug(f"Extracted from context: q={question_id}, date={simulated_date_str}")
+    except Exception as e:
+        logger.debug(f"Could not extract headers from context: {e}")
+
+    # Fall back to cached values if direct extraction failed
+    if not question_id:
+        logger.debug("Using cached _connection_context")
+        question_id = _connection_context.get('question_id')
+        knowledge_cutoff_obj = _connection_context.get('knowledge_cutoff_obj')
+        simulated_date_obj = _connection_context.get('simulated_date_obj')
+        db_path_str = _connection_context.get('db_path')
+    else:
+        # Parse the extracted headers
+        simulated_date_obj = parse_flexible_datetime(simulated_date_str)
+        knowledge_cutoff_obj = parse_flexible_datetime(knowledge_cutoff_str) if knowledge_cutoff_str else None
+
+    # Always fetch the question from the database (middleware no longer does this)
+    # Use database from header if provided, otherwise use global db
+    request_db = GenericDatabase(db_path_str) if db_path_str else db
+    question = request_db.get(Question, question_id)
 
     if not question_id:
         raise ValueError(
@@ -253,21 +256,26 @@ def _get_context_from_mcp(ctx: Context) -> Dict[str, Any]:
         "knowledge_cutoff": knowledge_cutoff_obj,
         "simulated_date": simulated_date_obj,
         "session_id": session_id,
-        "question": question
+        "question": question,
+        "db_path": db_path_str  # Include database path for per-request DB switching
     }
 
 
 def _get_temporal_db(cutoff_date: datetime) -> GenericDatabase:
     """Get a database instance with temporal filtering applied.
-    
+
     Args:
         cutoff_date: Cutoff date for temporal filtering
-        
+
     Returns:
         GenericDatabase instance with temporal filtering
     """
-    # Use the same database path as the global db instance
-    return GenericDatabase(db.db_path, cutoff_date=cutoff_date)
+    # Use database path from connection context if available (per-request switching)
+    # Otherwise fall back to global db path
+    db_path = _connection_context.get('db_path')
+    database_path = db_path if db_path else db.db_path
+
+    return GenericDatabase(database_path, cutoff_date=cutoff_date)
 
 
 # ============================================================================
@@ -698,7 +706,11 @@ Connection Metadata (provided by MCP client):
         default="debug",
         help="Logging level: debug|info|warning|error (default: debug)"
     )
-    global db, hybrid_search
+    global db, hybrid_search, _connection_context
+
+    # Clear cached connection context from any previous server instance
+    _connection_context.clear()
+    logger.info("Cleared _connection_context cache on server startup")
 
     args = parser.parse_args()
     db = GenericDatabase(args.db)
@@ -713,15 +725,6 @@ Connection Metadata (provided by MCP client):
     logger.info("  - X-Question-ID (required)")
     logger.info("  - X-Knowledge-Cutoff (optional)")
     logger.info("  - X-Simulated-Date (required)")
-
-    # Adjust logging level if provided
-    try:
-        from loguru import logger as _lg
-        _lg.remove()
-        import sys
-        _lg.add(sys.stderr, level=args.log_level.upper())
-    except Exception:
-        pass
 
     logger.info(f"Starting MCP STREAMABLE HTTP server on http://{args.host}:{args.port}")
     logger.info("Endpoints: /mcp/tools, /mcp/prompts, SSE streaming available")
@@ -745,11 +748,20 @@ Connection Metadata (provided by MCP client):
         )
 
     # Get the app instance using http_app() with streamable-http transport
-    app = mcp.http_app(transport="streamable-http")
+    logger.info("Creating FastMCP HTTP app...")
+    try:
+        app = mcp.http_app(transport="streamable-http")
+        logger.info("FastMCP app created successfully")
+    except Exception as e:
+        logger.error(f"Failed to create FastMCP app: {e}", exc_info=True)
+        raise
 
     # Add health check route to the Starlette app
+    logger.info("Adding health check route...")
     app.routes.append(Route("/health", health_check, methods=["GET"]))
+    logger.info(f"MCP server app created with {len(app.routes)} routes")
 
+    logger.info(f"Starting uvicorn server on {args.host}:{args.port}")
     import uvicorn
     uvicorn.run(app, host=args.host, port=args.port)
 

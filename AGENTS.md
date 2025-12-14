@@ -310,6 +310,16 @@ cutoff = datetime(2024, 11, 4)  # Naive datetime
 - **Access**: Use `src.config.get_config()` (singleton pattern)
 - **LLM**: Uses `litellm` wrapper supporting Gemini, OpenAI, etc.
 
+**Server Ports**:
+- **Backend API** (FastAPI): `server.host:server.port` (default: localhost:8018)
+- **MCP Server** (forecasting agents): `server.mcp_host:server.mcp_port` (default: localhost:8110)
+
+The system runs two servers:
+1. FastAPI backend for visualization and API endpoints (port 8018)
+2. MCP forecasting server for agent tools and temporal access (port 8110)
+
+Agents connect to the MCP server using `config.server.mcp_host` and `config.server.mcp_port`.
+
 ## Critical Conventions
 
 ### 1. ResultCollector Pattern (IMPORTANT!)

@@ -571,6 +571,7 @@ class PipelineRunner:
                     simulated_date=forecast_setup['simulated_date'].isoformat(),
                     knowledge_cutoff=get_knowledge_cutoff_date(config.llm.model),
                     config=config,
+                    db_path=self.db_path,  # Pass database path for per-request switching
                     knowledge_only=knowledge_only,
                 )
 
