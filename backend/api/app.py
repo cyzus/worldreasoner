@@ -6,9 +6,60 @@ and WebSocket support for real-time graph updates.
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 
 from src.utils.logging import logger
 from .routes import graph, events, websocket, questions, database, pipelines
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown events.
+
+    This handles:
+    - Starting the MCP forecasting server on backend startup
+    - Stopping the MCP forecasting server on backend shutdown
+    """
+    # Startup: Initialize MCP server with current database
+    logger.info("Backend starting up...")
+
+    try:
+        import os
+        from .routes.database import mcp_manager, get_current_db_path
+
+        # Check if auto-start is enabled (default: True)
+        auto_start = os.getenv("MCP_AUTO_START", "true").lower() in ("true", "1", "yes")
+
+        if auto_start:
+            current_db = get_current_db_path()
+            logger.info(f"Starting MCP server with database: {current_db}")
+
+            try:
+                mcp_manager.start_server(current_db, auto_restart=False)
+                logger.info("MCP server started successfully")
+            except Exception as e:
+                logger.warning(f"Failed to start MCP server on startup: {e}")
+                logger.warning("MCP server can be started manually or will auto-start on database switch")
+        else:
+            logger.info("MCP auto-start disabled (MCP_AUTO_START=false)")
+            logger.info("MCP server will auto-start on first database switch")
+    except Exception as e:
+        logger.error(f"Error during startup: {e}")
+
+    yield  # App is running
+
+    # Shutdown: Stop MCP server
+    logger.info("Backend shutting down...")
+
+    try:
+        from .routes.database import mcp_manager
+
+        if mcp_manager.is_running:
+            logger.info("Stopping MCP server...")
+            mcp_manager.stop_server()
+            logger.info("MCP server stopped")
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
 
 
 def create_app() -> FastAPI:
@@ -23,6 +74,7 @@ def create_app() -> FastAPI:
         title="WorldReasoner API",
         description="API for causal graph visualization and forecasting benchmarks",
         version="0.1.0",
+        lifespan=lifespan,
     )
 
     # CORS middleware for frontend

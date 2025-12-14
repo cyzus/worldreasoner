@@ -42,6 +42,14 @@ class ForecastAgent(BaseAgent):
             }
         ]
 
+        # Debug: Log what we're sending
+        from src.utils.logging import logger
+        logger.info(f"ForecastAgent connecting to MCP server with headers:")
+        logger.info(f"  X-Question-ID: {question.id}")
+        logger.info(f"  X-Simulated-Date: {simulated_date}")
+        logger.info(f"  X-Knowledge-Cutoff: {knowledge_cutoff}")
+        logger.info(f"  X-Model-Name: {config.llm.model}")
+
         mcp_client = MCPClient(server_parameters=mcp_server_parameters)
         forecast_tools = mcp_client.get_tools()
 

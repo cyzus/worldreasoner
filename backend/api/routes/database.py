@@ -3,8 +3,13 @@
 Provides REST API for managing database file selection.
 """
 
+import os
+import sys
+import subprocess
+import time
 from pathlib import Path
-from typing import List
+from typing import List, Optional
+import requests
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -12,6 +17,240 @@ from src.utils.logging import logger
 
 
 router = APIRouter()
+
+
+class MCPServerManager:
+    """Manages the lifecycle of the MCP forecasting server.
+
+    This class handles starting, stopping, and monitoring the MCP server process.
+    When the database switches, it automatically restarts the server with the new database.
+    """
+
+    def __init__(self, host: str = "0.0.0.0", port: int = 8110):
+        """Initialize the MCP server manager.
+
+        Args:
+            host: Host to bind the MCP server to
+            port: Port to bind the MCP server to
+        """
+        self.host = host
+        self.port = port
+        self.process: Optional[subprocess.Popen] = None
+        self._current_db: Optional[str] = None
+
+    @property
+    def is_running(self) -> bool:
+        """Check if the MCP server is currently running."""
+        return self.process is not None and self.process.poll() is None
+
+    def start_server(self, db_path: str, auto_restart: bool = True):
+        """Start the MCP server with the specified database.
+
+        Args:
+            db_path: Path to the database file
+            auto_restart: If True, stop existing server before starting new one
+
+        Raises:
+            RuntimeError: If server fails to start or health check fails
+        """
+        # Stop existing server if running
+        if self.is_running and auto_restart:
+            logger.info(f"Stopping existing MCP server (PID: {self.process.pid})")
+            self.stop_server()
+
+        # Resolve to absolute path
+        db_abs_path = str(Path(db_path).resolve())
+
+        logger.info(f"Starting MCP server with database: {db_abs_path}")
+
+        # Get the Python executable that's running this backend
+        python_exe = sys.executable
+
+        # Start the MCP server process
+        try:
+            self.process = subprocess.Popen(
+                [
+                    python_exe,
+                    "-m",
+                    "src.mcp_forecasting_server",
+                    "--host", self.host,
+                    "--port", str(self.port),
+                    "--db", db_abs_path,
+                    "--log-level", "info"
+                ],
+                env={**os.environ, "WORLDREASONER_DB": db_abs_path},
+                # Capture output for debugging
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                # Ensure server runs in background
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
+                text=True,
+                bufsize=1  # Line buffered
+            )
+
+            self._current_db = db_abs_path
+            logger.info(f"MCP server process started (PID: {self.process.pid})")
+
+            # Wait for server to be ready (give it more time to initialize)
+            self._wait_for_health(max_attempts=30, delay=0.5)
+
+            logger.info(f"MCP server is healthy and ready at http://{self.host}:{self.port}")
+
+        except Exception as e:
+            logger.error(f"Failed to start MCP server: {e}")
+
+            # Try to get error output from the process
+            if self.process:
+                try:
+                    # Check if process is still running
+                    if self.process.poll() is not None:
+                        # Process has terminated, get output
+                        stdout, stderr = self.process.communicate(timeout=1)
+                        if stderr:
+                            logger.error(f"MCP server stderr:\n{stderr}")
+                        if stdout:
+                            logger.info(f"MCP server stdout:\n{stdout}")
+                except Exception as comm_error:
+                    logger.warning(f"Could not get process output: {comm_error}")
+
+                self.process.kill()
+                self.process = None
+
+            raise RuntimeError(f"Failed to start MCP server: {e}")
+
+    def stop_server(self, timeout: int = 5):
+        """Stop the MCP server gracefully.
+
+        Args:
+            timeout: Maximum time to wait for graceful shutdown (seconds)
+        """
+        if not self.is_running:
+            logger.debug("No MCP server is running")
+            return
+
+        try:
+            logger.info(f"Terminating MCP server (PID: {self.process.pid})")
+            self.process.terminate()
+
+            # Wait for graceful shutdown
+            try:
+                self.process.wait(timeout=timeout)
+                logger.info("MCP server terminated gracefully")
+            except subprocess.TimeoutExpired:
+                logger.warning(f"MCP server did not terminate within {timeout}s, forcing kill")
+                self.process.kill()
+                self.process.wait()
+                logger.info("MCP server killed")
+
+        except Exception as e:
+            logger.error(f"Error stopping MCP server: {e}")
+        finally:
+            self.process = None
+            self._current_db = None
+
+    def _wait_for_health(self, max_attempts: int = 20, delay: float = 0.5):
+        """Wait for the MCP server to become healthy.
+
+        Args:
+            max_attempts: Maximum number of health check attempts
+            delay: Delay between attempts (seconds)
+
+        Raises:
+            RuntimeError: If health check fails after max attempts
+        """
+        # Use localhost/127.0.0.1 for health checks, even if server binds to 0.0.0.0
+        health_host = "127.0.0.1" if self.host == "0.0.0.0" else self.host
+        health_url = f"http://{health_host}:{self.port}/health"
+
+        logger.info(f"Waiting for MCP server health check at {health_url}")
+
+        # Give the server a moment to start binding to the port
+        time.sleep(1)
+
+        for attempt in range(1, max_attempts + 1):
+            # Check if process is still alive
+            if self.process.poll() is not None:
+                # Process has terminated
+                logger.error(f"MCP server process terminated unexpectedly (exit code: {self.process.returncode})")
+                try:
+                    stdout, stderr = self.process.communicate(timeout=1)
+                    if stderr:
+                        logger.error(f"MCP server stderr:\n{stderr}")
+                    if stdout:
+                        logger.info(f"MCP server stdout:\n{stdout}")
+                except Exception as e:
+                    logger.warning(f"Could not get process output: {e}")
+                raise RuntimeError(f"MCP server process terminated with exit code {self.process.returncode}")
+
+            try:
+                response = requests.get(health_url, timeout=2)
+                if response.status_code == 200:
+                    data = response.json()
+                    logger.debug(f"Health check successful: {data}")
+                    return
+            except requests.exceptions.RequestException as e:
+                logger.debug(f"Health check attempt {attempt}/{max_attempts} failed: {e}")
+
+            time.sleep(delay)
+
+        # Health check failed - try to get process output for debugging
+        logger.error(f"Health check failed after {max_attempts} attempts")
+        if self.process and self.process.poll() is None:
+            logger.warning("MCP server process is still running but not responding to health checks")
+            logger.warning(f"Check if port {self.port} is accessible or if there's a firewall blocking it")
+
+        raise RuntimeError(
+            f"MCP server failed to become healthy after {max_attempts} attempts. "
+            f"Check server logs for details."
+        )
+
+    def get_status(self) -> dict:
+        """Get the current status of the MCP server.
+
+        Returns:
+            Dictionary with server status information
+        """
+        if not self.is_running:
+            return {
+                "running": False,
+                "database": None,
+                "pid": None,
+                "url": None
+            }
+
+        return {
+            "running": True,
+            "database": self._current_db,
+            "pid": self.process.pid,
+            "url": f"http://{self.host}:{self.port}"
+        }
+
+    def get_logs(self, lines: int = 50) -> dict:
+        """Get recent stdout/stderr from the MCP server process.
+
+        Args:
+            lines: Number of recent lines to return (not implemented, returns all)
+
+        Returns:
+            Dictionary with stdout and stderr content
+        """
+        if not self.process:
+            return {"stdout": "", "stderr": "", "error": "No process running"}
+
+        # Note: Since we're using PIPE, we can't easily get logs after process starts
+        # This is a limitation - we'd need to use file-based logging instead
+        return {
+            "stdout": "Logs not available (process using PIPE)",
+            "stderr": "Logs not available (process using PIPE)",
+            "note": "Check MCP server logs in console or enable file logging"
+        }
+
+
+# Global MCP server manager instance
+# Read configuration from environment variables
+MCP_HOST = os.getenv("MCP_SERVER_HOST", "0.0.0.0")
+MCP_PORT = int(os.getenv("MCP_SERVER_PORT", "8110"))
+mcp_manager = MCPServerManager(host=MCP_HOST, port=MCP_PORT)
 
 
 class DatabaseInfo(BaseModel):
@@ -133,9 +372,27 @@ async def list_databases():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/mcp-status")
+async def get_mcp_status():
+    """Get the status of the MCP forecasting server.
+
+    Returns:
+        MCP server status information
+    """
+    try:
+        status = mcp_manager.get_status()
+        return status
+    except Exception as e:
+        logger.error(f"Failed to get MCP server status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/switch", response_model=DatabaseSwitchResponse)
 async def switch_database(request: DatabaseSwitchRequest):
     """Switch to a different database file.
+
+    This endpoint updates the backend's current database and automatically
+    restarts the MCP forecasting server with the new database.
 
     Args:
         request: Database switch request with db_path
@@ -167,9 +424,22 @@ async def switch_database(request: DatabaseSwitchRequest):
 
         logger.info(f"Switched to database: {db_path}")
 
+        # Restart the MCP server with the new database
+        try:
+            mcp_manager.start_server(str(db_path), auto_restart=True)
+            logger.info(f"MCP server restarted with database: {db_path}")
+            message = f"Successfully switched to database: {db_path.name} (MCP server restarted)"
+        except Exception as mcp_error:
+            logger.error(f"Failed to restart MCP server: {mcp_error}")
+            # Database was switched but MCP server failed to restart
+            message = (
+                f"Database switched to {db_path.name}, but MCP server restart failed: {str(mcp_error)}. "
+                f"You may need to restart the MCP server manually."
+            )
+
         return DatabaseSwitchResponse(
             success=True,
-            message=f"Successfully switched to database: {db_path.name}",
+            message=message,
             db_path=str(db_path),
         )
     except Exception as e:

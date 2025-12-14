@@ -563,16 +563,21 @@ function App() {
       <header className="app-header">
         <div className="header-left">
           <h1>WorldReasoner</h1>
-          {statistics && (
-            <div className="stats-bar">
-              <span>{statistics.total_nodes} events</span>
-              <span>{statistics.total_edges} causal links</span>
-              <span>Avg degree: {statistics.average_out_degree?.toFixed(2)}</span>
-            </div>
-          )}
+          <div className="header-info-bar">
+            <DatabaseDropdown onDatabaseChange={handleDatabaseChange} />
+            {statistics && (
+              <>
+                <div className="header-divider"></div>
+                <div className="stats-bar">
+                  <span>{statistics.total_nodes} events</span>
+                  <span>{statistics.total_edges} causal links</span>
+                  <span>Avg degree: {statistics.average_out_degree?.toFixed(2)}</span>
+                </div>
+              </>
+            )}
+          </div>
         </div>
         <div className="header-right">
-          <DatabaseDropdown onDatabaseChange={handleDatabaseChange} />
         </div>
       </header>
 

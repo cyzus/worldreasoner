@@ -46,16 +46,16 @@ function EventGraphsPage({
       {/* Nested tabs */}
       <div className="nested-tabs">
         <button
-          className={`nested-tab ${nestedTab === 'controls' ? 'active' : ''}`}
-          onClick={() => setNestedTab('controls')}
-        >
-          ⚙️ Controls
-        </button>
-        <button
           className={`nested-tab ${nestedTab === 'questions' ? 'active' : ''}`}
           onClick={() => setNestedTab('questions')}
         >
           📋 Questions ({questions.length})
+        </button>
+        <button
+          className={`nested-tab ${nestedTab === 'controls' ? 'active' : ''}`}
+          onClick={() => setNestedTab('controls')}
+        >
+          ⚙️ Controls
         </button>
       </div>
 

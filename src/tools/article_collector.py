@@ -38,7 +38,8 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
     description = f"""Fetches and stores article data from a URL.
     
     Use this tool AFTER you've found article URLs using web_search.
-    Pass ONLY the URL and metadata (title, source, etc.) - do NOT pass article content.
+    Pass ONLY the URL and metadata (title, source, etc.).
+    IMPORTANT: make sure the published_date is correct.
     This tool will internally fetch the full article content to save tokens.
     
     Args:
@@ -46,7 +47,7 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         title (str): Article headline/title from search results
         source (str): Publication name (e.g., "TechCrunch", "BBC News")
         domain (str): Article domain category - one of: {', '.join(enum_to_list(Domain))}
-        published_date (str, optional): Publication date in ISO format if available
+        published_date: Publication date in ISO format with time zone
         author (str, optional): Author name if available
     
     Returns:
@@ -64,7 +65,7 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             "enum": enum_to_list(Domain),
             "nullable": True
         },
-        "published_date": {"type": "string", "description": "Publication date (ISO format)", "nullable": True},
+        "published_date": {"type": "string", "description": "Publication date (ISO format with time zone)"},
         "author": {"type": "string", "description": "Author name", "nullable": True},
     }
     output_type = "string"  # JSON string
@@ -114,8 +115,8 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         url: str,
         title: str,
         source: str,
+        published_date: str,
         domain: str = "general",
-        published_date: Optional[str] = None,
         author: Optional[str] = None
     ) -> str:
         """Fetch article content from URL and store as structured JSON.
@@ -125,7 +126,7 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             title: Article headline from search results
             source: Publication name
             domain: Article domain category (string, will be converted to enum)
-            published_date: Optional publication date (ISO format)
+            published_date: Publication date (ISO format with time zone)
             author: Optional author name
 
         Returns:

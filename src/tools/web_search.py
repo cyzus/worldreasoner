@@ -22,14 +22,11 @@ class WebSearchTool(Tool):
     description: str = (
         "Performs a web search using either SearXNG or default search. "
         "Returns search results formatted as markdown with titles, links, and descriptions.\n\n"
-        "TIME RANGE PARAMETER LIMITATIONS:\n"
-        "The time_range parameter only accepts predefined values: 'day', 'week', 'month', or 'year'. "
-        "It does NOT support custom start and end dates.\n\n"
         "CUSTOM DATE RANGES:\n"
         "To define a custom date range, include search operators directly in your query string:\n"
-        "  - after:YYYY-MM-DD  (e.g., after:2024-01-01)\n"
-        "  - before:YYYY-MM-DD (e.g., before:2024-12-31)\n"
-        "  - Example: 'AI news after:2024-11-01 before:2024-11-30'"
+        "  - after:YYYY-MM-DD  (e.g., after:2025-01-01)\n"
+        "  - before:YYYY-MM-DD (e.g., before:2025-12-31)\n"
+        "  - Example: 'AI news after:2025-11-01 before:2025-11-30'"
     )
 
     is_initialized: bool = False
@@ -47,11 +44,6 @@ class WebSearchTool(Tool):
         "language": {
             "type": "string",
             "description": "Optional language code (e.g., 'en', 'fr')",
-            "nullable": True
-        },
-        "time_range": {
-            "type": "string",
-            "description": "Optional time range filter (e.g., 'day', 'week', 'month', 'year')",
             "nullable": True
         },
         "page": {
@@ -91,7 +83,6 @@ class WebSearchTool(Tool):
         query: str,
         categories: Optional[str] = None,
         language: Optional[str] = None,
-        time_range: Optional[str] = None,
         page: Optional[int] = 1,
     ) -> str:
         """
@@ -101,14 +92,13 @@ class WebSearchTool(Tool):
             query: The search query string
             categories: Optional categories for SearXNG (ignored for default search)
             language: Optional language code for SearXNG (ignored for default search)
-            time_range: Optional time range filter for SearXNG (ignored for default search)
             page: Optional page number for SearXNG (ignored for default search)
         
         Returns:
             Search results as a string
         """
         if self.use_searxng:
-            return self._search_with_searxng(query, categories, language, time_range, page)
+            return self._search_with_searxng(query, categories, language, page)
         else:
             # Use the fallback tool, which only accepts query parameter
             return self.fallback_tool.forward(query=query)
@@ -118,7 +108,6 @@ class WebSearchTool(Tool):
         query: str,
         categories: Optional[str] = None,
         language: Optional[str] = None,
-        time_range: Optional[str] = None,
         page: Optional[int] = 1,
     ) -> str:
         """
@@ -128,7 +117,6 @@ class WebSearchTool(Tool):
             query: The search query string
             categories: Optional categories to search
             language: Optional language code
-            time_range: Optional time range filter
             page: Optional page number
         
         Returns:
@@ -146,8 +134,6 @@ class WebSearchTool(Tool):
                 params["categories"] = categories
             if language:
                 params["language"] = language
-            if time_range:
-                params["time_range"] = time_range
 
             response = self.client.get("/search", params=params)
             
@@ -207,6 +193,7 @@ class WebSearchTool(Tool):
             url = result.get("url", "")
             content = result.get("content", "No description available")
             engines = result.get("engines", [])
+            published_date = result.get("publishedDate", None)
             
             # Clean up content - remove extra whitespace and limit length
             content = " ".join(content.split())
@@ -216,6 +203,8 @@ class WebSearchTool(Tool):
             output.append(f"## {i}. {title}")
             output.append(f"**URL:** {url}")
             output.append(f"**Description:** {content}")
+            output.append(f"**Published Date:** {published_date}" if published_date else "**Published Date:** N/A")
+            
             if engines:
                 output.append(f"**Sources:** {', '.join(engines)}")
             output.append("")  # Empty line for spacing

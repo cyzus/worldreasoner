@@ -726,8 +726,32 @@ Connection Metadata (provided by MCP client):
     logger.info(f"Starting MCP STREAMABLE HTTP server on http://{args.host}:{args.port}")
     logger.info("Endpoints: /mcp/tools, /mcp/prompts, SSE streaming available")
     logger.info("Context headers: X-Question-ID, X-Knowledge-Cutoff (optional), X-Simulated-Date (required)")
+
+    # Add health check endpoint
+    from fastapi.responses import JSONResponse
+    from starlette.routing import Route
+
+    # Define health check function
+    async def health_check(request):
+        """Health check endpoint for monitoring server availability."""
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "healthy",
+                "database": args.db,
+                "server_type": "mcp_forecasting",
+                "mode": "streamable_http"
+            }
+        )
+
+    # Get the app instance using http_app() with streamable-http transport
+    app = mcp.http_app(transport="streamable-http")
+
+    # Add health check route to the Starlette app
+    app.routes.append(Route("/health", health_check, methods=["GET"]))
+
     import uvicorn
-    uvicorn.run(mcp.streamable_http_app, host=args.host, port=args.port)
+    uvicorn.run(app, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":
