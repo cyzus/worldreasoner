@@ -163,13 +163,27 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
             if self.db is not None:
                 # Verify article IDs exist in database
                 missing_ids = []
+                invalid_date_articles = []
                 for aid in article_ids:
-                    if self.db.get(Article, aid) is None:
+                    article = self.db.get(Article, aid)
+                    if article is None:
                         missing_ids.append(aid)
-                
+                    else:
+                        # Check that article date is not prior to event date
+                        article_date = article.published_date or article.created_at
+                        if article_date and event_date:
+                            article_date = ensure_timezone_aware(article_date)
+                            if article_date < event_date:
+                                invalid_date_articles.append(
+                                    f"{aid} (article: {article_date.isoformat()}, event: {event_date.isoformat()})"
+                                )
+
                 if missing_ids:
                     return f"Error: The following article IDs do not exist in database: {', '.join(missing_ids)}"
-                
+
+                if invalid_date_articles:
+                    return f"Error: The following articles have dates prior to the event occurring date: {', '.join(invalid_date_articles)}"
+
         else:
             return "Error: source_article_ids cannot be empty."
         # Validate and convert domain

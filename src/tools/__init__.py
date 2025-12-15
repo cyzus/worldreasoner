@@ -14,6 +14,7 @@ from .web_search import WebSearchTool
 from .rss_fetch import RssFetchTool
 from .causal_reasoner import CausalReasonerTool
 from .graph_inspector import GraphInspectorTool
+from .article_inspector import ArticleInspectorTool
 from .question_articles import QuestionArticlesTool
 
 __all__ = [
@@ -31,5 +32,6 @@ __all__ = [
     "RssFetchTool",
     "CausalReasonerTool",
     "GraphInspectorTool",
+    "ArticleInspectorTool",
     "QuestionArticlesTool",
 ]

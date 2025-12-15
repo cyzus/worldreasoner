@@ -23,12 +23,14 @@ class GraphInspectorTool(Tool):
     """
 
     name = "graph_inspector"
-    description = """Analyze the causal graph structure for a question.
+    description = """Visualize and analyze the causal graph structure for a question.
 
-    Use this tool to check if you've built a deep enough causal explanation:
-    - How many levels of causation? (1 = shallow, 3+ = deep)
-    - How many events and causal links?
-    - Quality score of the explanation
+    Use this tool to see a visual representation of your causal explanation:
+    - Text-based tree showing causal chains (Root → Intermediate → Target)
+    - Event details with descriptions
+    - Causal chain depths and paths
+    - Evidence support for each hypothesis
+    - Quality metrics and recommendations
 
     If max_depth < 2, your graph is TOO SHALLOW - you need to:
     1. Pick the most important immediate causes
@@ -37,10 +39,10 @@ class GraphInspectorTool(Tool):
     4. Link them with causal_reasoner: Root → Intermediate → Target
 
     Returns:
-        str: JSON with graph statistics including depth, events, links, quality score
+        str: Multi-section text with visual graph, causal chains, and statistics
     """
     inputs = {}
-    output_type = "string"  # JSON string
+    output_type = "string"
 
     def __init__(self, question_id, db_path: str = "worldreasoner.db"):
         """Initialize the graph inspector.
@@ -53,10 +55,10 @@ class GraphInspectorTool(Tool):
         self.question_id = question_id
 
     def forward(self) -> str:
-        """Analyze graph structure for a question.
+        """Visualize and analyze graph structure for a question.
 
         Returns:
-            JSON string with graph statistics
+            Multi-section text with visual graph representation and statistics
         """
         # Get all hypotheses related to this question
         all_hypotheses = self.db.get_many(CausalHypothesis)
@@ -66,24 +68,37 @@ class GraphInspectorTool(Tool):
         ]
 
         if not question_hypotheses:
-            return json.dumps({
-                "question_id": self.question_id,
-                "events": 0,
-                "hypotheses": 0,
-                "max_depth": 0,
-                "avg_depth": 0.0,
-                "quality_score": 0.0,
-                "status": "empty",
-                "recommendation": "Start by creating a target event, then identify immediate causes."
-            }, indent=2)
+            return self._format_empty_graph()
 
-        # Build graph structure
+        # Get the question
+        from src.domain.models import Question
+        question = self.db.get(Question, self.question_id)
+        
+        # Build graph structure and statistics
         graph_stats = self._analyze_graph_structure(question_hypotheses, self.question_id)
-
-        # Add recommendations
-        graph_stats["recommendation"] = self._get_recommendation(graph_stats)
-
-        return json.dumps(graph_stats, indent=2)
+        
+        # Get all unique event IDs
+        event_ids = set()
+        for hyp in question_hypotheses:
+            event_ids.add(hyp.source_event_id)
+            event_ids.add(hyp.target_event_id)
+        
+        # Fetch event details
+        events = {eid: self.db.get(Event, eid) for eid in event_ids}
+        
+        # Build adjacency list for visualization
+        graph = defaultdict(list)
+        hypothesis_map = {}  # (source, target) -> hypothesis
+        for hyp in question_hypotheses:
+            graph[hyp.target_event_id].append(hyp.source_event_id)
+            hypothesis_map[(hyp.source_event_id, hyp.target_event_id)] = hyp
+        
+        # Generate visualization
+        output = self._format_graph_visualization(
+            question, events, graph, hypothesis_map, graph_stats
+        )
+        
+        return output
 
     def _analyze_graph_structure(
         self,
@@ -272,3 +287,264 @@ class GraphInspectorTool(Tool):
             return "Graph depth is good, but quality is low. Add more evidence citations and improve confidence scores."
         else:
             return "Graph looks good! Deep causal chains with good quality."
+
+    def _format_empty_graph(self) -> str:
+        """Format output for empty graph."""
+        return f"""
+╔════════════════════════════════════════════════════════════════╗
+║                    CAUSAL GRAPH INSPECTOR                      ║
+╚════════════════════════════════════════════════════════════════╝
+
+Question ID: {self.question_id}
+
+STATUS: Empty Graph
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+No causal relationships have been created yet.
+
+RECOMMENDATION:
+→ Start by creating a target event (the outcome you're explaining)
+→ Identify 2-3 immediate causes using evidence articles
+→ For each cause, ask "What caused THIS?" to build deeper chains
+"""
+
+    def _format_graph_visualization(
+        self,
+        question,
+        events: Dict[str, Event],
+        graph: Dict[str, List[str]],
+        hypothesis_map: Dict[tuple, CausalHypothesis],
+        stats: Dict
+    ) -> str:
+        """Format the graph as a visual text representation.
+
+        Args:
+            question: Question object
+            events: Event ID to Event object mapping
+            graph: Adjacency list (target -> sources)
+            hypothesis_map: (source, target) -> hypothesis mapping
+            stats: Graph statistics
+
+        Returns:
+            Formatted multi-section text
+        """
+        sections = []
+        
+        # Header
+        sections.append("""
+╔════════════════════════════════════════════════════════════════╗
+║                    CAUSAL GRAPH INSPECTOR                      ║
+╚════════════════════════════════════════════════════════════════╝
+""")
+        
+        # Question info
+        if question:
+            sections.append(f"Question: {question.question_text[:80]}...")
+            sections.append(f"Question ID: {self.question_id}")
+            sections.append("")
+        
+        # Visual graph section
+        sections.append("CAUSAL GRAPH STRUCTURE")
+        sections.append("━" * 64)
+        sections.append("")
+        
+        target_event_id = question.target_event_id if question else None
+        if target_event_id and target_event_id in events:
+            # Build tree from target event
+            tree_lines = self._build_causal_tree(
+                target_event_id, events, graph, hypothesis_map, set()
+            )
+            sections.extend(tree_lines)
+        else:
+            # Show all disconnected components
+            sections.append("⚠ No target event specified. Showing all causal links:")
+            sections.append("")
+            for target_id, source_ids in graph.items():
+                target_event = events.get(target_id)
+                target_desc = self._truncate(target_event.description if target_event else target_id, 50)
+                sections.append(f"  ▸ {target_desc}")
+                for source_id in source_ids:
+                    source_event = events.get(source_id)
+                    source_desc = self._truncate(source_event.description if source_event else source_id, 45)
+                    hyp = hypothesis_map.get((source_id, target_id))
+                    conf = f"[conf: {hyp.confidence:.1f}]" if hyp else ""
+                    sections.append(f"    └─→ {source_desc} {conf}")
+                sections.append("")
+        
+        # Causal chains section
+        sections.append("")
+        sections.append("CAUSAL CHAINS (Root → Target)")
+        sections.append("━" * 64)
+        sections.append("")
+        
+        if target_event_id:
+            chains = self._find_all_causal_chains(target_event_id, events, graph, hypothesis_map)
+            if chains:
+                for i, chain in enumerate(chains[:5], 1):  # Show top 5 chains
+                    sections.append(f"Chain {i} (depth: {len(chain)-1}):")
+                    for j, (event_id, hyp) in enumerate(chain):
+                        event = events.get(event_id)
+                        desc = self._truncate(event.description if event else event_id, 55)
+                        indent = "  " * j
+                        
+                        if j == 0:
+                            sections.append(f"  {indent}🌱 {desc}")
+                        elif j == len(chain) - 1:
+                            sections.append(f"  {indent}🎯 {desc}")
+                        else:
+                            sections.append(f"  {indent}⚡ {desc}")
+                        
+                        if hyp and j < len(chain) - 1:
+                            evidence_str = f"[{len(hyp.evidence_article_ids)} articles]" if hyp.evidence_article_ids else "[no evidence]"
+                            sections.append(f"  {indent}   └─ conf: {hyp.confidence:.1f}, strength: {hyp.strength:.1f} {evidence_str}")
+                    sections.append("")
+            else:
+                sections.append("  No complete causal chains found.")
+                sections.append("")
+        
+        # Statistics section
+        sections.append("")
+        sections.append("GRAPH STATISTICS")
+        sections.append("━" * 64)
+        sections.append("")
+        sections.append(f"  Events:           {stats['events']}")
+        sections.append(f"  Hypotheses:       {stats['hypotheses']}")
+        sections.append(f"  Max Depth:        {stats['max_depth']} levels")
+        sections.append(f"  Avg Depth:        {stats['avg_depth']:.1f} levels")
+        sections.append(f"  Leaf Events:      {stats['leaf_events']} (root causes)")
+        sections.append(f"  Avg Confidence:   {stats['avg_confidence']:.2f}")
+        sections.append(f"  Avg Strength:     {stats['avg_strength']:.2f}")
+        sections.append(f"  With Evidence:    {stats['with_evidence']}/{stats['hypotheses']}")
+        sections.append(f"  Quality Score:    {stats['quality_score']:.2f}")
+        sections.append("")
+        
+        # Recommendation
+        recommendation = self._get_recommendation(stats)
+        sections.append("RECOMMENDATION")
+        sections.append("━" * 64)
+        sections.append(f"  {recommendation}")
+        sections.append("")
+        
+        return "\n".join(sections)
+
+    def _build_causal_tree(
+        self,
+        event_id: str,
+        events: Dict[str, Event],
+        graph: Dict[str, List[str]],
+        hypothesis_map: Dict[tuple, CausalHypothesis],
+        visited: Set[str],
+        prefix: str = "",
+        is_last: bool = True
+    ) -> List[str]:
+        """Build ASCII tree representation of causal graph.
+
+        Args:
+            event_id: Current event ID
+            events: Event mapping
+            graph: Adjacency list
+            hypothesis_map: Hypothesis mapping
+            visited: Visited nodes
+            prefix: Current line prefix
+            is_last: Whether this is the last child
+
+        Returns:
+            List of formatted lines
+        """
+        if event_id in visited:
+            return [f"{prefix}{'└─' if is_last else '├─'} [CYCLE: {event_id[:8]}...]"]
+        
+        visited.add(event_id)
+        lines = []
+        
+        event = events.get(event_id)
+        event_desc = self._truncate(event.description if event else event_id, 50)
+        
+        # Current node
+        connector = "└─" if is_last else "├─"
+        lines.append(f"{prefix}{connector} {event_desc}")
+        
+        # Children (sources that cause this event)
+        sources = graph.get(event_id, [])
+        if sources:
+            extension = "  " if is_last else "│ "
+            for i, source_id in enumerate(sources):
+                is_last_child = (i == len(sources) - 1)
+                hyp = hypothesis_map.get((source_id, event_id))
+                
+                # Add hypothesis info
+                if hyp:
+                    conf_str = f"conf: {hyp.confidence:.1f}"
+                    strength_str = f"str: {hyp.strength:.1f}"
+                    evidence_count = len(hyp.evidence_article_ids) if hyp.evidence_article_ids else 0
+                    evidence_str = f"{evidence_count} articles"
+                    lines.append(f"{prefix}{extension}  [{conf_str}, {strength_str}, {evidence_str}]")
+                
+                # Recursively build subtree
+                child_lines = self._build_causal_tree(
+                    source_id, events, graph, hypothesis_map,
+                    visited.copy(), prefix + extension, is_last_child
+                )
+                lines.extend(child_lines)
+        
+        return lines
+
+    def _find_all_causal_chains(
+        self,
+        target_id: str,
+        events: Dict[str, Event],
+        graph: Dict[str, List[str]],
+        hypothesis_map: Dict[tuple, CausalHypothesis]
+    ) -> List[List[tuple]]:
+        """Find all causal chains from root causes to target.
+
+        Args:
+            target_id: Target event ID
+            events: Event mapping
+            graph: Adjacency list
+            hypothesis_map: Hypothesis mapping
+
+        Returns:
+            List of chains, where each chain is [(event_id, hypothesis), ...]
+        """
+        all_chains = []
+        
+        def dfs(current_id: str, path: List[tuple], visited: Set[str]):
+            if current_id in visited:
+                return
+            
+            visited.add(current_id)
+            sources = graph.get(current_id, [])
+            
+            if not sources:
+                # Reached a root cause - save this chain
+                all_chains.append(list(reversed(path)))
+            else:
+                for source_id in sources:
+                    hyp = hypothesis_map.get((source_id, current_id))
+                    dfs(source_id, path + [(source_id, hyp)], visited.copy())
+        
+        # Start DFS from target
+        dfs(target_id, [(target_id, None)], set())
+        
+        # Sort by depth (longest first)
+        all_chains.sort(key=lambda c: len(c), reverse=True)
+        
+        return all_chains
+
+    def _truncate(self, text: str, max_len: int) -> str:
+        """Truncate text to max length with ellipsis.
+
+        Args:
+            text: Text to truncate
+            max_len: Maximum length
+
+        Returns:
+            Truncated text
+        """
+        if not text:
+            return ""
+        if len(text) <= max_len:
+            return text
+        return text[:max_len-3] + "..."
+
