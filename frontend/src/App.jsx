@@ -96,18 +96,27 @@ function App() {
     console.log('[TimeFilter] Called with:', { 
       start: startDate?.toISOString(), 
       end: endDate?.toISOString(),
-      totalNodes: fullGraphData.nodes.length 
+      totalNodes: fullGraphData.nodes.length,
+      selectedQuestion: selectedQuestionId 
     })
 
     if (!startDate || !endDate) {
-      // No filter, show all data and clear outcome markers
-      // Reuse original objects to maintain reference identity
+      // No time filter - if question is selected, re-apply question filter, otherwise show all
+      if (selectedQuestionId) {
+        console.log('[TimeFilter] Clearing time filter but keeping question filter')
+        // Re-trigger question filter by calling handleQuestionFilter
+        // This will be handled by the parent - we just clear the time filter state
+        setTimeFilter(null)
+        return
+      }
+      
+      // No filters at all - show all data and clear outcome markers
       const resetNodes = fullGraphData.nodes
       resetNodes.forEach(node => {
         node.isOutcome = false
       })
 
-      // Filter out synthetic links - reuse original objects
+      // Filter out synthetic links
       const resetLinks = fullGraphData.links
         .filter(link => !link.isSynthetic && link.type !== 'potentially_relevant')
 
@@ -123,8 +132,13 @@ function App() {
 
     setTimeFilter({ start: startDate, end: endDate })
 
-    // Filter nodes by date - reuse original objects to maintain reference identity
-    const filteredNodes = fullGraphData.nodes
+    // IMPORTANT: Time filter should NOT clear question filter
+    // Instead, it should apply on top of current graphData (which may already be question-filtered)
+    // Use current graphData as the base, not fullGraphData
+    const baseData = graphData.nodes.length > 0 ? graphData : fullGraphData
+    
+    // Filter nodes by date
+    const filteredNodes = baseData.nodes
       .filter(node => {
         const eventDate = node.properties?.occurred_date || node.properties?.predicted_date
         if (!eventDate) return false
@@ -133,20 +147,13 @@ function App() {
         return date >= startDate && date <= endDate
       })
 
-    // Reset isOutcome on filtered nodes directly
-    filteredNodes.forEach(node => {
-      node.isOutcome = false
-    })
-
-    console.log('[TimeFilter] Filtered to', filteredNodes.length, 'nodes')
+    console.log('[TimeFilter] Filtered to', filteredNodes.length, 'nodes (from', baseData.nodes.length, 'base nodes)')
 
     const nodeIds = new Set(filteredNodes.map(n => n.id))
 
-    // Filter links to only include those between visible nodes (exclude synthetic)
-    // Reuse original link objects to maintain reference identity
-    const filteredLinks = fullGraphData.links
+    // Filter links to only include those between visible nodes
+    const filteredLinks = baseData.links
       .filter(link => {
-        if (link.isSynthetic || link.type === 'potentially_relevant') return false
         const sourceId = typeof link.source === 'object' ? link.source.id : link.source
         const targetId = typeof link.target === 'object' ? link.target.id : link.target
         return nodeIds.has(sourceId) && nodeIds.has(targetId)
@@ -158,9 +165,8 @@ function App() {
       links: filteredLinks,
     })
 
-    // Clear question filter when using time filter
-    setSelectedQuestionId(null)
-  }, [fullGraphData])
+    // DO NOT clear question filter - time filter works on top of question filter
+  }, [fullGraphData, graphData, selectedQuestionId])
 
   // Load statistics
   const loadStatistics = useCallback(async () => {
@@ -485,8 +491,7 @@ function App() {
         links: combinedLinks,
       })
 
-      // Clear time filter when filtering by question
-      setTimeFilter(null)
+      // Time filter will be preserved and applied on top if active
     } catch (error) {
       console.error('Failed to fetch question events:', error)
       // Fallback to old behavior using only related_event_ids

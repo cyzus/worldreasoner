@@ -203,7 +203,7 @@ class WebSearchTool(Tool):
             output.append(f"## {i}. {title}")
             output.append(f"**URL:** {url}")
             output.append(f"**Description:** {content}")
-            output.append(f"**Published Date:** {published_date}" if published_date else "**Published Date:** N/A")
+            output.append(f"**Published Date:** {published_date}" if published_date else "")
             
             if engines:
                 output.append(f"**Sources:** {', '.join(engines)}")

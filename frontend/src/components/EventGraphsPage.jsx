@@ -108,6 +108,8 @@ function EventGraphsPage({
             onEventClick={onNodeClick}
             onTimeRangeChange={onTimeRangeChange}
             selectedNode={selectedNode}
+            selectedQuestionId={selectedQuestionId}
+            questionRelatedEvents={questionRelatedEvents}
           />
 
           {/* Price history chart for Polymarket questions */}

@@ -22,6 +22,21 @@
   gap: 0.25rem;
 }
 
+.timeline-question-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  background: #e7f5ff;
+  color: #1971c2;
+  border: 1px solid #a5d8ff;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-top: 0.15rem;
+  width: fit-content;
+}
+
 .timeline-window-display {
   display: flex;
   gap: 0.5rem;
