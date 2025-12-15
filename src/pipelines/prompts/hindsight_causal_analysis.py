@@ -1,6 +1,6 @@
 """Prompts for hindsight causal analysis using multi-agent system."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from src.domain.models import Question
 from .base import BasePromptGenerator, PromptTemplate
 
@@ -11,6 +11,8 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
     # Template for agent prompt
     AGENT_TEMPLATE = PromptTemplate(
         template="""Your task: Build a DEEP causal explanation for this question with hindsight.
+
+NOTE: the question has already been resolved on {resolution_date} with known ground truth.
 
 QUESTION ID: {question_id}
 QUESTION: {question_text}
@@ -27,8 +29,9 @@ PROCESS:
 
 1. COLLECT EVIDENCE:
    Call evidence_collector to gather relevant articles:
-   - Time window: {evidence_window_days} days before resolution
-   - Need at least {min_evidence_articles} high-quality articles
+   - Time window: {evidence_window_days} days before resolution ({window_start} to {resolution_date})
+   - Need at least {min_evidence_articles} high-quality articles, more is better
+   - Collect articles at different dates/times to capture evolving context (but all BEFORE resolution date)
    - If insufficient, ask agent to broaden search
 
 2. BUILD DEEP CAUSAL GRAPH:
@@ -124,7 +127,7 @@ Begin the analysis!""",
         """
         # Format resolution date
         resolution_date_str = self.format_datetime(question.resolution_date)
-
+        window_start = self.format_datetime(question.resolution_date - timedelta(days=evidence_window_days))
         # Generate target event instructions based on whether target_event_id exists
         if question.target_event_id:
             target_event_info = f"TARGET EVENT ID: {question.target_event_id} (USE THIS as the final target for all causal chains)"
@@ -159,6 +162,7 @@ Begin the analysis!""",
             question_id=question.id,
             question_text=question.question_text,
             resolution_date=resolution_date_str,
+            window_start=window_start,
             ground_truth=str(question.ground_truth),
             target_event_info=target_event_info,
             causal_graph_instructions=causal_graph_instructions,

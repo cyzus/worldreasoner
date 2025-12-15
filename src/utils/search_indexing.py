@@ -106,15 +106,3 @@ async def auto_index_articles(
             "status": "failed",
             "error": str(e)
         }
-
-
-def should_auto_index(skip_indexing: bool = False) -> bool:
-    """Check if auto-indexing should run.
-
-    Args:
-        skip_indexing: CLI flag to skip indexing
-
-    Returns:
-        True if indexing should run
-    """
-    return not skip_indexing

@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react'
 import './Timeline.css'
 
-const Timeline = ({ graphData, onTimeRangeChange, onEventClick, selectedNode }) => {
+const Timeline = ({ graphData, onTimeRangeChange, onEventClick, selectedNode, selectedQuestionId, questionRelatedEvents }) => {
   const timelineRef = useRef(null)
   const [timeRange, setTimeRange] = useState({ start: null, end: null })
   const [hoveredEvent, setHoveredEvent] = useState(null)
@@ -11,8 +11,23 @@ const Timeline = ({ graphData, onTimeRangeChange, onEventClick, selectedNode }) 
   const playbackIntervalRef = useRef(null)
 
   // Extract events with dates and sort them
+  // Filter by selected question if one is selected
+  const questionEventIds = selectedQuestionId && questionRelatedEvents
+    ? new Set(questionRelatedEvents.map(e => e.id))
+    : null
+
   const eventsWithDates = graphData.nodes
-    .filter(node => node.properties?.occurred_date || node.properties?.predicted_date)
+    .filter(node => {
+      // Filter by date availability
+      if (!node.properties?.occurred_date && !node.properties?.predicted_date) {
+        return false
+      }
+      // Filter by question if selected
+      if (questionEventIds && !questionEventIds.has(node.id)) {
+        return false
+      }
+      return true
+    })
     .map(node => ({
       ...node,
       date: new Date(node.properties.occurred_date || node.properties.predicted_date),
@@ -116,9 +131,12 @@ const Timeline = ({ graphData, onTimeRangeChange, onEventClick, selectedNode }) 
   }
 
   if (eventsWithDates.length === 0) {
+    const message = selectedQuestionId
+      ? 'No events with dates for selected question'
+      : 'No events with dates available'
     return (
       <div className="timeline-container">
-        <div className="timeline-empty">No events with dates available</div>
+        <div className="timeline-empty">{message}</div>
       </div>
     )
   }
@@ -167,6 +185,9 @@ const Timeline = ({ graphData, onTimeRangeChange, onEventClick, selectedNode }) 
       <div className="timeline-header">
         <div className="timeline-info">
           <span className="timeline-title">Time Traversal</span>
+          {selectedQuestionId && (
+            <span className="timeline-question-badge">🔍 Question Filtered</span>
+          )}
           {window && (
             <div className="timeline-window-display">
               <span className="timeline-window-label">Viewing:</span>

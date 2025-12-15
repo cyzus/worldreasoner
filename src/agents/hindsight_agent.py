@@ -7,7 +7,7 @@ from src.tools import (ArticleRetrievalTool, ArticleCollectorTool,
                        WebFetchTool, WebSearchTool,
                        EventDetailsTool, EventIdentifierTool,
                        CausalReasonerTool, GraphInspectorTool,
-                       QuestionArticlesTool)
+                       ArticleInspectorTool, QuestionArticlesTool)
 
 
 class HindsightAgent(BaseAgent):
@@ -58,11 +58,13 @@ class HindsightAgent(BaseAgent):
             model=llm_model,
             tools=[
                 ArticleCollectorTool(db_path=db_path, question_id=question_id),  # Provenance-aware
+                ArticleInspectorTool(db_path=db_path, question_id=question_id),  # Check coverage
                 WebFetchTool(),
                 WebSearchTool(),
             ],
             max_steps=15,
             stream_outputs=True,
+            additional_authorized_imports=["json"], # Allow json imports in code agent
             name="evidence_collector",
             description="""Specialist agent for collecting evidence articles.
 
@@ -70,7 +72,10 @@ class HindsightAgent(BaseAgent):
             - Try multiple search queries if initial results are insufficient
             - Broaden time windows if needed
             - Fetch and analyze article content
+            - Make sure all the articles collected are published BEFORE the resolution date
             - Use article_collector to save relevant articles to the database
+            - Use article_inspector to check timeline coverage and identify gaps
+            - If gaps exist, collect more articles from those time periods
 
             IMPORTANT: After collecting, report back the article IDs in this format:
             "Collected articles: [art_xxx, art_yyy, art_zzz]"
@@ -88,10 +93,12 @@ class HindsightAgent(BaseAgent):
                 EventDetailsTool(db_path=db_path),
                 CausalReasonerTool(db_path=db_path, question_id=question_id),  # Provenance-aware
                 GraphInspectorTool(db_path=db_path, question_id=question_id),  # Provenance-aware
-                ArticleRetrievalTool(db_path=db_path)
+                ArticleRetrievalTool(db_path=db_path),
+                ArticleInspectorTool(db_path=db_path, question_id=question_id),  # Check coverage
             ],
             max_steps=30,  # More steps for iterative graph building
             stream_outputs=True,
+            additional_authorized_imports=["json"], # Allow json imports in code agent
             name="causal_analyzer",
             description="""Specialist agent for building deep causal graphs.
 
@@ -122,7 +129,8 @@ class HindsightAgent(BaseAgent):
 
         # Manager tools (high-level coordination)
         tools = tools + [
-            GraphInspectorTool(db_path=db_path, question_id=question_id)
+            GraphInspectorTool(db_path=db_path, question_id=question_id),
+            ArticleInspectorTool(db_path=db_path, question_id=question_id),
         ]
 
         super().__init__(

@@ -57,6 +57,60 @@ class PolymarketClient:
             self._tag_id_cache[slug] = None
             return None
 
+    async def search_markets(
+        self,
+        query: str,
+        limit_per_type: int = 20,
+        events_tag: Optional[List[str]] = None,
+        keep_closed_markets: bool = True,
+    ) -> Dict[str, Any]:
+        """Search Polymarket markets, events, and profiles.
+
+        Args:
+            query: Search query term
+            limit_per_type: Results limit per content type (default: 20)
+            events_tag: Optional event tags to filter by
+            keep_closed_markets: Include closed markets in results (default: True)
+
+        Returns:
+            Dict with 'events', 'tags', 'profiles' keys containing search results
+        """
+        url = f"{self.API_BASE}/public-search"
+        params = {
+            "q": query,
+            "limit_per_type": limit_per_type,
+            "keep_closed_markets": 1 if keep_closed_markets else 0,
+        }
+
+        # Add optional tag filter
+        if events_tag:
+            params["events_tag"] = events_tag
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                    if response.status != 200:
+                        logger.error(f"Polymarket search API returned {response.status}")
+                        return {"events": [], "tags": [], "profiles": []}
+
+                    data = await response.json()
+
+                    # Extract events (which contain markets)
+                    events = data.get("events", [])
+                    tags = data.get("tags", [])
+                    profiles = data.get("profiles", [])
+
+                    logger.info(
+                        f"Polymarket search for '{query}' returned: "
+                        f"{len(events)} events, {len(tags)} tags, {len(profiles)} profiles"
+                    )
+
+                    return data
+
+        except Exception as e:
+            logger.error(f"Failed to search Polymarket: {e}")
+            return {"events": [], "tags": [], "profiles": []}
+
     async def fetch_markets(
         self,
         limit: int = 1000,

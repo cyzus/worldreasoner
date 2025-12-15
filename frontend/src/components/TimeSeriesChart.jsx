@@ -9,7 +9,7 @@ import * as d3 from 'd3'
  */
 export default function TimeSeriesChart({
   priceHistory,
-  events,
+  events = [],
   targetEventId,
   outcomes = ['Yes', 'No'],
   width = 900,
@@ -22,7 +22,7 @@ export default function TimeSeriesChart({
 
   useEffect(() => {
     if (!isExpanded) return
-    if (!priceHistory || Object.keys(priceHistory).length === 0) return
+    if (!priceHistory || typeof priceHistory !== 'object' || Object.keys(priceHistory).length === 0) return
 
     // Clear previous chart
     const svg = d3.select(svgRef.current)
@@ -39,14 +39,16 @@ export default function TimeSeriesChart({
 
     tokenIds.forEach((tokenId, idx) => {
       const history = priceHistory[tokenId]
-      history.forEach(point => {
-        allData.push({
-          timestamp: point.t * 1000,  // Convert seconds to milliseconds
-          price: point.p,
-          tokenId: tokenId,
-          outcome: outcomes[idx] || `Outcome ${idx + 1}`
+      if (Array.isArray(history)) {
+        history.forEach(point => {
+          allData.push({
+            timestamp: point.t * 1000,  // Convert seconds to milliseconds
+            price: point.p,
+            tokenId: tokenId,
+            outcome: outcomes[idx] || `Outcome ${idx + 1}`
+          })
         })
-      })
+      }
     })
 
     if (allData.length === 0) {
@@ -73,7 +75,7 @@ export default function TimeSeriesChart({
     let maxLevel = 0
     const levelHeight = 20 // Vertical space per stacked event
 
-    if (events && events.length > 0) {
+    if (Array.isArray(events) && events.length > 0) {
       eventsInTimeRange = events.filter(event => {
         if (!event.occurred_date && !event.predicted_date) return false
         const eventDate = new Date(event.occurred_date || event.predicted_date)
@@ -461,13 +463,15 @@ export default function TimeSeriesChart({
   }, [priceHistory, events, targetEventId, outcomes, width, height, isExpanded])
 
   // Count events in time range for title
-  const eventsInRange = events ? events.filter(event => {
+  const eventsInRange = (Array.isArray(events) && events.length > 0) ? events.filter(event => {
     if (!event.occurred_date && !event.predicted_date) return false
-    if (!priceHistory || Object.keys(priceHistory).length === 0) return false
+    if (!priceHistory || typeof priceHistory !== 'object' || Object.keys(priceHistory).length === 0) return false
 
     const allData = []
     Object.values(priceHistory).forEach(history => {
-      history.forEach(point => allData.push(point.t * 1000))
+      if (Array.isArray(history)) {
+        history.forEach(point => allData.push(point.t * 1000))
+      }
     })
     if (allData.length === 0) return false
 

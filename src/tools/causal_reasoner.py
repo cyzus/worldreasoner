@@ -6,7 +6,7 @@ import uuid
 from typing import Optional
 
 from smolagents import Tool
-from src.domain.models import CausalHypothesis, CausalRelationType
+from src.domain.models import CausalHypothesis, CausalRelationType, Event
 from src.core.collectors import ResultCollector
 
 
@@ -166,6 +166,16 @@ class CausalReasonerTool(Tool):
         strength = max(0.0, min(1.0, float(strength)))
         confidence = max(0.0, min(1.0, float(confidence)))
 
+        # Validate chronology - source must occur before target
+        if not self._validate_chronology(source_event_id, target_event_id):
+            error_msg = {
+                "status": "error",
+                "message": "Chronology validation failed: source event must occur before target event",
+                "source_event_id": source_event_id,
+                "target_event_id": target_event_id,
+            }
+            return json.dumps(error_msg, indent=2)
+
         # Generate unique hypothesis ID
         hypothesis_id = self._generate_hypothesis_id(question_id)
 
@@ -225,3 +235,32 @@ class CausalReasonerTool(Tool):
         timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
         suffix = uuid.uuid4().hex[:8]
         return f"hyp_{question_id}_{timestamp}_{self._counter:03d}_{suffix}"
+
+    def _validate_chronology(self, source_event_id: str, target_event_id: str) -> bool:
+        """Validate that source event occurs before target event.
+
+        Args:
+            source_event_id: ID of the source event
+            target_event_id: ID of the target event
+
+        Returns:
+            True if chronology is valid, False otherwise
+        """
+        if self.db is None:
+            return True  # Cannot validate without DB
+
+        # Fetch events from database
+        source_event = self.db.get(Event, source_event_id)
+        target_event = self.db.get(Event, target_event_id)
+
+        # Check if events exist
+        if source_event is None or target_event is None:
+            return False  # Cannot validate if events don't exist
+
+        # Check if dates are present
+        if source_event.occurred_date is None or target_event.occurred_date is None:
+            return False  # Cannot validate without dates
+
+        # Validate chronological order
+        return source_event.occurred_date < target_event.occurred_date
+

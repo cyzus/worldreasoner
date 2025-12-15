@@ -161,7 +161,7 @@ class PipelineRunner:
         from src.pipelines.question.sources.news import NewsBasedRunner
         from src.pipelines.stages import ArticleCollectionConfig, EventIdentificationConfig, ArticleSource
         from src.config.pipeline import QuestionPipelineConfig
-        from src.utils.search_indexing import auto_index_articles, should_auto_index
+        from src.utils.search_indexing import auto_index_articles
         import yaml
 
         results = PipelineResult([], [], [], 0.0)
@@ -276,7 +276,7 @@ class PipelineRunner:
                 ))
 
             # Auto-index articles if not skipped
-            if should_auto_index(skip_indexing):
+            if not skip_indexing:
                 if on_progress:
                     on_progress(PipelineProgress(
                         current=5,
@@ -323,6 +323,7 @@ class PipelineRunner:
         force_reprocess: bool = False,
         evidence_window_days: int = 365,
         min_evidence_articles: int = 5,
+        skip_indexing: bool = False,
         **kwargs
     ) -> PipelineResult:
         """Run basic evidence pipeline."""
@@ -405,6 +406,24 @@ class PipelineRunner:
                 logger.error(f"Error processing question {qid}: {e}")
                 results.failed.append({"id": qid, "error": str(e)})
 
+        # Auto-index articles if not skipped
+        if not skip_indexing:
+            from src.utils.search_indexing import auto_index_articles
+
+            try:
+                logger.info("Indexing articles for hybrid search...")
+                index_stats = await auto_index_articles(db_path=self.db_path)
+                if index_stats['status'] == 'success':
+                    logger.info(f"Indexed {index_stats['newly_indexed']} new articles (total: {index_stats['final_indexed']})")
+                elif index_stats['status'] == 'up_to_date':
+                    logger.info("Search index is up to date")
+                elif index_stats['status'] == 'no_articles':
+                    logger.warning("No articles to index")
+                else:
+                    logger.error(f"Indexing failed: {index_stats.get('error', 'Unknown error')}")
+            except Exception as e:
+                logger.error(f"Failed to auto-index articles: {e}")
+
         return results
 
     async def _run_adaptive_evidence(
@@ -413,6 +432,7 @@ class PipelineRunner:
         on_progress: Optional[Callable],
         agent_max_steps: int = 30,
         min_graph_depth: int = 3,
+        skip_indexing: bool = False,
         **kwargs
     ) -> PipelineResult:
         """Run adaptive multi-agent evidence pipeline."""
@@ -474,6 +494,24 @@ class PipelineRunner:
                 logger.error(f"Error processing question {qid}: {e}")
                 results.failed.append({"id": qid, "error": str(e)})
 
+        # Auto-index articles if not skipped
+        if not skip_indexing:
+            from src.utils.search_indexing import auto_index_articles
+
+            try:
+                logger.info("Indexing articles for hybrid search...")
+                index_stats = await auto_index_articles(db_path=self.db_path)
+                if index_stats['status'] == 'success':
+                    logger.info(f"Indexed {index_stats['newly_indexed']} new articles (total: {index_stats['final_indexed']})")
+                elif index_stats['status'] == 'up_to_date':
+                    logger.info("Search index is up to date")
+                elif index_stats['status'] == 'no_articles':
+                    logger.warning("No articles to index")
+                else:
+                    logger.error(f"Indexing failed: {index_stats.get('error', 'Unknown error')}")
+            except Exception as e:
+                logger.error(f"Failed to auto-index articles: {e}")
+
         return results
 
     async def _run_forecast(
@@ -483,11 +521,12 @@ class PipelineRunner:
         model: Optional[str] = None,
         offset_days: int = 7,
         knowledge_only: bool = False,
+        min_context_items: int = 3,
         **kwargs
     ) -> PipelineResult:
         """Run forecasting on questions."""
         from src.agents.forecast_agent import ForecastAgent
-        from datetime import timedelta
+        from src.utils.llm_utils import get_knowledge_cutoff_date
 
         results = PipelineResult([], [], [], 0.0)
 
@@ -517,21 +556,22 @@ class PipelineRunner:
 
                 logger.info(f"Running forecast on question: {qid}")
 
-                # Calculate simulated date (offset_days before resolution)
-                if question.resolution_date:
-                    simulated_date = question.resolution_date - timedelta(days=offset_days)
-                else:
-                    simulated_date = datetime.now(timezone.utc) - timedelta(days=offset_days)
+                # Determine simulated date and knowledge cutoff
+                forecast_setup = question.prepare_forecast(
+                    db=self.db,
+                    offset_days_before_resolution=offset_days,
+                    min_context_items=min_context_items
+                )
 
-                # Use a reasonable knowledge cutoff (e.g., 6 months before simulated date)
-                knowledge_cutoff = simulated_date - timedelta(days=180)
+
 
                 # Create forecast agent with correct parameters
                 agent = ForecastAgent(
                     question=question,
-                    simulated_date=simulated_date.isoformat(),
-                    knowledge_cutoff=knowledge_cutoff.isoformat(),
+                    simulated_date=forecast_setup['simulated_date'].isoformat(),
+                    knowledge_cutoff=get_knowledge_cutoff_date(config.llm.model),
                     config=config,
+                    db_path=self.db_path,  # Pass database path for per-request switching
                     knowledge_only=knowledge_only,
                 )
 
@@ -539,6 +579,8 @@ class PipelineRunner:
                 result = agent.run(
                     f"Forecast the outcome of this question. Use get_question to see the details, "
                     f"research if needed (unless knowledge-only mode), then submit your forecast."
+                    f"The information you have access to might be limited due to the simulated date or evidence collection process."
+                    f"Make reasonable forecasts nonetheless."
                 )
 
                 # The forecast should be submitted via the MCP tool and saved to DB

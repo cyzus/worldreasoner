@@ -270,6 +270,113 @@ class PolymarketRunner(QuestionSourceRunner):
             logger.debug(f"Failed to parse market {market.get('question', 'unknown')}: {e}")
             return None
 
+    async def collect_from_search(
+        self,
+        search_query: str,
+        count: int,
+        type_filter: Optional[List[str]] = None,
+        quality_requirements: Optional[QualityRequirements] = None,
+        existing_question_ids: Optional[set] = None,
+    ) -> CollectionResult:
+        """Collect questions from Polymarket search results.
+
+        Args:
+            search_query: Search query term
+            count: Target number of questions
+            type_filter: Only collect these question types
+            quality_requirements: Quality constraints
+            existing_question_ids: Set of existing IDs to skip
+
+        Returns:
+            CollectionResult with Polymarket questions from search
+        """
+        try:
+            logger.info(f"PolymarketRunner: Searching Polymarket for '{search_query}'")
+
+            # Search Polymarket
+            search_results = await self.client.search_markets(
+                query=search_query,
+                limit_per_type=count * 2,  # Fetch more to account for filtering
+                keep_closed_markets=self.require_ground_truth,
+            )
+
+            # Extract markets from events in search results
+            events = search_results.get("events", [])
+            market_questions = []
+
+            for event in events:
+                # Each event contains markets
+                markets = event.get("markets", [])
+
+                for market in markets:
+                    # Parse dates
+                    end_date_str = market.get("endDate")
+                    if not end_date_str:
+                        continue
+
+                    try:
+                        end_date = parse_iso_datetime(end_date_str)
+                    except Exception:
+                        continue
+
+                    closed_time = self.parser.parse_close_time(market)
+                    should_skip, _ = self.parser.should_skip_market(
+                        market, end_date, closed_time, quality_requirements
+                    )
+
+                    if should_skip:
+                        continue
+
+                    # Parse market
+                    mq = self._parse_single_market(market, end_date, closed_time)
+                    if mq:
+                        market_questions.append(mq)
+
+            logger.info(f"Parsed {len(market_questions)} markets from search results")
+
+            # Map to Question model
+            questions = []
+            for mq in market_questions:
+                try:
+                    question = self._map_to_question(mq)
+                    questions.append(question)
+                except Exception as e:
+                    logger.warning(f"Failed to map market {mq.market_id}: {e}")
+
+            # Filter by existing IDs
+            if existing_question_ids:
+                questions = [q for q in questions if q.id not in existing_question_ids]
+
+            # Filter by type if specified
+            if type_filter:
+                questions = [q for q in questions if q.question_type in type_filter]
+
+            # Take only the requested count
+            questions = questions[:count]
+
+            logger.info(f"Collected {len(questions)} questions from search")
+
+            return CollectionResult(
+                source_name=self.source_name,
+                questions=questions,
+                requested_count=count,
+                actual_count=len(questions),
+                success=True,
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to collect from Polymarket search: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return CollectionResult(
+                source_name=self.source_name,
+                questions=[],
+                requested_count=count,
+                actual_count=0,
+                success=False,
+                error_message=str(e),
+            )
+
     async def collect(
         self,
         count: int,

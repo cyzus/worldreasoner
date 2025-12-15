@@ -4,9 +4,12 @@ import ControlPanel from './components/ControlPanel'
 import EventDetails from './components/EventDetails'
 import QuestionList from './components/QuestionList'
 import PipelinePage from './components/PipelinePage'
+import QuestionCollectionPage from './components/QuestionCollectionPage'
+import ForecastPage from './components/ForecastPage'
+import EventGraphsPage from './components/EventGraphsPage'
 import Timeline from './components/Timeline'
 import TimeSeriesChart from './components/TimeSeriesChart'
-import DatabaseSelector from './components/DatabaseSelector'
+import DatabaseDropdown from './components/DatabaseDropdown'
 import { fetchGraph, fetchStatistics, fetchQuestions, fetchQuestionEvents, fetchQuestionPriceHistory } from './api/graphApi'
 import './App.css'
 
@@ -26,7 +29,7 @@ function App() {
   const [timeFilter, setTimeFilter] = useState(null) // { start: Date, end: Date }
   const [questions, setQuestions] = useState([]) // List of all questions
   const [selectedQuestionId, setSelectedQuestionId] = useState(null) // Currently selected question filter
-  const [leftPanelTab, setLeftPanelTab] = useState('controls') // 'controls', 'questions', or 'pipelines'
+  const [leftPanelTab, setLeftPanelTab] = useState('eventgraphs') // 'eventgraphs', 'collection', 'forecast', or 'pipelines'
   const [priceHistoryData, setPriceHistoryData] = useState(null) // Price history for selected question
   const [loadingPriceHistory, setLoadingPriceHistory] = useState(false) // Loading state for price history
   const [questionRelatedEvents, setQuestionRelatedEvents] = useState([]) // All events related to selected question
@@ -93,18 +96,27 @@ function App() {
     console.log('[TimeFilter] Called with:', { 
       start: startDate?.toISOString(), 
       end: endDate?.toISOString(),
-      totalNodes: fullGraphData.nodes.length 
+      totalNodes: fullGraphData.nodes.length,
+      selectedQuestion: selectedQuestionId 
     })
 
     if (!startDate || !endDate) {
-      // No filter, show all data and clear outcome markers
-      // Reuse original objects to maintain reference identity
+      // No time filter - if question is selected, re-apply question filter, otherwise show all
+      if (selectedQuestionId) {
+        console.log('[TimeFilter] Clearing time filter but keeping question filter')
+        // Re-trigger question filter by calling handleQuestionFilter
+        // This will be handled by the parent - we just clear the time filter state
+        setTimeFilter(null)
+        return
+      }
+      
+      // No filters at all - show all data and clear outcome markers
       const resetNodes = fullGraphData.nodes
       resetNodes.forEach(node => {
         node.isOutcome = false
       })
 
-      // Filter out synthetic links - reuse original objects
+      // Filter out synthetic links
       const resetLinks = fullGraphData.links
         .filter(link => !link.isSynthetic && link.type !== 'potentially_relevant')
 
@@ -120,8 +132,13 @@ function App() {
 
     setTimeFilter({ start: startDate, end: endDate })
 
-    // Filter nodes by date - reuse original objects to maintain reference identity
-    const filteredNodes = fullGraphData.nodes
+    // IMPORTANT: Time filter should NOT clear question filter
+    // Instead, it should apply on top of current graphData (which may already be question-filtered)
+    // Use current graphData as the base, not fullGraphData
+    const baseData = graphData.nodes.length > 0 ? graphData : fullGraphData
+    
+    // Filter nodes by date
+    const filteredNodes = baseData.nodes
       .filter(node => {
         const eventDate = node.properties?.occurred_date || node.properties?.predicted_date
         if (!eventDate) return false
@@ -130,20 +147,13 @@ function App() {
         return date >= startDate && date <= endDate
       })
 
-    // Reset isOutcome on filtered nodes directly
-    filteredNodes.forEach(node => {
-      node.isOutcome = false
-    })
-
-    console.log('[TimeFilter] Filtered to', filteredNodes.length, 'nodes')
+    console.log('[TimeFilter] Filtered to', filteredNodes.length, 'nodes (from', baseData.nodes.length, 'base nodes)')
 
     const nodeIds = new Set(filteredNodes.map(n => n.id))
 
-    // Filter links to only include those between visible nodes (exclude synthetic)
-    // Reuse original link objects to maintain reference identity
-    const filteredLinks = fullGraphData.links
+    // Filter links to only include those between visible nodes
+    const filteredLinks = baseData.links
       .filter(link => {
-        if (link.isSynthetic || link.type === 'potentially_relevant') return false
         const sourceId = typeof link.source === 'object' ? link.source.id : link.source
         const targetId = typeof link.target === 'object' ? link.target.id : link.target
         return nodeIds.has(sourceId) && nodeIds.has(targetId)
@@ -155,9 +165,8 @@ function App() {
       links: filteredLinks,
     })
 
-    // Clear question filter when using time filter
-    setSelectedQuestionId(null)
-  }, [fullGraphData])
+    // DO NOT clear question filter - time filter works on top of question filter
+  }, [fullGraphData, graphData, selectedQuestionId])
 
   // Load statistics
   const loadStatistics = useCallback(async () => {
@@ -482,8 +491,7 @@ function App() {
         links: combinedLinks,
       })
 
-      // Clear time filter when filtering by question
-      setTimeFilter(null)
+      // Time filter will be preserved and applied on top if active
     } catch (error) {
       console.error('Failed to fetch question events:', error)
       // Fallback to old behavior using only related_event_ids
@@ -549,210 +557,106 @@ function App() {
     loadStatistics()
   }, [filters, loadGraph, loadStatistics])
 
+  // Handle questions added from collection page
+  const handleQuestionsAdded = useCallback((count) => {
+    console.log(`${count} questions added, refreshing...`)
+    loadQuestions() // Reload questions list
+  }, [loadQuestions])
+
   return (
     <div className="app">
       <header className="app-header">
-        <h1>WorldReasoner</h1>
-        {statistics && (
-          <div className="stats-bar">
-            <span>{statistics.total_nodes} events</span>
-            <span>{statistics.total_edges} causal links</span>
-            <span>Avg degree: {statistics.average_out_degree?.toFixed(2)}</span>
+        <div className="header-left">
+          <h1>WorldReasoner</h1>
+          <div className="header-info-bar">
+            <DatabaseDropdown onDatabaseChange={handleDatabaseChange} />
+            {statistics && (
+              <>
+                <div className="header-divider"></div>
+                <div className="stats-bar">
+                  <span>{statistics.total_nodes} events</span>
+                  <span>{statistics.total_edges} causal links</span>
+                  <span>Avg degree: {statistics.average_out_degree?.toFixed(2)}</span>
+                </div>
+              </>
+            )}
           </div>
-        )}
+        </div>
+        <div className="header-right">
+        </div>
       </header>
 
       <div className="app-content">
         {/* Top navigation tabs */}
         <div className="top-tabs">
           <button
-            className={`top-tab-btn ${leftPanelTab === 'controls' ? 'active' : ''}`}
-            onClick={() => setLeftPanelTab('controls')}
+            className={`top-tab-btn ${leftPanelTab === 'eventgraphs' ? 'active' : ''}`}
+            onClick={() => setLeftPanelTab('eventgraphs')}
           >
-            ⚙️ Controls
+            📊 Event Graphs
           </button>
           <button
-            className={`top-tab-btn ${leftPanelTab === 'questions' ? 'active' : ''}`}
-            onClick={() => setLeftPanelTab('questions')}
+            className={`top-tab-btn ${leftPanelTab === 'collection' ? 'active' : ''}`}
+            onClick={() => setLeftPanelTab('collection')}
           >
-            📋 Questions ({questions.length})
+            🔍 Collection
           </button>
           <button
             className={`top-tab-btn ${leftPanelTab === 'pipelines' ? 'active' : ''}`}
             onClick={() => setLeftPanelTab('pipelines')}
           >
-            🔄 Pipelines
+            🔬 Evidence
+          </button>
+
+          <button
+            className={`top-tab-btn ${leftPanelTab === 'forecast' ? 'active' : ''}`}
+            onClick={() => setLeftPanelTab('forecast')}
+          >
+            🎯 Forecast
           </button>
         </div>
 
-        {leftPanelTab === 'pipelines' ? (
+        {leftPanelTab === 'eventgraphs' ? (
+          /* Event Graphs page with nested tabs */
+          <EventGraphsPage
+            fullGraphData={fullGraphData}
+            graphData={graphData}
+            selectedNode={selectedNode}
+            onNodeClick={handleNodeClick}
+            loading={loading}
+            error={error}
+            filters={filters}
+            onFilterChange={handleFilterChange}
+            onRefresh={() => loadGraph(filters)}
+            questions={questions}
+            selectedQuestionId={selectedQuestionId}
+            onQuestionFilter={(questionId) => {
+              setSelectedQuestionId(questionId)
+              handleQuestionFilter(questionId)
+            }}
+            onShowNeighborhood={handleShowNeighborhood}
+            onTimeRangeChange={handleTimeRangeChange}
+            priceHistoryData={priceHistoryData}
+            loadingPriceHistory={loadingPriceHistory}
+            questionRelatedEvents={questionRelatedEvents}
+            priceHistoryInterval={priceHistoryInterval}
+            setPriceHistoryInterval={setPriceHistoryInterval}
+          />
+        ) : leftPanelTab === 'collection' ? (
+          /* Full-width collection page */
+          <QuestionCollectionPage
+            onQuestionsAdded={handleQuestionsAdded}
+          />
+        ) : leftPanelTab === 'forecast' ? (
+          /* Full-width forecast page */
+          <ForecastPage />
+        ) : leftPanelTab === 'pipelines' ? (
           /* Full-width pipeline page */
           <PipelinePage
             questions={questions}
             onJobComplete={handleJobComplete}
-            onDatabaseChange={handleDatabaseChange}
           />
-        ) : (
-          /* Sidebar + Graph layout for controls and questions */
-          <div className="main-layout">
-            <div className="left-sidebar">
-              <div className="sidebar-content">
-                {leftPanelTab === 'controls' && (
-                  <>
-                    <DatabaseSelector onDatabaseChange={handleDatabaseChange} />
-                    <ControlPanel
-                      filters={filters}
-                      onFilterChange={handleFilterChange}
-                      onRefresh={() => loadGraph(filters)}
-                      loading={loading}
-                      questions={questions}
-                      onQuestionFilter={handleQuestionFilter}
-                    />
-                  </>
-                )}
-
-                {leftPanelTab === 'questions' && (
-                  <QuestionList
-                    questions={questions}
-                    selectedQuestionId={selectedQuestionId}
-                    onQuestionSelect={(questionId) => {
-                      setSelectedQuestionId(questionId)
-                      handleQuestionFilter(questionId)
-                    }}
-                    onClose={() => setLeftPanelTab('controls')}
-                  />
-                )}
-              </div>
-            </div>
-
-            <div className="graph-main">
-          <div className="graph-container">
-            {loading && <div className="loading">Loading graph...</div>}
-            {error && <div className="error">{error}</div>}
-            {!loading && !error && (
-              <GraphVisualization
-                graphData={graphData}
-                onNodeClick={handleNodeClick}
-                selectedNode={selectedNode}
-              />
-            )}
-          </div>
-
-          <Timeline
-            graphData={fullGraphData}
-            onEventClick={handleNodeClick}
-            onTimeRangeChange={handleTimeRangeChange}
-            selectedNode={selectedNode}
-          />
-
-          {/* Price history chart for Polymarket questions */}
-          {selectedQuestionId && questions.find(q => q.id === selectedQuestionId)?.source === 'polymarket' && (
-            <div style={{ marginTop: '20px', padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '8px', minHeight: '100px', border: '1px solid #dee2e6' }}>
-              {/* Time interval controls - always visible */}
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '10px 20px 0 20px',
-                gap: '10px',
-                borderBottom: '1px solid #333',
-                paddingBottom: '10px',
-                marginBottom: '10px'
-              }}>
-                <div style={{ color: '#888', fontSize: '12px', fontStyle: 'italic' }}>
-                  {!loadingPriceHistory && priceHistoryData && priceHistoryData.price_history && (() => {
-                    // Calculate actual date range from price data
-                    const allTimestamps = []
-                    Object.values(priceHistoryData.price_history).forEach(history => {
-                      history.forEach(point => allTimestamps.push(point.t * 1000))
-                    })
-                    if (allTimestamps.length > 0) {
-                      const minDate = new Date(Math.min(...allTimestamps))
-                      const maxDate = new Date(Math.max(...allTimestamps))
-                      const daysDiff = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24))
-                      return `Showing ${daysDiff + 1} day${daysDiff !== 0 ? 's' : ''} of market data`
-                    }
-                    return ''
-                  })()}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ color: '#999', fontSize: '13px' }}>Time Range:</span>
-                  {['max', '1w', '1d', '6h', '1h', '1m'].map(interval => (
-                    <button
-                      key={interval}
-                      onClick={() => setPriceHistoryInterval(interval)}
-                      disabled={loadingPriceHistory}
-                      style={{
-                        padding: '6px 12px',
-                        backgroundColor: priceHistoryInterval === interval ? '#4CAF50' : '#333',
-                        color: priceHistoryInterval === interval ? '#fff' : '#ddd',
-                        border: priceHistoryInterval === interval ? '2px solid #4CAF50' : '1px solid #555',
-                        borderRadius: '4px',
-                        cursor: loadingPriceHistory ? 'not-allowed' : 'pointer',
-                        fontSize: '12px',
-                        fontWeight: priceHistoryInterval === interval ? 'bold' : 'normal',
-                        transition: 'all 0.2s',
-                        opacity: loadingPriceHistory ? 0.5 : 1
-                      }}
-                      onMouseEnter={(e) => {
-                        if (priceHistoryInterval !== interval && !loadingPriceHistory) {
-                          e.target.style.backgroundColor = '#444'
-                          e.target.style.borderColor = '#666'
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (priceHistoryInterval !== interval && !loadingPriceHistory) {
-                          e.target.style.backgroundColor = '#333'
-                          e.target.style.borderColor = '#555'
-                        }
-                      }}
-                    >
-                      {interval === 'max' ? 'All' : interval.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Loading state */}
-              {loadingPriceHistory && (
-                <div style={{ color: '#495057', textAlign: 'center', padding: '40px', fontSize: '15px', fontWeight: 500 }}>
-                  ⏳ Loading market price history...
-                </div>
-              )}
-
-              {/* Chart display */}
-              {!loadingPriceHistory && priceHistoryData && priceHistoryData.price_history && Object.keys(priceHistoryData.price_history).length > 0 && (
-                <TimeSeriesChart
-                  priceHistory={priceHistoryData.price_history}
-                  events={questionRelatedEvents}
-                  targetEventId={questions.find(q => q.id === selectedQuestionId)?.target_event_id}
-                  outcomes={priceHistoryData.outcomes || ['Yes', 'No']}
-                />
-              )}
-
-              {/* Error/no data state */}
-              {!loadingPriceHistory && (!priceHistoryData || !priceHistoryData.price_history || Object.keys(priceHistoryData.price_history).length === 0) && (
-                <div style={{ color: '#6c757d', textAlign: 'center', padding: '40px', fontSize: '14px' }}>
-                  ℹ️ No price data available for this time range
-                  <br />
-                  <span style={{ fontSize: '12px', color: '#adb5bd' }}>
-                    Try selecting a different time range above
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-            </div>
-
-            {selectedNode && (
-              <EventDetails
-                node={selectedNode}
-                onClose={() => setSelectedNode(null)}
-                onShowNeighborhood={handleShowNeighborhood}
-              />
-            )}
-          </div>
-        )}
+        ) : null}
       </div>
     </div>
   )

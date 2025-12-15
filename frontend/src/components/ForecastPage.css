@@ -1,0 +1,648 @@
+.forecast-page {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f5f5f5;
+  color: #333;
+  overflow: hidden;
+}
+
+.forecast-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 32px;
+  background: white;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.forecast-header h2 {
+  margin: 0;
+  font-size: 24px;
+  color: #333;
+  font-weight: 600;
+}
+
+.forecast-content {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 350px 1fr;
+  gap: 20px;
+  padding: 20px;
+  overflow: hidden;
+}
+
+/* Left Sidebar - Config, Jobs, Results */
+.forecast-sidebar {
+  overflow-y: auto;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Right Main Content - Questions & Price History */
+.forecast-main-content {
+  overflow-y: auto;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Questions Panel */
+.forecast-questions-panel {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.questions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #fafafa;
+}
+
+.questions-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+  font-weight: 600;
+}
+
+.selection-info {
+  background: #4CAF50;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.questions-filters {
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-bottom: 1px solid #e0e0e0;
+  background: white;
+}
+
+.search-input,
+.filter-select {
+  width: 100%;
+  padding: 8px 12px;
+  background: white;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  color: #333;
+  font-size: 14px;
+}
+
+.search-input::placeholder {
+  color: #999;
+}
+
+.search-input:focus,
+.filter-select:focus {
+  outline: none;
+  border-color: #4CAF50;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
+}
+
+.questions-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  background: white;
+}
+
+.question-item {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 8px;
+  background: #fafafa;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.question-item:hover {
+  background: #f0f0f0;
+  border-color: #4CAF50;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.question-item.active {
+  background: #e8f5e9;
+  border-color: #4CAF50;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+}
+
+.question-item input[type="checkbox"] {
+  margin-top: 2px;
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  accent-color: #4CAF50;
+}
+
+.question-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.question-text {
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: #333;
+  line-height: 1.4;
+}
+
+.question-meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.badge.source {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.badge.domain {
+  background: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.badge.difficulty {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+/* Database Selector - matches light theme */
+.forecast-sidebar .database-selector {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.forecast-sidebar .database-selector .selector-header h3 {
+  color: #333;
+}
+
+.forecast-sidebar .database-selector .refresh-btn {
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  color: #333;
+}
+
+.forecast-sidebar .database-selector .refresh-btn:hover:not(:disabled) {
+  background: #e0e0e0;
+}
+
+.forecast-sidebar .database-selector .database-list {
+  background: white;
+  border: 1px solid #e0e0e0;
+}
+
+.forecast-sidebar .database-selector .database-item {
+  background: white;
+  border-bottom: 1px solid #f0f0f0;
+  color: #333;
+}
+
+.forecast-sidebar .database-selector .database-item:not(.current):not(.missing):hover {
+  background: #f8f9fa;
+}
+
+.forecast-sidebar .database-selector .database-item.current {
+  background: #e8f4f8;
+  border-left: 3px solid #2196F3;
+}
+
+.forecast-sidebar .database-selector .db-name {
+  color: #333;
+}
+
+.forecast-sidebar .database-selector .current-badge {
+  color: #2196F3;
+}
+
+.forecast-sidebar .database-selector .db-info {
+  color: #666;
+}
+
+.forecast-sidebar .database-selector .db-size {
+  color: #666;
+}
+
+.forecast-sidebar .database-selector .current-db-footer {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  color: #555;
+}
+
+.forecast-sidebar .database-selector .current-db-footer strong {
+  color: #333;
+}
+
+.forecast-sidebar .database-selector .error-message {
+  background: #fee;
+  border: 1px solid #fcc;
+  color: #c00;
+}
+
+.forecast-sidebar .database-selector .success-message {
+  background: #efe;
+  border: 1px solid #cfc;
+  color: #060;
+}
+
+.forecast-sidebar .database-selector .loading-state,
+.forecast-sidebar .database-selector .no-databases {
+  color: #666;
+}
+
+/* Configuration Section */
+.forecast-config-section {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 20px;
+}
+
+.forecast-config-section h3 {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  color: #333;
+  font-weight: 600;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.config-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.config-item label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #555;
+  display: block;
+  line-height: 1.5;
+}
+
+.config-item select,
+.config-item input {
+  padding: 8px 12px;
+  background: white;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  color: #333;
+  font-size: 14px;
+}
+
+.config-item select:focus,
+.config-item input:focus {
+  outline: none;
+  border-color: #4CAF50;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
+}
+
+.run-forecast-btn {
+  width: 100%;
+  padding: 12px 20px;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
+}
+
+.run-forecast-btn:hover:not(:disabled) {
+  background: #45a049;
+  box-shadow: 0 4px 8px rgba(76, 175, 80, 0.4);
+}
+
+.run-forecast-btn:disabled {
+  background: #e0e0e0;
+  color: #999;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Price History Section */
+.price-history-section {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 20px;
+}
+
+.price-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  gap: 20px;
+}
+
+.price-history-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.interval-selector {
+  display: flex;
+  gap: 8px;
+}
+
+.interval-btn {
+  padding: 6px 12px;
+  background: white;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  color: #333;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.interval-btn:hover {
+  background: #f5f5f5;
+  border-color: #4CAF50;
+}
+
+.interval-btn.active {
+  background: #4CAF50;
+  border-color: #4CAF50;
+  color: white;
+}
+
+/* Jobs Section */
+.jobs-section {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 20px;
+}
+
+.jobs-section h3 {
+  margin: 0 0 15px 0;
+  font-size: 18px;
+  color: #333;
+  font-weight: 600;
+}
+
+.jobs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.job-item {
+  background: #fafafa;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 15px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.job-item:hover {
+  background: #f5f5f5;
+  border-color: #4CAF50;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.job-item.completed {
+  border-left: 3px solid #4CAF50;
+}
+
+.job-item.running {
+  border-left: 3px solid #2196F3;
+  animation: pulse 2s infinite;
+}
+
+.job-item.failed {
+  border-left: 3px solid #f44336;
+}
+
+.job-item.cancelled {
+  border-left: 3px solid #FF9800;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}
+
+.job-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.job-status {
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: #e0e0e0;
+  color: #666;
+}
+
+.job-item.completed .job-status {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.job-item.running .job-status {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.job-item.failed .job-status {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.job-date {
+  font-size: 12px;
+  color: #999;
+}
+
+.job-progress {
+  margin-bottom: 10px;
+}
+
+.progress-bar {
+  height: 6px;
+  background: #e0e0e0;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #2196F3;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 12px;
+  color: #666;
+}
+
+.job-results {
+  display: flex;
+  gap: 15px;
+  font-size: 13px;
+  color: #666;
+}
+
+/* Forecast Results Section */
+.forecast-results-section {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 20px;
+}
+
+.forecast-results-section h3 {
+  margin: 0 0 15px 0;
+  font-size: 18px;
+  color: #333;
+  font-weight: 600;
+}
+
+.results-content {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 15px;
+  max-height: 400px;
+  overflow: auto;
+}
+
+.results-content pre {
+  margin: 0;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: #333;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* Common States */
+.loading,
+.no-data,
+.no-jobs {
+  padding: 40px;
+  text-align: center;
+  color: #999;
+  font-size: 14px;
+}
+
+/* Scrollbar Styling */
+.forecast-sidebar::-webkit-scrollbar,
+.forecast-main-content::-webkit-scrollbar,
+.questions-list::-webkit-scrollbar,
+.results-content::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.forecast-sidebar::-webkit-scrollbar-track,
+.forecast-main-content::-webkit-scrollbar-track,
+.questions-list::-webkit-scrollbar-track,
+.results-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.forecast-sidebar::-webkit-scrollbar-thumb,
+.forecast-main-content::-webkit-scrollbar-thumb,
+.questions-list::-webkit-scrollbar-thumb,
+.results-content::-webkit-scrollbar-thumb {
+  background: #c0c0c0;
+  border-radius: 4px;
+}
+
+.forecast-sidebar::-webkit-scrollbar-thumb:hover,
+.forecast-main-content::-webkit-scrollbar-thumb:hover,
+.questions-list::-webkit-scrollbar-thumb:hover,
+.results-content::-webkit-scrollbar-thumb:hover {
+  background: #a0a0a0;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .forecast-content {
+    grid-template-columns: 300px 1fr;
+  }
+
+  .config-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .forecast-content {
+    grid-template-columns: 1fr;
+  }
+
+  .forecast-questions-panel {
+    max-height: 300px;
+  }
+
+  .price-history-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .config-grid {
+    grid-template-columns: 1fr;
+  }
+}

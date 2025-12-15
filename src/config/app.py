@@ -5,10 +5,16 @@ from pydantic import BaseModel, Field
 
 
 class ServerConfig(BaseModel):
-    """MCP server configuration."""
+    """Server configuration for both FastAPI backend and MCP server."""
     
-    host: str = Field(default="localhost", description="Server host")
-    port: int = Field(default=8018, description="Server port")
+    # Backend API server (FastAPI)
+    host: str = Field(default="localhost", description="Backend API server host")
+    port: int = Field(default=8018, description="Backend API server port")
+    
+    # MCP forecasting server (used by agents)
+    mcp_host: str = Field(default="localhost", description="MCP server host")
+    mcp_port: int = Field(default=8110, description="MCP server port")
+    
     reload: bool = Field(default=False, description="Auto-reload on code changes")
     log_level: str = Field(default="info", description="Logging level")
 

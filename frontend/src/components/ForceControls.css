@@ -1,14 +1,10 @@
 .force-controls {
-  position: absolute;
-  top: 20px;
-  right: 20px;
   background: #ffffff;
   border: 1px solid #dee2e6;
   border-radius: 8px;
   padding: 1rem;
-  width: 280px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  z-index: 10;
+  margin-top: 1rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .force-controls-header {
@@ -104,17 +100,6 @@
   cursor: pointer;
   transition: all 0.2s ease;
   margin-top: 0.5rem;
-}
-
-.reset-button:hover {
-  background: #e9ecef;
-  border-color: #ced4da;
-}
-  color: #495057;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
 }
 
 .reset-button:hover {

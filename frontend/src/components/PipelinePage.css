@@ -22,13 +22,29 @@
 .pipeline-page-content {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 500px;
+  grid-template-columns: 350px 1fr;
   gap: 20px;
   padding: 20px;
   overflow: hidden;
 }
 
-/* Left Section: Question Selection */
+/* Left Sidebar: Database + Pipeline Controls */
+.pipeline-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+}
+
+/* Right Main Content Area */
+.pipeline-main-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+}
+
+/* Question Selection Section */
 .pipeline-questions-section {
   display: flex;
   flex-direction: column;
@@ -61,14 +77,6 @@
   padding: 4px 12px;
   background: #f0f7ff;
   border-radius: 12px;
-}
-
-/* Right Section: Pipeline Actions & Job History */
-.pipeline-actions-section {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  overflow-y: auto;
 }
 
 .section-card {
@@ -245,23 +253,27 @@
 }
 
 /* Scrollbar styling */
-.pipeline-actions-section::-webkit-scrollbar,
+.pipeline-sidebar::-webkit-scrollbar,
+.pipeline-main-content::-webkit-scrollbar,
 .jobs-list::-webkit-scrollbar {
   width: 8px;
 }
 
-.pipeline-actions-section::-webkit-scrollbar-track,
+.pipeline-sidebar::-webkit-scrollbar-track,
+.pipeline-main-content::-webkit-scrollbar-track,
 .jobs-list::-webkit-scrollbar-track {
   background: #f1f1f1;
 }
 
-.pipeline-actions-section::-webkit-scrollbar-thumb,
+.pipeline-sidebar::-webkit-scrollbar-thumb,
+.pipeline-main-content::-webkit-scrollbar-thumb,
 .jobs-list::-webkit-scrollbar-thumb {
   background: #c0c0c0;
   border-radius: 4px;
 }
 
-.pipeline-actions-section::-webkit-scrollbar-thumb:hover,
+.pipeline-sidebar::-webkit-scrollbar-thumb:hover,
+.pipeline-main-content::-webkit-scrollbar-thumb:hover,
 .jobs-list::-webkit-scrollbar-thumb:hover {
   background: #a0a0a0;
 }
@@ -269,7 +281,7 @@
 /* Responsive Design */
 @media (max-width: 1200px) {
   .pipeline-page-content {
-    grid-template-columns: 1fr 400px;
+    grid-template-columns: 300px 1fr;
   }
 }
 
@@ -278,7 +290,7 @@
     grid-template-columns: 1fr;
   }
 
-  .pipeline-actions-section {
+  .pipeline-sidebar {
     max-height: none;
   }
 }
