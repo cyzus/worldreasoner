@@ -5,6 +5,7 @@ from typing import Optional, Tuple, List
 from .question import Question
 from .event import Event
 from .article import Article
+from src.utils.logging import logger
 
 
 def calculate_forecast_context_window(
@@ -208,26 +209,17 @@ def suggest_simulated_date(
     """
     # HARD REQUIREMENT: simulated date must be AT LEAST offset_days before resolution
     # This means we can forecast further out if needed (for data availability), but never closer
-    min_date = question.resolution_date - timedelta(days=offset_days_before_resolution)
+    max_date = question.resolution_date - timedelta(days=offset_days_before_resolution)
 
-    # If context requires us to forecast even earlier, do that
-    # (We'd rather have a 14-day forecast than violate the minimum offset)
-    if window_start > min_date:
-        # Context available early - we can use our minimum offset
-        suggested = min_date
+    if window_start <= max_date:
+        suggested = max_date
     else:
-        # Context available late - use it but add a small buffer (1 day)
-        # This means we'll be forecasting MORE than offset_days out
-        suggested = window_start + timedelta(days=1)
-
-        # Validate this still satisfies the minimum offset requirement
-        actual_offset_days = (question.resolution_date - suggested).days
-        if actual_offset_days < offset_days_before_resolution:
-            raise ValueError(
-                f"Cannot satisfy minimum offset_days={offset_days_before_resolution} requirement. "
-                f"Context not available until {window_start}, which is only {actual_offset_days} days "
-                f"before resolution at {question.resolution_date}. Question needs earlier context items."
-            )
+        actual_offset_days = (question.resolution_date - window_start).days
+        raise ValueError(
+            f"Cannot satisfy minimum offset_days={offset_days_before_resolution} requirement. "
+            f"Context not available until {window_start}, which is only {actual_offset_days} days "
+            f"before resolution at {question.resolution_date}. Question needs earlier context items."
+        )
 
     return suggested
 
@@ -283,9 +275,57 @@ def prepare_forecast_context(
     if not valid:
         raise ValueError(f"Invalid forecast setup: {error}")
 
+    # Count how many context items are available at the suggested date
+    context_count = 0
+    event_count = 0
+    article_count = 0
+
+    if db is not None:
+        from src.core.database import GenericDatabase
+        if not isinstance(db, GenericDatabase):
+            from src.core.database import GenericDatabase
+            db = GenericDatabase(db) if isinstance(db, str) else db
+
+        # Count events available at simulated_date
+        if question.related_event_ids:
+            for event_id in question.related_event_ids:
+                event = db.get(Event, event_id)
+                if event and event.occurred_date:
+                    occurred = event.occurred_date
+                    if occurred.tzinfo is None:
+                        occurred = occurred.replace(tzinfo=timezone.utc)
+                    if occurred <= simulated_date:
+                        event_count += 1
+
+        # Count articles available at simulated_date
+        all_articles = db.get_many(Article)
+        question_articles = [
+            a for a in all_articles
+            if 'related_question_ids' in a.metadata
+            and question.id in a.metadata['related_question_ids']
+        ]
+        for article in question_articles:
+            if article.published_date:
+                published = article.published_date
+                if published.tzinfo is None:
+                    published = published.replace(tzinfo=timezone.utc)
+                if published <= simulated_date:
+                    article_count += 1
+
+        context_count = event_count + article_count
+
+    logger.info(
+        f"Forecast context for question {question.id}: "
+        f"{context_count} items available at suggested date {simulated_date.date()} "
+        f"({event_count} events, {article_count} articles)"
+    )
+
     return {
         'window_start': window_start,
         'window_end': window_end,
         'simulated_date': simulated_date,
-        'days_available': (window_end - window_start).days
+        'days_available': (window_end - window_start).days,
+        'context_count': context_count,
+        'event_count': event_count,
+        'article_count': article_count
     }

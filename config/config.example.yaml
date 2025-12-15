@@ -41,4 +41,5 @@ data_dir: ./data
 llm:
   model: gemini/gemini-2.5-flash
   embedding_model: gemini/gemini-embedding-001
+  max_completion_tokens: 2048
   temperature: 1.0

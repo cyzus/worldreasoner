@@ -278,6 +278,27 @@ def _get_temporal_db(cutoff_date: datetime) -> GenericDatabase:
     return GenericDatabase(database_path, cutoff_date=cutoff_date)
 
 
+def _get_hybrid_search() -> HybridSearch:
+    """Get a HybridSearch instance for the current request's database.
+
+    Uses the database path from connection context if available (per-request switching),
+    otherwise uses the global hybrid_search instance.
+
+    Returns:
+        HybridSearch instance for the appropriate database
+    """
+    # Use database path from connection context if available
+    db_path = _connection_context.get('db_path')
+    
+    if db_path and db_path != db.db_path:
+        # Different database requested - create new HybridSearch instance
+        logger.debug(f"Creating HybridSearch for custom database: {db_path}")
+        return HybridSearch(db_path)
+    else:
+        # Use global hybrid_search instance
+        return hybrid_search
+
+
 # ============================================================================
 # Pydantic Models for Parameters
 # ============================================================================
@@ -400,9 +421,12 @@ async def temporal_search_articles(
 
         logger.info(f"Hybrid search: query='{query}', simulated_date={simulated_date.isoformat()}")
 
+        # Get appropriate HybridSearch instance (handles per-request database switching)
+        search_engine = _get_hybrid_search()
+
         # Perform hybrid search with temporal filtering
         # Returns article IDs ranked by hybrid score (FTS5 + embeddings)
-        article_ids = await hybrid_search.search(
+        article_ids = await search_engine.search(
             query=query,
             max_results=max_results.value,
             cutoff_date=simulated_date,
