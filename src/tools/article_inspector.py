@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 from smolagents import Tool
-from src.domain.models import Article
+from src.domain.models import Article, Question
 from src.core.database import GenericDatabase
 
 
@@ -29,8 +29,8 @@ class ArticleInspectorTool(Tool):
 
     NO INPUT REQUIRED - automatically uses the current question context.
 
-    Use this to check if your evidence collection is sufficient:
-    - Timeline distribution (when articles were published)
+    Evaluates coverage relative to the question resolution date:
+    - Timeline distribution (articles published before resolution)
     - Time gaps that need filling
     - Source diversity (how many different sources)
     - Coverage quality score
@@ -62,46 +62,49 @@ class ArticleInspectorTool(Tool):
         if not self.question_id:
             return self._format_error("No question context provided")
 
-        # Get articles for this question
+        # Get question for resolution date
+        question = self.db.get(Question, self.question_id)
+        if not question:
+            return self._format_error(f"Question {self.question_id} not found")
+
+        # Get articles published before resolution date
         all_articles = self.db.get_many(Article)
         question_articles = [
             a for a in all_articles
             if a.collected_for_question_id == self.question_id
+            and (not a.published_date or a.published_date < question.resolution_date)
         ]
 
         if not question_articles:
             return self._format_empty()
 
         # Analyze articles
-        timeline_data = self._analyze_timeline(question_articles)
+        timeline_data = self._analyze_timeline(question_articles, question.resolution_date)
         source_data = self._analyze_sources(question_articles)
         gaps = self._identify_gaps(timeline_data, question_articles)
-        
+
         return self._format_visualization(
-            question_articles, timeline_data, source_data, gaps
+            question_articles, timeline_data, source_data, gaps, question.resolution_date
         )
 
-    def _analyze_timeline(self, articles: List[Article]) -> Dict:
+    def _analyze_timeline(self, articles: List[Article], resolution_date: datetime) -> Dict:
         """Analyze temporal distribution of articles.
 
         Args:
             articles: List of articles
+            resolution_date: Question resolution date (coverage endpoint)
 
         Returns:
             Timeline statistics
         """
-        dates = []
-        for article in articles:
-            if article.published_date:
-                dates.append(article.published_date)
+        dates = [a.published_date for a in articles if a.published_date]
 
         if not dates:
-            return {"has_dates": False}
+            return {"has_dates": False, "resolution_date": resolution_date}
 
         dates.sort()
         earliest = dates[0]
-        latest = dates[-1]
-        span_days = (latest - earliest).days
+        span_days = (resolution_date - earliest).days
 
         # Group by month for visualization
         monthly = defaultdict(int)
@@ -112,7 +115,7 @@ class ArticleInspectorTool(Tool):
         return {
             "has_dates": True,
             "earliest": earliest,
-            "latest": latest,
+            "resolution_date": resolution_date,
             "span_days": span_days,
             "monthly": dict(monthly),
             "dates": dates
@@ -206,7 +209,8 @@ ERROR: {error}
         articles: List[Article],
         timeline_data: Dict,
         source_data: Dict,
-        gaps: List[Dict]
+        gaps: List[Dict],
+        resolution_date: datetime
     ) -> str:
         """Format the article analysis as visual text.
 
@@ -215,33 +219,35 @@ ERROR: {error}
             timeline_data: Timeline statistics
             source_data: Source statistics
             gaps: Identified timeline gaps
+            resolution_date: Question resolution date
 
         Returns:
             Formatted multi-section text
         """
         sections = []
-        
+
         # Header
         sections.append("""
 ╔════════════════════════════════════════════════════════════════╗
 ║                   ARTICLE COVERAGE INSPECTOR                   ║
 ╚════════════════════════════════════════════════════════════════╝
 """)
-        
+
         # Overview
         sections.append(f"Question ID: {self.question_id}")
         sections.append(f"Total Articles: {len(articles)}")
+        sections.append(f"Resolution Date: {resolution_date.strftime('%Y-%m-%d')}")
         sections.append("")
-        
+
         # Timeline section
         if timeline_data.get("has_dates"):
             sections.append("TIMELINE DISTRIBUTION")
             sections.append("━" * 64)
             sections.append("")
-            sections.append(f"  Date Range:  {timeline_data['earliest'].strftime('%Y-%m-%d')} → {timeline_data['latest'].strftime('%Y-%m-%d')}")
+            sections.append(f"  Date Range:  {timeline_data['earliest'].strftime('%Y-%m-%d')} → {resolution_date.strftime('%Y-%m-%d')}")
             sections.append(f"  Time Span:   {timeline_data['span_days']} days")
             sections.append("")
-            
+
             # Monthly bar chart
             sections.append("  Articles by Month:")
             monthly = timeline_data['monthly']

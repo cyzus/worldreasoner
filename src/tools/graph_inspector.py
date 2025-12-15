@@ -286,7 +286,7 @@ class GraphInspectorTool(Tool):
         elif quality < 0.6:
             return "Graph depth is good, but quality is low. Add more evidence citations and improve confidence scores."
         else:
-            return "Graph looks good! Deep causal chains with good quality."
+            return "Graph depth and quality look good. Feel free to finalize or add minor improvements."
 
     def _format_empty_graph(self) -> str:
         """Format output for empty graph."""

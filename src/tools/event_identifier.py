@@ -170,7 +170,7 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
                         missing_ids.append(aid)
                     else:
                         # Check that article date is not prior to event date
-                        article_date = article.published_date or article.created_at
+                        article_date = article.published_date
                         if article_date and event_date:
                             article_date = ensure_timezone_aware(article_date)
                             if article_date < event_date:
@@ -182,7 +182,7 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
                     return f"Error: The following article IDs do not exist in database: {', '.join(missing_ids)}"
 
                 if invalid_date_articles:
-                    return f"Error: The following articles have dates prior to the event occurring date: {', '.join(invalid_date_articles)}"
+                    return f"Error: The following articles have dates prior to the event occurring date: {', '.join(invalid_date_articles)}, meaning that they cannot be the source of this event."
 
         else:
             return "Error: source_article_ids cannot be empty."
