@@ -269,8 +269,11 @@ def _get_context_from_mcp(ctx: Context) -> Dict[str, Any]:
     if not question:
         raise ValueError(f"Question not found: {question_id}")
 
-    # Create session ID
-    session_id = f"session_{question_id}_{int(datetime.now(timezone.utc).timestamp())}"
+    # Get session ID from context (passed via headers) or create new one as fallback
+    session_id = _connection_context.get('session_id')
+    if not session_id:
+        session_id = f"session_{question_id}_{int(datetime.now(timezone.utc).timestamp())}"
+        logger.warning(f"No session_id in headers, generated new one: {session_id}")
 
     return {
         "question_id": question_id,

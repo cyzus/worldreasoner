@@ -142,8 +142,9 @@ def extract_dataframe(benchmarks: List[Dict[str, Any]]) -> pd.DataFrame:
             'knowledge_cutoff': bench['model_info']['knowledge_cutoff'],
             'offset_days': bench['model_info']['offset_days'],
             'min_context_items': bench['model_info']['min_context_items'],
-            'knowledge_only': bench['model_info'].get('knowledge_only', False),
-            'mode': 'Knowledge-Only' if bench['model_info'].get('knowledge_only') else 'Full',
+            # Support both old knowledge_only and new mode fields
+            'mode': bench['model_info'].get('mode') or ('knowledge_only' if bench['model_info'].get('knowledge_only') else 'container'),
+            'mode_label': bench['model_info'].get('mode', 'Knowledge-Only' if bench['model_info'].get('knowledge_only') else 'Container').title(),
 
             # Results
             'total_questions': bench['results']['total_questions'],

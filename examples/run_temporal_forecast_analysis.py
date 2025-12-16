@@ -108,9 +108,10 @@ def parse_args():
     )
 
     parser.add_argument(
-        '--knowledge-only',
-        action='store_true',
-        help='Disable research tools (test inherent knowledge only)'
+        '--mode',
+        default='container',
+        choices=['knowledge_only', 'container', 'real_time'],
+        help='Forecasting mode (default: container)'
     )
 
     # Output control
@@ -309,7 +310,7 @@ def run_single_temporal_forecast(
             knowledge_cutoff=args.knowledge_cutoff,
             config=config,
             max_steps=args.max_steps,
-            knowledge_only=args.knowledge_only
+            mode=args.mode
         )
 
         # Run agent
@@ -608,7 +609,7 @@ def main():
             'model': args.model or config.llm.model,
             'knowledge_cutoff': args.knowledge_cutoff,
             'num_points': len(results),
-            'knowledge_only': args.knowledge_only
+            'mode': args.mode
         },
         'results': results
     }

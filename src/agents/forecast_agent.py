@@ -18,7 +18,7 @@ class ForecastAgent(BaseAgent):
                  enable_causal_tools: bool = False,
                  tools: list = None,
                  max_steps: int = 15,
-                 is_code: bool = False):
+                 is_code: bool = True):
         """Initialize ForecastAgent.
 
         Args:

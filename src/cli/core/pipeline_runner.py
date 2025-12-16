@@ -576,14 +576,13 @@ class PipelineRunner:
                     mode=mode,
                     enable_causal_tools=enable_causal_tools,
                 )
-
-                # Run agent to generate forecast
-                result = agent.run(
-                    f"Forecast the outcome of this question. Use get_question to see the details, "
-                    f"research if needed (unless knowledge-only mode), then submit your forecast."
-                    f"The information you have access to might be limited due to the simulated date or evidence collection process."
-                    f"Make reasonable forecasts nonetheless."
+                from src.pipelines.prompts.forecast import get_forecast_instructions
+                prompt_instructions = get_forecast_instructions(
+                    mode=mode,
+                    enable_causal_tools=enable_causal_tools,
                 )
+                # Run agent to generate forecast
+                result = agent.run(prompt_instructions)
 
                 # The forecast should be submitted via the MCP tool and saved to DB
                 # Check if forecast was created

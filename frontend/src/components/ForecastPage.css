@@ -646,3 +646,52 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Forecast Graph Styles */
+.forecast-list {
+  margin-bottom: 16px;
+}
+
+.forecast-list h4 {
+  margin-bottom: 12px;
+  font-size: 16px;
+}
+
+.forecast-item {
+  margin-bottom: 8px;
+}
+
+.view-graph-btn {
+  padding: 8px 16px;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.view-graph-btn:hover {
+  background: #45a049;
+}
+
+.forecast-graph-section {
+  margin-top: 20px;
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.graph-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.forecast-id {
+  font-size: 14px;
+  color: #666;
+  font-family: monospace;
+}

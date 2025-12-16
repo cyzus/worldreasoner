@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { fetchQuestions, fetchQuestionPriceHistory, fetchQuestionEvents } from '../api/graphApi';
 import TimeSeriesChart from './TimeSeriesChart';
+import ForecastGraph from './ForecastGraph';
 import './ForecastPage.css';
 
 const ForecastPage = ({
@@ -36,6 +37,8 @@ const ForecastPage = ({
   // Results state
   const [forecastResults, setForecastResults] = useState(null);
   const [loadingResults, setLoadingResults] = useState(false);
+  const [forecastGraphData, setForecastGraphData] = useState(null);
+  const [selectedForecastId, setSelectedForecastId] = useState(null);
 
   useEffect(() => {
     loadQuestions();
@@ -158,6 +161,23 @@ const ForecastPage = ({
       console.error('Error fetching results:', error);
     } finally {
       setLoadingResults(false);
+    }
+  };
+
+  const fetchForecastGraph = async (forecastId) => {
+    try {
+      const response = await fetch(`http://localhost:8018/api/forecasts/${forecastId}/graph`);
+      if (response.ok) {
+        const data = await response.json();
+        setForecastGraphData(data);
+        setSelectedForecastId(forecastId);
+      } else {
+        console.log('No graph data for forecast:', forecastId);
+        setForecastGraphData(null);
+      }
+    } catch (error) {
+      console.error('Error fetching forecast graph:', error);
+      setForecastGraphData(null);
     }
   };
 
@@ -340,9 +360,41 @@ const ForecastPage = ({
                 <div className="loading">Loading results...</div>
               ) : (
                 <div className="results-content">
-                  <pre>{JSON.stringify(forecastResults, null, 2)}</pre>
+                  {/* Show forecast IDs from processed results */}
+                  {forecastResults.processed_details && forecastResults.processed_details.length > 0 && (
+                    <div className="forecast-list">
+                      <h4>Forecasts Generated:</h4>
+                      {forecastResults.processed_details.map((item, idx) => (
+                        <div key={idx} className="forecast-item">
+                          <button
+                            onClick={() => item.forecast_id && fetchForecastGraph(item.forecast_id)}
+                            className="view-graph-btn"
+                          >
+                            View Graph for {item.id}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <details>
+                    <summary>Full Results JSON</summary>
+                    <pre>{JSON.stringify(forecastResults, null, 2)}</pre>
+                  </details>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Forecast Graph Display */}
+          {forecastGraphData && (
+            <div className="forecast-graph-section">
+              <div className="graph-header">
+                <h3>Causal Reasoning Graph</h3>
+                {selectedForecastId && (
+                  <span className="forecast-id">Forecast: {selectedForecastId}</span>
+                )}
+              </div>
+              <ForecastGraph graphData={forecastGraphData} />
             </div>
           )}
         </div>

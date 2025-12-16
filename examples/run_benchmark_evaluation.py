@@ -102,9 +102,10 @@ def parse_args():
     )
 
     parser.add_argument(
-        '--knowledge-only',
-        action='store_true',
-        help='Disable research tools (only allow get_question and submit_forecast). Tests inherent LLM knowledge without external information.'
+        '--mode',
+        default='container',
+        choices=['knowledge_only', 'container', 'real_time'],
+        help='Forecasting mode (default: container)'
     )
 
     # Execution control
@@ -238,7 +239,7 @@ def run_single_forecast(
             knowledge_cutoff=args.knowledge_cutoff,
             config=config,
             max_steps=args.max_steps,
-            knowledge_only=args.knowledge_only
+            mode=args.mode
         )
 
         # Run agent
@@ -399,11 +400,14 @@ def print_benchmark_report(report: Dict[str, Any]):
     print(f"  Forecast Offset: {model_info['offset_days']} days before resolution")
     print(f"  Min Context Items: {model_info['min_context_items']}")
 
-    # Knowledge-only mode indicator
-    if model_info.get('knowledge_only'):
+    # Mode indicator
+    mode = model_info.get('mode', 'container')
+    if mode == 'knowledge_only':
         print(f"  Mode: KNOWLEDGE-ONLY (no research tools - testing inherent knowledge)")
+    elif mode == 'real_time':
+        print(f"  Mode: REAL-TIME (with web search and fetch tools)")
     else:
-        print(f"  Mode: FULL (with research tools - temporal_search_articles, fetch_article)")
+        print(f"  Mode: CONTAINER (with research tools - temporal_search_articles, fetch_article)")
 
     # Execution info
     print("\nExecution Info:")

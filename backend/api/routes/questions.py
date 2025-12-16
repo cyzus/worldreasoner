@@ -3,6 +3,7 @@
 Provides REST API for querying forecast questions.
 """
 
+from datetime import datetime
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Query, HTTPException, Depends, Body
 from pydantic import BaseModel, Field
@@ -625,6 +626,68 @@ async def get_question_events(
         raise
     except Exception as e:
         logger.error(f"Failed to fetch question events: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{question_id}/forecasts")
+async def get_question_forecasts(
+    question_id: str,
+    db: GenericDatabase = Depends(get_database),
+):
+    """Get all forecasts for a question.
+
+    Args:
+        question_id: Question identifier
+
+    Returns:
+        List of forecasts for this question
+    """
+    try:
+        from src.domain.models.forecast import Forecast
+
+        # Verify question exists
+        question = db.get(Question, question_id)
+        if not question:
+            raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
+
+        # Get all forecasts for this question
+        forecasts = db.get_many(Forecast, filters={'question_id': question_id})
+
+        # Sort by timestamp (most recent first) - handle both timestamp and created_at
+        forecasts.sort(key=lambda f: getattr(f, 'timestamp', getattr(f, 'created_at', datetime.min)), reverse=True)
+
+        # Convert to dicts
+        forecasts_data = []
+        for f in forecasts:
+            # Get timestamp - try timestamp first, fall back to created_at
+            ts = getattr(f, 'timestamp', getattr(f, 'created_at', None))
+            forecast_dict = {
+                'id': f.id,
+                'question_id': f.question_id,
+                'probability': getattr(f, 'probability', getattr(f, 'prediction', None)),
+                'confidence': f.confidence,
+                'reasoning': f.reasoning,
+                'mode': f.mode.value if hasattr(f.mode, 'value') else str(f.mode) if f.mode else 'container',
+                'db': getattr(f, 'db', None),
+                'session_id': f.session_id,
+                'created_at': ts.isoformat() if ts else None
+            }
+            forecasts_data.append(forecast_dict)
+
+        logger.info(f"Returning {len(forecasts_data)} forecasts for question {question_id}")
+
+        return {
+            "question_id": question_id,
+            "forecasts": forecasts_data,
+            "total": len(forecasts_data)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch forecasts: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
