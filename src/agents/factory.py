@@ -93,6 +93,7 @@ class AgentFactory:
         config: Optional[Config] = None,
         db_path: str = None,
         mode: str = "container",
+        enable_causal_tools: bool = False,
         max_steps: int = 15
     ):
         """Create a ForecastAgent with standard configuration.
@@ -110,6 +111,7 @@ class AgentFactory:
             config: Optional custom configuration. If not provided, uses global config.
             db_path: Path to test/forecast database (optional)
             mode: Forecasting mode - 'knowledge_only', 'container', or 'real_time' (default: 'container')
+            enable_causal_tools: Whether to include causal reasoning tools (default: False)
             max_steps: Maximum number of steps the agent can take (default: 15)
 
         Returns:
@@ -143,6 +145,7 @@ class AgentFactory:
             config=app_config,
             db_path=db_path,
             mode=mode,
+            enable_causal_tools=enable_causal_tools,
             tools=tools,
             max_steps=max_steps
         )

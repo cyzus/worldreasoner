@@ -141,6 +141,18 @@ class ForecastContextMiddleware(Middleware):
                             simulated_date_obj = parse_flexible_datetime(simulated_date)
                             knowledge_cutoff_obj = parse_flexible_datetime(knowledge_cutoff) if knowledge_cutoff else None
 
+                            # Validate knowledge cutoff < simulated date if provided
+                            if knowledge_cutoff_obj and knowledge_cutoff_obj >= simulated_date_obj:
+                                logger.error(
+                                    f"Invalid dates: knowledge_cutoff {knowledge_cutoff_obj.date()} "
+                                    f"must be before simulated_date {simulated_date_obj.date()}"
+                                )
+                                raise ValueError(
+                                    f"Knowledge cutoff ({knowledge_cutoff_obj.date()}) must be BEFORE "
+                                    f"simulated date ({simulated_date_obj.date()}). "
+                                    f"The LLM must be 'deployed' after its training ends."
+                                )
+
                             # Store raw values in context (no DB queries!)
                             _connection_context['question_id'] = question_id
                             _connection_context['knowledge_cutoff'] = knowledge_cutoff_obj.isoformat() if knowledge_cutoff_obj else None
@@ -148,40 +160,16 @@ class ForecastContextMiddleware(Middleware):
                             _connection_context['simulated_date'] = simulated_date_obj.isoformat()
                             _connection_context['simulated_date_obj'] = simulated_date_obj
                             _connection_context['model_name'] = model_name or 'unknown'
+                            _connection_context['forecast_mode'] = forecast_mode or 'container'
+                            _connection_context['session_id'] = session_id
                             _connection_context['db_path'] = db_path
 
-                                # Validate knowledge cutoff < simulated date if provided
-                                if knowledge_cutoff_obj and knowledge_cutoff_obj >= simulated_date_obj:
-                                    logger.error(
-                                        f"Invalid dates: knowledge_cutoff {knowledge_cutoff_obj.date()} "
-                                        f"must be before simulated_date {simulated_date_obj.date()}"
-                                    )
-                                    raise ValueError(
-                                        f"Knowledge cutoff ({knowledge_cutoff_obj.date()}) must be BEFORE "
-                                        f"simulated date ({simulated_date_obj.date()}). "
-                                        f"The LLM must be 'deployed' after its training ends."
-                                    )
-
-                                _connection_context['question_id'] = question_id
-                                _connection_context['knowledge_cutoff'] = knowledge_cutoff_obj.isoformat() if knowledge_cutoff_obj else None
-                                _connection_context['knowledge_cutoff_obj'] = knowledge_cutoff_obj
-                                _connection_context['simulated_date'] = simulated_date_obj.isoformat()
-                                _connection_context['simulated_date_obj'] = simulated_date_obj
-                                _connection_context['model_name'] = model_name or 'unknown'
-                                _connection_context['forecast_mode'] = forecast_mode or 'container'
-                                _connection_context['session_id'] = session_id
-                                _connection_context['db_path'] = db_path
-                                _connection_context['question'] = question
-                                logger.info(
-                                    f"Context captured from headers: q={question_id}, "
-                                    f"model={model_name or 'unknown'}, "
-                                    f"knowledge_cutoff={knowledge_cutoff_obj.date() if knowledge_cutoff_obj else 'N/A'}, "
-                                    f"simulated_date={simulated_date_obj.date()}, "
-                                    f"resolution_date={question.resolution_date.date()}, "
-                                    f"forecast_horizon={(question.resolution_date - simulated_date_obj).days} days"
-                                )
-                            else:
-                                logger.warning(f"Question {question_id} not found in database")
+                            logger.info(
+                                f"Context captured from headers: q={question_id}, "
+                                f"mode={forecast_mode or 'container'}, "
+                                f"session={session_id[:8] if session_id else 'N/A'}..., "
+                                f"simulated_date={simulated_date_obj.date()}"
+                            )
                         except Exception as e:
                             logger.error(f"Error parsing context headers: {e}")
                     else:
@@ -582,18 +570,6 @@ def fetch_article(
     except Exception as e:
         logger.error(f"Error fetching article: {e}")
         return json.dumps({"error": str(e)})
-
-def graph_reasoning(ctx: Context,
-                    source_event: str,
-                    target_event: str,
-                    relation: str,
-                    reasoning: str) -> str:
-    pass
-
-def inspect_graph(ctx: Context) -> str:
-    pass
-
-
 
 
 @mcp.tool()

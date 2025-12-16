@@ -65,11 +65,15 @@ def run(
         "-m",
         help="LLM model to use for forecasting (e.g., gpt-4o, gemini-2.0-flash)",
     ),
-    knowledge_only: bool = typer.Option(
+    mode: str = typer.Option(
+        "container",
+        "--mode",
+        help="Forecasting mode: knowledge_only (no research), container (temporal research), real_time (live info)",
+    ),
+    enable_causal_tools: bool = typer.Option(
         False,
-        "--knowledge-only",
-        "-k",
-        help="Use only model knowledge, no web search tools",
+        "--enable-causal-tools",
+        help="Enable causal reasoning tools (identify events, create causal links, inspect graph)",
     ),
     offset_days: int = typer.Option(
         7,
@@ -139,7 +143,8 @@ def run(
     # Confirm before running
     console.print("\n[bold]Configuration:[/bold]")
     console.print(f"  Model: {model or 'default'}")
-    console.print(f"  Knowledge-only: {knowledge_only}")
+    console.print(f"  Mode: {mode}")
+    console.print(f"  Causal tools: {'enabled' if enable_causal_tools else 'disabled'}")
     console.print(f"  Offset days: {offset_days}")
 
     if not typer.confirm("\nRun forecast?"):
@@ -154,7 +159,8 @@ def run(
             [question],
             db_path,
             model,
-            knowledge_only,
+            mode,
+            enable_causal_tools,
             offset_days,
         ))
         
@@ -174,7 +180,8 @@ async def _run_forecast_async(
     questions: List[Question],
     db_path: str,
     model: Optional[str] = None,
-    knowledge_only: bool = False,
+    mode: str = "container",
+    enable_causal_tools: bool = False,
     offset_days: int = 7,
 ):
     """Execute forecast on questions using PipelineRunner."""
@@ -205,7 +212,8 @@ async def _run_forecast_async(
             question_ids=question_ids,
             on_progress=on_progress,
             model=model,
-            knowledge_only=knowledge_only,
+            mode=mode,
+            enable_causal_tools=enable_causal_tools,
             offset_days=offset_days,
         )
 
@@ -263,11 +271,15 @@ def batch(
         "-m",
         help="LLM model to use",
     ),
-    knowledge_only: bool = typer.Option(
+    mode: str = typer.Option(
+        "container",
+        "--mode",
+        help="Forecasting mode: knowledge_only, container, or real_time",
+    ),
+    enable_causal_tools: bool = typer.Option(
         False,
-        "--knowledge-only",
-        "-k",
-        help="Use only model knowledge",
+        "--enable-causal-tools",
+        help="Enable causal reasoning tools",
     ),
     db_path: str = typer.Option(
         "worldreasoner.db",
@@ -314,7 +326,8 @@ def batch(
     # Confirm before running
     console.print(f"\n[bold]Will forecast on {len(questions_to_process)} question(s)[/bold]")
     console.print(f"  Model: {model or 'default'}")
-    console.print(f"  Knowledge-only: {knowledge_only}")
+    console.print(f"  Mode: {mode}")
+    console.print(f"  Causal tools: {'enabled' if enable_causal_tools else 'disabled'}")
 
     if not typer.confirm("Continue?"):
         raise typer.Exit(0)
@@ -327,7 +340,8 @@ def batch(
             questions_to_process,
             db_path,
             model,
-            knowledge_only,
+            mode,
+            enable_causal_tools,
         ))
         
         # Display results

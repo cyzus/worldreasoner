@@ -520,7 +520,8 @@ class PipelineRunner:
         on_progress: Optional[Callable],
         model: Optional[str] = None,
         offset_days: int = 7,
-        knowledge_only: bool = False,
+        mode: str = "container",
+        enable_causal_tools: bool = False,
         min_context_items: int = 3,
         **kwargs
     ) -> PipelineResult:
@@ -572,7 +573,8 @@ class PipelineRunner:
                     knowledge_cutoff=get_knowledge_cutoff_date(config.llm.model),
                     config=config,
                     db_path=self.db_path,  # Pass database path for per-request switching
-                    knowledge_only=knowledge_only,
+                    mode=mode,
+                    enable_causal_tools=enable_causal_tools,
                 )
 
                 # Run agent to generate forecast

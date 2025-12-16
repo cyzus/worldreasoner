@@ -87,7 +87,7 @@ class TestPipelineRunner:
             PipelineType.FORECAST,
             sample_questions,
             on_progress=on_progress,
-            knowledge_only=True,  # Use knowledge-only for faster testing
+            mode="knowledge_only",  # Use knowledge-only for faster testing
         )
 
         assert isinstance(result, PipelineResult)

@@ -15,6 +15,7 @@ class ForecastAgent(BaseAgent):
                  config: Config,
                  db_path: str = None,
                  mode: str = "container",
+                 enable_causal_tools: bool = False,
                  tools: list = None,
                  max_steps: int = 15,
                  is_code: bool = False):
@@ -27,6 +28,7 @@ class ForecastAgent(BaseAgent):
             config: Configuration object
             db_path: Path to test/forecast database (optional)
             mode: Forecasting mode ('knowledge_only', 'container', 'real_time')
+            enable_causal_tools: Whether to include causal reasoning tools (identify_forecast_event, create_forecast_causal_link, inspect_forecast_graph)
             tools: Additional custom tools
             max_steps: Maximum agent steps
             is_code: Whether this is a code execution agent
@@ -78,11 +80,27 @@ class ForecastAgent(BaseAgent):
             # Add web tools for real-time mode
             from src.tools.web_search import WebSearchTool
             from src.tools.web_fetch import WebFetchTool
-
+            allowed_tool_names = {'get_question', 'submit_forecast'}
+            forecast_tools = [
+                tool for tool in forecast_tools
+                if tool.name in allowed_tool_names
+            ]
             forecast_tools.extend([
                 WebSearchTool(),
                 WebFetchTool()
             ])
+
+        # Filter out causal reasoning tools if not enabled
+        if not enable_causal_tools:
+            causal_tool_names = {
+                'identify_forecast_event',
+                'create_forecast_causal_link',
+                'inspect_forecast_graph'
+            }
+            forecast_tools = [
+                tool for tool in forecast_tools
+                if tool.name not in causal_tool_names
+            ]
 
         # Add any additional custom tools
         if tools:

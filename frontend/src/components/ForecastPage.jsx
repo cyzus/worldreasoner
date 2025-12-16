@@ -23,7 +23,8 @@ const ForecastPage = ({
   const [forecastConfig, setForecastConfig] = useState({
     model: null,
     offset_days: 7,
-    knowledge_only: false,
+    mode: 'container',
+    enable_causal_tools: false,
     min_context_items: 3
   });
 
@@ -232,16 +233,40 @@ const ForecastPage = ({
               </div>
 
               <div className="config-item">
+                <label>
+                  Forecast Mode
+                  <span style={{fontSize: '12px', fontWeight: 'normal', color: '#888', marginLeft: '4px'}}>
+                    - What information can the agent access?
+                  </span>
+                </label>
+                <select
+                  value={forecastConfig.mode}
+                  onChange={(e) => setForecastConfig({...forecastConfig, mode: e.target.value})}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    borderRadius: '4px',
+                    border: '1px solid #ddd',
+                    fontSize: '14px'
+                  }}
+                >
+                  <option value="knowledge_only">Knowledge Only - LLM inherent knowledge</option>
+                  <option value="container">Container - Temporal research (default)</option>
+                  <option value="real_time">Real-Time - Live web search</option>
+                </select>
+              </div>
+
+              <div className="config-item">
                 <label style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
                   <input
                     type="checkbox"
-                    checked={forecastConfig.knowledge_only}
-                    onChange={(e) => setForecastConfig({...forecastConfig, knowledge_only: e.target.checked})}
+                    checked={forecastConfig.enable_causal_tools}
+                    onChange={(e) => setForecastConfig({...forecastConfig, enable_causal_tools: e.target.checked})}
                     style={{width: '18px', height: '18px', margin: 0, accentColor: '#4CAF50'}}
                   />
-                  Knowledge Only
+                  Enable Causal Reasoning Tools
                   <span style={{fontSize: '12px', fontWeight: 'normal', color: '#888', marginLeft: '4px'}}>
-                    - Use only LLM's knowledge cutoff date
+                    - Build causal graphs during forecasting
                   </span>
                 </label>
               </div>
