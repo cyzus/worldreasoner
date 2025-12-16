@@ -91,8 +91,9 @@ class AgentFactory:
         knowledge_cutoff: str,
         tools: Optional[List[Tool]] = None,
         config: Optional[Config] = None,
-        max_steps: int = 15,
-        knowledge_only: bool = False
+        db_path: str = None,
+        mode: str = "container",
+        max_steps: int = 15
     ):
         """Create a ForecastAgent with standard configuration.
 
@@ -107,9 +108,9 @@ class AgentFactory:
             tools: Optional list of custom tools to add to the agent.
                    MCP tools are added automatically based on question context.
             config: Optional custom configuration. If not provided, uses global config.
+            db_path: Path to test/forecast database (optional)
+            mode: Forecasting mode - 'knowledge_only', 'container', or 'real_time' (default: 'container')
             max_steps: Maximum number of steps the agent can take (default: 15)
-            knowledge_only: If True, disable research tools (only allow get_question and submit_forecast).
-                          Tests inherent LLM knowledge without external information.
 
         Returns:
             Configured ForecastAgent instance
@@ -129,7 +130,7 @@ class AgentFactory:
             ...     question=question,
             ...     simulated_date="2024-01-01",
             ...     knowledge_cutoff="2023-12-31",
-            ...     knowledge_only=True
+            ...     mode="knowledge_only"
             ... )
         """
         from src.agents.forecast_agent import ForecastAgent
@@ -140,9 +141,10 @@ class AgentFactory:
             simulated_date=simulated_date,
             knowledge_cutoff=knowledge_cutoff,
             config=app_config,
+            db_path=db_path,
+            mode=mode,
             tools=tools,
-            max_steps=max_steps,
-            knowledge_only=knowledge_only
+            max_steps=max_steps
         )
 
     @staticmethod

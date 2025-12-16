@@ -1,6 +1,8 @@
 from src.agents.base import BaseAgent
 from src.config import Config
 from smolagents import MCPClient
+import uuid
+from datetime import datetime, timezone
 
 from src.domain.models.question import Question
 
@@ -12,10 +14,10 @@ class ForecastAgent(BaseAgent):
                  knowledge_cutoff: str,
                  config: Config,
                  db_path: str = None,
+                 mode: str = "container",
                  tools: list = None,
                  max_steps: int = 15,
-                 is_code: bool = False,
-                 knowledge_only: bool = False):
+                 is_code: bool = False):
         """Initialize ForecastAgent.
 
         Args:
@@ -23,27 +25,35 @@ class ForecastAgent(BaseAgent):
             simulated_date: Simulated "today" date (ISO format)
             knowledge_cutoff: LLM training cutoff date (ISO format)
             config: Configuration object
-            db_path: Database path (enables per-request database switching)
+            db_path: Path to test/forecast database (optional)
+            mode: Forecasting mode ('knowledge_only', 'container', 'real_time')
             tools: Additional custom tools
             max_steps: Maximum agent steps
-            knowledge_only: If True, only allow get_question and submit_forecast tools
-                          (disable research tools to test inherent LLM knowledge)
+            is_code: Whether this is a code execution agent
         """
+
+        # Auto-configure for real-time mode
+        if mode == "real_time":
+            simulated_date = datetime.now(timezone.utc).isoformat()
+            db_path = None  # Use main database for real-time forecasts
+
+        # Generate session ID for tracking causal reasoning across requests
+        session_id = f"sess_{question.id}_{int(datetime.now(timezone.utc).timestamp())}_{uuid.uuid4().hex[:8]}"
 
         # Create headers for MCP connection
         headers = {
             "X-Question-ID": question.id,
             "X-Knowledge-Cutoff": knowledge_cutoff,
             "X-Simulated-Date": simulated_date,
-            "X-Model-Name": config.llm.model
+            "X-Model-Name": config.llm.model,
+            "X-Forecast-Mode": mode,
+            "X-Session-ID": session_id,
         }
 
-        # Add database path if provided (enables per-request DB switching)
         if db_path:
             headers["X-Database-Path"] = db_path
 
-        # Create MCP server connection parameters
-        # Note: For streamable-http transport, URL should point to the /mcp endpoint
+        # Create MCP server parameters
         mcp_server_parameters = [
             {
                 "url": f"http://{config.server.mcp_host}:{config.server.mcp_port}/mcp",
@@ -52,26 +62,31 @@ class ForecastAgent(BaseAgent):
             }
         ]
 
-        # Debug: Log connection details
-        from src.utils.logging import logger
-        logger.info(f"ForecastAgent connecting to MCP server at http://{config.server.mcp_host}:{config.server.mcp_port}/mcp")
-        logger.debug(f"Headers: question_id={question.id}, simulated_date={simulated_date}, db_path={db_path or 'default'}")
-
+        # Get MCP tools
         mcp_client = MCPClient(server_parameters=mcp_server_parameters)
         forecast_tools = mcp_client.get_tools()
 
-        # If knowledge_only mode, filter to only essential tools
-        if knowledge_only:
+        # Filter/add tools based on mode
+        if mode == "knowledge_only":
             # Only allow get_question and submit_forecast
             allowed_tool_names = {'get_question', 'submit_forecast'}
             forecast_tools = [
                 tool for tool in forecast_tools
                 if tool.name in allowed_tool_names
             ]
+        elif mode == "real_time":
+            # Add web tools for real-time mode
+            from src.tools.web_search import WebSearchTool
+            from src.tools.web_fetch import WebFetchTool
+
+            forecast_tools.extend([
+                WebSearchTool(),
+                WebFetchTool()
+            ])
 
         # Add any additional custom tools
         if tools:
             forecast_tools.extend(tools)
 
-        # WebAgent gets more steps since it needs to search + visit + collect
+        # Initialize parent agent
         super().__init__(config=config, tools=forecast_tools, max_steps=max_steps, is_code=is_code)

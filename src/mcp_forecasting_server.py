@@ -124,9 +124,11 @@ class ForecastContextMiddleware(Middleware):
                     knowledge_cutoff = headers.get('x-knowledge-cutoff') or headers.get('X-Knowledge-Cutoff')
                     simulated_date = headers.get('x-simulated-date') or headers.get('X-Simulated-Date')
                     model_name = headers.get('x-model-name') or headers.get('X-Model-Name')
+                    forecast_mode = headers.get('x-forecast-mode') or headers.get('X-Forecast-Mode')
+                    session_id = headers.get('x-session-id') or headers.get('X-Session-ID')
                     db_path = headers.get('x-database-path') or headers.get('X-Database-Path')
 
-                    logger.debug(f"Extracted headers: question_id={question_id is not None}, simulated_date={simulated_date is not None}")
+                    logger.debug(f"Extracted - question_id: {question_id}, knowledge_cutoff: {knowledge_cutoff}, simulated_date: {simulated_date}, model: {model_name}, mode: {forecast_mode}, session_id: {session_id}, db_path: {db_path}")
 
                     # If headers are present, store them globally
                     if question_id and simulated_date:
@@ -148,7 +150,38 @@ class ForecastContextMiddleware(Middleware):
                             _connection_context['model_name'] = model_name or 'unknown'
                             _connection_context['db_path'] = db_path
 
-                            logger.debug(f"Context captured: q={question_id}, date={simulated_date_obj.date()}")
+                                # Validate knowledge cutoff < simulated date if provided
+                                if knowledge_cutoff_obj and knowledge_cutoff_obj >= simulated_date_obj:
+                                    logger.error(
+                                        f"Invalid dates: knowledge_cutoff {knowledge_cutoff_obj.date()} "
+                                        f"must be before simulated_date {simulated_date_obj.date()}"
+                                    )
+                                    raise ValueError(
+                                        f"Knowledge cutoff ({knowledge_cutoff_obj.date()}) must be BEFORE "
+                                        f"simulated date ({simulated_date_obj.date()}). "
+                                        f"The LLM must be 'deployed' after its training ends."
+                                    )
+
+                                _connection_context['question_id'] = question_id
+                                _connection_context['knowledge_cutoff'] = knowledge_cutoff_obj.isoformat() if knowledge_cutoff_obj else None
+                                _connection_context['knowledge_cutoff_obj'] = knowledge_cutoff_obj
+                                _connection_context['simulated_date'] = simulated_date_obj.isoformat()
+                                _connection_context['simulated_date_obj'] = simulated_date_obj
+                                _connection_context['model_name'] = model_name or 'unknown'
+                                _connection_context['forecast_mode'] = forecast_mode or 'container'
+                                _connection_context['session_id'] = session_id
+                                _connection_context['db_path'] = db_path
+                                _connection_context['question'] = question
+                                logger.info(
+                                    f"Context captured from headers: q={question_id}, "
+                                    f"model={model_name or 'unknown'}, "
+                                    f"knowledge_cutoff={knowledge_cutoff_obj.date() if knowledge_cutoff_obj else 'N/A'}, "
+                                    f"simulated_date={simulated_date_obj.date()}, "
+                                    f"resolution_date={question.resolution_date.date()}, "
+                                    f"forecast_horizon={(question.resolution_date - simulated_date_obj).days} days"
+                                )
+                            else:
+                                logger.warning(f"Question {question_id} not found in database")
                         except Exception as e:
                             logger.error(f"Error parsing context headers: {e}")
                     else:
@@ -564,6 +597,111 @@ def inspect_graph(ctx: Context) -> str:
 
 
 @mcp.tool()
+def identify_forecast_event(ctx: Context, title: str, description: str, domain: str,
+                           occurred_date: str, event_type: str = None,
+                           source_article_ids: str = None) -> str:
+    """Identify event for forecast reasoning.
+
+    Use this tool to identify and record events that are relevant to your forecast.
+    The tool checks for existing events and either reuses them or creates new ones.
+
+    Args:
+        title: Short event title
+        description: Detailed event description
+        domain: Event domain
+        occurred_date: When event occurred (ISO format with timezone)
+        event_type: Optional event type
+        source_article_ids: Optional comma-separated article IDs
+
+    Returns:
+        JSON string with event details
+    """
+    try:
+        session_id = _connection_context.get('session_id')
+        if not session_id:
+            return json.dumps({"error": "No session_id. Send X-Session-ID header."})
+
+        from src.tools.forecast_event_identifier import ForecastEventIdentifierTool
+
+        tool = ForecastEventIdentifierTool(
+            question_db_path=db.db_path,
+            forecast_db_path=_connection_context.get('db_path') or db.db_path,
+            session_id=session_id
+        )
+
+        return tool.forward(title, description, domain, occurred_date, event_type, source_article_ids)
+    except Exception as e:
+        logger.error(f"Error identifying forecast event: {e}")
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def create_forecast_causal_link(ctx: Context, source_event_id: str, target_event_id: str,
+                               relation_type: str, strength: float, confidence: float,
+                               reasoning: str, evidence_article_ids: str = "") -> str:
+    """Create causal link for forecast reasoning.
+
+    Use this tool to record causal relationships between events during forecasting.
+
+    Args:
+        source_event_id: Event ID of the cause
+        target_event_id: Event ID of the effect
+        relation_type: Type of causation
+        strength: Causal strength (0-1)
+        confidence: Confidence in link (0-1)
+        reasoning: Explanation of mechanism
+        evidence_article_ids: Optional comma-separated article IDs
+
+    Returns:
+        JSON confirmation with hypothesis ID
+    """
+    try:
+        session_id = _connection_context.get('session_id')
+        if not session_id:
+            return json.dumps({"error": "No session_id. Send X-Session-ID header."})
+
+        from src.tools.forecast_causal_reasoner import ForecastCausalReasonerTool
+
+        tool = ForecastCausalReasonerTool(
+            forecast_db_path=_connection_context.get('db_path') or db.db_path,
+            session_id=session_id
+        )
+
+        return tool.forward(source_event_id, target_event_id, relation_type,
+                          strength, confidence, reasoning, evidence_article_ids)
+    except Exception as e:
+        logger.error(f"Error creating forecast causal link: {e}")
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def inspect_forecast_graph(ctx: Context) -> str:
+    """Inspect forecast's causal reasoning graph.
+
+    Use this tool to check the quality and structure of your causal reasoning graph.
+
+    Returns:
+        JSON with graph statistics and quality feedback
+    """
+    try:
+        session_id = _connection_context.get('session_id')
+        if not session_id:
+            return json.dumps({"error": "No session_id. Send X-Session-ID header."})
+
+        from src.tools.forecast_graph_inspector import ForecastGraphInspectorTool
+
+        tool = ForecastGraphInspectorTool(
+            forecast_db_path=_connection_context.get('db_path') or db.db_path,
+            session_id=session_id
+        )
+
+        return tool.forward()
+    except Exception as e:
+        logger.error(f"Error inspecting forecast graph: {e}")
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
 def submit_forecast(
     ctx: Context,
     prediction: str,
@@ -618,8 +756,13 @@ def submit_forecast(
         # Create forecast
         forecast_id = f"fcst_{question_id}_{int(datetime.now(timezone.utc).timestamp())}"
 
-        # Get model name from context
+        # Get model name, mode, and db_path from context
         model_name = _connection_context.get('model_name', 'unknown')
+        mode = _connection_context.get('forecast_mode', 'container')
+        db_path = _connection_context.get('db_path')
+
+        # Import ForecastMode enum
+        from src.domain.models.forecast import ForecastMode
 
         forecast = Forecast(
             id=forecast_id,
@@ -634,11 +777,34 @@ def submit_forecast(
             articles_accessed=articles_accessed.value or [],
             searches_performed=[],  # Could track this if needed
             model_name=model_name,
+            mode=ForecastMode(mode),
+            db=db_path
         )
 
-        # Save forecast to database
-        db.save(Forecast, forecast)
+        # Save forecast to appropriate database
+        forecast_db = GenericDatabase(db_path) if db_path else db
+        forecast_db.save(Forecast, forecast)
         logger.info(f"Forecast saved to database: {forecast_id}")
+
+        # Link events and hypotheses to forecast_id
+        from src.domain.models.forecast_graph import ForecastEvent, ForecastHypothesis
+
+        try:
+            # Get all forecast events for this session
+            events = forecast_db.get_many(ForecastEvent, filters={'session_id': session_id})
+            for event in events:
+                event.forecast_id = forecast_id
+                forecast_db.save(ForecastEvent, event)
+
+            # Get all forecast hypotheses for this session
+            hypotheses = forecast_db.get_many(ForecastHypothesis, filters={'session_id': session_id})
+            for hyp in hypotheses:
+                hyp.forecast_id = forecast_id
+                forecast_db.save(ForecastHypothesis, hyp)
+
+            logger.info(f"Linked {len(events)} events and {len(hypotheses)} hypotheses to forecast {forecast_id}")
+        except Exception as e:
+            logger.warning(f"Could not link forecast graph to forecast_id: {e}")
 
         result = {
             "forecast_id": forecast_id,

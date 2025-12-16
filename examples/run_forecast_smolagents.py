@@ -97,9 +97,18 @@ def parse_args():
     )
 
     parser.add_argument(
-        '--knowledge-only',
-        action='store_true',
-        help='Disable research tools (only allow get_question and submit_forecast). Tests inherent LLM knowledge without external information.'
+        '--mode',
+        type=str,
+        choices=['knowledge_only', 'container', 'real_time'],
+        default='container',
+        help='Forecasting mode (default: container). knowledge_only=no research tools, container=temporal research, real_time=live information'
+    )
+
+    parser.add_argument(
+        '--test-db',
+        type=str,
+        default=None,
+        help='Path to test database for storing forecasts (optional)'
     )
 
     # Output control
@@ -358,6 +367,8 @@ def run_forecast(args):
         simulated_date=forecast_setup['simulated_date'].isoformat(),
         knowledge_cutoff=args.knowledge_cutoff,
         config=config,
+        db_path=args.test_db,
+        mode=args.mode,
         max_steps=args.max_steps
     )
 

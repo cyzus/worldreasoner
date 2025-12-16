@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from enum import Enum
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -9,7 +10,14 @@ from ...core.database import register_model
 from .causal_hypothesis import CausalHypothesis
 
 
-@register_model('forecasts', indexes=['question_id', 'session_id'])
+class ForecastMode(str, Enum):
+    """Forecasting mode types."""
+    KNOWLEDGE_ONLY = "knowledge_only"
+    CONTAINER = "container"
+    REAL_TIME = "real_time"
+
+
+@register_model('forecasts', indexes=['question_id', 'session_id', 'mode', 'db'])
 class Forecast(BaseModel):
     """LLM forecast submission.
     
@@ -77,6 +85,10 @@ class Forecast(BaseModel):
     # Model information
     model_name: Optional[str] = Field(None, description="Name of the model that made the forecast")
     model_version: Optional[str] = Field(None, description="Version of the model")
+
+    # Mode and database tracking
+    db: Optional[str] = Field(None, description="Database path used for this forecast")
+    mode: ForecastMode = Field(ForecastMode.CONTAINER, description="Forecasting mode used")
     
     # Evaluation results (populated after resolution)
     is_correct: Optional[bool] = Field(None, description="Whether prediction was correct")
