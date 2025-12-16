@@ -7,6 +7,7 @@ from collections import defaultdict
 from smolagents import Tool
 from src.domain.models import CausalHypothesis, Event
 from src.core.database import GenericDatabase
+from src.utils.graph_visualization import GraphVisualizer
 
 
 class GraphInspectorTool(Tool):
@@ -243,50 +244,12 @@ class GraphInspectorTool(Tool):
         node: str,
         visited: Set[str]
     ) -> int:
-        """Find maximum depth from a node using DFS.
-
-        Args:
-            graph: Adjacency list
-            node: Starting node
-            visited: Visited nodes
-
-        Returns:
-            Maximum depth from this node
-        """
-        if node in visited or node not in graph:
-            return 0
-
-        visited.add(node)
-        max_child_depth = 0
-
-        for source in graph[node]:
-            depth = self._find_max_depth_from_node(graph, source, visited.copy())
-            max_child_depth = max(max_child_depth, depth)
-
-        return 1 + max_child_depth
+        """Find maximum depth from a node using DFS."""
+        return GraphVisualizer.find_max_depth_from_node(graph, node, visited)
 
     def _get_recommendation(self, stats: Dict) -> str:
-        """Generate recommendation based on graph statistics.
-
-        Args:
-            stats: Graph statistics
-
-        Returns:
-            Recommendation string
-        """
-        max_depth = stats["max_depth"]
-        quality = stats["quality_score"]
-
-        if max_depth == 0:
-            return "No causal graph yet. Start by identifying the target event and immediate causes."
-        elif max_depth == 1:
-            return "Graph is SHALLOW (1 level). You need deeper chains! For each immediate cause, ask 'What caused THIS?' and create intermediate events."
-        elif max_depth == 2:
-            return "Graph has some depth (2 levels). Consider going deeper on the most important causal chains."
-        elif quality < 0.6:
-            return "Graph depth is good, but quality is low. Add more evidence citations and improve confidence scores."
-        else:
-            return "Graph depth and quality look good. Feel free to finalize or add minor improvements."
+        """Generate recommendation based on graph statistics."""
+        return GraphVisualizer.get_recommendation(stats["max_depth"], stats["quality_score"])
 
     def _format_empty_graph(self) -> str:
         """Format output for empty graph."""
@@ -437,57 +400,12 @@ RECOMMENDATION:
         prefix: str = "",
         is_last: bool = True
     ) -> List[str]:
-        """Build ASCII tree representation of causal graph.
-
-        Args:
-            event_id: Current event ID
-            events: Event mapping
-            graph: Adjacency list
-            hypothesis_map: Hypothesis mapping
-            visited: Visited nodes
-            prefix: Current line prefix
-            is_last: Whether this is the last child
-
-        Returns:
-            List of formatted lines
-        """
-        if event_id in visited:
-            return [f"{prefix}{'└─' if is_last else '├─'} [CYCLE: {event_id[:8]}...]"]
-        
-        visited.add(event_id)
-        lines = []
-        
-        event = events.get(event_id)
-        event_desc = self._truncate(event.description if event else event_id, 50)
-        
-        # Current node
-        connector = "└─" if is_last else "├─"
-        lines.append(f"{prefix}{connector} {event_desc}")
-        
-        # Children (sources that cause this event)
-        sources = graph.get(event_id, [])
-        if sources:
-            extension = "  " if is_last else "│ "
-            for i, source_id in enumerate(sources):
-                is_last_child = (i == len(sources) - 1)
-                hyp = hypothesis_map.get((source_id, event_id))
-                
-                # Add hypothesis info
-                if hyp:
-                    conf_str = f"conf: {hyp.confidence:.1f}"
-                    strength_str = f"str: {hyp.strength:.1f}"
-                    evidence_count = len(hyp.evidence_article_ids) if hyp.evidence_article_ids else 0
-                    evidence_str = f"{evidence_count} articles"
-                    lines.append(f"{prefix}{extension}  [{conf_str}, {strength_str}, {evidence_str}]")
-                
-                # Recursively build subtree
-                child_lines = self._build_causal_tree(
-                    source_id, events, graph, hypothesis_map,
-                    visited.copy(), prefix + extension, is_last_child
-                )
-                lines.extend(child_lines)
-        
-        return lines
+        """Build ASCII tree representation of causal graph."""
+        return GraphVisualizer.build_causal_tree(
+            event_id, events, graph, hypothesis_map, visited,
+            get_event_title=lambda e: e.description if e else "",
+            prefix=prefix, is_last=is_last
+        )
 
     def _find_all_causal_chains(
         self,
@@ -496,55 +414,10 @@ RECOMMENDATION:
         graph: Dict[str, List[str]],
         hypothesis_map: Dict[tuple, CausalHypothesis]
     ) -> List[List[tuple]]:
-        """Find all causal chains from root causes to target.
-
-        Args:
-            target_id: Target event ID
-            events: Event mapping
-            graph: Adjacency list
-            hypothesis_map: Hypothesis mapping
-
-        Returns:
-            List of chains, where each chain is [(event_id, hypothesis), ...]
-        """
-        all_chains = []
-        
-        def dfs(current_id: str, path: List[tuple], visited: Set[str]):
-            if current_id in visited:
-                return
-            
-            visited.add(current_id)
-            sources = graph.get(current_id, [])
-            
-            if not sources:
-                # Reached a root cause - save this chain
-                all_chains.append(list(reversed(path)))
-            else:
-                for source_id in sources:
-                    hyp = hypothesis_map.get((source_id, current_id))
-                    dfs(source_id, path + [(source_id, hyp)], visited.copy())
-        
-        # Start DFS from target
-        dfs(target_id, [(target_id, None)], set())
-        
-        # Sort by depth (longest first)
-        all_chains.sort(key=lambda c: len(c), reverse=True)
-        
-        return all_chains
+        """Find all causal chains from root causes to target."""
+        return GraphVisualizer.find_all_causal_chains(target_id, events, graph, hypothesis_map)
 
     def _truncate(self, text: str, max_len: int) -> str:
-        """Truncate text to max length with ellipsis.
-
-        Args:
-            text: Text to truncate
-            max_len: Maximum length
-
-        Returns:
-            Truncated text
-        """
-        if not text:
-            return ""
-        if len(text) <= max_len:
-            return text
-        return text[:max_len-3] + "..."
+        """Truncate text to max length with ellipsis."""
+        return GraphVisualizer.truncate(text, max_len)
 
