@@ -304,7 +304,8 @@ class HindsightEvidenceCollectionStage(PipelineStage[Question, Article]):
         instruction = self.hindsight_prompts.get_evidence_extraction_instruction(
             current_date=current_date,
             articles=articles,
-            question_domain=question.domain or "general"
+            question_domain=question.domain,
+            question_resolution_date=question.resolution_date,
         )
 
         logger.debug(f"Running event extraction agent for {len(articles)} articles")

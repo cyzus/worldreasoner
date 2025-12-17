@@ -33,8 +33,6 @@ class ArticleInspectorTool(Tool):
     name = "article_inspector"
     description = """Analyze timeline and coverage of collected articles.
 
-    NO INPUT REQUIRED - automatically uses the current question context.
-
     Evaluates coverage relative to the question resolution date:
     - Timeline distribution (articles published before resolution)
     - Time gaps that need filling

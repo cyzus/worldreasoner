@@ -5,13 +5,8 @@ from src.domain.models import Question, Domain
 from src.utils.enums import enum_to_list
 from .base import BasePromptGenerator, PromptTemplate
 
-
-class QuestionCategorizationPrompts(BasePromptGenerator[Question]):
-    """Prompts for categorizing questions into domains."""
-
-    # Template for the categorization instruction
-    CATEGORIZATION_TEMPLATE = PromptTemplate(
-        template="""Categorize these prediction market questions into domains.
+CATEGORIZATION_PROMPT = \
+"""Categorize these prediction market questions into domains.
 
 Questions:
 {questions_text}
@@ -21,7 +16,14 @@ Available domains: {available_domains}
 Return a JSON object with a "categorizations" key containing an array:
 {{"categorizations": [{{"id": "question_id", "domain": "domain_name"}}, ...]}}
 
-Only return the JSON object, nothing else.""",
+Only return the JSON object, nothing else."""
+
+class QuestionCategorizationPrompts(BasePromptGenerator[Question]):
+    """Prompts for categorizing questions into domains."""
+
+    # Template for the categorization instruction
+    CATEGORIZATION_TEMPLATE = PromptTemplate(
+        template=CATEGORIZATION_PROMPT,
         required_vars=["questions_text", "available_domains"]
     )
 

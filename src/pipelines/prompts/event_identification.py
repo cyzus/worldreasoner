@@ -6,26 +6,19 @@ from src.domain.models import Article, Domain
 from src.utils.enums import enum_to_list
 from .base import ContextualPromptGenerator, PromptTemplate
 
-
-class EventIdentificationPrompts(ContextualPromptGenerator[Article]):
-    """Prompts for the event identification stage."""
-    
-    # Template for formatting individual articles
-    ARTICLE_TEMPLATE = PromptTemplate(
-        template="""
+ARTICLE_TEMPLATE = \
+"""
 Article {idx} (ID: {article_id}):
 - Title: {title}
 - Source: {source}
 - Published: {published_date}
 - Domain: {domain}
 - Content Preview: {content_preview}
-""",
-        required_vars=["idx", "article_id", "title", "source", "published_date", "domain", "content_preview"]
-    )
-    
-    # Template for the main identification instruction
-    IDENTIFICATION_TEMPLATE = PromptTemplate(
-        template="""Analyze the following {num_articles} articles and identify events that would make good forecast questions.
+"""
+
+IDENTIFICATION_PROMPT = \
+"""
+Analyze the following {num_articles} articles and identify events that would make good forecast questions.
 
 {articles_text}
 
@@ -49,7 +42,22 @@ Each event should have:
 
 Only include events with confidence >= {confidence_threshold}.
 
-Call final_answer only after you finish the task.""",
+Call final_answer only after you finish the task.
+"""
+
+
+class EventIdentificationPrompts(ContextualPromptGenerator[Article]):
+    """Prompts for the event identification stage."""
+    
+    # Template for formatting individual articles
+    ARTICLE_TEMPLATE = PromptTemplate(
+        template=ARTICLE_TEMPLATE,
+        required_vars=["idx", "article_id", "title", "source", "published_date", "domain", "content_preview"]
+    )
+    
+    # Template for the main identification instruction
+    IDENTIFICATION_TEMPLATE = PromptTemplate(
+        template=IDENTIFICATION_PROMPT,
         required_vars=["num_articles", "articles_text", "confidence_threshold", "domain_options"],
         optional_vars={"tool_name": "batch_event_identifier"}
     )

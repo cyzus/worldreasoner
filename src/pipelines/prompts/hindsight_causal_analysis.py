@@ -11,17 +11,17 @@ Specialist agent for collecting evidence articles.
 
 Uses adaptive search strategies:
 - Try multiple search queries if initial results are insufficient
-- Broaden time windows if needed
+- Start from the resolution date and gradually go backwards in time
+- Prioritize high-quality sources and diverse perspectives
 - Fetch and analyze article content
 - Make sure all the articles collected are published BEFORE the resolution date
 - Use article_collector to save relevant articles to the database
-- Use article_inspector to check timeline coverage and identify gaps
+- Before submission, use article_inspector to check timeline coverage and identify gaps
 - If gaps exist, collect more articles from those time periods
 
 IMPORTANT: After collecting, report back the article IDs in this format:
 "Collected articles: [art_xxx, art_yyy, art_zzz]"
 
-This allows the causal_analyzer to link events to evidence.
 """
 
 GRAPH_AGENT_DESCRIPTION = \
@@ -32,8 +32,8 @@ CRITICAL: Build DEEP multi-level causal chains, not just direct links!
 
 FIRST STEP - Get article IDs:
 Call get_question_articles to get all articles
-collected for this question. Save the article_ids list - you MUST use
-these when creating events and causal links!
+collected for this question. 
+Save the article_ids list - you MUST use these when creating events and causal links!
 
 Process:
 1. Call get_question_articles to get article IDs

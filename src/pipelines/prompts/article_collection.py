@@ -5,12 +5,9 @@ from typing import Optional
 from .base import ContextualPromptGenerator, PromptTemplate
 
 
-class ArticleCollectionPrompts(ContextualPromptGenerator[None]):
-    """Prompts for the article collection stage."""
-    
-    # Template for the main collection instruction
-    COLLECTION_TEMPLATE = PromptTemplate(
-        template="""Search for news articles through "{source_name}" from the past {days_back} days.
+COLLECTION_TEMPLATE = \
+"""
+Search for news articles through "{source_name}" from the past {days_back} days.
 Find up to {max_articles} relevant articles.{domain_context}
 
 For each article you find:
@@ -18,7 +15,15 @@ For each article you find:
 2. Use web_fetch to fetch article content
 3. Call {tool_name}
 
-Return a summary when done.""",
+Return a summary when done.
+"""
+
+class ArticleCollectionPrompts(ContextualPromptGenerator[None]):
+    """Prompts for the article collection stage."""
+    
+    # Template for the main collection instruction
+    COLLECTION_TEMPLATE = PromptTemplate(
+        template=COLLECTION_TEMPLATE,
         required_vars=["source_name", "days_back", "max_articles"],
         optional_vars={"domain_context": "", "tool_name": "article_collector"}
     )

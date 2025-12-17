@@ -5,27 +5,18 @@ from typing import List, Optional
 from src.domain.models import Event
 from .base import ContextualPromptGenerator, PromptTemplate
 
-
-class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
-    """Prompts for the question generation stage."""
-    
-    # Template for formatting individual events
-    EVENT_TEMPLATE = PromptTemplate(
-        template="""
+EVENT_TEMPLATE = \
+"""
 Event {idx} (ID: {event_id}){status_note}:
 - Title: {title}
 - Description: {description}
 - Date: {event_date}
 - Domain: {domain}
 - Confidence: {confidence}
-""",
-        required_vars=["idx", "event_id", "title", "description", "event_date", "domain", "confidence"],
-        optional_vars={"status_note": ""}
-    )
-    
-    # Template for GROUND TRUTH mode (past events only)
-    GENERATION_TEMPLATE_GROUND_TRUTH = PromptTemplate(
-        template="""Generate {max_questions} forecast questions from PAST events.{domain_filter}
+"""
+
+QUESTION_GENERATION_TEMPLATE_GROUND_TRUTH = \
+"""Generate {max_questions} forecast questions from PAST events.{domain_filter}
 
 {events_text}
 
@@ -51,17 +42,10 @@ TOOL USAGE:
 
 Required fields: question_text, question_type, domain, difficulty, resolution_date, resolution_criteria, ground_truth, resolution_reasoning, related_event_ids
 
-Example: {tool_name}(questions_json='[{{"question_text": "Will Bitcoin exceed $100K by Dec 31, 2025?", "question_type": "boolean", "domain": "finance", "difficulty": 3, "resolution_date": "2025-12-31", "resolution_criteria": "CoinMarketCap closing price", "ground_truth": "YES", "resolution_reasoning": "BTC closed at $105K on Dec 31 per CoinMarketCap", "related_event_ids": "evt_fin_20251201_001"}}]')""",
-        required_vars=["num_events", "events_text", "max_questions", "current_date", "min_resolution_date"],
-        optional_vars={
-            "domain_filter": "",
-            "tool_name": "batch_question_generator"
-        }
-    )
+Example: {tool_name}(questions_json='[{{"question_text": "Will Bitcoin exceed $100K by Dec 31, 2025?", "question_type": "boolean", "domain": "finance", "difficulty": 3, "resolution_date": "2025-12-31", "resolution_criteria": "CoinMarketCap closing price", "ground_truth": "YES", "resolution_reasoning": "BTC closed at $105K on Dec 31 per CoinMarketCap", "related_event_ids": "evt_fin_20251201_001"}}]')"""
 
-    # Template for FUTURE events mode (predictions only)
-    GENERATION_TEMPLATE_FUTURE = PromptTemplate(
-        template="""Generate {max_questions} forecast questions about FUTURE events.{domain_filter}
+QUESTION_GENERATION_TEMPLATE_FUTURE = \
+"""Generate {max_questions} forecast questions about FUTURE events.{domain_filter}
 
 {events_text}
 
@@ -89,7 +73,31 @@ TOOL USAGE:
 Required fields: question_text, question_type, domain, difficulty, resolution_date, resolution_criteria, related_event_ids
 DO NOT include: ground_truth, resolution_reasoning (outcomes unknown)
 
-Example: {tool_name}(questions_json='[{{"question_text": "Will Bitcoin exceed $150K by Dec 31, 2026?", "question_type": "boolean", "domain": "finance", "difficulty": 3, "resolution_date": "2026-12-31", "resolution_criteria": "CoinMarketCap closing price", "related_event_ids": "evt_fin_20260601_001"}}]')""",
+Example: {tool_name}(questions_json='[{{"question_text": "Will Bitcoin exceed $150K by Dec 31, 2026?", "question_type": "boolean", "domain": "finance", "difficulty": 3, "resolution_date": "2026-12-31", "resolution_criteria": "CoinMarketCap closing price", "related_event_ids": "evt_fin_20260601_001"}}]')"""
+
+class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
+    """Prompts for the question generation stage."""
+    
+    # Template for formatting individual events
+    EVENT_TEMPLATE = PromptTemplate(
+        template=EVENT_TEMPLATE,
+        required_vars=["idx", "event_id", "title", "description", "event_date", "domain", "confidence"],
+        optional_vars={"status_note": ""}
+    )
+    
+    # Template for GROUND TRUTH mode (past events only)
+    GENERATION_TEMPLATE_GROUND_TRUTH = PromptTemplate(
+        template=QUESTION_GENERATION_TEMPLATE_GROUND_TRUTH,
+        required_vars=["num_events", "events_text", "max_questions", "current_date", "min_resolution_date"],
+        optional_vars={
+            "domain_filter": "",
+            "tool_name": "batch_question_generator"
+        }
+    )
+
+    # Template for FUTURE events mode (predictions only)
+    GENERATION_TEMPLATE_FUTURE = PromptTemplate(
+        template=QUESTION_GENERATION_TEMPLATE_FUTURE,
         required_vars=["num_events", "events_text", "max_questions", "current_date", "max_resolution_date"],
         optional_vars={
             "domain_filter": "",

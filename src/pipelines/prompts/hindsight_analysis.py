@@ -6,26 +6,19 @@ from src.domain.models import Question, Article
 from src.pipelines.prompts.base import ContextualPromptGenerator, PromptTemplate
 
 
-class HindsightAnalysisPrompts(ContextualPromptGenerator[Tuple[Question, List[Article]]]):
-    """Prompts for analyzing evidence with hindsight to identify causal relationships."""
-
-    # Template for formatting evidence articles
-    EVIDENCE_ARTICLE_TEMPLATE = PromptTemplate(
-        template="""
+EVIDENCE_ARTICLE_TEMPLATE = \
+"""
 Evidence Article {idx} (ID: {article_id}):
 - Title: {title}
 - Source: {source}
 - Published: {published_date} (BEFORE outcome on {resolution_date})
 - Domain: {domain}
 - Summary: {content_preview}
-""",
-        required_vars=["idx", "article_id", "title", "source", "published_date",
-                       "resolution_date", "domain", "content_preview"]
-    )
+"""
 
-    # Template for hindsight causal analysis instruction
-    HINDSIGHT_ANALYSIS_TEMPLATE = PromptTemplate(
-        template="""You are analyzing what caused the following outcome with the benefit of HINDSIGHT.
+
+HINDSIGHT_ANALYSIS_TEMPLATE = \
+"""You are analyzing what caused the following outcome with the benefit of HINDSIGHT.
 
 ========== QUESTION DETAILS ==========
 Question ID: {question_id}
@@ -106,17 +99,10 @@ AVAILABLE TOOLS:
 - Call causal_reasoner once per link, multiple times to build the graph
 - Do NOT invent event IDs - only use those from the list
 
-Return a summary when finished identifying all causal relationships (direct and multi-hop).""",
-        required_vars=[
-            "question_id", "question_text", "ground_truth", "resolution_date",
-            "target_event_id", "evidence_articles_text", "related_events_text",
-            "min_confidence", "min_strength", "max_causal_depth"
-        ]
-    )
+Return a summary when finished identifying all causal relationships (direct and multi-hop)."""
 
-    # Template for evidence collection instruction
-    EVIDENCE_COLLECTION_TEMPLATE = PromptTemplate(
-        template="""Search for evidence articles that explain what caused the following outcome.
+EVIDENCE_COLLECTION_TEMPLATE = \
+"""Search for evidence articles that explain what caused the following outcome.
 
 ========== OUTCOME DETAILS ==========
 Question: {question_text}
@@ -152,7 +138,57 @@ FOCUS ON:
 - Analysis of conditions and trends leading up to the event
 - Sources that discussed potential causes before the outcome occurred
 
-Return a summary when you've collected enough evidence articles.""",
+Return a summary when you've collected enough evidence articles."""
+
+EVENT_IDENTIFICATION_PROMPT = \
+"""Today's date is {date_str}.
+
+You are analyzing evidence articles related to a forecast question to extract key events.
+
+ARTICLES TO ANALYZE:
+{articles_text}
+
+TASK:
+1. Read through each article carefully
+2. Identify significant events, developments, or milestones mentioned
+3. For each important event, use the event_identifier tool to record it
+
+GUIDELINES:
+- Extract events that represent real developments, decisions, or outcomes
+- Include the article ID(s) when calling the tool
+- Use domain: {question_domain}
+- Be specific with titles and descriptions
+- Set occurred_date to when the event actually happened (from article publication or context)
+- Set confidence based on how clearly the article discusses the event
+- Extract multiple events if an article mentions several developments
+- Events should be substantive and factual, not hypothetical
+
+Only call event_identifier for real, important events. Do not create hypothetical events."""
+
+
+class HindsightAnalysisPrompts(ContextualPromptGenerator[Tuple[Question, List[Article]]]):
+    """Prompts for analyzing evidence with hindsight to identify causal relationships."""
+
+    # Template for formatting evidence articles
+    EVIDENCE_ARTICLE_TEMPLATE = PromptTemplate(
+        template=EVIDENCE_ARTICLE_TEMPLATE,
+        required_vars=["idx", "article_id", "title", "source", "published_date",
+                       "resolution_date", "domain", "content_preview"]
+    )
+
+    # Template for hindsight causal analysis instruction
+    HINDSIGHT_ANALYSIS_TEMPLATE = PromptTemplate(
+        template=HINDSIGHT_ANALYSIS_TEMPLATE,
+        required_vars=[
+            "question_id", "question_text", "ground_truth", "resolution_date",
+            "target_event_id", "evidence_articles_text", "related_events_text",
+            "min_confidence", "min_strength", "max_causal_depth"
+        ]
+    )
+
+    # Template for evidence collection instruction
+    EVIDENCE_COLLECTION_TEMPLATE = PromptTemplate(
+        template=EVIDENCE_COLLECTION_TEMPLATE,
         required_vars=[
             "question_text", "ground_truth", "resolution_date", "domain", "min_articles", "start_date", "end_date"
         ]
@@ -307,6 +343,7 @@ Return a summary when you've collected enough evidence articles.""",
         current_date: datetime,
         articles: List[Article],
         question_domain: str = "general",
+        question_resolution_date: datetime = None,
         content_preview_length: int = 500,
     ) -> str:
         """Generate instruction for extracting events from evidence articles.
@@ -333,41 +370,25 @@ Return a summary when you've collected enough evidence articles.""",
                 max_length=content_preview_length,
                 suffix="..."
             )
-            summary = f"""
-Article {idx} (ID: {article.id}):
-- Title: {article.title}
-- Published: {article.published_date.isoformat() if article.published_date else 'Unknown'}
-- Source: {article.source or 'Unknown'}
-- Domain: {article.domain or 'general'}
-- Content: {content_preview}
-"""
+            summary = self.EVIDENCE_ARTICLE_TEMPLATE.format(
+                idx=idx,
+                article_id=article.id,
+                title=article.title,
+                source=article.source,
+                published_date=self.format_datetime(article.published_date),
+                resolution_date=self.format_datetime(question_resolution_date),
+                domain=article.domain,
+                content_preview=content_preview
+            )
             article_summaries.append(summary)
 
         articles_text = "\n---\n".join(article_summaries)
 
-        instruction = f"""Today's date is {date_str}.
-
-You are analyzing evidence articles related to a forecast question to extract key events.
-
-ARTICLES TO ANALYZE:
-{articles_text}
-
-TASK:
-1. Read through each article carefully
-2. Identify significant events, developments, or milestones mentioned
-3. For each important event, use the event_identifier tool to record it
-
-GUIDELINES:
-- Extract events that represent real developments, decisions, or outcomes
-- Include the article ID(s) when calling the tool
-- Use domain: {question_domain}
-- Be specific with titles and descriptions
-- Set occurred_date to when the event actually happened (from article publication or context)
-- Set confidence based on how clearly the article discusses the event
-- Extract multiple events if an article mentions several developments
-- Events should be substantive and factual, not hypothetical
-
-Only call event_identifier for real, important events. Do not create hypothetical events."""
+        instruction = EVENT_IDENTIFICATION_PROMPT.format(
+            date_str=date_str,
+            articles_text=articles_text,
+            question_domain=question_domain
+        )
 
         return instruction
 
