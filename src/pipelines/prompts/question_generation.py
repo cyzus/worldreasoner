@@ -34,6 +34,7 @@ QUALITY:
 - Skip niche topics requiring insider knowledge
 - Ask "Will X happen?" not "Which company will..." (don't assume outcomes)
 - MCQ options from actual event participants only
+- Use future tense in question wording
 
 TOOL USAGE:
 1. Generate all {max_questions} questions as JSON array
@@ -64,6 +65,7 @@ QUALITY:
 - Skip niche topics requiring insider knowledge
 - Ask "Will X happen?" not "Which company will..." (don't assume outcomes)
 - MCQ options from actual event participants only
+- Use future tense in question wording
 
 TOOL USAGE:
 1. Generate all {max_questions} questions as JSON array
