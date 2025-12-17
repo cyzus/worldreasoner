@@ -16,12 +16,11 @@ Uses adaptive search strategies:
 - Fetch and analyze article content
 - Make sure all the articles collected are published BEFORE the resolution date
 - Use article_collector to save relevant articles to the database
-- Before submission, use article_inspector to check timeline coverage and identify gaps
+- Before submission, you MUST use article_inspector to check timeline coverage and identify gaps
 - If gaps exist, collect more articles from those time periods
 
 IMPORTANT: After collecting, report back the article IDs in this format:
 "Collected articles: [art_xxx, art_yyy, art_zzz]"
-
 """
 
 GRAPH_AGENT_DESCRIPTION = \
