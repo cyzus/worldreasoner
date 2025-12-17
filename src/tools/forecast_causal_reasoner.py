@@ -12,6 +12,7 @@ from src.domain.models.forecast_graph import ForecastHypothesis
 from src.domain.models.event import CausalRelationType
 from src.core.database import GenericDatabase
 from src.utils.logging import logger
+from src.utils.id_generator import generate_forecast_hypothesis_id
 
 
 class ForecastCausalReasonerTool(Tool):
@@ -125,7 +126,7 @@ class ForecastCausalReasonerTool(Tool):
             article_ids = [aid.strip() for aid in evidence_article_ids.split(',') if aid.strip()]
 
             # Create and save ForecastHypothesis
-            hyp_id = f"hyp_fcst_{int(datetime.now(timezone.utc).timestamp())}"
+            hyp_id = generate_forecast_hypothesis_id()
             hypothesis = ForecastHypothesis(
                 id=hyp_id,
                 forecast_id=None,

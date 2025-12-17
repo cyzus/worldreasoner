@@ -380,29 +380,28 @@ def get_question(ctx: Context) -> str:
                 "question_type": question.question_type.value,
                 "domain": question.domain.value if hasattr(question.domain, 'value') else question.domain,
                 "difficulty": question.difficulty,
-                "resolution_date": question.resolution_date.isoformat(),
+                # "resolution_date": question.resolution_date.isoformat(),
                 # "context": question.context, # The context might leak the answer
                 "options": question.options,
                 "quantity_unit": question.quantity_unit,
-                "target_event_id": question.target_event_id
+                # "target_event_id": question.target_event_id # Avoid leaking answer
             },
             "temporal_context": {
                 "knowledge_cutoff_date": knowledge_cutoff.isoformat() if knowledge_cutoff else None,
-                "simulated_date": simulated_date.isoformat(),
-                "resolution_date": question.resolution_date.isoformat(),
-                "days_to_forecast": (question.resolution_date - simulated_date).days,
+                "today's date": simulated_date.isoformat(),
+                # "resolution_date": question.resolution_date.isoformat(),
                 "explanation": (
-                    f"Simulated 'today' is {simulated_date.date()}. "
+                    f"'today' is {simulated_date.date()}. "
                     + (f"Your training data cutoff is {knowledge_cutoff.date()}. " if knowledge_cutoff else "")
                 )
             },
             "instructions": (
                 f"FORECASTING SCENARIO:\n"
                 + (f"- Your training data includes information up to: {knowledge_cutoff.date()}\n" if knowledge_cutoff else "")
-                + f"- Simulated 'today' date: {simulated_date.date()}\n"
-                f"- Event resolution date: {question.resolution_date.date()}\n"
-                f"- You must forecast: {(question.resolution_date - simulated_date).days} days into the future\n"
-                f"- All article searches will only return information from BEFORE the simulated date\n"
+                + f"- 'today' date: {simulated_date.date()}\n"
+                f"- Approximate event resolution date: {question.resolution_date.date()}\n"
+                f"- You must forecast: around {(question.resolution_date - simulated_date).days} days into the future\n"
+                f"- All article searches will only return information from BEFORE today\n"
                 f"- This tests your ability to make genuine predictions about future events"
             )
         }

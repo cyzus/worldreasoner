@@ -15,6 +15,7 @@ from src.core.database import GenericDatabase
 from src.utils.logging import logger
 from src.utils.enums import parse_domain, parse_event_type, enum_to_list, Domain
 from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
+from src.utils.id_generator import generate_forecast_event_id
 
 
 class ForecastEventIdentifierTool(Tool):
@@ -129,7 +130,7 @@ class ForecastEventIdentifierTool(Tool):
                 }}, indent=2, default=str)
 
             # Create new ForecastEvent
-            event_id = f"evt_fcst_{int(datetime.now(timezone.utc).timestamp())}"
+            event_id = generate_forecast_event_id()
             forecast_event = ForecastEvent(
                 id=event_id,
                 forecast_id=None,

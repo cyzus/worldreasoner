@@ -37,10 +37,14 @@ class GraphVisualizer:
             visited: Visited nodes
 
         Returns:
-            Maximum depth from this node
+            Maximum depth from this node (number of edges in longest path)
         """
-        if node in visited or node not in graph:
+        if node in visited:
             return 0
+        
+        # Leaf nodes (root causes with no incoming edges) have depth 1
+        if node not in graph:
+            return 1
 
         visited.add(node)
         max_child_depth = 0

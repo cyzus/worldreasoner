@@ -101,6 +101,8 @@ class ForecastAgent(BaseAgent):
                 tool for tool in forecast_tools
                 if tool.name not in causal_tool_names
             ]
+        else:
+            max_steps = max(max_steps, 25)  # Allow more steps if causal tools enabled
 
         # Add any additional custom tools
         if tools:

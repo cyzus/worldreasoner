@@ -121,9 +121,12 @@ class ForecastGraphInspectorTool(Tool):
             all_sources.update(sources)
         leaf_nodes = all_sources - all_targets
 
-        # Calculate depths
+        # Calculate depths from target events (endpoints of causal chains)
+        # Target events are those that are effects but not causes of other events
+        target_events = all_targets - all_sources if all_targets else event_ids
+        
         max_depth = 0
-        for event_id in event_ids:
+        for event_id in target_events:
             depth = self._find_max_depth_from_node(graph, event_id, set())
             max_depth = max(max_depth, depth)
 
