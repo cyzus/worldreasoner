@@ -115,6 +115,28 @@ async def get_job_status(job_id: str):
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
     return jobs[job_id]
 
+@router.get("/jobs/{job_id}/results")
+async def get_job_results(job_id: str):
+    """Get the results of a completed pipeline job.
+    
+    Returns the results field from the job, which includes:
+    - processed: list of successfully processed question IDs
+    - failed: list of failed questions with error details
+    - skipped: list of skipped questions
+    - duration_seconds: total execution time
+    """
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    
+    job = jobs[job_id]
+    if job.status == JobStatus.PENDING or job.status == JobStatus.RUNNING:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Job {job_id} is still {job.status.value}. Wait for completion."
+        )
+    
+    return job.results
+
 @router.get("/jobs", response_model=List[PipelineJobResponse])
 async def list_jobs(
     status: Optional[JobStatus] = None,

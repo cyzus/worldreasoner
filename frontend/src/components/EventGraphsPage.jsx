@@ -66,7 +66,7 @@ function EventGraphsPage({
     setLoadingForecasts(true)
     setForecastsError(null)
 
-    fetch(`http://localhost:8000/api/questions/${selectedQuestionId}/forecasts`)
+    fetch(`http://localhost:8018/api/questions/${selectedQuestionId}/forecasts`)
       .then(res => {
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}: ${res.statusText}`)
@@ -101,7 +101,7 @@ function EventGraphsPage({
     }
 
     setLoadingForecastGraph(true)
-    fetch(`http://localhost:8000/api/forecasts/${selectedForecastId}/graph`)
+    fetch(`http://localhost:8018/api/forecasts/${selectedForecastId}/graph`)
       .then(res => {
         if (!res.ok) {
           if (res.status === 404) {

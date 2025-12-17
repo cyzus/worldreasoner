@@ -7,6 +7,9 @@ const PipelinePage = ({ questions, onJobComplete }) => {
   const [selectedQuestions, setSelectedQuestions] = useState([])
   const [jobs, setJobs] = useState([])
   const [loadingJobs, setLoadingJobs] = useState(false)
+  const [selectedJob, setSelectedJob] = useState(null)
+  const [jobDetails, setJobDetails] = useState(null)
+  const [loadingDetails, setLoadingDetails] = useState(false)
 
   // Load recent jobs
   const loadJobs = async () => {
@@ -68,6 +71,22 @@ const PipelinePage = ({ questions, onJobComplete }) => {
     return `${diffDays}d ago`
   }
 
+  const handleJobClick = async (job) => {
+    setSelectedJob(job.job_id)
+    setLoadingDetails(true)
+    try {
+      // Fetch full job details including results
+      const response = await fetch(`http://localhost:8018/api/pipelines/jobs/${job.job_id}`)
+      const data = await response.json()
+      setJobDetails(data)
+    } catch (error) {
+      console.error('Failed to load job details:', error)
+      setJobDetails(null)
+    } finally {
+      setLoadingDetails(false)
+    }
+  }
+
   return (
     <div className="pipeline-page">
       <div className="pipeline-page-header">
@@ -109,7 +128,12 @@ const PipelinePage = ({ questions, onJobComplete }) => {
                 </div>
               ) : (
                 jobs.map(job => (
-                  <div key={job.job_id} className="job-item">
+                  <div 
+                    key={job.job_id} 
+                    className={`job-item ${selectedJob === job.job_id ? 'selected' : ''}`}
+                    onClick={() => handleJobClick(job)}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <div className="job-header">
                       <div className="job-info">
                         <span
@@ -193,23 +217,154 @@ const PipelinePage = ({ questions, onJobComplete }) => {
           </div>
         </div>
 
-        {/* Right Main Content: Question Selection */}
+        {/* Right Main Content: Question Selection or Job Details */}
         <div className="pipeline-main-content">
-          <div className="pipeline-questions-section">
-            <div className="section-header">
-              <h3>Select Questions</h3>
-              <span className="selected-badge">
-                {selectedQuestions.length} selected
-              </span>
+          {selectedJob && jobDetails ? (
+            <div className="job-details-section">
+              <div className="section-header">
+                <h3>Job Details: {selectedJob}</h3>
+                <button 
+                  className="close-btn"
+                  onClick={() => { setSelectedJob(null); setJobDetails(null); }}
+                >
+                  ✕ Close
+                </button>
+              </div>
+
+              <div className="job-details-content">
+                <div className="job-detail-card">
+                  <h4>Status</h4>
+                  <div className="job-detail-row">
+                    <span className="label">Status:</span>
+                    <span className="value" style={{ color: getStatusColor(jobDetails.status) }}>
+                      {getStatusIcon(jobDetails.status)} {jobDetails.status}
+                    </span>
+                  </div>
+                  <div className="job-detail-row">
+                    <span className="label">Pipeline Type:</span>
+                    <span className="value">{jobDetails.pipeline_type}</span>
+                  </div>
+                  <div className="job-detail-row">
+                    <span className="label">Progress:</span>
+                    <span className="value">{(jobDetails.progress * 100).toFixed(0)}%</span>
+                  </div>
+                  <div className="job-detail-row">
+                    <span className="label">Created:</span>
+                    <span className="value">{new Date(jobDetails.created_at).toLocaleString()}</span>
+                  </div>
+                  <div className="job-detail-row">
+                    <span className="label">Updated:</span>
+                    <span className="value">{new Date(jobDetails.updated_at).toLocaleString()}</span>
+                  </div>
+                  {jobDetails.message && (
+                    <div className="job-detail-row">
+                      <span className="label">Message:</span>
+                      <span className="value">{jobDetails.message}</span>
+                    </div>
+                  )}
+                </div>
+
+                {jobDetails.results && Object.keys(jobDetails.results).length > 0 && (
+                  <div className="job-detail-card">
+                    <h4>Results</h4>
+                    
+                    {/* Summary */}
+                    <div className="results-summary">
+                      {jobDetails.results.processed !== undefined && (
+                        <div className="result-stat-large success">
+                          <div className="stat-value">{jobDetails.results.processed}</div>
+                          <div className="stat-label">Processed</div>
+                        </div>
+                      )}
+                      {jobDetails.results.failed !== undefined && jobDetails.results.failed > 0 && (
+                        <div className="result-stat-large failed">
+                          <div className="stat-value">{jobDetails.results.failed}</div>
+                          <div className="stat-label">Failed</div>
+                        </div>
+                      )}
+                      {jobDetails.results.skipped !== undefined && jobDetails.results.skipped > 0 && (
+                        <div className="result-stat-large skipped">
+                          <div className="stat-value">{jobDetails.results.skipped}</div>
+                          <div className="stat-label">Skipped</div>
+                        </div>
+                      )}
+                      {jobDetails.results.duration_seconds && (
+                        <div className="result-stat-large duration">
+                          <div className="stat-value">{jobDetails.results.duration_seconds.toFixed(1)}s</div>
+                          <div className="stat-label">Duration</div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Processed Questions */}
+                    {jobDetails.results.processed_details && jobDetails.results.processed_details.length > 0 && (
+                      <div className="result-details-section">
+                        <h5>✓ Processed Questions ({jobDetails.results.processed_details.length})</h5>
+                        <div className="result-items">
+                          {jobDetails.results.processed_details.map((item, idx) => (
+                            <div key={idx} className="result-item success">
+                              <code>{typeof item === 'string' ? item : item.id}</code>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Failed Questions */}
+                    {jobDetails.results.failed_details && jobDetails.results.failed_details.length > 0 && (
+                      <div className="result-details-section">
+                        <h5>✗ Failed Questions ({jobDetails.results.failed_details.length})</h5>
+                        <div className="result-items">
+                          {jobDetails.results.failed_details.map((item, idx) => (
+                            <div key={idx} className="result-item failed">
+                              <code>{item.id}</code>
+                              {item.error && <div className="error-message">{item.error}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Skipped Questions */}
+                    {jobDetails.results.skipped_details && jobDetails.results.skipped_details.length > 0 && (
+                      <div className="result-details-section">
+                        <h5>⊘ Skipped Questions ({jobDetails.results.skipped_details.length})</h5>
+                        <div className="result-items">
+                          {jobDetails.results.skipped_details.map((item, idx) => (
+                            <div key={idx} className="result-item skipped">
+                              <code>{typeof item === 'string' ? item : item.id}</code>
+                              {item.reason && <div className="skip-reason">{item.reason}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-            <QuestionList
-              questions={questions}
-              selectedQuestionId={null}
-              onQuestionSelect={() => {}} // Disabled in pipeline mode
-              multiSelectMode={true}
-              onQuestionsSelected={setSelectedQuestions}
-            />
-          </div>
+          ) : loadingDetails ? (
+            <div className="loading-details">
+              <div className="loading-spinner"></div>
+              <div>Loading job details...</div>
+            </div>
+          ) : (
+            <div className="pipeline-questions-section">
+              <div className="section-header">
+                <h3>Select Questions</h3>
+                <span className="selected-badge">
+                  {selectedQuestions.length} selected
+                </span>
+              </div>
+              <QuestionList
+                questions={questions}
+                selectedQuestionId={null}
+                onQuestionSelect={() => {}} // Disabled in pipeline mode
+                multiSelectMode={true}
+                onQuestionsSelected={setSelectedQuestions}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>
