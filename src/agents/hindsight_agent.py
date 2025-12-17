@@ -8,6 +8,7 @@ from src.tools import (ArticleRetrievalTool, ArticleCollectorTool,
                        EventDetailsTool, EventIdentifierTool,
                        CausalReasonerTool, GraphInspectorTool,
                        ArticleInspectorTool, QuestionArticlesTool)
+from src.pipelines.prompts.hindsight_causal_analysis import EVIDENCE_AGENT_DESCRIPTION, GRAPH_AGENT_DESCRIPTION
 
 
 class HindsightAgent(BaseAgent):
@@ -66,21 +67,7 @@ class HindsightAgent(BaseAgent):
             stream_outputs=False,
             additional_authorized_imports=["json"], # Allow json imports in code agent
             name="evidence_collector",
-            description="""Specialist agent for collecting evidence articles.
-
-            Uses adaptive search strategies:
-            - Try multiple search queries if initial results are insufficient
-            - Broaden time windows if needed
-            - Fetch and analyze article content
-            - Make sure all the articles collected are published BEFORE the resolution date
-            - Use article_collector to save relevant articles to the database
-            - Use article_inspector to check timeline coverage and identify gaps
-            - If gaps exist, collect more articles from those time periods
-
-            IMPORTANT: After collecting, report back the article IDs in this format:
-            "Collected articles: [art_xxx, art_yyy, art_zzz]"
-
-            This allows the causal_analyzer to link events to evidence."""
+            description=EVIDENCE_AGENT_DESCRIPTION
         )
 
         # Causal analysis specialist (event creation, graph building, depth evaluation)
@@ -100,29 +87,7 @@ class HindsightAgent(BaseAgent):
             stream_outputs=False,
             additional_authorized_imports=["json"], # Allow json imports in code agent
             name="causal_analyzer",
-            description="""Specialist agent for building deep causal graphs.
-
-            CRITICAL: Build DEEP multi-level causal chains, not just direct links!
-
-            FIRST STEP - Get article IDs:
-            Call get_question_articles to get all articles
-            collected for this question. Save the article_ids list - you MUST use
-            these when creating events and causal links!
-
-            Process:
-            1. Call get_question_articles to get article IDs
-            2. If target_event_id is provided, use EventDetailsTool to understand it
-            3. Create events using event_identifier with source_article_ids from step 1
-            4. For each cause, ask "What caused THIS?" and create intermediate events
-            5. Use causal_reasoner with evidence_article_ids from step 1
-            6. Use graph_inspector to check depth - iterate if < 2 levels
-
-            IMPORTANT:
-            - Always pass source_article_ids when creating events
-            - Always pass evidence_article_ids when creating causal links
-            - All chains must connect to the target event
-
-            Your goal: Create causal graphs with depth >= 3 levels, properly linked to evidence."""
+            description=GRAPH_AGENT_DESCRIPTION
         )
 
         managed_agents = [evidence_agent, causal_agent]

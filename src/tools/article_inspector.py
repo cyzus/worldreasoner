@@ -1,12 +1,18 @@
 """Article inspector tool - analyze timeline and coverage of collected articles."""
 
 from typing import Optional, List, Dict
-from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from smolagents import Tool
 from src.domain.models import Article, Question
 from src.core.database import GenericDatabase
+from src.utils.article_analysis import (
+    analyze_timeline,
+    analyze_sources,
+    identify_gaps,
+    calculate_quality,
+    get_recommendation
+)
 
 
 class ArticleInspectorTool(Tool):
@@ -78,101 +84,14 @@ class ArticleInspectorTool(Tool):
         if not question_articles:
             return self._format_empty()
 
-        # Analyze articles
-        timeline_data = self._analyze_timeline(question_articles, question.resolution_date)
-        source_data = self._analyze_sources(question_articles)
-        gaps = self._identify_gaps(timeline_data, question_articles)
+        # Analyze articles using shared utilities
+        timeline_data = analyze_timeline(question_articles, question.resolution_date)
+        source_data = analyze_sources(question_articles)
+        gaps = identify_gaps(timeline_data)
 
         return self._format_visualization(
             question_articles, timeline_data, source_data, gaps, question.resolution_date
         )
-
-    def _analyze_timeline(self, articles: List[Article], resolution_date: datetime) -> Dict:
-        """Analyze temporal distribution of articles.
-
-        Args:
-            articles: List of articles
-            resolution_date: Question resolution date (coverage endpoint)
-
-        Returns:
-            Timeline statistics
-        """
-        dates = [a.published_date for a in articles if a.published_date]
-
-        if not dates:
-            return {"has_dates": False, "resolution_date": resolution_date}
-
-        dates.sort()
-        earliest = dates[0]
-        span_days = (resolution_date - earliest).days
-
-        # Group by month for visualization
-        monthly = defaultdict(int)
-        for date in dates:
-            month_key = date.strftime("%Y-%m")
-            monthly[month_key] += 1
-
-        return {
-            "has_dates": True,
-            "earliest": earliest,
-            "resolution_date": resolution_date,
-            "span_days": span_days,
-            "monthly": dict(monthly),
-            "dates": dates
-        }
-
-    def _analyze_sources(self, articles: List[Article]) -> Dict:
-        """Analyze source diversity.
-
-        Args:
-            articles: List of articles
-
-        Returns:
-            Source statistics
-        """
-        sources = defaultdict(int)
-        domains = set()
-
-        for article in articles:
-            if article.source:
-                sources[article.source] += 1
-            if article.domain:
-                domains.add(article.domain)
-
-        return {
-            "unique_sources": len(sources),
-            "unique_domains": len(domains),
-            "source_counts": dict(sources),
-            "top_sources": sorted(sources.items(), key=lambda x: x[1], reverse=True)[:5]
-        }
-
-    def _identify_gaps(self, timeline_data: Dict, articles: List[Article]) -> List[Dict]:
-        """Identify significant time gaps in coverage.
-
-        Args:
-            timeline_data: Timeline analysis data
-            articles: List of articles
-
-        Returns:
-            List of identified gaps
-        """
-        if not timeline_data.get("has_dates"):
-            return []
-
-        gaps = []
-        dates = timeline_data["dates"]
-        
-        # Find gaps larger than 7 days
-        for i in range(len(dates) - 1):
-            gap_days = (dates[i + 1] - dates[i]).days
-            if gap_days > 7:
-                gaps.append({
-                    "start": dates[i],
-                    "end": dates[i + 1],
-                    "days": gap_days
-                })
-
-        return gaps
 
     def _format_empty(self) -> str:
         """Format output for no articles."""
@@ -282,7 +201,7 @@ ERROR: {error}
         sections.append("")
         
         # Coverage quality
-        quality = self._calculate_quality(articles, timeline_data, source_data, gaps)
+        quality = calculate_quality(articles, timeline_data, source_data, gaps)
         sections.append("COVERAGE QUALITY")
         sections.append("━" * 64)
         sections.append("")
@@ -291,98 +210,12 @@ ERROR: {error}
         sections.append(f"  Diversity:      {quality['diversity_score']:.2f} ({source_data['unique_sources']} sources)")
         sections.append(f"  Coverage:       {quality['coverage_score']:.2f} (gaps: {len(gaps)})")
         sections.append("")
-        
+
         # Recommendation
-        recommendation = self._get_recommendation(quality, gaps, source_data, timeline_data)
+        recommendation = get_recommendation(quality, gaps, source_data, timeline_data)
         sections.append("RECOMMENDATION")
         sections.append("━" * 64)
         sections.append(f"  {recommendation}")
         sections.append("")
-        
+
         return "\n".join(sections)
-
-    def _calculate_quality(
-        self,
-        articles: List[Article],
-        timeline_data: Dict,
-        source_data: Dict,
-        gaps: List[Dict]
-    ) -> Dict:
-        """Calculate overall coverage quality score.
-
-        Args:
-            articles: List of articles
-            timeline_data: Timeline statistics
-            source_data: Source statistics
-            gaps: Timeline gaps
-
-        Returns:
-            Quality metrics
-        """
-        # Volume score (5-10 articles = optimal)
-        article_count = len(articles)
-        if article_count >= 10:
-            volume_score = 1.0
-        elif article_count >= 5:
-            volume_score = 0.5 + (article_count - 5) * 0.1
-        else:
-            volume_score = article_count * 0.1
-
-        # Diversity score (3+ sources = good)
-        unique_sources = source_data['unique_sources']
-        diversity_score = min(unique_sources / 5.0, 1.0)
-
-        # Coverage score (fewer gaps = better)
-        if not timeline_data.get("has_dates"):
-            coverage_score = 0.0
-        else:
-            gap_penalty = len(gaps) * 0.15
-            coverage_score = max(0.0, 1.0 - gap_penalty)
-
-        # Overall quality
-        overall = (volume_score * 0.4 + diversity_score * 0.3 + coverage_score * 0.3)
-
-        return {
-            "score": overall,
-            "volume_score": volume_score,
-            "diversity_score": diversity_score,
-            "coverage_score": coverage_score
-        }
-
-    def _get_recommendation(
-        self,
-        quality: Dict,
-        gaps: List[Dict],
-        source_data: Dict,
-        timeline_data: Dict
-    ) -> str:
-        """Generate actionable recommendation.
-
-        Args:
-            quality: Quality metrics
-            gaps: Timeline gaps
-            source_data: Source statistics
-            timeline_data: Timeline statistics
-
-        Returns:
-            Recommendation string
-        """
-        if quality['score'] >= 0.8:
-            return "✓ Excellent coverage! You have sufficient diverse articles with good timeline coverage."
-        
-        issues = []
-        
-        if quality['volume_score'] < 0.5:
-            issues.append("Need more articles (aim for 5-10)")
-        
-        if quality['diversity_score'] < 0.6:
-            issues.append(f"Low source diversity (only {source_data['unique_sources']} sources)")
-        
-        if gaps:
-            top_gap = max(gaps, key=lambda g: g['days'])
-            issues.append(f"Large time gap: {top_gap['start'].strftime('%Y-%m-%d')} to {top_gap['end'].strftime('%Y-%m-%d')}")
-        
-        if issues:
-            return "⚠ " + " | ".join(issues) + "\n  → Search for more articles to fill gaps and increase diversity"
-        
-        return "Good coverage, but could be improved with a few more diverse sources."
