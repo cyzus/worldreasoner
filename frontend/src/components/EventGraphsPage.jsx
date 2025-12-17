@@ -6,6 +6,7 @@ import EventDetails from './EventDetails'
 import Timeline from './Timeline'
 import TimeSeriesChart from './TimeSeriesChart'
 import ForecastGraph from './ForecastGraph'
+import ArticleCoverage from './ArticleCoverage'
 import './EventGraphsPage.css'
 
 /**
@@ -184,9 +185,9 @@ function EventGraphsPage({
               padding: '12px 16px',
               backgroundColor: '#f8f9fa',
               borderRadius: '8px',
-              marginBottom: '16px',
               alignItems: 'center',
-              flexWrap: 'wrap'
+              flexWrap: 'wrap',
+              flexShrink: 0
             }}>
               {/* Loading state */}
               {loadingForecasts && (
@@ -310,14 +311,19 @@ function EventGraphsPage({
             </div>
           )}
 
+          {/* Article Coverage Analysis */}
+          {selectedQuestionId && (
+            <ArticleCoverage questionId={selectedQuestionId} />
+          )}
+
           {/* Graph display area */}
           <div style={{
-            flex: 1,
+            height: '600px',
             display: 'flex',
             gap: '16px',
             flexDirection: graphView === 'both' ? 'row' : 'column',
-            minHeight: 0,
-            overflow: graphView === 'both' ? 'auto' : 'hidden'
+            overflow: graphView === 'both' ? 'auto' : 'hidden',
+            flexShrink: 0
           }}>
             {/* Evidence collection graph */}
             {(graphView === 'evidence' || graphView === 'both') && (
@@ -389,18 +395,20 @@ function EventGraphsPage({
             )}
           </div>
 
-          <Timeline
-            graphData={fullGraphData}
-            onEventClick={onNodeClick}
-            onTimeRangeChange={onTimeRangeChange}
-            selectedNode={selectedNode}
-            selectedQuestionId={selectedQuestionId}
-            questionRelatedEvents={questionRelatedEvents}
-          />
+          <div style={{ flexShrink: 0 }}>
+            <Timeline
+              graphData={fullGraphData}
+              onEventClick={onNodeClick}
+              onTimeRangeChange={onTimeRangeChange}
+              selectedNode={selectedNode}
+              selectedQuestionId={selectedQuestionId}
+              questionRelatedEvents={questionRelatedEvents}
+            />
+          </div>
 
           {/* Price history chart for Polymarket questions */}
           {selectedQuestionId && questions.find(q => q.id === selectedQuestionId)?.source === 'polymarket' && (
-            <div style={{ marginTop: '20px', padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '8px', minHeight: '100px', border: '1px solid #dee2e6' }}>
+            <div style={{ padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '8px', minHeight: '100px', border: '1px solid #dee2e6', flexShrink: 0 }}>
               {/* Time interval controls - always visible */}
               <div style={{
                 display: 'flex',

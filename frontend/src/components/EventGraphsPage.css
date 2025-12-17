@@ -68,8 +68,11 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+  gap: 16px;
   min-width: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 20px;
 }
 
 .event-graphs-page .graph-container {
@@ -82,20 +85,24 @@
 }
 
 /* Scrollbar styling */
-.event-graphs-page .left-sidebar::-webkit-scrollbar {
+.event-graphs-page .left-sidebar::-webkit-scrollbar,
+.event-graphs-page .graph-main::-webkit-scrollbar {
   width: 8px;
 }
 
-.event-graphs-page .left-sidebar::-webkit-scrollbar-track {
+.event-graphs-page .left-sidebar::-webkit-scrollbar-track,
+.event-graphs-page .graph-main::-webkit-scrollbar-track {
   background: #f1f1f1;
   border-radius: 4px;
 }
 
-.event-graphs-page .left-sidebar::-webkit-scrollbar-thumb {
+.event-graphs-page .left-sidebar::-webkit-scrollbar-thumb,
+.event-graphs-page .graph-main::-webkit-scrollbar-thumb {
   background: #c0c0c0;
   border-radius: 4px;
 }
 
-.event-graphs-page .left-sidebar::-webkit-scrollbar-thumb:hover {
+.event-graphs-page .left-sidebar::-webkit-scrollbar-thumb:hover,
+.event-graphs-page .graph-main::-webkit-scrollbar-thumb:hover {
   background: #a0a0a0;
 }

@@ -9,12 +9,13 @@ from fastapi import APIRouter, Query, HTTPException, Depends, Body
 from pydantic import BaseModel, Field
 
 from src.core.database import GenericDatabase
-from src.domain.models import Question, CausalHypothesis
+from src.domain.models import Question, CausalHypothesis, Article
 from src.domain.models.domain import Domain
 from src.domain.models.question import QuestionType
 from backend.api.routes.database import get_current_db_path
 from src.utils.logging import logger
 from src.utils.polymarket import get_price_history_for_market
+from src.utils.article_analysis import analyze_article_coverage
 from src.config.collection_goal import CollectionGoal, QualityRequirements
 from src.config.pipeline import QuestionQualityConfig
 from src.pipelines.question.orchestrator import (
@@ -775,5 +776,93 @@ async def get_question_price_history(
     except Exception as e:
         import traceback
         logger.error(f"Failed to fetch price history: {e}")
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{question_id}/article_coverage")
+async def get_article_coverage(
+    question_id: str,
+    db: GenericDatabase = Depends(get_database),
+):
+    """Get article coverage analysis for a question.
+
+    Analyzes the collected articles for this question, including:
+    - Timeline distribution and gaps
+    - Source diversity metrics
+    - Coverage quality score
+    - Recommendations for improvement
+
+    Args:
+        question_id: Question identifier
+
+    Returns:
+        Complete article coverage analysis with timeline, sources, gaps, and quality metrics
+    """
+    try:
+        logger.info(f"Fetching article coverage for question {question_id}")
+
+        # Get question for resolution date
+        question = db.get(Question, question_id)
+        if not question:
+            raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
+
+        # Get articles published before resolution date
+        all_articles = db.get_many(Article)
+        question_articles = [
+            a for a in all_articles
+            if a.collected_for_question_id == question_id
+            and (not a.published_date or a.published_date < question.resolution_date)
+        ]
+
+        logger.info(f"Found {len(question_articles)} articles for question {question_id}")
+
+        if not question_articles:
+            # Return empty analysis
+            return {
+                "question_id": question_id,
+                "article_count": 0,
+                "timeline": {"has_dates": False, "resolution_date": question.resolution_date.isoformat()},
+                "sources": {"unique_sources": 0, "unique_domains": 0, "source_counts": {}, "top_sources": []},
+                "gaps": [],
+                "quality": {
+                    "score": 0.0,
+                    "volume_score": 0.0,
+                    "diversity_score": 0.0,
+                    "coverage_score": 0.0
+                },
+                "recommendation": "No articles collected yet. Start evidence collection with web_search and article_collector."
+            }
+
+        # Perform complete analysis using shared utilities
+        analysis = analyze_article_coverage(question_articles, question.resolution_date)
+
+        # Convert datetime objects to ISO format for JSON serialization
+        if analysis["timeline"].get("has_dates"):
+            analysis["timeline"]["earliest"] = analysis["timeline"]["earliest"].isoformat()
+            analysis["timeline"]["resolution_date"] = analysis["timeline"]["resolution_date"].isoformat()
+            # Convert dates in gaps
+            for gap in analysis["gaps"]:
+                gap["start"] = gap["start"].isoformat()
+                gap["end"] = gap["end"].isoformat()
+        else:
+            analysis["timeline"]["resolution_date"] = analysis["timeline"]["resolution_date"].isoformat()
+
+        # Add question_id to response
+        analysis["question_id"] = question_id
+
+        logger.info(
+            f"Article coverage for question {question_id}: "
+            f"{analysis['article_count']} articles, "
+            f"quality score {analysis['quality']['score']:.2f}"
+        )
+
+        return analysis
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"Failed to fetch article coverage: {e}")
         logger.error(f"Full traceback:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
