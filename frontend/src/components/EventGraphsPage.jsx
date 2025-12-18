@@ -33,7 +33,7 @@ function EventGraphsPage({
   priceHistoryInterval,
   setPriceHistoryInterval,
 }) {
-  const [nestedTab, setNestedTab] = useState('controls') // 'controls' or 'questions'
+  const [nestedTab, setNestedTab] = useState('questions') // 'controls' or 'questions'
 
   // Graph force settings (moved from GraphVisualization)
   const [forceSettings, setForceSettings] = useState({

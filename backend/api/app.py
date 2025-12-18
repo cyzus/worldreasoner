@@ -32,12 +32,12 @@ async def lifespan(app: FastAPI):
 
         if auto_start:
             current_db = get_current_db_path()
-            logger.info(f"Starting MCP server with database: {current_db}")
+            logger.info(f"Initializing MCP server with database: {current_db}")
 
             try:
-                # Force cleanup of any orphaned processes from previous runs
+                # start_server will check health and skip restart if already healthy
                 mcp_manager.start_server(current_db, auto_restart=True)
-                logger.info("MCP server started successfully")
+                logger.info("MCP server initialized successfully")
             except Exception as e:
                 logger.warning(f"Failed to start MCP server on startup: {e}")
                 logger.warning("MCP server can be started manually or will auto-start on database switch")

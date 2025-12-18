@@ -53,6 +53,15 @@ class MCPServerManager:
         Raises:
             RuntimeError: If server fails to start or health check fails
         """
+        # Resolve to absolute path for comparison
+        db_abs_path = str(Path(db_path).resolve())
+
+        # Check if server is already healthy with the requested database
+        if self.check_health(expected_db=db_abs_path):
+            logger.info(f"MCP server already healthy with database: {db_abs_path}")
+            logger.info("Skipping restart")
+            return
+
         # Stop existing server if running
         if self.is_running and auto_restart:
             old_pid = self.process.pid
@@ -181,12 +190,6 @@ class MCPServerManager:
         Raises:
             RuntimeError: If health check fails after max attempts
         """
-        # Use localhost/127.0.0.1 for health checks, even if server binds to 0.0.0.0
-        health_host = "127.0.0.1" if self.host == "0.0.0.0" else self.host
-        health_url = f"http://{health_host}:{self.port}/health"
-
-        logger.info(f"Waiting for MCP server health check at {health_url}")
-
         # Give the server a moment to start binding to the port
         time.sleep(1)
 
@@ -205,25 +208,12 @@ class MCPServerManager:
                     logger.warning(f"Could not get process output: {e}")
                 raise RuntimeError(f"MCP server process terminated with exit code {self.process.returncode}")
 
-            try:
-                response = requests.get(health_url, timeout=2)
-                if response.status_code == 200:
-                    data = response.json()
-                    reported_db = data.get('database', 'unknown')
-                    logger.info(f"Health check successful: {data}")
+            # Use the check_health method to verify server is healthy
+            if self.check_health(expected_db=self._current_db):
+                logger.info(f"Health check successful - database verified: {self._current_db}")
+                return
 
-                    # Verify the server is using the correct database
-                    if reported_db != self._current_db:
-                        logger.warning(
-                            f"DATABASE MISMATCH! Expected: {self._current_db}, "
-                            f"but server reports: {reported_db}"
-                        )
-                    else:
-                        logger.info(f"Database verified: {reported_db}")
-                    return
-            except requests.exceptions.RequestException as e:
-                logger.debug(f"Health check attempt {attempt}/{max_attempts} failed: {e}")
-
+            logger.debug(f"Health check attempt {attempt}/{max_attempts} failed")
             time.sleep(delay)
 
         # Health check failed - try to get process output for debugging
@@ -236,6 +226,41 @@ class MCPServerManager:
             f"MCP server failed to become healthy after {max_attempts} attempts. "
             f"Check server logs for details."
         )
+
+    def check_health(self, expected_db: Optional[str] = None) -> bool:
+        """Check if the MCP server is healthy and responding.
+
+        Args:
+            expected_db: Optional database path to verify server is using
+
+        Returns:
+            True if server is healthy (and using expected_db if provided), False otherwise
+        """
+        if not self.is_running:
+            return False
+
+        health_host = "127.0.0.1" if self.host == "0.0.0.0" else self.host
+        health_url = f"http://{health_host}:{self.port}/health"
+
+        try:
+            response = requests.get(health_url, timeout=2)
+            if response.status_code == 200:
+                data = response.json()
+
+                # If expected_db is provided, verify the server is using it
+                if expected_db:
+                    reported_db = data.get('database', '')
+                    expected_abs = str(Path(expected_db).resolve())
+                    reported_abs = str(Path(reported_db).resolve()) if reported_db else ''
+
+                    if reported_abs != expected_abs:
+                        logger.debug(f"Health check: DB mismatch. Expected: {expected_abs}, Got: {reported_abs}")
+                        return False
+
+                return True
+        except requests.exceptions.RequestException as e:
+            logger.debug(f"Health check failed: {e}")
+            return False
 
     def get_status(self) -> dict:
         """Get the current status of the MCP server.
