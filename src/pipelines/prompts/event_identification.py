@@ -80,12 +80,11 @@ class EventIdentificationPrompts(ContextualPromptGenerator[Article]):
         Returns:
             Formatted article summary
         """
-        content_preview = self.truncate_text(
+        content_preview = self.format_content_preview(
             item.content,
-            max_length=content_preview_length,
-            suffix="..."
+            max_length=content_preview_length
         )
-        
+
         return self.ARTICLE_TEMPLATE.format(
             idx=idx,
             article_id=item.id,
@@ -118,26 +117,27 @@ class EventIdentificationPrompts(ContextualPromptGenerator[Article]):
         Returns:
             Formatted instruction string
         """
-        date_str = self.format_datetime(current_date)
-        
         # Format all articles
         articles_text = self.format_items(
             articles,
             content_preview_length=content_preview_length
         )
-        
+
         # Build domain options from category hints (fully adaptive)
-        if category_hints:
-            domain_options = f"One of ({', '.join(category_hints)})"
-        else:
-            # Fallback: use actual Domain enum values to ensure consistency
-            domain_options = f"One of ({', '.join(enum_to_list(Domain))})"
-        
+        domain_options = self.build_domain_options(category_hints, Domain)
+
         # Build priority guidance from hints
-        priority_guidance = ""
-        if category_hints:
-            priority_guidance = f"\n\n⚠️ PRIORITY DOMAINS NEEDED: {self.format_list(category_hints)}\nFocus on identifying events in these domains first!"
-        
+        priority_guidance = self.build_priority_guidance(
+            category_hints=category_hints,
+            prefix="\n\n⚠️ PRIORITY DOMAINS NEEDED: "
+        )
+        # Adjust the suffix message if needed
+        if priority_guidance:
+            priority_guidance = priority_guidance.replace(
+                "Focus on generating questions of these types/categories first!",
+                "Focus on identifying events in these domains first!"
+            )
+
         # Format the instruction body
         instruction_body = self.IDENTIFICATION_TEMPLATE.format(
             num_articles=len(articles),
@@ -146,10 +146,10 @@ class EventIdentificationPrompts(ContextualPromptGenerator[Article]):
             domain_options=domain_options,
             tool_name=tool_name
         )
-        
+
         # Add priority guidance if provided
         if priority_guidance:
             instruction_body = instruction_body + priority_guidance
-        
-        return f"Today's date is {date_str}.\n\n{instruction_body}"
+
+        return self.build_instruction(current_date, instruction_body)
     

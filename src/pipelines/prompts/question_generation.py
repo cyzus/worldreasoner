@@ -112,32 +112,31 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
         item: Event,
         idx: int,
         current_date: datetime,
-        description_preview_length: int = 200,
+        content_preview_length: int = 200,
         **context
     ) -> str:
         """Format a single event for the prompt.
-        
+
         Args:
             item: Event to format
             idx: Index of the event (1-based)
             current_date: Current datetime for past event detection
-            description_preview_length: Length of description preview (default: 200)
+            content_preview_length: Length of content preview (default: 200)
             **context: Additional context (not used)
-            
+
         Returns:
             Formatted event summary
         """
         event_date = item.occurred_date or item.predicted_date
-        
+
         # Determine if event is in the past (for ground truth)
         is_past_event = event_date and event_date < current_date if event_date else False
         status_note = " (PAST EVENT - questions should include ground_truth)" if is_past_event else ""
-        
+
         # Truncate description
-        description = self.truncate_text(
+        description = self.format_content_preview(
             item.description,
-            max_length=description_preview_length,
-            suffix="..."
+            max_length=content_preview_length
         )
         
         # Extract metadata with safe defaults
@@ -162,11 +161,12 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
         events: List[Event],
         max_questions: int,
         domains: Optional[List[str]] = None,
-        description_preview_length: int = 200,
+        content_preview_length: int = 200,
         tool_name: str = "question_generator",
         require_ground_truth: bool = True,
         type_hints: Optional[List[str]] = None,
-        category_hints: Optional[List[str]] = None
+        category_hints: Optional[List[str]] = None,
+        description_preview_length: int = None  # DEPRECATED: Use content_preview_length
     ) -> str:
         """Generate instruction for question generation.
 
@@ -175,7 +175,7 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
             events: List of events to generate questions from
             max_questions: Maximum number of questions to generate
             domains: Optional list of domains to focus on
-            description_preview_length: Length of description preview (default: 200)
+            content_preview_length: Length of content preview (default: 200)
             tool_name: Name of the tool to call (default: question_generator)
             require_ground_truth: If True, only generate questions about past events with known outcomes.
                                  If False, only generate questions about future predictions.
@@ -185,58 +185,44 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
         Returns:
             Formatted instruction string
         """
-        from datetime import timedelta
-
-        date_str = self.format_datetime(current_date)
+        # Handle deprecated parameter
+        if description_preview_length is not None:
+            import warnings
+            warnings.warn(
+                "description_preview_length is deprecated, use content_preview_length instead",
+                DeprecationWarning,
+                stacklevel=2
+            )
+            content_preview_length = description_preview_length
 
         # Calculate resolution date range based on mode
-        if require_ground_truth:
-            # Ground truth mode: Use past events only
-            # Min: earliest event date (or 1 year ago)
-            # Max: current_date (only events that already occurred)
-            event_dates = []
-            for event in events:
-                event_date = event.occurred_date or event.predicted_date
-                if event_date and event_date < current_date:
-                    event_dates.append(event_date)
-
-            if event_dates:
-                min_resolution_date = min(event_dates)
-            else:
-                min_resolution_date = current_date - timedelta(days=365)
-
-            max_resolution_date = current_date
-        else:
-            # Future prediction mode: Use future dates only
-            # Min: current_date (tomorrow onwards)
-            # Max: current_date + 1 year (reasonable forecasting horizon)
-            min_resolution_date = current_date
-            max_resolution_date = current_date + timedelta(days=365)
+        min_resolution_date, max_resolution_date = self.calculate_date_window(
+            current_date=current_date,
+            require_past_events=require_ground_truth,
+            events=events
+        )
 
         min_res_str = self.format_datetime(min_resolution_date)
         max_res_str = self.format_datetime(max_resolution_date)
+        date_str = self.format_datetime(current_date)
 
         # Format all events
         events_text = self.format_items(
             events,
             current_date=current_date,
-            description_preview_length=description_preview_length
+            content_preview_length=content_preview_length
         )
 
         # Build domain filter
         domain_filter = ""
         if domains:
             domain_filter = f" Focus on domains: {self.format_list(domains)}."
-        
+
         # Build priority guidance from hints
-        priority_guidance = ""
-        if type_hints or category_hints:
-            guidance_parts = []
-            if type_hints:
-                guidance_parts.append(f"PRIORITY TYPES NEEDED: {self.format_list(type_hints)}")
-            if category_hints:
-                guidance_parts.append(f"PRIORITY CATEGORIES NEEDED: {self.format_list(category_hints)}")
-            priority_guidance = "\n\n⚠️ COLLECTION PRIORITIES:\n" + "\n".join(guidance_parts) + "\nFocus on generating questions of these types/categories first!"
+        priority_guidance = self.build_priority_guidance(
+            type_hints=type_hints,
+            category_hints=category_hints
+        )
 
         # Select appropriate template based on mode
         if require_ground_truth:
@@ -266,4 +252,4 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
         if priority_guidance:
             instruction_body = instruction_body + priority_guidance
 
-        return f"Today's date is {date_str}.\n\n{instruction_body}"
+        return self.build_instruction(current_date, instruction_body)

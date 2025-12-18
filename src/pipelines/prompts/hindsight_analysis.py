@@ -219,10 +219,9 @@ class HindsightAnalysisPrompts(ContextualPromptGenerator[Tuple[Question, List[Ar
 
         formatted = []
         for article_idx, article in enumerate(evidence_articles, 1):
-            content_preview = self.truncate_text(
+            content_preview = self.format_content_preview(
                 article.content,
-                max_length=content_preview_length,
-                suffix="..."
+                max_length=content_preview_length
             )
 
             formatted_article = self.EVIDENCE_ARTICLE_TEMPLATE.format(
@@ -365,10 +364,9 @@ class HindsightAnalysisPrompts(ContextualPromptGenerator[Tuple[Question, List[Ar
         # Format articles with more content for better event extraction
         article_summaries = []
         for idx, article in enumerate(articles, 1):
-            content_preview = self.truncate_text(
+            content_preview = self.format_content_preview(
                 article.content,
-                max_length=content_preview_length,
-                suffix="..."
+                max_length=content_preview_length
             )
             summary = self.EVIDENCE_ARTICLE_TEMPLATE.format(
                 idx=idx,

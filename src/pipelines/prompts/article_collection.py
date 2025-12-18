@@ -54,8 +54,6 @@ class ArticleCollectionPrompts(ContextualPromptGenerator[None]):
         Returns:
             Formatted instruction string
         """
-        date_str = self.format_datetime(current_date)
-        
         # Format the instruction body
         instruction_body = self.COLLECTION_TEMPLATE.format(
             source_name=source_name,
@@ -64,5 +62,5 @@ class ArticleCollectionPrompts(ContextualPromptGenerator[None]):
             domain_context=domain_context,
             tool_name=tool_name
         )
-        
-        return f"Today's date is {date_str}.\n\n{instruction_body}"
+
+        return self.build_instruction(current_date, instruction_body)
