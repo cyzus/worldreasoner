@@ -32,6 +32,8 @@ function EventGraphsPage({
   questionRelatedEvents,
   priceHistoryInterval,
   setPriceHistoryInterval,
+  onQuestionUpdated,
+  onQuestionDeleted,
 }) {
   const [nestedTab, setNestedTab] = useState('questions') // 'controls' or 'questions'
 
@@ -171,6 +173,8 @@ function EventGraphsPage({
                   onQuestionFilter(questionId)
                 }}
                 onClose={() => setNestedTab('controls')}
+                onQuestionUpdated={onQuestionUpdated}
+                onQuestionDeleted={onQuestionDeleted}
               />
             )}
           </div>

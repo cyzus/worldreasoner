@@ -14,12 +14,37 @@ import './QuestionCollectionPage.css'
  * - Manual question creation form
  * - Batch save to database
  */
-function QuestionCollectionPage({ onQuestionsAdded }) {
-  const [sourceTab, setSourceTab] = useState('polymarket') // 'polymarket', 'news', or 'manual'
-  const [previewQuestions, setPreviewQuestions] = useState([])
+function QuestionCollectionPage({
+  onQuestionsAdded,
+  previewQuestions = [],
+  setPreviewQuestions = () => {},
+  sourceTab = 'polymarket',
+  setSourceTab = () => {},
+  previewSource = null,
+  setPreviewSource = () => {}
+}) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
+
+  // Log when preview questions change (for debugging)
+  React.useEffect(() => {
+    console.log(`[QuestionCollectionPage] Preview: ${previewQuestions.length} questions from ${previewSource}, current tab: ${sourceTab}`)
+  }, [previewQuestions, previewSource, sourceTab])
+
+  // Only show preview questions if they match the current source tab
+  const filteredPreviewQuestions = React.useMemo(() => {
+    // If no preview source, show nothing (fresh state)
+    if (!previewSource) {
+      return []
+    }
+    // If preview source matches current tab, show the questions
+    if (previewSource === sourceTab) {
+      return previewQuestions
+    }
+    // Otherwise, don't show questions from a different source
+    return []
+  }, [previewQuestions, previewSource, sourceTab])
 
   /**
    * Handle fetching preview questions from the API
@@ -28,6 +53,8 @@ function QuestionCollectionPage({ onQuestionsAdded }) {
     setLoading(true)
     setError(null)
     setSuccess(null)
+    setPreviewQuestions([]) // Clear preview questions when starting a new fetch
+    setPreviewSource(null) // Clear preview source
 
     try {
       const response = await fetch('http://localhost:8018/api/questions/preview', {
@@ -50,6 +77,7 @@ function QuestionCollectionPage({ onQuestionsAdded }) {
 
       if (data.success) {
         setPreviewQuestions(data.questions)
+        setPreviewSource(data.source) // Store which source these questions came from
         setSuccess(`Fetched ${data.total} questions from ${data.source}`)
       } else {
         setError(data.errors.join('; ') || 'Failed to fetch questions')
@@ -60,7 +88,7 @@ function QuestionCollectionPage({ onQuestionsAdded }) {
     } finally {
       setLoading(false)
     }
-  }, [sourceTab])
+  }, [sourceTab, setPreviewQuestions, setPreviewSource])
 
   /**
    * Handle manual question creation
@@ -123,7 +151,7 @@ function QuestionCollectionPage({ onQuestionsAdded }) {
     } finally {
       setLoading(false)
     }
-  }, [onQuestionsAdded])
+  }, [onQuestionsAdded, setPreviewQuestions])
 
   return (
     <div className="collection-page">
@@ -140,7 +168,6 @@ function QuestionCollectionPage({ onQuestionsAdded }) {
           className={`source-tab ${sourceTab === 'polymarket' ? 'active' : ''}`}
           onClick={() => {
             setSourceTab('polymarket')
-            setPreviewQuestions([])
             setError(null)
             setSuccess(null)
           }}
@@ -151,7 +178,6 @@ function QuestionCollectionPage({ onQuestionsAdded }) {
           className={`source-tab ${sourceTab === 'news' ? 'active' : ''}`}
           onClick={() => {
             setSourceTab('news')
-            setPreviewQuestions([])
             setError(null)
             setSuccess(null)
           }}
@@ -162,7 +188,6 @@ function QuestionCollectionPage({ onQuestionsAdded }) {
           className={`source-tab ${sourceTab === 'manual' ? 'active' : ''}`}
           onClick={() => {
             setSourceTab('manual')
-            setPreviewQuestions([])
             setError(null)
             setSuccess(null)
           }}
@@ -202,7 +227,7 @@ function QuestionCollectionPage({ onQuestionsAdded }) {
           {/* Right panel: Preview and selection */}
           <div className="preview-panel">
             <QuestionPreviewList
-              questions={previewQuestions}
+              questions={filteredPreviewQuestions}
               onSaveSelected={handleSaveSelected}
               loading={loading}
               source={sourceTab}

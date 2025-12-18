@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
+import QuestionEditModal from './QuestionEditModal'
 import './QuestionList.css'
 
 const QuestionList = ({
@@ -7,13 +8,17 @@ const QuestionList = ({
   onQuestionSelect,
   onClose,
   multiSelectMode = false,
-  onQuestionsSelected = null
+  onQuestionsSelected = null,
+  onQuestionUpdated = null,
+  onQuestionDeleted = null
 }) => {
   const [searchTerm, setSearchTerm] = useState('')
   const [domainFilter, setDomainFilter] = useState('all')
   const [difficultyFilter, setDifficultyFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [selectedIds, setSelectedIds] = useState(new Set())
+  const [editingQuestion, setEditingQuestion] = useState(null)
+  const [deletingQuestionId, setDeletingQuestionId] = useState(null)
 
   // Extract unique values for filters
   const domains = useMemo(() => {
@@ -108,6 +113,54 @@ const QuestionList = ({
     setSelectedIds(filteredIds)
     if (onQuestionsSelected) {
       onQuestionsSelected(Array.from(filteredIds))
+    }
+  }
+
+  // Edit and delete handlers
+  const handleEdit = (question, event) => {
+    if (event) {
+      event.stopPropagation()
+    }
+    setEditingQuestion(question)
+  }
+
+  const handleDelete = async (questionId, event) => {
+    if (event) {
+      event.stopPropagation()
+    }
+
+    // Show confirmation
+    setDeletingQuestionId(questionId)
+  }
+
+  const confirmDelete = async (questionId) => {
+    try {
+      const response = await fetch(`http://localhost:8018/api/questions/${questionId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Failed to delete question')
+      }
+
+      // Notify parent component
+      if (onQuestionDeleted) {
+        onQuestionDeleted(questionId)
+      }
+
+      setDeletingQuestionId(null)
+    } catch (error) {
+      console.error('Delete error:', error)
+      alert(`Failed to delete question: ${error.message}`)
+      setDeletingQuestionId(null)
+    }
+  }
+
+  const handleSaveEdit = (updatedQuestion) => {
+    // Notify parent component
+    if (onQuestionUpdated) {
+      onQuestionUpdated(updatedQuestion)
     }
   }
 
@@ -218,6 +271,22 @@ const QuestionList = ({
                       Lvl {q.difficulty}
                     </span>
                   </div>
+                  <div className="question-item-actions">
+                    <button
+                      className="action-btn edit-btn"
+                      onClick={(e) => handleEdit(q, e)}
+                      title="Edit question"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      className="action-btn delete-btn"
+                      onClick={(e) => handleDelete(q.id, e)}
+                      title="Delete question"
+                    >
+                      🗑️
+                    </button>
+                  </div>
                 </div>
                 <div className="question-item-text">{q.question_text}</div>
                 <div className="question-item-meta">
@@ -253,6 +322,39 @@ const QuestionList = ({
       {filteredQuestions.length > 0 && (
         <div className="question-list-stats">
           Showing {filteredQuestions.length} of {questions.length} questions
+        </div>
+      )}
+
+      {/* Edit modal */}
+      {editingQuestion && (
+        <QuestionEditModal
+          question={editingQuestion}
+          onClose={() => setEditingQuestion(null)}
+          onSave={handleSaveEdit}
+        />
+      )}
+
+      {/* Delete confirmation dialog */}
+      {deletingQuestionId && (
+        <div className="modal-overlay" onClick={() => setDeletingQuestionId(null)}>
+          <div className="confirmation-dialog" onClick={(e) => e.stopPropagation()}>
+            <h3>Delete Question?</h3>
+            <p>Are you sure you want to delete this question? This action cannot be undone.</p>
+            <div className="confirmation-actions">
+              <button
+                className="btn btn-secondary"
+                onClick={() => setDeletingQuestionId(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={() => confirmDelete(deletingQuestionId)}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

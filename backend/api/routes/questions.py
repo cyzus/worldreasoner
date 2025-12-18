@@ -866,3 +866,122 @@ async def get_article_coverage(
         logger.error(f"Failed to fetch article coverage: {e}")
         logger.error(f"Full traceback:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class QuestionUpdateRequest(BaseModel):
+    """Request to update a question."""
+    question_text: Optional[str] = None
+    question_type: Optional[str] = None
+    domain: Optional[str] = None
+    difficulty: Optional[int] = Field(None, ge=1, le=5)
+    resolution_criteria: Optional[str] = None
+    ground_truth: Optional[Any] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+@router.put("/{question_id}")
+async def update_question(
+    question_id: str,
+    request: QuestionUpdateRequest,
+    db: GenericDatabase = Depends(get_database),
+):
+    """Update a question.
+
+    Args:
+        question_id: Question identifier
+        request: Fields to update
+        db: Database instance
+
+    Returns:
+        Updated question data
+    """
+    try:
+        logger.info(f"Updating question {question_id}")
+
+        # Get existing question
+        question = db.get(Question, question_id)
+        if not question:
+            raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
+
+        # Update fields if provided
+        if request.question_text is not None:
+            question.question_text = request.question_text
+        if request.question_type is not None:
+            question.question_type = QuestionType[request.question_type.upper()]
+        if request.domain is not None:
+            question.domain = Domain[request.domain.upper()]
+        if request.difficulty is not None:
+            question.difficulty = request.difficulty
+        if request.resolution_criteria is not None:
+            question.resolution_criteria = request.resolution_criteria
+        if request.ground_truth is not None:
+            question.ground_truth = request.ground_truth
+        if request.metadata is not None:
+            question.metadata = request.metadata
+
+        # Save updated question
+        db.save(Question, question)
+        logger.info(f"Successfully updated question {question_id}")
+
+        # Return updated question
+        return QuestionListItem(
+            id=question.id,
+            question_text=question.question_text,
+            question_type=question.question_type.value,
+            domain=question.domain.value,
+            difficulty=question.difficulty,
+            source=question.source,
+            target_event_id=question.target_event_id,
+            related_event_ids=question.related_event_ids,
+            quality_score=question.quality_score,
+            resolution_date=question.resolution_date.isoformat() if question.resolution_date else None,
+            metadata=question.metadata,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update question: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{question_id}")
+async def delete_question(
+    question_id: str,
+    db: GenericDatabase = Depends(get_database),
+):
+    """Delete a question.
+
+    Args:
+        question_id: Question identifier
+        db: Database instance
+
+    Returns:
+        Success confirmation
+    """
+    try:
+        logger.info(f"Deleting question {question_id}")
+
+        # Check if question exists
+        question = db.get(Question, question_id)
+        if not question:
+            raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
+
+        # Delete the question
+        db.delete(Question, question_id)
+        logger.info(f"Successfully deleted question {question_id}")
+
+        return {
+            "success": True,
+            "message": f"Question {question_id} deleted successfully"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete question: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))

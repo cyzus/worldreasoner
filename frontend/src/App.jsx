@@ -35,6 +35,11 @@ function App() {
   const [questionRelatedEvents, setQuestionRelatedEvents] = useState([]) // All events related to selected question
   const [priceHistoryInterval, setPriceHistoryInterval] = useState('max') // Price history interval (max, 1d, 1h, 5m)
 
+  // Question collection preview state (persists across navigation)
+  const [previewQuestions, setPreviewQuestions] = useState([])
+  const [previewSourceTab, setPreviewSourceTab] = useState('polymarket')
+  const [previewSource, setPreviewSource] = useState(null) // Track which source the preview came from
+
   // Load full graph data once
   const loadGraph = useCallback(async (queryParams = {}) => {
     console.log('Loading graph with params:', queryParams)
@@ -213,6 +218,9 @@ function App() {
     setSelectedQuestionId(null)
     setPriceHistoryData(null)
     setQuestionRelatedEvents([])
+    setPreviewQuestions([]) // Clear preview questions when switching database
+    setPreviewSourceTab('polymarket')
+    setPreviewSource(null)
 
     try {
       // Reload graph, statistics, and questions
@@ -563,6 +571,27 @@ function App() {
     loadQuestions() // Reload questions list
   }, [loadQuestions])
 
+  // Handle question updated
+  const handleQuestionUpdated = useCallback((updatedQuestion) => {
+    console.log('Question updated:', updatedQuestion.id)
+    // Update questions list in state
+    setQuestions(prevQuestions =>
+      prevQuestions.map(q => q.id === updatedQuestion.id ? updatedQuestion : q)
+    )
+  }, [])
+
+  // Handle question deleted
+  const handleQuestionDeleted = useCallback((questionId) => {
+    console.log('Question deleted:', questionId)
+    // Remove question from list
+    setQuestions(prevQuestions => prevQuestions.filter(q => q.id !== questionId))
+    // Clear selection if deleted question was selected
+    if (selectedQuestionId === questionId) {
+      setSelectedQuestionId(null)
+      handleQuestionFilter(null)
+    }
+  }, [selectedQuestionId, handleQuestionFilter])
+
   return (
     <div className="app">
       <header className="app-header">
@@ -641,11 +670,19 @@ function App() {
             questionRelatedEvents={questionRelatedEvents}
             priceHistoryInterval={priceHistoryInterval}
             setPriceHistoryInterval={setPriceHistoryInterval}
+            onQuestionUpdated={handleQuestionUpdated}
+            onQuestionDeleted={handleQuestionDeleted}
           />
         ) : leftPanelTab === 'collection' ? (
           /* Full-width collection page */
           <QuestionCollectionPage
             onQuestionsAdded={handleQuestionsAdded}
+            previewQuestions={previewQuestions}
+            setPreviewQuestions={setPreviewQuestions}
+            sourceTab={previewSourceTab}
+            setSourceTab={setPreviewSourceTab}
+            previewSource={previewSource}
+            setPreviewSource={setPreviewSource}
           />
         ) : leftPanelTab === 'forecast' ? (
           /* Full-width forecast page */
