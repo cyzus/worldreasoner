@@ -13,7 +13,7 @@ Uses adaptive search strategies:
 - Try multiple search queries if initial results are insufficient
 - Start from the resolution date and gradually go backwards in time
 - Prioritize high-quality sources and diverse perspectives
-- Fetch and analyze article content
+- Fetch and analyze article content, be sure to capture the correct published date
 - Make sure all the articles collected are published BEFORE the resolution date
 - Use article_collector to save relevant articles to the database
 - Before submission, you MUST use article_inspector to check timeline coverage and identify gaps
@@ -51,12 +51,8 @@ Your goal: Create causal graphs with depth >= 3 levels, properly linked to evide
 """
 
 
-class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
-    """Prompts for building deep causal graphs with HindsightAgent."""
-
-    # Template for agent prompt
-    AGENT_TEMPLATE = PromptTemplate(
-        template="""Your task: Build a DEEP causal explanation for this question with hindsight.
+MANAGER_AGENT_DESCRIPTION = \
+"""Your task: Build a DEEP causal explanation for this question with hindsight.
 
 NOTE: the question has already been resolved on {resolution_date} with known ground truth.
 
@@ -78,6 +74,7 @@ PROCESS:
    - Time window: {evidence_window_days} days before resolution ({window_start} to {resolution_date})
    - Need at least {min_evidence_articles} high-quality articles, more is better
    - Collect articles at different dates/times to capture evolving context (but all BEFORE resolution date)
+   - Use article_inspector to check coverage
    - If insufficient, ask agent to broaden search
 
 2. BUILD DEEP CAUSAL GRAPH:
@@ -108,7 +105,14 @@ SUCCESS CRITERIA:
 ✓ Links: Multiple causal chains to target
 ✓ Quality: Score > 0.7
 
-Begin the analysis!""",
+Begin the analysis!"""
+
+class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
+    """Prompts for building deep causal graphs with HindsightAgent."""
+
+    # Template for agent prompt
+    AGENT_TEMPLATE = PromptTemplate(
+        template=MANAGER_AGENT_DESCRIPTION,
         required_vars=[
             "question_id",
             "question_text",
