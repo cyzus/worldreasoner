@@ -56,6 +56,7 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
         "options": {"type": "string", "description": "For MCQ: comma-separated answer choices", "nullable": True},
         "quantity_unit": {"type": "string", "description": "For quantity: unit (e.g., USD, users, GW)", "nullable": True},
         "quantity_bounds": {"type": "string", "description": "For quantity: range as min:X,max:Y", "nullable": True},
+        "estimated_start_time": {"type": "string", "description": "When question becomes valid for forecasting (ISO 8601 WITH timezone). Should be BEFORE resolution_date and when sufficient context is available.", "nullable": True},
     }
     output_type = "string"  # JSON string
     
@@ -85,7 +86,8 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
         context: str = None,
         options: str = None,
         quantity_unit: str = None,
-        quantity_bounds: str = None
+        quantity_bounds: str = None,
+        estimated_start_time: str = None
     ) -> str:
         """Store question data and return as structured JSON.
 
@@ -103,6 +105,7 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             options: Optional MCQ choices (comma-separated)
             quantity_unit: Optional unit for quantity questions
             quantity_bounds: Optional bounds for quantity questions
+            estimated_start_time: Optional start time when question becomes valid for forecasting
 
         Returns:
             JSON string of Question object
@@ -113,6 +116,26 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             fallback=datetime.now(timezone.utc) + timedelta(days=30)
         )
         res_date = ensure_timezone_aware(res_date)
+
+        # Parse estimated start time
+        est_start_time = None
+        if estimated_start_time:
+            try:
+                est_start_time = parse_iso_datetime(estimated_start_time)
+                est_start_time = ensure_timezone_aware(est_start_time)
+
+                # Validate: must be before resolution_date
+                if est_start_time >= res_date:
+                    from src.utils.logging import logger
+                    logger.warning(
+                        f"estimated_start_time ({est_start_time}) >= resolution_date ({res_date}), "
+                        f"ignoring estimated_start_time"
+                    )
+                    est_start_time = None
+            except Exception as e:
+                from src.utils.logging import logger
+                logger.debug(f"Failed to parse estimated_start_time: {e}")
+                est_start_time = None
 
         # CRITICAL VALIDATION: Ground truth questions must have past/present resolution dates
         current_time = datetime.now(timezone.utc)
@@ -232,6 +255,7 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             source="news",  # These questions are generated from news events
             difficulty=min(5, max(1, difficulty)),
             resolution_date=res_date,
+            estimated_start_time=est_start_time,  # When question becomes valid for forecasting
             ground_truth=normalized_ground_truth,  # Use normalized value
             target_event_id=event_ids[0] if event_ids else None,
             related_event_ids=event_ids,

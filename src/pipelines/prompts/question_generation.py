@@ -15,6 +15,31 @@ Event {idx} (ID: {event_id}){status_note}:
 - Confidence: {confidence}
 """
 
+SHARED_RULES_DESC = \
+"""
+QUALITY:
+- Broad appeal (elections, major companies, crypto, policy, sports)
+- Skip niche topics requiring insider knowledge
+- Ask "Will X happen?" not "Which company will..." (don't assume outcomes)
+- MCQ options from actual event participants only
+- Use future tense in question wording
+
+ESTIMATED START TIME:
+- estimated_start_time: When sufficient context exists for informed forecasting
+  * For event-based questions: when event was first announced/became public
+  * For trend questions: when baseline data became available
+  * For policy questions: when policy was first proposed/discussed
+  * MUST be BEFORE resolution_date (use ISO format with timezone)
+  * Be conservative - better to start later with context than earlier without
+  * If uncertain, omit this field
+
+Required fields: question_text, question_type, domain, difficulty, resolution_date, resolution_criteria, ground_truth, resolution_reasoning, related_event_ids
+Optional fields: estimated_start_time
+
+Example: {tool_name}(questions_json='[{{"question_text": "Will Bitcoin exceed $100K by Dec 31, 2025?", "question_type": "boolean", "domain": "finance", "difficulty": 3, "resolution_date": "2025-12-31T23:59:59Z", "resolution_criteria": "CoinMarketCap closing price", "ground_truth": "YES", "resolution_reasoning": "BTC closed at $105K on Dec 31 per CoinMarketCap", "related_event_ids": "evt_fin_20251201_001", "estimated_start_time": "2025-01-01T00:00:00Z"}}]')
+"""
+
+
 QUESTION_GENERATION_TEMPLATE_GROUND_TRUTH = \
 """Generate {max_questions} forecast questions from PAST events.{domain_filter}
 
@@ -27,23 +52,8 @@ RULES:
 - Alternate boolean answers: YES, NO, YES, NO (avoid bias)
 - Types: boolean, mcq, quantity, timeframe (distribute evenly)
 - Use round numbers ($100K, 1M users) not oddly specific values
-- Natural deadlines ("by end of Q4 2024" not "by Oct 27")
+- Natural deadlines ("by end of Q4 2024" not "by Oct 27")""" + SHARED_RULES_DESC
 
-QUALITY:
-- Broad appeal (elections, major companies, crypto, policy, sports)
-- Skip niche topics requiring insider knowledge
-- Ask "Will X happen?" not "Which company will..." (don't assume outcomes)
-- MCQ options from actual event participants only
-- Use future tense in question wording
-
-TOOL USAGE:
-1. Generate all {max_questions} questions as JSON array
-2. Call {tool_name}(questions_json="[...]") ONCE
-3. Then call final_answer
-
-Required fields: question_text, question_type, domain, difficulty, resolution_date, resolution_criteria, ground_truth, resolution_reasoning, related_event_ids
-
-Example: {tool_name}(questions_json='[{{"question_text": "Will Bitcoin exceed $100K by Dec 31, 2025?", "question_type": "boolean", "domain": "finance", "difficulty": 3, "resolution_date": "2025-12-31", "resolution_criteria": "CoinMarketCap closing price", "ground_truth": "YES", "resolution_reasoning": "BTC closed at $105K on Dec 31 per CoinMarketCap", "related_event_ids": "evt_fin_20251201_001"}}]')"""
 
 QUESTION_GENERATION_TEMPLATE_FUTURE = \
 """Generate {max_questions} forecast questions about FUTURE events.{domain_filter}
@@ -58,24 +68,8 @@ RULES:
 - Balance boolean predictions: ~50% likely YES, ~50% likely NO
 - Types: boolean, mcq, quantity, timeframe (distribute evenly)
 - Use round numbers ($100K, 1M users) not oddly specific values
-- Natural deadlines ("by end of Q1 2026" not "by Mar 15")
+- Natural deadlines ("by end of Q1 2026" not "by Mar 15")""" + SHARED_RULES_DESC
 
-QUALITY:
-- Broad appeal (elections, major companies, crypto, policy, sports)
-- Skip niche topics requiring insider knowledge
-- Ask "Will X happen?" not "Which company will..." (don't assume outcomes)
-- MCQ options from actual event participants only
-- Use future tense in question wording
-
-TOOL USAGE:
-1. Generate all {max_questions} questions as JSON array
-2. Call {tool_name}(questions_json="[...]") ONCE
-3. Then call final_answer
-
-Required fields: question_text, question_type, domain, difficulty, resolution_date, resolution_criteria, related_event_ids
-DO NOT include: ground_truth, resolution_reasoning (outcomes unknown)
-
-Example: {tool_name}(questions_json='[{{"question_text": "Will Bitcoin exceed $150K by Dec 31, 2026?", "question_type": "boolean", "domain": "finance", "difficulty": 3, "resolution_date": "2026-12-31", "resolution_criteria": "CoinMarketCap closing price", "related_event_ids": "evt_fin_20260601_001"}}]')"""
 
 class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
     """Prompts for the question generation stage."""

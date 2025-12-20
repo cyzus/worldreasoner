@@ -241,6 +241,16 @@ class PolymarketRunner(QuestionSourceRunner):
             clob_ids_raw = market.get('clobTokenIds', '[]')
             clob_ids = json.loads(clob_ids_raw) if isinstance(clob_ids_raw, str) else clob_ids_raw
 
+            # Extract estimated start time from startDate
+            start_date_str = market.get("startDate")
+            estimated_start = None
+            if start_date_str:
+                try:
+                    estimated_start = parse_iso_datetime(start_date_str)
+                    logger.debug(f"Market {market.get('id')}: startDate={estimated_start}")
+                except Exception as e:
+                    logger.debug(f"Failed to parse startDate: {e}")
+
             return MarketQuestion(
                 market_id=market.get("conditionId", market.get("id")),
                 market_source="polymarket",
@@ -263,6 +273,7 @@ class PolymarketRunner(QuestionSourceRunner):
                     "categories": market.get("categories", []),
                     "ground_truth": ground_truth,
                     "resolution_reasoning": resolution_reasoning,
+                    "start_date": estimated_start.isoformat() if estimated_start else None,  # Store for estimated_start_time
                     "closed": market.get("closed", False),
                 },
             )
@@ -650,7 +661,7 @@ class PolymarketRunner(QuestionSourceRunner):
 
     def _map_to_question(self, mq: MarketQuestion) -> Question:
         """Map MarketQuestion to WorldReasoner Question model.
-        
+
         Uses pre-assigned domain from tag-based fetching (no LLM needed).
 
         Args:
@@ -676,6 +687,14 @@ class PolymarketRunner(QuestionSourceRunner):
         ground_truth = mq.metadata.get("ground_truth") if mq.metadata else None
         resolution_reasoning = mq.metadata.get("resolution_reasoning") if mq.metadata else None
 
+        # Extract estimated start time from metadata
+        estimated_start = None
+        if mq.metadata and "start_date" in mq.metadata and mq.metadata["start_date"]:
+            try:
+                estimated_start = parse_iso_datetime(mq.metadata["start_date"])
+            except Exception as e:
+                logger.debug(f"Failed to parse start_date from metadata: {e}")
+
         # Prepare metadata dict with all Polymarket-specific data
         # Remove fields that are already direct Question parameters to avoid conflicts
         extra_metadata = {k: v for k, v in mq.metadata.items()
@@ -700,6 +719,7 @@ class PolymarketRunner(QuestionSourceRunner):
             source="polymarket",
             difficulty=self._estimate_difficulty(mq),
             resolution_date=mq.resolution_time or mq.close_time,
+            estimated_start_time=estimated_start,  # When market opened for trading
             cutoff_date=mq.close_time,
             created_at=datetime.now(timezone.utc),
             ground_truth=ground_truth,  # Use ground truth from metadata

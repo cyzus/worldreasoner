@@ -43,6 +43,7 @@ class BatchQuestionGeneratorTool(QuestionGeneratorTool):
             - options (str, optional): For MCQ - comma-separated choices
             - quantity_unit (str, optional): For quantity - unit (e.g., USD, users)
             - quantity_bounds (str, optional): For quantity - range as min:X,max:Y
+            - estimated_start_time (str, optional): When question becomes valid for forecasting (ISO format, MUST be before resolution_date)
 
     Example:
         [
@@ -51,12 +52,13 @@ class BatchQuestionGeneratorTool(QuestionGeneratorTool):
             "question_type": "boolean",
             "domain": "finance",
             "difficulty": 3,
-            "resolution_date": "2025-12-31",
+            "resolution_date": "2025-12-31T23:59:59Z",
             "resolution_criteria": "Based on CoinMarketCap closing price on Dec 31, 2025",
             "ground_truth": "YES",
             "resolution_reasoning": "Bitcoin closed at $105,432 on Dec 31, 2025 per CoinMarketCap",
             "context": "Bitcoin has been volatile in 2025...",
-            "related_event_ids": "evt_finance_20251201_001"
+            "related_event_ids": "evt_finance_20251201_001",
+            "estimated_start_time": "2025-01-01T00:00:00Z"
           }}
         ]
 
@@ -124,7 +126,8 @@ class BatchQuestionGeneratorTool(QuestionGeneratorTool):
                         context=question_data.get("context"),
                         options=question_data.get("options"),
                         quantity_unit=question_data.get("quantity_unit"),
-                        quantity_bounds=question_data.get("quantity_bounds")
+                        quantity_bounds=question_data.get("quantity_bounds"),
+                        estimated_start_time=question_data.get("estimated_start_time")
                     )
                     
                     result = json.loads(result_json)
