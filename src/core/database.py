@@ -87,6 +87,10 @@ class ModelRegistry:
         """Check if model is registered."""
         return model in self._registry
 
+    def get_models(self) -> List[Type[BaseModel]]:
+        """Return all registered Pydantic model classes."""
+        return list(self._registry.keys())
+
 
 # Global registry instance
 _registry = ModelRegistry()
@@ -273,6 +277,18 @@ class GenericDatabase(Generic[T]):
                 """)
             
             conn.commit()
+
+    def initialize_all_tables(self) -> int:
+        """Create tables for all registered models.
+
+        Returns:
+            Number of tables ensured/created.
+        """
+        count = 0
+        for model in _registry.get_models():
+            self.create_table(model)
+            count += 1
+        return count
     
     def _serialize_value(self, value: Any, python_type: str) -> Any:
         """Serialize Python value for database storage."""

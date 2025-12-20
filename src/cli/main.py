@@ -19,6 +19,8 @@ import typer
 from rich.console import Console
 
 from src.cli.commands import db, evidence, forecast, question
+from src.core.database import GenericDatabase
+from src.config import get_config
 
 # Create the main Typer app
 app = typer.Typer(
@@ -73,6 +75,16 @@ def main(
 
     if verbose:
         console.print("[dim]Verbose mode enabled[/dim]")
+
+    # Ensure all database tables exist before any subcommand runs
+    try:
+        cfg = get_config()
+        db = GenericDatabase(cfg.database.db_path)
+        tables = db.initialize_all_tables()
+        if verbose:
+            console.print(f"[dim]Initialized database; ensured {tables} tables[/dim]")
+    except Exception as e:
+        console.print(f"[yellow]Warning:[/yellow] Failed to initialize database tables: {e}")
 
 
 def cli():

@@ -10,6 +10,8 @@ from contextlib import asynccontextmanager
 
 from src.utils.logging import logger
 from .routes import graph, events, websocket, questions, database, pipelines, forecast_graphs
+from src.core.database import GenericDatabase
+from src.config import get_config
 
 
 @asynccontextmanager
@@ -24,6 +26,15 @@ async def lifespan(app: FastAPI):
     logger.info("Backend starting up...")
 
     try:
+        # Ensure all database tables exist at startup
+        try:
+            cfg = get_config()
+            db = GenericDatabase(cfg.database.db_path)
+            tables = db.initialize_all_tables()
+            logger.info(f"Database initialized. Ensured {tables} tables exist.")
+        except Exception as e:
+            logger.warning(f"Failed to initialize database tables on startup: {e}")
+
         import os
         from .routes.database import mcp_manager, get_current_db_path
 
