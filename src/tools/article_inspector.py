@@ -13,6 +13,7 @@ from src.utils.article_analysis import (
     calculate_quality,
     get_recommendation
 )
+from src.utils.date_utils import ensure_timezone_aware
 
 
 class ArticleInspectorTool(Tool):
@@ -66,44 +67,82 @@ class ArticleInspectorTool(Tool):
         if not self.question_id:
             return self._format_error("No question context provided")
 
-        # Get question for resolution date
+        # Get question for resolution date and estimated_start_time
         question = self.db.get(Question, self.question_id)
         if not question:
             return self._format_error(f"Question {self.question_id} not found")
 
-        # Get articles published before resolution date
+        # Get articles for this question
         all_articles = self.db.get_many(Article)
         question_articles = [
             a for a in all_articles
             if a.collected_for_question_id == self.question_id
-            and (not a.published_date or a.published_date < question.resolution_date)
         ]
 
-        if not question_articles:
-            return self._format_empty()
+        # Filter articles by time window
+        # Articles should be:
+        # - After estimated_start_time (if available) - articles before the question is valid
+        # - Before resolution_date - articles published after the outcome is known
+        filtered_articles = []
+        # Normalize question dates for safe comparison
+        q_resolution = ensure_timezone_aware(question.resolution_date)
+        q_start = ensure_timezone_aware(question.estimated_start_time) if question.estimated_start_time else None
+        for article in question_articles:
+            if not article.published_date:
+                continue
+
+            # Normalize article date for comparison
+            apd = ensure_timezone_aware(article.published_date)
+
+            # Must be before resolution (strictly before)
+            if apd >= q_resolution:
+                continue
+
+            # If estimated_start_time exists, article should be on/after it
+            # (to avoid using information from before the question was valid)
+            if q_start and apd < q_start:
+                continue
+
+            filtered_articles.append(article)
+
+        if not filtered_articles:
+            return self._format_empty(question)
 
         # Analyze articles using shared utilities
-        timeline_data = analyze_timeline(question_articles, question.resolution_date)
-        source_data = analyze_sources(question_articles)
+        timeline_data = analyze_timeline(filtered_articles, q_resolution)
+        source_data = analyze_sources(filtered_articles)
         gaps = identify_gaps(timeline_data)
 
         return self._format_visualization(
-            question_articles, timeline_data, source_data, gaps, question.resolution_date
+            filtered_articles, timeline_data, source_data, gaps, question
         )
 
-    def _format_empty(self) -> str:
-        """Format output for no articles."""
+    def _format_empty(self, question: Question) -> str:
+        """Format output for no articles.
+
+        Args:
+            question: Question object
+
+        Returns:
+            Formatted empty state message
+        """
+        time_window = ""
+        if question.estimated_start_time:
+            time_window = f"\nTime Window: {question.estimated_start_time.strftime('%Y-%m-%d')} → {question.resolution_date.strftime('%Y-%m-%d')}"
+        else:
+            time_window = f"\nResolution Date: {question.resolution_date.strftime('%Y-%m-%d')}"
+
         return f"""
 ╔════════════════════════════════════════════════════════════════╗
 ║                   ARTICLE COVERAGE INSPECTOR                   ║
 ╚════════════════════════════════════════════════════════════════╝
 
-Question ID: {self.question_id}
+Question ID: {self.question_id}{time_window}
 
 STATUS: No Articles Collected
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-No articles have been collected yet for this question.
+No valid articles have been collected for this question's time window.
 
 RECOMMENDATION:
 → Start evidence collection with web_search and article_collector
@@ -127,7 +166,7 @@ ERROR: {error}
         timeline_data: Dict,
         source_data: Dict,
         gaps: List[Dict],
-        resolution_date: datetime
+        question: Question
     ) -> str:
         """Format the article analysis as visual text.
 
@@ -136,7 +175,7 @@ ERROR: {error}
             timeline_data: Timeline statistics
             source_data: Source statistics
             gaps: Identified timeline gaps
-            resolution_date: Question resolution date
+            question: Question object with resolution_date and optional estimated_start_time
 
         Returns:
             Formatted multi-section text
@@ -150,10 +189,25 @@ ERROR: {error}
 ╚════════════════════════════════════════════════════════════════╝
 """)
 
+        # Normalize question dates for formatting/comparison
+        q_resolution = ensure_timezone_aware(question.resolution_date)
+        q_start = ensure_timezone_aware(question.estimated_start_time) if question.estimated_start_time else None
+
         # Overview
         sections.append(f"Question ID: {self.question_id}")
         sections.append(f"Total Articles: {len(articles)}")
-        sections.append(f"Resolution Date: {resolution_date.strftime('%Y-%m-%d')}")
+
+        # Show time window
+        if q_start:
+            sections.append(
+                f"Time Window: {q_start.strftime('%Y-%m-%d')} "
+                f"→ {q_resolution.strftime('%Y-%m-%d')}"
+            )
+            window_days = (q_resolution - q_start).days
+            sections.append(f"Window Span: {window_days} days")
+        else:
+            sections.append(f"Resolution Date: {q_resolution.strftime('%Y-%m-%d')}")
+
         sections.append("")
 
         # Timeline section
@@ -161,8 +215,25 @@ ERROR: {error}
             sections.append("TIMELINE DISTRIBUTION")
             sections.append("━" * 64)
             sections.append("")
-            sections.append(f"  Date Range:  {timeline_data['earliest'].strftime('%Y-%m-%d')} → {resolution_date.strftime('%Y-%m-%d')}")
-            sections.append(f"  Time Span:   {timeline_data['span_days']} days")
+
+            # Show coverage range (considering estimated_start_time)
+            earliest = ensure_timezone_aware(timeline_data['earliest']) if timeline_data.get('earliest') else None
+            coverage_start = q_start or earliest
+            sections.append(
+                f"  Coverage Range: {coverage_start.strftime('%Y-%m-%d')} "
+                f"→ {q_resolution.strftime('%Y-%m-%d')}"
+            )
+            sections.append(
+                f"  Article Range:  {earliest.strftime('%Y-%m-%d')} "
+                f"→ {q_resolution.strftime('%Y-%m-%d')} "
+                f"({timeline_data['span_days']} days)"
+            )
+
+            # Note if articles don't cover the full window
+            if q_start and earliest and earliest > q_start:
+                gap_days = (earliest - q_start).days
+                sections.append(f"  ⚠ Missing early coverage: {gap_days} days gap from start")
+
             sections.append("")
 
             # Monthly bar chart

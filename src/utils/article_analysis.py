@@ -201,6 +201,54 @@ def get_recommendation(
     return "Good coverage, but could be improved with a few more diverse sources."
 
 
+def calculate_simple_quality(articles: List[Article]) -> Dict:
+    """Calculate simple article quality score based on count and source diversity.
+
+    This is a lightweight quality calculation used by the pipeline for quick
+    quality assessment without timeline analysis.
+
+    Args:
+        articles: List of articles to analyze
+
+    Returns:
+        Dictionary with:
+        - score: Overall quality score (0-1)
+        - article_count: Number of articles
+        - unique_sources: Number of unique sources
+    """
+    if not articles:
+        return {
+            "score": 0.0,
+            "article_count": 0,
+            "unique_sources": 0
+        }
+
+    article_count = len(articles)
+    sources = {
+        getattr(article, "source", "unknown")
+        for article in articles
+    }
+    unique_sources = len(sources)
+
+    # Simple quality score based on count and source diversity
+    # Coverage factor: normalized by 50 articles (50+ = full score)
+    coverage_factor = min(article_count / 50.0, 1.0)
+    # Source diversity: normalized by 10 sources (10+ = full score)
+    source_diversity_factor = min(unique_sources / 10.0, 1.0)
+
+    # Weighted combination (60% coverage, 40% diversity)
+    quality_score = max(0.0, min(
+        (coverage_factor * 0.6) + (source_diversity_factor * 0.4),
+        1.0
+    ))
+
+    return {
+        "score": quality_score,
+        "article_count": article_count,
+        "unique_sources": unique_sources
+    }
+
+
 def analyze_article_coverage(articles: List[Article], resolution_date: datetime) -> Dict:
     """Perform complete article coverage analysis.
 

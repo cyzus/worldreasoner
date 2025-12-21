@@ -181,7 +181,23 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         
         # Parse published date or use current time
         pub_date = parse_iso_datetime(published_date)
-        
+
+        # Validate article date against question time window
+        # Store validation result to include in return message
+        time_window_validation = None
+        if self.question_id and self.db:
+            from src.domain.models import Question
+            from src.utils.date_utils import validate_date_against_question_window
+
+            question = self.db.get(Question, self.question_id)
+            if question:
+                time_window_validation = validate_date_against_question_window(
+                    date=pub_date,
+                    question_start_time=question.estimated_start_time,
+                    question_resolution_date=question.resolution_date,
+                    entity_type="Article"
+                )
+
         # STAGE 3: Content hash deduplication (catches syndicated/republished articles)
         # Check if we've already seen this content (in-memory for current run)
         content_hash = self._compute_content_hash(content)
@@ -267,7 +283,14 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             "content_preview": article.content[:200] + "..." if len(article.content) > 200 else article.content,
             "status": "stored"
         }
-        
+
+        # Add time window validation warnings if present
+        if time_window_validation:
+            summary["status"] = "stored_with_warnings"
+            summary["warnings"] = time_window_validation["warnings"]
+            summary["recommendation"] = time_window_validation["recommendation"]
+            summary["suggestion"] = "Consider searching for articles published within the valid time window for better evidence quality."
+
         return json.dumps(summary, indent=2, default=str)
     
     def _normalize_url(self, url: str) -> str:

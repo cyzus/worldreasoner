@@ -98,3 +98,87 @@ def parse_flexible_datetime(
     except (ValueError, AttributeError) as e:
         logger.warning(f"Failed to parse datetime '{date_str}': {e}")
         return fallback or datetime.now(timezone.utc)
+
+
+def validate_date_against_question_window(
+    date: datetime,
+    question_start_time: Optional[datetime],
+    question_resolution_date: datetime,
+    entity_type: str = "item"
+) -> Optional[dict]:
+    """
+    Validate that a date falls within the question's valid time window.
+
+    Returns None if valid, or a dict with error details if invalid.
+
+    Args:
+        date: The date to validate
+        question_start_time: Optional question start time (estimated_start_time)
+        question_resolution_date: Question resolution date
+        entity_type: Type of entity being validated (e.g., "Article", "Event")
+
+    Returns:
+        None if valid, or dict with 'warnings' and 'recommendation' if invalid
+
+    Examples:
+        >>> from datetime import datetime, timezone
+        >>> date = datetime(2024, 6, 1, tzinfo=timezone.utc)
+        >>> start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        >>> resolution = datetime(2024, 12, 1, tzinfo=timezone.utc)
+        >>> validate_date_against_question_window(date, start, resolution, "Article")
+        None  # Valid - within window
+
+        >>> early_date = datetime(2023, 1, 1, tzinfo=timezone.utc)
+        >>> result = validate_date_against_question_window(early_date, start, resolution, "Article")
+        >>> result is not None
+        True
+    """
+    warning_messages = []
+
+    # Ensure dates are timezone-aware for comparison
+    date = ensure_timezone_aware(date)
+    question_resolution_date = ensure_timezone_aware(question_resolution_date)
+    if question_start_time:
+        question_start_time = ensure_timezone_aware(question_start_time)
+
+    # Check if date is before estimated_start_time
+    if question_start_time and date < question_start_time:
+        days_before = (question_start_time - date).days
+        warning_messages.append(
+            f"{entity_type} dated {days_before} days before question start time "
+            f"({question_start_time.strftime('%Y-%m-%d')}). "
+            f"This {entity_type.lower()} may not be relevant for forecasting this question."
+        )
+
+    # Check if date is after resolution_date
+    if date >= question_resolution_date:
+        days_after = (date - question_resolution_date).days
+        warning_messages.append(
+            f"{entity_type} dated {days_after} days after resolution date "
+            f"({question_resolution_date.strftime('%Y-%m-%d')}). "
+            f"This {entity_type.lower()} contains hindsight information and should not be used for evidence."
+        )
+
+    # If there are warnings, return error details
+    if warning_messages:
+        if question_start_time:
+            recommended_window = (
+                f"Recommended time window: "
+                f"{question_start_time.strftime('%Y-%m-%d')} to "
+                f"{question_resolution_date.strftime('%Y-%m-%d')}"
+            )
+        else:
+            recommended_window = (
+                f"Recommended: {entity_type.lower()}s dated before "
+                f"{question_resolution_date.strftime('%Y-%m-%d')}"
+            )
+
+        return {
+            "warnings": warning_messages,
+            "recommendation": recommended_window,
+            "date": date.isoformat(),
+            "question_start": question_start_time.isoformat() if question_start_time else None,
+            "question_resolution": question_resolution_date.isoformat()
+        }
+
+    return None

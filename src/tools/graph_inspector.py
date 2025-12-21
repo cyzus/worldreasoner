@@ -74,9 +74,13 @@ class GraphInspectorTool(Tool):
         # Get the question
         from src.domain.models import Question
         question = self.db.get(Question, self.question_id)
-        
-        # Build graph structure and statistics
-        graph_stats = self._analyze_graph_structure(question_hypotheses, self.question_id)
+
+        # Build graph structure and statistics using shared utility
+        from src.utils.graph_analysis import analyze_graph_structure
+
+        target_event_id = question.target_event_id if question else None
+        graph_stats = analyze_graph_structure(question_hypotheses, target_event_id)
+        graph_stats['question_id'] = self.question_id  # Add question_id for context
         
         # Get all unique event IDs
         event_ids = set()
@@ -101,151 +105,6 @@ class GraphInspectorTool(Tool):
         
         return output
 
-    def _analyze_graph_structure(
-        self,
-        hypotheses: List[CausalHypothesis],
-        question_id: str
-    ) -> Dict:
-        """Analyze the graph structure and compute metrics.
-
-        Args:
-            hypotheses: List of causal hypotheses
-            question_id: Question being analyzed
-
-        Returns:
-            Dictionary with graph statistics
-        """
-        # Extract unique events involved
-        event_ids: Set[str] = set()
-        for hyp in hypotheses:
-            event_ids.add(hyp.source_event_id)
-            event_ids.add(hyp.target_event_id)
-
-        # Build adjacency list (target -> sources)
-        graph: Dict[str, List[str]] = defaultdict(list)
-        for hyp in hypotheses:
-            graph[hyp.target_event_id].append(hyp.source_event_id)
-
-        # Get the question to find target event
-        from src.domain.models import Question
-        question = self.db.get(Question, question_id)
-        target_event_id = question.target_event_id if question else None
-
-        # Find all leaf nodes (events with no incoming edges)
-        all_targets = set(graph.keys())
-        all_sources = set()
-        for sources in graph.values():
-            all_sources.update(sources)
-        leaf_nodes = all_sources - all_targets
-
-        # Calculate depths from all leaf nodes
-        max_depth = 0
-        total_depth = 0
-        depth_count = 0
-
-        if target_event_id:
-            # Calculate depth to target event from each leaf
-            for leaf in leaf_nodes:
-                depth = self._find_path_length(graph, leaf, target_event_id)
-                if depth > 0:
-                    max_depth = max(max_depth, depth)
-                    total_depth += depth
-                    depth_count += 1
-        else:
-            # No target event - just find longest path
-            for event_id in event_ids:
-                depth = self._find_max_depth_from_node(graph, event_id, set())
-                max_depth = max(max_depth, depth)
-
-        avg_depth = total_depth / depth_count if depth_count > 0 else 0.0
-
-        # Calculate quality score
-        avg_confidence = sum(h.confidence for h in hypotheses) / len(hypotheses)
-        avg_strength = sum(h.strength for h in hypotheses) / len(hypotheses)
-
-        # Quality combines depth, confidence, and evidence support
-        depth_score = min(max_depth / 3.0, 1.0)  # Normalize to 0-1 (3+ levels = full score)
-        evidence_score = sum(1 for h in hypotheses if h.evidence_article_ids) / len(hypotheses)
-
-        quality_score = (
-            depth_score * 0.4 +
-            avg_confidence * 0.3 +
-            avg_strength * 0.2 +
-            evidence_score * 0.1
-        )
-
-        return {
-            "question_id": question_id,
-            "events": len(event_ids),
-            "hypotheses": len(hypotheses),
-            "max_depth": max_depth,
-            "avg_depth": round(avg_depth, 2),
-            "leaf_events": len(leaf_nodes),
-            "avg_confidence": round(avg_confidence, 2),
-            "avg_strength": round(avg_strength, 2),
-            "with_evidence": sum(1 for h in hypotheses if h.evidence_article_ids),
-            "quality_score": round(quality_score, 2),
-            "status": "analyzed"
-        }
-
-    def _find_path_length(
-        self,
-        graph: Dict[str, List[str]],
-        start: str,
-        target: str,
-        visited: Optional[Set[str]] = None
-    ) -> int:
-        """Find length of causal path from start to target.
-
-        The graph structure is graph[target_event] = [source_events], where
-        sources CAUSE the target. To find path length from start to target,
-        we need to traverse in the causal direction: start causes X causes target.
-
-        Args:
-            graph: Adjacency list (target -> sources)
-            start: Starting node (source event)
-            target: Target node (final effect)
-            visited: Set of visited nodes to prevent cycles
-
-        Returns:
-            Path length, or 0 if no path exists
-        """
-        if visited is None:
-            visited = set()
-
-        if start == target:
-            return 0
-
-        if start in visited:
-            return 0
-
-        visited.add(start)
-
-        # Find all nodes that have 'start' as a source (i.e., events that 'start' causes)
-        # Since graph[node] = sources, we need to check if start is in any node's sources
-        max_path = 0
-        for node, sources in graph.items():
-            if start in sources:
-                # start causes node, so we can traverse this edge
-                if node == target:
-                    # Direct causal link to target
-                    return 1
-                else:
-                    # Recursively find path from node to target
-                    path_len = self._find_path_length(graph, node, target, visited.copy())
-                    if path_len > 0:
-                        max_path = max(max_path, 1 + path_len)
-
-        return max_path
-
-    def _find_max_depth_from_node(
-        self,
-        graph: Dict[str, List[str]],
-        node: str,
-        visited: Set[str]
-    ) -> int:
-        """Find maximum depth from a node using DFS."""
-        return GraphVisualizer.find_max_depth_from_node(graph, node, visited)
 
     def _get_recommendation(self, stats: Dict) -> str:
         """Generate recommendation based on graph statistics."""
@@ -370,14 +229,14 @@ RECOMMENDATION:
         sections.append("GRAPH STATISTICS")
         sections.append("━" * 64)
         sections.append("")
-        sections.append(f"  Events:           {stats['events']}")
-        sections.append(f"  Hypotheses:       {stats['hypotheses']}")
+        sections.append(f"  Events:           {stats['event_count']}")
+        sections.append(f"  Hypotheses:       {stats['hypothesis_count']}")
         sections.append(f"  Max Depth:        {stats['max_depth']} levels")
-        sections.append(f"  Avg Depth:        {stats['avg_depth']:.1f} levels")
+        sections.append(f"  Depth Score:      {stats['depth_score']:.1f}")
         sections.append(f"  Leaf Events:      {stats['leaf_events']} (root causes)")
-        sections.append(f"  Avg Confidence:   {stats['avg_confidence']:.2f}")
-        sections.append(f"  Avg Strength:     {stats['avg_strength']:.2f}")
-        sections.append(f"  With Evidence:    {stats['with_evidence']}/{stats['hypotheses']}")
+        sections.append(f"  Avg Confidence:   {stats['confidence_score']:.2f}")
+        sections.append(f"  Avg Strength:     {stats['strength_score']:.2f}")
+        sections.append(f"  With Evidence:    {stats['with_evidence']}/{stats['hypothesis_count']}")
         sections.append(f"  Quality Score:    {stats['quality_score']:.2f}")
         sections.append("")
         

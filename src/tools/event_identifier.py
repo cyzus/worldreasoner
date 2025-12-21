@@ -192,6 +192,22 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
         # Validate and convert event_type
         event_type_enum = parse_event_type(event_type)
 
+        # Validate event date against question time window
+        # Store validation result to include in return message
+        time_window_validation = None
+        if self.question_id and self.db and event_date:
+            from src.domain.models import Question
+            from src.utils.date_utils import validate_date_against_question_window
+
+            question = self.db.get(Question, self.question_id)
+            if question:
+                time_window_validation = validate_date_against_question_window(
+                    date=event_date,
+                    question_start_time=question.estimated_start_time,
+                    question_resolution_date=question.resolution_date,
+                    entity_type="Event"
+                )
+
         # Try to find existing similar event (deduplication)
         existing_event = self._find_existing_event(
             title=title,
@@ -203,11 +219,12 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
         if existing_event:
             # Update existing event with new article links if provided
             updated = self._update_existing_event(existing_event, article_ids)
-            
+
             return self._format_response(
                 event=existing_event,
                 is_new=False,
                 updated_articles=updated,
+                time_window_validation=time_window_validation,
             )
 
         # Create new event
@@ -220,7 +237,7 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
             article_ids=article_ids,
         )
 
-        return self._format_response(event=event, is_new=True)
+        return self._format_response(event=event, is_new=True, time_window_validation=time_window_validation)
 
     def _find_existing_event(
         self,
@@ -363,6 +380,7 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
         event: Event,
         is_new: bool,
         updated_articles: bool = False,
+        time_window_validation: dict = None,
     ) -> str:
         """Format event response as JSON.
 
@@ -370,12 +388,13 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
             event: Event to format
             is_new: Whether this is a newly created event
             updated_articles: Whether existing event was updated with new articles
+            time_window_validation: Optional validation warnings about event date
 
         Returns:
             JSON string summary
         """
         status_msg = "created" if is_new else ("updated" if updated_articles else "reused_existing")
-        
+
         summary = {
             "id": event.id,
             "title": event.title,
@@ -389,6 +408,13 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
 
         if not is_new:
             summary["note"] = "Matched existing event - no duplicate created"
-        
+
+        # Add time window validation warnings if present
+        if time_window_validation:
+            summary["status"] = f"{status_msg}_with_warnings"
+            summary["warnings"] = time_window_validation["warnings"]
+            summary["recommendation"] = time_window_validation["recommendation"]
+            summary["suggestion"] = "Consider identifying events that occurred within the valid time window for better causal analysis."
+
         return json.dumps(summary, indent=2, default=str)
 

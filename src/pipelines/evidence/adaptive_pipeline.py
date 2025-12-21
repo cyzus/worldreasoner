@@ -155,11 +155,106 @@ class AdaptiveEvidencePipeline(EvidencePipeline):
                 f"{len(question_hypotheses)} hypotheses"
             )
 
+            # Evaluate article quality based on collected evidence articles
+            from src.utils.article_analysis import (
+                analyze_timeline,
+                analyze_sources,
+                identify_gaps,
+                calculate_quality
+            )
+
+            article_quality_score = 0.0
+            article_coverage = None
+
+            if evidence_articles:
+                # Use comprehensive quality calculation with timeline analysis
+                timeline_data = analyze_timeline(evidence_articles, question.resolution_date)
+                source_data = analyze_sources(evidence_articles)
+                gaps = identify_gaps(timeline_data)
+                quality_metrics = calculate_quality(evidence_articles, timeline_data, source_data, gaps)
+
+                article_quality_score = quality_metrics["score"]
+
+                # Structure result for compatibility with existing code
+                article_coverage = {
+                    "quality": quality_metrics,
+                    "article_count": len(evidence_articles),
+                    "sources": {"unique_sources": source_data["unique_sources"]},
+                    "coverage_end_date": question.resolution_date,
+                    "timeline": timeline_data,
+                    "gaps": gaps
+                }
+
+                logger.info(
+                    f"[{question.id}] Article quality: {article_quality_score:.2f} "
+                    f"({article_coverage['article_count']} articles, "
+                    f"{article_coverage['sources']['unique_sources']} sources, "
+                    f"{len(gaps)} time gaps)"
+                )
+            else:
+                logger.warning(f"[{question.id}] No evidence articles collected - article quality: 0.0")
+
+            # Evaluate graph quality using shared utilities
+            from src.utils.graph_analysis import calculate_graph_quality
+
+            graph_quality_score = 0.0
+            max_depth = 0
+
+            if question_hypotheses:
+                # Calculate graph quality using shared utility
+                quality_metrics = calculate_graph_quality(
+                    hypotheses=question_hypotheses,
+                    target_event_id=question.target_event_id,
+                    min_depth_for_full_score=self.min_graph_depth
+                )
+
+                graph_quality_score = quality_metrics['quality_score']
+                max_depth = quality_metrics['max_depth']
+
+                logger.info(
+                    f"[{question.id}] Graph quality: {graph_quality_score:.2f} "
+                    f"(depth: {max_depth}, events: {quality_metrics['event_count']}, "
+                    f"hypotheses: {quality_metrics['hypothesis_count']})"
+                )
+            else:
+                logger.warning(f"[{question.id}] No causal hypotheses generated - graph quality: 0.0")
+
+            # Check if pipeline should be marked as failed based on quality
+            status_message = None
+            if article_quality_score == 0.0:
+                status_message = "Failed: Article quality is zero (no/insufficient articles)"
+                logger.error(f"[{question.id}] {status_message}")
+            elif graph_quality_score == 0.0:
+                status_message = "Failed: Graph quality is zero (no/insufficient causal hypotheses)"
+                logger.error(f"[{question.id}] {status_message}")
+            elif max_depth < self.min_graph_depth:
+                status_message = f"Failed: Graph depth ({max_depth}) below minimum ({self.min_graph_depth})"
+                logger.error(f"[{question.id}] {status_message}")
+
+            # If failed, return empty results to signal failure
+            if status_message:
+                return {
+                    "evidence_articles": [],
+                    "causal_hypotheses": [],
+                    "stage_results": [],
+                    "agent_output": result,
+                    "status": "failed",
+                    "failure_reason": status_message,
+                    "article_quality": article_quality_score,
+                    "graph_quality": graph_quality_score,
+                    "graph_depth": max_depth
+                }
+
+            # Success
             return {
                 "evidence_articles": evidence_articles,
                 "causal_hypotheses": question_hypotheses,
                 "stage_results": [],  # Agent mode doesn't have stages
-                "agent_output": result
+                "agent_output": result,
+                "status": "success",
+                "article_quality": article_quality_score,
+                "graph_quality": graph_quality_score,
+                "graph_depth": max_depth
             }
 
         except Exception as e:
