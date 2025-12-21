@@ -748,8 +748,35 @@ async def get_question_price_history(
 
         logger.info(f"Found {len(clob_token_ids)} CLOB token IDs")
 
-        # Fetch price history for all tokens
-        price_history = await get_price_history_for_market(clob_token_ids, interval)
+        # Calculate timestamp range from question metadata
+        # Use estimated_start_time or start_date as start, and resolution_date as end
+        start_ts = None
+        end_ts = None
+
+        if question.estimated_start_time:
+            start_ts = int(question.estimated_start_time.timestamp())
+        elif metadata.get("start_date"):
+            from src.utils.date_utils import parse_iso_datetime
+            start_dt = parse_iso_datetime(metadata["start_date"])
+            start_ts = int(start_dt.timestamp())
+
+        if question.resolution_date:
+            end_ts = int(question.resolution_date.timestamp())
+
+        logger.info(
+            f"Calculated time range: start_ts={start_ts}, end_ts={end_ts}"
+            f"{f' (start: {question.estimated_start_time})' if question.estimated_start_time else ''}"
+            f" (end: {question.resolution_date})"
+        )
+
+        # Fetch price history for all tokens using timestamp range
+        price_history = await get_price_history_for_market(
+            clob_token_ids,
+            interval=interval,
+            start_ts=start_ts,
+            end_ts=end_ts,
+            fidelity=30
+        )
 
         if not price_history:
             logger.warning(f"No price history found for question {question_id}")
