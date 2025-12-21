@@ -20,6 +20,7 @@ function CollectionConfigPanel({ source, onFetch, loading }) {
     max_difficulty: 5,
     include_resolved: true,
     search_query: '',
+    lookback_days: 730, // Default: 2 years
   })
 
   // Available options (must match backend enums in src/domain/models/)
@@ -64,6 +65,7 @@ function CollectionConfigPanel({ source, onFetch, loading }) {
       }
     }
 
+    console.log('[CollectionConfigPanel] Fetching with config:', cleanConfig)
     onFetch(cleanConfig)
   }
 
@@ -73,23 +75,50 @@ function CollectionConfigPanel({ source, onFetch, loading }) {
 
       {/* Polymarket Search (only show for Polymarket source) */}
       {source === 'polymarket' && (
-        <div className="config-section">
-          <label className="config-label">
-            Search Markets
-            <span className="label-hint">(optional)</span>
-          </label>
-          <input
-            type="text"
-            value={config.search_query}
-            onChange={(e) => handleInputChange('search_query', e.target.value)}
-            className="config-input"
-            placeholder="e.g., Bitcoin, US Election, AI..."
-            disabled={loading}
-          />
-          <p className="config-description">
-            Search for specific markets by keywords. Leave empty to fetch all markets.
-          </p>
-        </div>
+        <>
+          <div className="config-section">
+            <label className="config-label">
+              Search Markets
+              <span className="label-hint">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={config.search_query}
+              onChange={(e) => handleInputChange('search_query', e.target.value)}
+              className="config-input"
+              placeholder="e.g., Bitcoin, US Election, AI..."
+              disabled={loading}
+            />
+            <p className="config-description">
+              Search for specific markets by keywords. Leave empty to fetch all markets.
+            </p>
+          </div>
+
+          {/* Time Window */}
+          <div className="config-section">
+            <label className="config-label">
+              Max Age of Markets
+              <span className="label-hint">(how far back to search)</span>
+            </label>
+            <select
+              value={config.lookback_days}
+              onChange={(e) => handleInputChange('lookback_days', parseInt(e.target.value))}
+              className="config-input"
+              disabled={loading}
+            >
+              <option value="30">Last 30 days</option>
+              <option value="90">Last 90 days</option>
+              <option value="180">Last 6 months</option>
+              <option value="365">Last year</option>
+              <option value="730">Last 2 years</option>
+              <option value="1825">Last 5 years</option>
+              <option value="3650">All time (10 years)</option>
+            </select>
+            <p className="config-description">
+              Only include markets that closed within this time window.
+            </p>
+          </div>
+        </>
       )}
 
       {/* Count */}

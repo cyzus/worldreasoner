@@ -50,6 +50,8 @@ function QuestionCollectionPage({
    * Handle fetching preview questions from the API
    */
   const handleFetchPreview = useCallback(async (config) => {
+    console.log('[QuestionCollectionPage] Fetching preview with config:', config, 'source:', sourceTab)
+    
     setLoading(true)
     setError(null)
     setSuccess(null)
@@ -57,15 +59,19 @@ function QuestionCollectionPage({
     setPreviewSource(null) // Clear preview source
 
     try {
+      const requestBody = {
+        source: sourceTab,
+        ...config,
+      }
+      
+      console.log('[QuestionCollectionPage] Request body:', JSON.stringify(requestBody, null, 2))
+      
       const response = await fetch('http://localhost:8018/api/questions/preview', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          source: sourceTab,
-          ...config,
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (!response.ok) {
@@ -74,6 +80,14 @@ function QuestionCollectionPage({
       }
 
       const data = await response.json()
+
+      console.log('[QuestionCollectionPage] Response data:', {
+        success: data.success,
+        total: data.total,
+        source: data.source,
+        questionCount: data.questions?.length,
+        firstQuestion: data.questions?.[0]?.question_text
+      })
 
       if (data.success) {
         setPreviewQuestions(data.questions)

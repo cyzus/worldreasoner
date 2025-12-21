@@ -62,7 +62,11 @@ class PolymarketClient:
         query: str,
         limit_per_type: int = 20,
         events_tag: Optional[List[str]] = None,
-        keep_closed_markets: bool = True,
+        page: Optional[int] = None,
+        result_type: Optional[str] = None,
+        events_status: Optional[str] = None,
+        sort: Optional[str] = None,
+        presets: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Search Polymarket markets, events, and profiles.
 
@@ -70,21 +74,39 @@ class PolymarketClient:
             query: Search query term
             limit_per_type: Results limit per content type (default: 20)
             events_tag: Optional event tags to filter by
-            keep_closed_markets: Include closed markets in results (default: True)
+            page: Page number for pagination
+            result_type: Filter by type (e.g., 'events')
+            events_status: Event status filter ('active' or 'resolved')
+            sort: Sort key (e.g., 'closed_time')
+            presets: Response presets
 
         Returns:
             Dict with 'events', 'tags', 'profiles' keys containing search results
         """
+        # Let aiohttp handle URL encoding automatically - don't manually replace spaces
+        normalized_query = query.strip()
+
         url = f"{self.API_BASE}/public-search"
         params = {
-            "q": query,
+            "q": normalized_query,
             "limit_per_type": limit_per_type,
-            "keep_closed_markets": 1 if keep_closed_markets else 0,
         }
+        # Only include page if explicitly provided
+        if page is not None:
+            params["page"] = page
 
-        # Add optional tag filter
+        # Optional filters per example query
         if events_tag:
             params["events_tag"] = events_tag
+        if result_type:
+            params["type"] = result_type
+        if events_status:
+            params["events_status"] = events_status
+        if sort:
+            params["sort"] = sort
+        if presets:
+            # aiohttp will serialize list values as repeated query params
+            params["presets"] = presets
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -101,7 +123,7 @@ class PolymarketClient:
                     profiles = data.get("profiles", [])
 
                     logger.info(
-                        f"Polymarket search for '{query}' returned: "
+                        f"Polymarket search for '{normalized_query}' page={page} returned: "
                         f"{len(events)} events, {len(tags)} tags, {len(profiles)} profiles"
                     )
 

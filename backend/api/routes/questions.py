@@ -53,12 +53,18 @@ class PolymarketSearchRequest(BaseModel):
     query: str = Field(description="Search query term")
     limit_per_type: int = Field(default=20, ge=1, le=100, description="Results limit per content type (1-100)")
     events_tag: Optional[List[str]] = Field(default=None, description="Filter by event tags")
-    keep_closed_markets: bool = Field(default=True, description="Include closed markets in results")
+    page: int = Field(default=1, ge=1, description="Page number (1-based)")
+    type: Optional[str] = Field(default="events", description="Result type filter, e.g. 'events'")
+    events_status: Optional[str] = Field(default="resolved", description="Event status filter: 'active' or 'resolved'")
+    sort: Optional[str] = Field(default="closed_time", description="Sort key, e.g. 'closed_time'")
+    presets: Optional[List[str]] = Field(default_factory=lambda: ["EventsTitle", "Events"], description="Response presets")
 
 
 class PolymarketSearchResponse(BaseModel):
     """Response from Polymarket search."""
     success: bool
+    page: int = 1
+    limit_per_type: int = 20
     events: List[Dict[str, Any]] = Field(default_factory=list)
     tags: List[Dict[str, Any]] = Field(default_factory=list)
     profiles: List[Dict[str, Any]] = Field(default_factory=list)
@@ -78,6 +84,7 @@ class QuestionPreviewRequest(BaseModel):
     tags: Optional[List[str]] = Field(default=None, description="Polymarket tags (e.g., 'politics', 'crypto')")
     include_resolved: Optional[bool] = Field(default=True, description="Include resolved markets (Polymarket only)")
     search_query: Optional[str] = Field(default=None, description="Search query for Polymarket markets (Polymarket only)")
+    lookback_days: Optional[int] = Field(default=730, ge=1, le=3650, description="Max age of markets in days (default: 2 years)")
 
 
 class QuestionPreviewResponse(BaseModel):
@@ -118,7 +125,11 @@ async def search_polymarket(request: PolymarketSearchRequest):
             query=request.query,
             limit_per_type=request.limit_per_type,
             events_tag=request.events_tag,
-            keep_closed_markets=request.keep_closed_markets,
+            page=request.page,
+            result_type=request.type,
+            events_status=request.events_status,
+            sort=request.sort,
+            presets=request.presets,
         )
 
         events = results.get("events", [])
@@ -127,6 +138,8 @@ async def search_polymarket(request: PolymarketSearchRequest):
 
         return PolymarketSearchResponse(
             success=len(events) > 0 or len(tags) > 0 or len(profiles) > 0,
+            page=request.page,
+            limit_per_type=request.limit_per_type,
             events=events,
             tags=tags,
             profiles=profiles,
@@ -157,6 +170,7 @@ async def preview_questions(request: QuestionPreviewRequest):
     """
     try:
         logger.info(f"Previewing questions from {request.source} (count={request.count})")
+        logger.info(f"Request details: search_query={request.search_query!r}, include_resolved={request.include_resolved}")
 
         # Initialize the appropriate source runner
         from src.pipelines.question.sources.markets import PolymarketRunner
@@ -172,6 +186,9 @@ async def preview_questions(request: QuestionPreviewRequest):
                 quality.min_difficulty = request.min_difficulty
             if request.max_difficulty:
                 quality.max_difficulty = request.max_difficulty
+            # Set lookback window (negative value indicates lookback from now)
+            if request.lookback_days:
+                quality.min_resolution_days = -request.lookback_days
 
             # Initialize runner with require_ground_truth based on include_resolved
             # require_ground_truth=True fetches resolved markets with ground truth
@@ -232,6 +249,7 @@ async def preview_questions(request: QuestionPreviewRequest):
                     quality_requirements=quality,
                 )
             else:
+                logger.info(f"No search query provided, using standard collection")
                 result = await runner.collect(
                     count=request.count,
                     type_filter=type_filter_enums,

@@ -305,16 +305,27 @@ class PolymarketRunner(QuestionSourceRunner):
             logger.info(f"PolymarketRunner: Searching Polymarket for '{search_query}'")
 
             # Search Polymarket
+            # Filter by status to get resolved markets (for ground truth) or active markets (for predictions)
+            # Use same parameters as Polymarket's official website for consistent results
             search_results = await self.client.search_markets(
                 query=search_query,
                 limit_per_type=count * 2,  # Fetch more to account for filtering
-                keep_closed_markets=self.require_ground_truth,
+                events_status='resolved' if self.require_ground_truth else 'active',
+                result_type='events',  # Filter to events only
+                sort='closed_time',  # Sort by most recently closed
+                presets=['EventsTitle', 'Events'],  # Get full event data
             )
+
+            # Use quality_requirements lookback window if provided
+            # For search queries, user can control how far back to search
+            if quality_requirements is None:
+                quality_requirements = QualityRequirements()
+            search_quality = quality_requirements
 
             # Extract markets from events in search results
             events = search_results.get("events", [])
+            logger.info(f"Search returned {len(events)} events")
             market_questions = []
-
             for event in events:
                 # Each event contains markets
                 markets = event.get("markets", [])
@@ -331,8 +342,8 @@ class PolymarketRunner(QuestionSourceRunner):
                         continue
 
                     closed_time = self.parser.parse_close_time(market)
-                    should_skip, _ = self.parser.should_skip_market(
-                        market, end_date, closed_time, quality_requirements
+                    should_skip, skip_reason = self.parser.should_skip_market(
+                        market, end_date, closed_time, search_quality
                     )
 
                     if should_skip:
