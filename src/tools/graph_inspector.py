@@ -82,7 +82,7 @@ class GraphInspectorTool(Tool):
         graph_stats = analyze_graph_structure(question_hypotheses, target_event_id)
         graph_stats['question_id'] = self.question_id  # Add question_id for context
         
-        # Get all unique event IDs
+        # Get all unique event IDs in hypotheses
         event_ids = set()
         for hyp in question_hypotheses:
             event_ids.add(hyp.source_event_id)
@@ -90,6 +90,20 @@ class GraphInspectorTool(Tool):
         
         # Fetch event details
         events = {eid: self.db.get(Event, eid) for eid in event_ids}
+        
+        # Find orphan events (related to question but not in any hypothesis)
+        orphan_event_ids = set()
+        if question:
+            # Check target event
+            if question.target_event_id and question.target_event_id not in event_ids:
+                orphan_event_ids.add(question.target_event_id)
+            # Check related events
+            for rel_id in (question.related_event_ids or []):
+                if rel_id not in event_ids:
+                    orphan_event_ids.add(rel_id)
+        
+        # Fetch orphan event details
+        orphan_events = {eid: self.db.get(Event, eid) for eid in orphan_event_ids}
         
         # Build adjacency list for visualization
         graph = defaultdict(list)
@@ -100,7 +114,7 @@ class GraphInspectorTool(Tool):
         
         # Generate visualization
         output = self._format_graph_visualization(
-            question, events, graph, hypothesis_map, graph_stats
+            question, events, graph, hypothesis_map, graph_stats, orphan_events
         )
         
         return output
@@ -136,7 +150,8 @@ RECOMMENDATION:
         events: Dict[str, Event],
         graph: Dict[str, List[str]],
         hypothesis_map: Dict[tuple, CausalHypothesis],
-        stats: Dict
+        stats: Dict,
+        orphan_events: Dict[str, Event]
     ) -> str:
         """Format the graph as a visual text representation.
 
@@ -146,6 +161,7 @@ RECOMMENDATION:
             graph: Adjacency list (target -> sources)
             hypothesis_map: (source, target) -> hypothesis mapping
             stats: Graph statistics
+            orphan_events: Orphan event ID to Event object mapping
 
         Returns:
             Formatted multi-section text
@@ -193,6 +209,30 @@ RECOMMENDATION:
                     sections.append(f"    └─→ {source_desc} {conf}")
                 sections.append("")
         
+        # Orphan events section (NEW)
+        if orphan_events:
+            sections.append("")
+            sections.append("⚠ ORPHAN EVENTS (Related but Disconnected)")
+            sections.append("━" * 64)
+            sections.append("")
+            sections.append(f"Found {len(orphan_events)} event(s) related to this question but")
+            sections.append("not connected via causal hypotheses:")
+            sections.append("")
+            for event_id, event in orphan_events.items():
+                if event:
+                    desc = self._truncate(event.description, 55)
+                    sections.append(f"  🔴 {desc}")
+                    sections.append(f"     ID: {event_id}")
+                    if event.occurred_date:
+                        sections.append(f"     Date: {event.occurred_date}")
+                else:
+                    sections.append(f"  🔴 {event_id} (event not found in database)")
+                sections.append("")
+            sections.append("RECOMMENDATION:")
+            sections.append("  → Consider creating causal hypotheses linking these events")
+            sections.append("  → Use causal_reasoner tool to establish relationships")
+            sections.append("  → These events may provide missing context or root causes")
+        
         # Causal chains section
         sections.append("")
         sections.append("CAUSAL CHAINS (Root → Target)")
@@ -238,6 +278,8 @@ RECOMMENDATION:
         sections.append(f"  Avg Strength:     {stats['strength_score']:.2f}")
         sections.append(f"  With Evidence:    {stats['with_evidence']}/{stats['hypothesis_count']}")
         sections.append(f"  Quality Score:    {stats['quality_score']:.2f}")
+        if orphan_events:
+            sections.append(f"  Orphan Events:    {len(orphan_events)} ⚠")
         sections.append("")
         
         # Recommendation
