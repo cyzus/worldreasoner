@@ -122,6 +122,7 @@ class AdaptiveEvidencePipeline(EvidencePipeline):
 
         try:
             # Run agent in thread pool to avoid blocking
+            # Agent execution details are automatically logged via BaseAgent._log_execution()
             logger.debug(f"[{question.id}] Starting HindsightAgent...")
             result = await asyncio.to_thread(hindsight_agent.run, prompt)
             logger.info(f"[{question.id}] Agent completed successfully")
