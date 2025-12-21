@@ -222,3 +222,4 @@ temporal_analysis/
 test-dbs/
 test-output/
 config/collection_goal.yaml
+logs/
