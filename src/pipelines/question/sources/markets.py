@@ -199,6 +199,21 @@ class PolymarketRunner(QuestionSourceRunner):
             if not question_text:
                 return None
 
+            # Skip template/placeholder markets with no trading activity
+            # These are created by Polymarket but never properly configured
+            volume = market.get("volume")
+            if volume is None:
+                volume = market.get("volumeNum")
+
+            liquidity = market.get("liquidity")
+            if liquidity is None:
+                liquidity = market.get("liquidityNum")
+
+            # Filter out markets with no volume AND no liquidity (likely templates)
+            if (volume is None or volume == 0 or volume == "0") and (liquidity is None or liquidity == 0 or liquidity == "0"):
+                logger.info(f"Filtering template market (vol={volume}, liq={liquidity}): {question_text[:80]}")
+                return None
+
             # Get description (resolution criteria)
             description = market.get("description", "")
             if not description:
