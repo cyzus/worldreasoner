@@ -787,14 +787,59 @@ async def get_question_price_history(
             f" (end: {question.resolution_date})"
         )
 
-        # Fetch price history for all tokens using timestamp range
-        price_history = await get_price_history_for_market(
-            clob_token_ids,
-            interval=interval,
-            start_ts=start_ts,
-            end_ts=end_ts,
-            fidelity=30
-        )
+        # Fetch price history for all tokens
+        # Strategy:
+        # - For 'all' or 'max': Use interval-based API to get full history
+        # - For specific intervals ('1h', '6h', '1d', '1w'): Calculate appropriate time range
+        
+        if interval in ['all', 'max']:
+            # Get full history using interval-based API
+            price_history = await get_price_history_for_market(
+                clob_token_ids,
+                interval=interval,
+                fidelity=720  # Higher fidelity for full history
+            )
+        else:
+            # For specific intervals, calculate time range to display
+            from datetime import datetime, timezone, timedelta
+            
+            # Map intervals to days
+            interval_to_days = {
+                '1h': 1/24,   # Last 1 hour
+                '6h': 0.25,   # Last 6 hours  
+                '1d': 1,      # Last 1 day
+                '1w': 7,      # Last 1 week
+            }
+            
+            days = interval_to_days.get(interval, 1)
+            
+            # Use resolution_date as the end time (or now for unresolved questions)
+            if end_ts:
+                interval_end_ts = end_ts
+            else:
+                interval_end_ts = int(datetime.now(timezone.utc).timestamp())
+            
+            # Calculate start time by subtracting the interval duration
+            interval_start_ts = int(interval_end_ts - (days * 86400))
+            
+            # Clamp to question's start time if available
+            if start_ts and interval_start_ts < start_ts:
+                interval_start_ts = start_ts
+            
+            logger.info(
+                f"Using custom interval '{interval}': "
+                f"start={interval_start_ts}, end={interval_end_ts}, "
+                f"range={(interval_end_ts - interval_start_ts) / 86400:.2f} days"
+            )
+            
+            # Use timestamp-based API for custom intervals
+            price_history = await get_price_history_for_market(
+                clob_token_ids,
+                interval='all',  # Not used when timestamps provided
+                start_ts=interval_start_ts,
+                end_ts=interval_end_ts,
+                fidelity=30  # Lower fidelity for short ranges
+            )
 
         if not price_history:
             logger.warning(f"No price history found for question {question_id}")

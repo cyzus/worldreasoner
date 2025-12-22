@@ -153,17 +153,41 @@ export default function TimeSeriesChart({
       .selectAll('line')
       .style('stroke', '#dee2e6')
 
-    // Add X axis
+    // Add X axis with smart tick calculation
+    const timeRange = xScale.domain()[1] - xScale.domain()[0]
+    const daysRange = timeRange / (1000 * 60 * 60 * 24)
+    
+    // Choose appropriate tick interval based on data range
+    let tickInterval, tickFormat
+    if (daysRange > 180) {
+      tickInterval = d3.timeMonth.every(1)
+      tickFormat = d3.timeFormat('%b %Y')
+    } else if (daysRange > 60) {
+      tickInterval = d3.timeWeek.every(2)
+      tickFormat = d3.timeFormat('%b %d')
+    } else if (daysRange > 30) {
+      tickInterval = d3.timeWeek.every(1)
+      tickFormat = d3.timeFormat('%b %d')
+    } else if (daysRange > 7) {
+      tickInterval = d3.timeDay.every(3)
+      tickFormat = d3.timeFormat('%b %d')
+    } else {
+      tickInterval = d3.timeDay.every(1)
+      tickFormat = d3.timeFormat('%b %d')
+    }
+    
     const xAxis = g.append('g')
       .attr('transform', `translate(0,${innerHeight})`)
       .call(d3.axisBottom(xScale)
-        .ticks(d3.timeDay.every(1))  // Show ticks by day
-        .tickFormat(d3.timeFormat('%b %d'))  // Format as "Dec 01"
+        .ticks(tickInterval)
+        .tickFormat(tickFormat)
       )
 
     xAxis.selectAll('text')
       .style('fill', '#495057')
-      .style('font-size', '12px')
+      .style('font-size', '11px')
+      .attr('transform', 'rotate(-45)')
+      .style('text-anchor', 'end')
 
     xAxis.selectAll('line')
       .style('stroke', '#dee2e6')

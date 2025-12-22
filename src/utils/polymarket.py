@@ -20,11 +20,12 @@ async def get_price_history(
 
     Args:
         token_id: Token ID (hex with 0x prefix, or decimal string)
-        interval: Time interval - "1m", "1w", "1d", "6h", "1h", or "max" (deprecated, use start_ts/end_ts)
+        interval: Time interval - "1m", "1w", "1d", "6h", "1h", "all", or "max" (deprecated, use start_ts/end_ts)
         session: Optional aiohttp session to reuse
         start_ts: Start timestamp in seconds (Unix epoch). If provided with end_ts, overrides interval.
         end_ts: End timestamp in seconds (Unix epoch). If provided with start_ts, overrides interval.
         fidelity: Price point granularity (default: 30). Higher values = more data points.
+                  Note: Different intervals have minimum fidelity requirements.
 
     Returns:
         List of price points: [{"t": timestamp_ms, "p": price_0_to_1}, ...]
@@ -32,9 +33,31 @@ async def get_price_history(
     """
     # Build URL with timestamp parameters if provided, otherwise use interval
     if start_ts is not None and end_ts is not None:
-        url = f"https://clob.polymarket.com/prices-history?startTs={start_ts}&market={token_id}&fidelity={fidelity}&endTs={end_ts}"
+        # Validate time range - API rejects ranges > ~90 days
+        range_days = (end_ts - start_ts) / (24 * 60 * 60)
+        if range_days > 90:
+            logger.warning(
+                f"Time range too long for timestamp API ({range_days:.1f} days), "
+                f"using interval='{interval}' instead"
+            )
+            # Fall back to interval-based query
+            if interval in ["all", "max"] and fidelity < 720:
+                fidelity = 720
+            url = f"https://clob.polymarket.com/prices-history?market={token_id}&interval={interval}&fidelity={fidelity}"
+        else:
+            # Use timestamp-based API for short ranges
+            url = f"https://clob.polymarket.com/prices-history?startTs={start_ts}&market={token_id}&fidelity={fidelity}&endTs={end_ts}"
     else:
-        url = f"https://clob.polymarket.com/prices-history?market={token_id}&interval={interval}"
+        # Ensure fidelity for interval-based queries
+        if interval == "1w" and fidelity < 5:
+            fidelity = 5
+        elif interval in ["all", "max"]:
+            if fidelity < 720:
+                fidelity = 720
+        elif interval in ["1d", "6h", "1h"] and fidelity < 60:
+            fidelity = 60
+        
+        url = f"https://clob.polymarket.com/prices-history?market={token_id}&interval={interval}&fidelity={fidelity}"
 
     close_session = False
     if session is None:
