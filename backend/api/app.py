@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from src.utils.logging import logger
-from .routes import graph, events, websocket, questions, database, pipelines, forecast_graphs
+from .routes import graph, events, websocket, questions, database, pipelines, forecast_graphs, search
 from src.core.database import GenericDatabase
 from src.config import get_config
 
@@ -100,6 +100,7 @@ def create_app() -> FastAPI:
 
     # Include routers
     app.include_router(database.router, prefix="/api/database", tags=["database"])
+    app.include_router(search.router, prefix="/api/search", tags=["search"])
     app.include_router(graph.router, prefix="/api/graph", tags=["graph"])
     app.include_router(events.router, prefix="/api/events", tags=["events"])
     app.include_router(questions.router, prefix="/api/questions", tags=["questions"])

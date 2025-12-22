@@ -160,7 +160,7 @@ See https://docs.litellm.ai/docs/embedding/supported_embedding for full list.
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=5,
+        default=2,
         help="Batch size for embedding generation"
     )
 

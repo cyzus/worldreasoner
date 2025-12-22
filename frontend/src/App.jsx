@@ -10,6 +10,7 @@ import EventGraphsPage from './components/EventGraphsPage'
 import Timeline from './components/Timeline'
 import TimeSeriesChart from './components/TimeSeriesChart'
 import DatabaseDropdown from './components/DatabaseDropdown'
+import SearchIndexStatus from './components/SearchIndexStatus'
 import { fetchGraph, fetchStatistics, fetchQuestions, fetchQuestionEvents, fetchQuestionPriceHistory } from './api/graphApi'
 import './App.css'
 
@@ -39,6 +40,9 @@ function App() {
   const [previewQuestions, setPreviewQuestions] = useState([])
   const [previewSourceTab, setPreviewSourceTab] = useState('polymarket')
   const [previewSource, setPreviewSource] = useState(null) // Track which source the preview came from
+
+  // Current database path for search index status
+  const [currentDatabasePath, setCurrentDatabasePath] = useState(null)
 
   // Load full graph data once
   const loadGraph = useCallback(async (queryParams = {}) => {
@@ -220,6 +224,7 @@ function App() {
     setQuestionRelatedEvents([])
     setPreviewQuestions([]) // Clear preview questions when switching database
     setPreviewSourceTab('polymarket')
+    setCurrentDatabasePath(dbPath) // Update database path for search index status
     setPreviewSource(null)
 
     try {
@@ -614,6 +619,12 @@ function App() {
         <div className="header-right">
         </div>
       </header>
+
+      {/* Search Index Status Banner */}
+      <SearchIndexStatus
+        databasePath={currentDatabasePath}
+        visible={true}
+      />
 
       <div className="app-content">
         {/* Top navigation tabs */}

@@ -159,3 +159,23 @@ export async function switchDatabase(dbPath) {
   })
   return response.data
 }
+
+/**
+ * Fetch search index status
+ */
+export async function fetchSearchIndexStatus() {
+  const response = await axios.get(`${API_BASE_URL}/search/status`)
+  return response.data
+}
+
+/**
+ * Build or rebuild search indexes
+ */
+export async function buildSearchIndex(rebuild = false, embeddingModel = null, batchSize = 2) {
+  const response = await axios.post(`${API_BASE_URL}/search/build-index`, {
+    rebuild,
+    embedding_model: embeddingModel,
+    batch_size: batchSize
+  })
+  return response.data
+}

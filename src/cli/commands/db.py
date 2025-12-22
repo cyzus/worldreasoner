@@ -4,6 +4,7 @@ Provides question-centric CRUD operations with cascading deletes.
 """
 
 import sys
+import asyncio
 from typing import Optional, List
 import typer
 from rich.console import Console
@@ -13,9 +14,12 @@ from rich import print as rprint
 import json
 
 from src.core.database import GenericDatabase
+from src.core.hybrid_search import HybridSearch
 from src.cli.core.question_manager import QuestionManager, QuestionFilter
 from src.cli.ui.tables import display_question_table, display_event_table, display_article_table
 from src.domain.models import Event, Article
+from src.utils.search_indexing import auto_index_articles
+from src.config.settings import get_config
 
 app = typer.Typer(help="Database management commands")
 console = Console()
@@ -285,4 +289,107 @@ def update(
     else:
         console.print(f"[red]Unknown item type: {item_type}[/red]")
         console.print("Valid types: question")
+        raise typer.Exit(1)
+
+
+@app.command("build-index")
+def build_index(
+    db_path: str = typer.Option("worldreasoner.db", "--db", "-d", help="Database path"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Embedding model (default: from config)"),
+    rebuild: bool = typer.Option(False, "--rebuild", "-r", help="Rebuild all indexes from scratch"),
+    batch_size: int = typer.Option(2, "--batch-size", "-b", help="Batch size for embeddings"),
+    show_stats: bool = typer.Option(True, "--stats/--no-stats", help="Show index statistics"),
+):
+    """Build or rebuild search indexes for hybrid search.
+
+    Indexes articles for both FTS5 (full-text search) and semantic embeddings.
+    By default, only indexes new articles. Use --rebuild to reindex everything.
+
+    Examples:
+        wr db build-index
+        wr db build-index --rebuild
+        wr db build-index --model text-embedding-3-large
+        wr db build-index --db data/worldreasoner.db --batch-size 10
+    """
+    db = GenericDatabase(db_path)
+
+    # Get embedding model from config if not provided
+    if model is None:
+        config = get_config()
+        model = config.llm.embedding_model
+        console.print(f"[dim]Using embedding model from config: {model}[/dim]")
+
+    # Get current stats before indexing
+    search = HybridSearch(db_path, embedding_model=model)
+    before_stats = search.get_index_stats()
+
+    # Show current status
+    db.create_table(Article)
+    total_articles = len(db.get_many(Article))
+
+    if show_stats:
+        console.print(Panel(
+            f"[bold]Database:[/bold] {db_path}\n"
+            f"[bold]Total Articles:[/bold] {total_articles}\n"
+            f"[bold]FTS Indexed:[/bold] {before_stats['fts_indexed']}\n"
+            f"[bold]Embeddings Indexed:[/bold] {before_stats['embeddings_indexed']}\n"
+            f"[bold]Model:[/bold] {model}",
+            title="Current Index Status"
+        ))
+
+    if total_articles == 0:
+        console.print("[yellow]No articles found in database. Nothing to index.[/yellow]")
+        return
+
+    # Determine what to do
+    if rebuild:
+        console.print(f"\n[bold yellow]Rebuilding all indexes from scratch...[/bold yellow]")
+        skip_existing = False
+    else:
+        to_index = total_articles - before_stats['embeddings_indexed']
+        if to_index == 0:
+            console.print("[green]All articles already indexed.[/green]")
+            return
+        console.print(f"\n[bold cyan]Indexing {to_index} new articles...[/bold cyan]")
+        skip_existing = True
+
+    # Run the indexing
+    try:
+        with console.status("[bold green]Indexing articles..."):
+            result = asyncio.run(auto_index_articles(
+                db_path=db_path,
+                embedding_model=model,
+                skip_existing=skip_existing
+            ))
+
+        # Show results
+        if result['status'] == 'success':
+            console.print(f"\n[bold green]Indexing Complete![/bold green]")
+            console.print(f"  New articles indexed: {result['newly_indexed']}")
+            console.print(f"  Total indexed: {result['final_indexed']}")
+        elif result['status'] == 'up_to_date':
+            console.print(f"\n[bold green]All articles already indexed![/bold green]")
+        elif result['status'] == 'failed':
+            console.print(f"\n[bold red]Indexing failed: {result.get('error', 'Unknown error')}[/bold red]")
+            raise typer.Exit(1)
+
+        # Show final stats
+        if show_stats:
+            after_stats = search.get_index_stats()
+            table = Table(title="Index Statistics")
+            table.add_column("Metric", style="cyan")
+            table.add_column("Value", style="green", justify="right")
+
+            table.add_row("Total Articles", str(total_articles))
+            table.add_row("FTS5 Indexed", str(after_stats['fts_indexed']))
+            table.add_row("Embeddings Indexed", str(after_stats['embeddings_indexed']))
+            table.add_row("Embedding Models", ", ".join(after_stats['models']))
+
+            console.print("\n")
+            console.print(table)
+
+    except Exception as e:
+        console.print(f"\n[bold red]Error building index: {e}[/bold red]")
+        import traceback
+        console.print(f"[dim]{traceback.format_exc()}[/dim]")
         raise typer.Exit(1)
