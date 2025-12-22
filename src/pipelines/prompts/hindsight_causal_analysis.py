@@ -9,8 +9,10 @@ EVIDENCE_AGENT_DESCRIPTION = \
 """
 Specialist agent for collecting evidence articles.
 
+
 Uses adaptive search strategies:
 - Try multiple search queries if initial results are insufficient
+- Be multifaceted - not only look for causes that support the ground truth, but also alternative perspectives
 - Start from the resolution date and gradually go backwards in time
 - Prioritize high-quality sources and diverse perspectives
 - Fetch and analyze article content, be sure to capture the correct published date
