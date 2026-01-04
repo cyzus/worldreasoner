@@ -170,7 +170,7 @@ class CausalReasonerTool(Tool):
         if not self._validate_chronology(source_event_id, target_event_id):
             error_msg = {
                 "status": "error",
-                "message": "Chronology validation failed: source event must occur before target event",
+                "message": "Chronology validation failed: source event must occur before target event - also make sure you provide occurred_date for both events",
                 "source_event_id": source_event_id,
                 "target_event_id": target_event_id,
             }
