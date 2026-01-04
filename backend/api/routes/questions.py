@@ -897,21 +897,71 @@ async def get_article_coverage(
         if not question:
             raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
 
-        # Get articles published before resolution date
+        # Get articles for this question and filter by time window
+        from src.utils.article_analysis import filter_articles_by_time_window
+        from src.utils.date_utils import ensure_timezone_aware
+
         all_articles = db.get_many(Article)
-        question_articles = [
+        all_question_articles = [
             a for a in all_articles
             if a.collected_for_question_id == question_id
-            and (not a.published_date or a.published_date < question.resolution_date)
         ]
 
-        logger.info(f"Found {len(question_articles)} articles for question {question_id}")
+        # Track filtering stats for transparency
+        q_resolution = ensure_timezone_aware(question.resolution_date)
+        q_start = ensure_timezone_aware(question.estimated_start_time) if question.estimated_start_time else None
+
+        excluded_before_start = []
+        excluded_after_resolution = []
+
+        for article in all_question_articles:
+            if not article.published_date:
+                continue
+            apd = ensure_timezone_aware(article.published_date)
+
+            if apd >= q_resolution:
+                excluded_after_resolution.append({
+                    "id": article.id,
+                    "title": article.title,
+                    "published_date": apd.isoformat(),
+                    "source": article.source,
+                    "reason": "after_resolution"
+                })
+            elif q_start and apd < q_start:
+                excluded_before_start.append({
+                    "id": article.id,
+                    "title": article.title,
+                    "published_date": apd.isoformat(),
+                    "source": article.source,
+                    "reason": "before_market_start"
+                })
+
+        # Filter by time window using shared utility
+        question_articles = filter_articles_by_time_window(
+            all_question_articles,
+            question.resolution_date,
+            question.estimated_start_time
+        )
+
+        logger.info(
+            f"Found {len(question_articles)} valid articles for question {question_id} "
+            f"({len(all_question_articles)} collected, "
+            f"{len(excluded_before_start)} before start, "
+            f"{len(excluded_after_resolution)} after resolution)"
+        )
 
         if not question_articles:
-            # Return empty analysis
+            # Return empty analysis with filtering stats
             return {
                 "question_id": question_id,
-                "article_count": 0,
+                "article_count": 0,  # Valid articles in range
+                "total_articles_collected": len(all_question_articles),
+                "articles_excluded_before_start": len(excluded_before_start),
+                "articles_excluded_after_resolution": len(excluded_after_resolution),
+                "excluded_articles": {
+                    "before_start": excluded_before_start,
+                    "after_resolution": excluded_after_resolution
+                },
                 "timeline": {"has_dates": False, "resolution_date": question.resolution_date.isoformat()},
                 "sources": {"unique_sources": 0, "unique_domains": 0, "source_counts": {}, "top_sources": []},
                 "gaps": [],
@@ -919,13 +969,23 @@ async def get_article_coverage(
                     "score": 0.0,
                     "volume_score": 0.0,
                     "diversity_score": 0.0,
-                    "coverage_score": 0.0
+                    "coverage_score": 0.0,
+                    "distribution_score": 0.0,
+                    "gap_severity": 0.0
                 },
-                "recommendation": "No articles collected yet. Start evidence collection with web_search and article_collector."
+                "recommendation": "No valid articles in time window. " + (
+                    f"{len(all_question_articles)} articles collected but excluded (see excluded_articles)."
+                    if all_question_articles
+                    else "Start evidence collection with web_search and article_collector."
+                )
             }
 
         # Perform complete analysis using shared utilities
-        analysis = analyze_article_coverage(question_articles, question.resolution_date)
+        analysis = analyze_article_coverage(
+            question_articles,
+            question.resolution_date,
+            question.estimated_start_time
+        )
 
         # Convert datetime objects to ISO format for JSON serialization
         if analysis["timeline"].get("has_dates"):
@@ -938,12 +998,22 @@ async def get_article_coverage(
         else:
             analysis["timeline"]["resolution_date"] = analysis["timeline"]["resolution_date"].isoformat()
 
-        # Add question_id to response
+        # Add question_id and filtering stats to response
         analysis["question_id"] = question_id
+        analysis["total_articles_collected"] = len(all_question_articles)
+        analysis["articles_excluded_before_start"] = len(excluded_before_start)
+        analysis["articles_excluded_after_resolution"] = len(excluded_after_resolution)
+        analysis["excluded_articles"] = {
+            "before_start": excluded_before_start,
+            "after_resolution": excluded_after_resolution
+        }
 
         logger.info(
             f"Article coverage for question {question_id}: "
-            f"{analysis['article_count']} articles, "
+            f"{analysis['article_count']} valid articles "
+            f"({len(all_question_articles)} total collected, "
+            f"{len(excluded_before_start)} excluded before start, "
+            f"{len(excluded_after_resolution)} excluded after resolution), "
             f"quality score {analysis['quality']['score']:.2f}"
         )
 

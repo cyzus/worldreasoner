@@ -308,14 +308,21 @@ class HindsightAnalysisPrompts(ContextualPromptGenerator[Tuple[Question, List[Ar
         min_articles: int = 5,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
-        evidence_window_days: int = None,
+        evidence_window_days: int = 365,
     ) -> str:
         """Generate instruction for collecting hindsight evidence.
+
+        Uses two-tier evidence window approach:
+        1. If question has estimated_start_time: use [estimated_start_time, resolution_date]
+        2. Fallback: use [resolution_date - evidence_window_days, resolution_date]
 
         Args:
             current_date: Current datetime
             question: Resolved question
             min_articles: Minimum articles to collect
+            start_date: Optional explicit start date (overrides window calculation)
+            end_date: Optional explicit end date (overrides resolution_date)
+            evidence_window_days: Days to look back if no estimated_start_time (default: 365)
 
         Returns:
             Formatted instruction string
@@ -323,9 +330,21 @@ class HindsightAnalysisPrompts(ContextualPromptGenerator[Tuple[Question, List[Ar
         date_str = self.format_datetime(current_date)
         resolution_str = self.format_datetime(question.resolution_date) if question.resolution_date else "N/A"
 
-        # If datetime start/end were provided, format them; otherwise use placeholder
-        start_date_str = self.format_datetime(start_date) if start_date is not None else "(unspecified)"
-        end_date_str = self.format_datetime(end_date) if end_date is not None else "(unspecified)"
+        # Calculate evidence window with fallback logic
+        from src.utils.article_analysis import get_evidence_window
+
+        # If explicit dates provided, use them; otherwise compute from question
+        if start_date is not None and end_date is not None:
+            start_date_str = self.format_datetime(start_date)
+            end_date_str = self.format_datetime(end_date)
+        else:
+            window_start, window_end = get_evidence_window(
+                question.resolution_date,
+                question.estimated_start_time,
+                fallback_window_days=evidence_window_days
+            )
+            start_date_str = self.format_datetime(window_start)
+            end_date_str = self.format_datetime(window_end)
 
         return self.EVIDENCE_COLLECTION_TEMPLATE.format(
             question_text=question.question_text,

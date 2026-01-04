@@ -7,6 +7,7 @@ from smolagents import Tool
 from src.domain.models import Article, Question
 from src.core.database import GenericDatabase
 from src.utils.article_analysis import (
+    filter_articles_by_time_window,
     analyze_timeline,
     analyze_sources,
     identify_gaps,
@@ -79,42 +80,34 @@ class ArticleInspectorTool(Tool):
             if a.collected_for_question_id == self.question_id
         ]
 
-        # Filter articles by time window
-        # Articles should be:
-        # - After estimated_start_time (if available) - articles before the question is valid
-        # - Before resolution_date - articles published after the outcome is known
-        filtered_articles = []
-        # Normalize question dates for safe comparison
-        q_resolution = ensure_timezone_aware(question.resolution_date)
-        q_start = ensure_timezone_aware(question.estimated_start_time) if question.estimated_start_time else None
-        for article in question_articles:
-            if not article.published_date:
-                continue
-
-            # Normalize article date for comparison
-            apd = ensure_timezone_aware(article.published_date)
-
-            # Must be before resolution (strictly before)
-            if apd >= q_resolution:
-                continue
-
-            # If estimated_start_time exists, article should be on/after it
-            # (to avoid using information from before the question was valid)
-            if q_start and apd < q_start:
-                continue
-
-            filtered_articles.append(article)
+        # Filter articles by time window using shared utility
+        filtered_articles = filter_articles_by_time_window(
+            question_articles,
+            question.resolution_date,
+            question.estimated_start_time
+        )
 
         if not filtered_articles:
             return self._format_empty(question)
 
         # Analyze articles using shared utilities
-        timeline_data = analyze_timeline(filtered_articles, q_resolution)
+        timeline_data = analyze_timeline(
+            filtered_articles,
+            question.resolution_date,
+            coverage_start=question.estimated_start_time
+        )
         source_data = analyze_sources(filtered_articles)
         gaps = identify_gaps(timeline_data)
+        quality = calculate_quality(
+            filtered_articles,
+            timeline_data,
+            source_data,
+            gaps,
+            coverage_start=question.estimated_start_time
+        )
 
         return self._format_visualization(
-            filtered_articles, timeline_data, source_data, gaps, question
+            filtered_articles, timeline_data, source_data, gaps, question, quality
         )
 
     def _format_empty(self, question: Question) -> str:
@@ -166,7 +159,8 @@ ERROR: {error}
         timeline_data: Dict,
         source_data: Dict,
         gaps: List[Dict],
-        question: Question
+        question: Question,
+        quality: Dict
     ) -> str:
         """Format the article analysis as visual text.
 
@@ -176,6 +170,7 @@ ERROR: {error}
             source_data: Source statistics
             gaps: Identified timeline gaps
             question: Question object with resolution_date and optional estimated_start_time
+            quality: Quality metrics from calculate_quality()
 
         Returns:
             Formatted multi-section text
@@ -270,7 +265,6 @@ ERROR: {error}
         sections.append("")
         
         # Coverage quality
-        quality = calculate_quality(articles, timeline_data, source_data, gaps)
         sections.append("COVERAGE QUALITY")
         sections.append("━" * 64)
         sections.append("")
@@ -278,6 +272,9 @@ ERROR: {error}
         sections.append(f"  Volume:         {quality['volume_score']:.2f} ({len(articles)} articles)")
         sections.append(f"  Diversity:      {quality['diversity_score']:.2f} ({source_data['unique_sources']} sources)")
         sections.append(f"  Coverage:       {quality['coverage_score']:.2f} (gaps: {len(gaps)})")
+        if timeline_data.get("has_dates"):
+            sections.append(f"  Distribution:   {quality['distribution_score']:.2f} (evenness)")
+            sections.append(f"  Gap Severity:   {quality['gap_severity']:.2f} (penalty)")
         sections.append("")
 
         # Recommendation

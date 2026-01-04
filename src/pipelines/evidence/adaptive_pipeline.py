@@ -169,10 +169,17 @@ class AdaptiveEvidencePipeline(EvidencePipeline):
 
             if evidence_articles:
                 # Use comprehensive quality calculation with timeline analysis
-                timeline_data = analyze_timeline(evidence_articles, question.resolution_date)
+                from src.utils.date_utils import ensure_timezone_aware
+
+                # Pass coverage_start for expected coverage window calculation
+                coverage_start = ensure_timezone_aware(question.estimated_start_time) if question.estimated_start_time else None
+                timeline_data = analyze_timeline(evidence_articles, question.resolution_date, coverage_start=coverage_start)
                 source_data = analyze_sources(evidence_articles)
                 gaps = identify_gaps(timeline_data)
-                quality_metrics = calculate_quality(evidence_articles, timeline_data, source_data, gaps)
+
+                quality_metrics = calculate_quality(
+                    evidence_articles, timeline_data, source_data, gaps, coverage_start=coverage_start
+                )
 
                 article_quality_score = quality_metrics["score"]
 

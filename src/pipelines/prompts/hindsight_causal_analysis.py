@@ -73,7 +73,7 @@ PROCESS:
 
 1. COLLECT EVIDENCE:
    Call evidence_collector to gather relevant articles:
-   - Time window: {evidence_window_days} days before resolution ({window_start} to {resolution_date})
+   - Time window: {window_start} to {resolution_date} ({actual_window_days} days)
    - Need at least {min_evidence_articles} high-quality articles, more is better
    - Collect articles at different dates/times to capture evolving context (but all BEFORE resolution date)
    - Use article_inspector to check coverage
@@ -119,11 +119,12 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
             "question_id",
             "question_text",
             "resolution_date",
+            "window_start",
+            "actual_window_days",
             "ground_truth",
             "target_event_info",
             "causal_graph_instructions",
             "min_graph_depth",
-            "evidence_window_days",
             "min_evidence_articles",
             "confidence_threshold",
         ]
@@ -166,10 +167,14 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
     ) -> str:
         """Generate prompt for HindsightAgent to build deep causal graph.
 
+        Uses two-tier evidence window approach:
+        1. If question has estimated_start_time: use [estimated_start_time, resolution_date]
+        2. Fallback: use [resolution_date - evidence_window_days, resolution_date]
+
         Args:
             question: Question to analyze
             min_graph_depth: Minimum causal chain depth required (default: 3)
-            evidence_window_days: Days before resolution to collect evidence (default: 365)
+            evidence_window_days: Days before resolution to collect evidence if no estimated_start_time (default: 365)
             min_evidence_articles: Minimum evidence articles needed (default: 5)
             confidence_threshold: Minimum confidence for causal links (default: 0.6)
             **kwargs: Additional context (not used)
@@ -177,9 +182,22 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
         Returns:
             Formatted agent prompt string
         """
-        # Format resolution date
+        # Calculate evidence window with fallback logic
+        from src.utils.article_analysis import get_evidence_window
+
+        window_start, window_end = get_evidence_window(
+            question.resolution_date,
+            question.estimated_start_time,
+            fallback_window_days=evidence_window_days
+        )
+
+        # Format dates for prompt
         resolution_date_str = self.format_datetime(question.resolution_date)
-        window_start = self.format_datetime(question.resolution_date - timedelta(days=evidence_window_days))
+        window_start_str = self.format_datetime(window_start)
+
+        # Calculate actual window size in days
+        actual_window_days = (window_end - window_start).days
+
         # Generate target event instructions based on whether target_event_id exists
         if question.target_event_id:
             target_event_info = f"TARGET EVENT ID: {question.target_event_id} (USE THIS as the final target for all causal chains)"
@@ -214,12 +232,12 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
             question_id=question.id,
             question_text=question.question_text,
             resolution_date=resolution_date_str,
-            window_start=window_start,
+            window_start=window_start_str,
+            actual_window_days=actual_window_days,
             ground_truth=str(question.ground_truth),
             target_event_info=target_event_info,
             causal_graph_instructions=causal_graph_instructions,
             min_graph_depth=min_graph_depth,
-            evidence_window_days=evidence_window_days,
             min_evidence_articles=min_evidence_articles,
             confidence_threshold=confidence_threshold,
         )

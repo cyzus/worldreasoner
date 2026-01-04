@@ -4,33 +4,132 @@ These utilities can be used by both backend tools and frontend API endpoints
 to analyze article collections.
 """
 
-from typing import List, Dict
+from typing import List, Dict, Optional, Tuple
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from src.domain.models import Article
+from src.utils.date_utils import ensure_timezone_aware
 
 
-def analyze_timeline(articles: List[Article], resolution_date: datetime) -> Dict:
+def get_evidence_window(
+    resolution_date: datetime,
+    estimated_start_time: Optional[datetime] = None,
+    fallback_window_days: int = 365
+) -> Tuple[Optional[datetime], datetime]:
+    """Calculate the evidence collection time window for a question.
+
+    Uses a two-tier approach:
+    1. If question has estimated_start_time: use [estimated_start_time, resolution_date]
+    2. Fallback: use [resolution_date - fallback_window_days, resolution_date]
+
+    Args:
+        resolution_date: Question resolution date (end of window)
+        estimated_start_time: Optional question/market start time (preferred start)
+        fallback_window_days: Days to look back if no estimated_start_time (default: 365)
+
+    Returns:
+        Tuple of (window_start, window_end) where:
+        - window_start: Start of evidence window (None means no start limit)
+        - window_end: End of evidence window (always resolution_date)
+    """
+    window_end = ensure_timezone_aware(resolution_date)
+
+    if estimated_start_time:
+        # Use question's explicit time window
+        window_start = ensure_timezone_aware(estimated_start_time)
+    else:
+        # Fallback to configured lookback window
+        window_start = window_end - timedelta(days=fallback_window_days)
+
+    return window_start, window_end
+
+
+def filter_articles_by_time_window(
+    articles: List[Article],
+    resolution_date: datetime,
+    estimated_start_time: Optional[datetime] = None,
+    fallback_window_days: int = 365
+) -> List[Article]:
+    """Filter articles to valid time window for a question.
+
+    Uses two-tier window approach:
+    1. If estimated_start_time provided: [estimated_start_time, resolution_date)
+    2. Fallback: [resolution_date - fallback_window_days, resolution_date)
+
+    Articles are considered valid if:
+    - Published after window start (estimated_start_time or resolution_date - fallback_window_days)
+    - Published before resolution_date (strictly before) - excludes post-resolution articles
+
+    Args:
+        articles: List of articles to filter
+        resolution_date: Question resolution date (articles must be before this)
+        estimated_start_time: Optional question/market start time (preferred window start)
+        fallback_window_days: Days to look back if no estimated_start_time (default: 365)
+
+    Returns:
+        List of articles within the valid time window
+    """
+    # Get evidence window with fallback
+    window_start, window_end = get_evidence_window(
+        resolution_date,
+        estimated_start_time,
+        fallback_window_days
+    )
+
+    filtered_articles = []
+    for article in articles:
+        if not article.published_date:
+            continue
+
+        # Normalize article date for comparison
+        apd = ensure_timezone_aware(article.published_date)
+
+        # Must be before resolution (strictly before)
+        if apd >= window_end:
+            continue
+
+        # Must be after window start (if defined)
+        if window_start and apd < window_start:
+            continue
+
+        filtered_articles.append(article)
+
+    return filtered_articles
+
+
+def analyze_timeline(
+    articles: List[Article],
+    resolution_date: datetime,
+    coverage_start: datetime = None
+) -> Dict:
     """Analyze temporal distribution of articles.
 
     Args:
         articles: List of articles
         resolution_date: Question resolution date (coverage endpoint)
+        coverage_start: Optional expected start of coverage (e.g., estimated_start_time)
 
     Returns:
         Timeline statistics including:
         - has_dates: Whether articles have date information
         - earliest: Earliest article date
         - resolution_date: Question resolution date
-        - span_days: Days between earliest and resolution
+        - span_days: Days between earliest article and resolution
+        - expected_span_days: Days between coverage_start and resolution (if coverage_start provided)
         - monthly: Monthly article counts
         - dates: Sorted list of all article dates
     """
     dates = [a.published_date for a in articles if a.published_date]
 
+    result = {"has_dates": False, "resolution_date": resolution_date}
+
+    # Calculate expected span if coverage_start is provided
+    if coverage_start:
+        result["expected_span_days"] = (resolution_date - coverage_start).days
+
     if not dates:
-        return {"has_dates": False, "resolution_date": resolution_date}
+        return result
 
     dates.sort()
     earliest = dates[0]
@@ -42,14 +141,15 @@ def analyze_timeline(articles: List[Article], resolution_date: datetime) -> Dict
         month_key = date.strftime("%Y-%m")
         monthly[month_key] += 1
 
-    return {
+    result.update({
         "has_dates": True,
         "earliest": earliest,
-        "resolution_date": resolution_date,
         "span_days": span_days,
         "monthly": dict(monthly),
         "dates": dates
-    }
+    })
+
+    return result
 
 
 def analyze_sources(articles: List[Article]) -> Dict:
@@ -111,55 +211,219 @@ def identify_gaps(timeline_data: Dict, min_gap_days: int = 7) -> List[Dict]:
     return gaps
 
 
+def calculate_volume_score(article_count: int) -> float:
+    """Calculate quality score based on article count.
+
+    Args:
+        article_count: Number of articles
+
+    Returns:
+        Volume score (0-1), where 5-10 articles is optimal
+    """
+    if article_count >= 10:
+        return 1.0
+    elif article_count >= 5:
+        return 0.5 + (article_count - 5) * 0.1
+    else:
+        return article_count * 0.1
+
+
+def calculate_diversity_score(unique_sources: int) -> float:
+    """Calculate quality score based on source diversity.
+
+    Uses exponential curve that heavily penalizes 1-2 sources.
+
+    Args:
+        unique_sources: Number of unique sources
+
+    Returns:
+        Diversity score (0-1)
+    """
+    if unique_sources == 1:
+        return 0.1  # Single source = very poor
+    elif unique_sources == 2:
+        return 0.3
+    elif unique_sources == 3:
+        return 0.5
+    elif unique_sources == 4:
+        return 0.7
+    else:
+        return min(0.7 + (unique_sources - 4) * 0.075, 1.0)
+
+
+def calculate_gap_severity(gaps: List[Dict], timeline_span_days: int) -> float:
+    """Calculate gap severity considering both absolute and relative size.
+
+    Args:
+        gaps: List of timeline gaps from identify_gaps()
+        timeline_span_days: Total span of the coverage window in days
+
+    Returns:
+        Total gap severity penalty (0-1)
+    """
+    if not gaps or timeline_span_days <= 0:
+        return 0.0
+
+    total_penalty = 0.0
+    for gap in gaps:
+        gap_days = gap['days']
+
+        # Absolute penalty: exponential scaling for larger gaps
+        # 7-14 days: mild, 15-30 days: moderate, 30+ days: severe
+        if gap_days <= 14:
+            absolute_penalty = 0.05
+        elif gap_days <= 30:
+            absolute_penalty = 0.10
+        elif gap_days <= 60:
+            absolute_penalty = 0.20
+        else:
+            absolute_penalty = 0.30
+
+        # Relative penalty: gap as % of total timeline
+        relative_penalty = min(gap_days / timeline_span_days * 0.5, 0.3)
+
+        # Combined penalty (take maximum to penalize both large absolute and relative gaps)
+        total_penalty += max(absolute_penalty, relative_penalty)
+
+    return min(total_penalty, 1.0)  # Cap at 1.0
+
+
+def calculate_early_gap_penalty(
+    earliest_article: datetime,
+    coverage_start: datetime,
+    timeline_span_days: int
+) -> float:
+    """Penalize missing coverage at start of window.
+
+    Args:
+        earliest_article: Date of earliest article
+        coverage_start: Expected start of coverage window
+        timeline_span_days: Total span of the coverage window in days
+
+    Returns:
+        Early gap penalty (0-0.25)
+    """
+    if earliest_article <= coverage_start:
+        return 0.0
+
+    early_gap_days = (earliest_article - coverage_start).days
+
+    # Absolute penalty for early gap
+    if early_gap_days <= 7:
+        return 0.05
+    elif early_gap_days <= 30:
+        return 0.15
+    else:
+        return 0.25
+
+
+def calculate_distribution_score(timeline_data: Dict) -> float:
+    """Score based on how evenly articles are distributed across timeline.
+
+    Uses coefficient of variation to measure distribution evenness.
+
+    Args:
+        timeline_data: Timeline statistics from analyze_timeline()
+
+    Returns:
+        Distribution score (0-1), where 1.0 is perfectly even distribution
+    """
+    if not timeline_data.get('has_dates') or not timeline_data.get('monthly'):
+        return 0.0
+
+    monthly_counts = list(timeline_data['monthly'].values())
+    if len(monthly_counts) <= 1:
+        return 0.5  # Only one month has articles
+
+    # Calculate coefficient of variation (lower = more even distribution)
+    mean = sum(monthly_counts) / len(monthly_counts)
+    if mean == 0:
+        return 0.0
+
+    variance = sum((x - mean) ** 2 for x in monthly_counts) / len(monthly_counts)
+    std_dev = variance ** 0.5
+    cv = std_dev / mean
+
+    # Convert CV to score (0 = perfect uniformity, high CV = clustered)
+    # CV > 1.0 is very uneven, CV < 0.5 is fairly even
+    return max(0.0, min(1.0 - (cv / 2.0), 1.0))
+
+
 def calculate_quality(
     articles: List[Article],
     timeline_data: Dict,
     source_data: Dict,
-    gaps: List[Dict]
+    gaps: List[Dict],
+    coverage_start: datetime = None
 ) -> Dict:
     """Calculate overall coverage quality score.
+
+    Uses improved heuristics that consider gap severity, early coverage gaps,
+    distribution evenness, and stricter source diversity requirements.
 
     Args:
         articles: List of articles
         timeline_data: Timeline statistics from analyze_timeline()
         source_data: Source statistics from analyze_sources()
         gaps: Timeline gaps from identify_gaps()
+        coverage_start: Expected start of coverage window (e.g., estimated_start_time)
 
     Returns:
         Quality metrics including:
         - score: Overall quality score (0-1)
         - volume_score: Score based on article count (0-1)
         - diversity_score: Score based on source diversity (0-1)
-        - coverage_score: Score based on timeline gaps (0-1)
+        - coverage_score: Score based on timeline gaps and distribution (0-1)
+        - distribution_score: Score based on temporal distribution evenness (0-1)
+        - gap_severity: Total gap severity penalty (0-1)
     """
     # Volume score (5-10 articles = optimal)
-    article_count = len(articles)
-    if article_count >= 10:
-        volume_score = 1.0
-    elif article_count >= 5:
-        volume_score = 0.5 + (article_count - 5) * 0.1
+    volume_score = calculate_volume_score(len(articles))
+
+    # Improved diversity score (stricter penalties for 1-3 sources)
+    diversity_score = calculate_diversity_score(source_data['unique_sources'])
+
+    # Coverage score with gap severity and distribution
+    if timeline_data.get("has_dates"):
+        # Use expected span (coverage_start to resolution) if available,
+        # otherwise fall back to article span (earliest to resolution)
+        timeline_span = timeline_data.get('expected_span_days', timeline_data['span_days'])
+
+        # Gap severity penalty (considers both absolute and relative gap sizes)
+        # Now calculated relative to the EXPECTED coverage window, not just article span
+        gap_severity = calculate_gap_severity(gaps, timeline_span)
+
+        # Early coverage gap penalty
+        early_gap_penalty = 0.0
+        if coverage_start and timeline_data.get('earliest'):
+            early_gap_penalty = calculate_early_gap_penalty(
+                timeline_data['earliest'],
+                coverage_start,
+                timeline_span
+            )
+
+        # Distribution score (how evenly articles are spread)
+        distribution_score = calculate_distribution_score(timeline_data)
+
+        # Combined coverage score
+        # Start at 1.0, apply penalties, blend with distribution score
+        coverage_score = max(0.0, 1.0 - gap_severity - early_gap_penalty)
+        coverage_score = (coverage_score * 0.7) + (distribution_score * 0.3)
     else:
-        volume_score = article_count * 0.1
-
-    # Diversity score (3+ sources = good)
-    unique_sources = source_data['unique_sources']
-    diversity_score = min(unique_sources / 5.0, 1.0)
-
-    # Coverage score (fewer gaps = better)
-    if not timeline_data.get("has_dates"):
         coverage_score = 0.0
-    else:
-        gap_penalty = len(gaps) * 0.15
-        coverage_score = max(0.0, 1.0 - gap_penalty)
+        distribution_score = 0.0
+        gap_severity = 0.0
 
-    # Overall quality (weighted average)
-    overall = (volume_score * 0.4 + diversity_score * 0.3 + coverage_score * 0.3)
+    # Overall quality - adjusted weights (Volume: 35%, Diversity: 25%, Coverage: 40%)
+    overall = (volume_score * 0.35 + diversity_score * 0.25 + coverage_score * 0.40)
 
     return {
         "score": overall,
         "volume_score": volume_score,
         "diversity_score": diversity_score,
-        "coverage_score": coverage_score
+        "coverage_score": coverage_score,
+        "distribution_score": distribution_score,
+        "gap_severity": gap_severity
     }
 
 
@@ -249,7 +513,11 @@ def calculate_simple_quality(articles: List[Article]) -> Dict:
     }
 
 
-def analyze_article_coverage(articles: List[Article], resolution_date: datetime) -> Dict:
+def analyze_article_coverage(
+    articles: List[Article],
+    resolution_date: datetime,
+    coverage_start: datetime = None
+) -> Dict:
     """Perform complete article coverage analysis.
 
     Convenience function that runs all analysis steps and returns complete results.
@@ -258,14 +526,15 @@ def analyze_article_coverage(articles: List[Article], resolution_date: datetime)
     Args:
         articles: List of articles to analyze
         resolution_date: Question resolution date
+        coverage_start: Optional expected start of coverage window for early gap penalty
 
     Returns:
         Complete analysis including timeline, sources, gaps, quality, and recommendations
     """
-    timeline_data = analyze_timeline(articles, resolution_date)
+    timeline_data = analyze_timeline(articles, resolution_date, coverage_start=coverage_start)
     source_data = analyze_sources(articles)
     gaps = identify_gaps(timeline_data)
-    quality = calculate_quality(articles, timeline_data, source_data, gaps)
+    quality = calculate_quality(articles, timeline_data, source_data, gaps, coverage_start)
     recommendation = get_recommendation(quality, gaps, source_data, timeline_data)
 
     return {
