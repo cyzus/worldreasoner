@@ -9,40 +9,30 @@ EVIDENCE_AGENT_DESCRIPTION = \
 """
 Specialist agent for collecting evidence articles.
 
-
-Uses adaptive search strategies:
-- Try multiple search queries if initial results are insufficient
-- Be multifaceted - not only look for causes that support the ground truth, but also events that might lead to alternative outcomes
-- Start from the resolution date and gradually go backwards in time
+Guidelines:
+- Be multifaceted - look for causes supporting ground truth AND alternative outcome paths
+- Work backwards from resolution date
 - Prioritize high-quality sources and diverse perspectives
-- Fetch and analyze article content, be sure to capture the correct published date; DO NOT make up any published dates
-- Make sure all the articles collected are published BEFORE the resolution date
-- Use article_collector to save relevant articles to the database
-- Before submission, you MUST use article_inspector to check timeline coverage and identify gaps
-- If gaps exist, collect more articles from those time periods
+- Fetch article content and capture correct published dates (all BEFORE resolution date)
+- Use article_collector to save articles (target: {min_evidence_articles}+ articles)
+- Before submission, use article_inspector to check timeline coverage
+- Fill any gaps by collecting more articles from those periods
 """
 
 GRAPH_AGENT_DESCRIPTION = \
 """
 Specialist agent for building deep causal graphs.
 
-CRITICAL: Build DEEP multi-level causal chains, not just direct links!
-
-
-Process:
-1. Call get_question_articles to get article IDs
-2. If target_event_id is provided, use EventDetailsTool to understand it
-3. Create events using event_identifier with source_article_ids from step 1
-4. For each cause, ask "What caused THIS?" and create intermediate events
-5. Use causal_reasoner with evidence_article_ids from step 1
-6. Use graph_inspector to check depth - iterate if < 2 levels
-
-IMPORTANT:
-- Always pass source_article_ids when creating events
-- Always pass evidence_article_ids when creating causal links
+Guidelines:
+- Call get_question_articles to get article IDs
+- If target_event_id is provided, use EventDetailsTool to understand it
+- Create target event (outcome from ground truth) using event_identifier if not provided
+- Create events using event_identifier with source_article_ids from step 1
+- Use causal_reasoner to identify relationships between events
 - All chains must connect to the target event
+- Make sure the chronology of events makes sense (earlier events cause later events)
+- Use graph_inspector to check the quality and depth of the graph
 """
-
 
 MANAGER_AGENT_DESCRIPTION = \
 """Your task: Build a DEEP causal explanation for this question with hindsight.
@@ -55,48 +45,21 @@ RESOLUTION DATE: {resolution_date}
 GROUND TRUTH: {ground_truth}
 {target_event_info}
 
-REQUIREMENTS:
-- Causal graph depth must be >= {min_graph_depth} levels (multi-hop chains)
-- Each causal link must have supporting evidence
-- Build from root causes → intermediate factors → immediate causes → outcome
-
 PROCESS:
 
 1. COLLECT EVIDENCE:
    Call evidence_collector to gather relevant articles:
    - Time window: {window_start} to {resolution_date} ({actual_window_days} days)
-   - Need at least {min_evidence_articles} high-quality articles, more is better
-   - Collect articles at different dates/times to capture evolving context (but all BEFORE resolution date)
-   - Use article_inspector to check coverage
-   - If insufficient, ask agent to broaden search
+   - Target: {min_evidence_articles}+ high-quality articles across different dates
+   - Use article_inspector to verify coverage; if insufficient, broaden search
 
-2. BUILD DEEP CAUSAL GRAPH:
-   Call causal_analyzer with this exact prompt:
-
-   "Build a deep causal graph for question '{question_id}' about: {question_text}
-
-   Make sure you provide the related article IDs from evidence_collector.
-
-   {causal_graph_instructions}
-
-   REMEMBER: Every causal_reasoner call must have question_id='{question_id}'"
+2. BUILD DEEP EVENT GRAPH:
+   Call causal_analyzer to build deep event relationship graph:
+   - Target: {min_evidence_articles}+ events, {min_graph_depth}+ depth levels
+   - Use graph_inspector to verify quality and depth
 
 3. EVALUATE & ITERATE:
-   - Call graph_inspector to check current depth
-   - If max_depth < {min_graph_depth}: Tell causal_analyzer to go deeper
-   - Target: {min_evidence_articles}+ events, {min_graph_depth}+ levels
 
-4. FINAL VALIDATION:
-   - Verify each causal link has evidence support (confidence >= {confidence_threshold})
-   - Check temporal validity (causes before effects)
-   - Confirm chains explain the ground truth outcome
-
-SUCCESS CRITERIA:
-✓ Evidence: {min_evidence_articles}+ relevant articles collected
-✓ Depth: Causal chains with {min_graph_depth}+ levels
-✓ Events: 5+ events created
-✓ Links: Multiple causal chains to target
-✓ Quality: Score > 0.7
 
 Begin the analysis!"""
 
@@ -114,7 +77,6 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
             "actual_window_days",
             "ground_truth",
             "target_event_info",
-            "causal_graph_instructions",
             "min_graph_depth",
             "min_evidence_articles",
             "confidence_threshold",
@@ -190,33 +152,11 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
         actual_window_days = (window_end - window_start).days
 
         # Generate target event instructions based on whether target_event_id exists
+
         if question.target_event_id:
             target_event_info = f"TARGET EVENT ID: {question.target_event_id} (USE THIS as the final target for all causal chains)"
-            causal_graph_instructions = f"""Steps:
-   1. The target event is ALREADY CREATED: {question.target_event_id}
-   2. Identify 3-4 immediate causes (level 1) that lead to the target event
-   3. For EACH immediate cause, identify what caused IT (level 2)
-   4. For top 2 level-2 causes, go even deeper (level 3)
-   5. Use causal_reasoner with target_event_id="{question.target_event_id}" for final links
-   6. Use graph_inspector to check depth
-   7. If depth < {min_graph_depth}, create more intermediate events
-   
-   IMPORTANT: All causal chains MUST eventually lead to target_event_id="{question.target_event_id}"!
-   Build: Root → Intermediate → Immediate → TARGET({question.target_event_id})"""
         else:
             target_event_info = "TARGET EVENT: Not yet created (you must create it first)"
-            causal_graph_instructions = f"""Steps:
-   1. Create target event (the outcome from ground truth) using event_identifier
-   2. Save the returned event ID - THIS is your target_event_id
-   3. Identify 3-4 immediate causes (level 1) that lead to the target event
-   4. For EACH immediate cause, identify what caused IT (level 2)
-   5. For top 2 level-2 causes, go even deeper (level 3)
-   6. Use causal_reasoner with the target_event_id for final links
-   7. Use graph_inspector to check depth
-   8. If depth < {min_graph_depth}, create more intermediate events
-   
-   IMPORTANT: All causal chains MUST eventually lead to your created target event!
-   Build: Root → Intermediate → Immediate → TARGET"""
 
         # Build the prompt
         return self.AGENT_TEMPLATE.format(
@@ -227,7 +167,6 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
             actual_window_days=actual_window_days,
             ground_truth=str(question.ground_truth),
             target_event_info=target_event_info,
-            causal_graph_instructions=causal_graph_instructions,
             min_graph_depth=min_graph_depth,
             min_evidence_articles=min_evidence_articles,
             confidence_threshold=confidence_threshold,
