@@ -179,13 +179,24 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
                                 )
 
                 if missing_ids:
-                    return f"Error: The following article IDs do not exist in database: {', '.join(missing_ids)}"
+                    return json.dumps({
+                        "error": "missing_article_ids",
+                        "message": "The following article IDs do not exist in database",
+                        "missing_ids": missing_ids
+                    }, indent=2)
 
                 if invalid_date_articles:
-                    return f"Error: The following articles have dates prior to the event occurring date: {', '.join(invalid_date_articles)}, meaning that they cannot be the source of this event."
+                    return json.dumps({
+                        "error": "invalid_article_dates",
+                        "message": "The following articles have dates prior to the event occurring date, meaning they cannot be the source of this event",
+                        "invalid_articles": invalid_date_articles
+                    }, indent=2)
 
         else:
-            return "Error: source_article_ids cannot be empty."
+            return json.dumps({
+                "error": "empty_source_article_ids",
+                "message": "source_article_ids cannot be empty"
+            }, indent=2)
         # Validate and convert domain
         domain_enum = parse_domain(domain)
 
