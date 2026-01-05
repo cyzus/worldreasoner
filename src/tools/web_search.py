@@ -1,7 +1,8 @@
 from dotenv import load_dotenv
 import os
 import json
-from typing import Optional
+from typing import Optional, List, Dict, Any
+from datetime import datetime
 import httpx
 from smolagents.tools import Tool
 from smolagents import WebSearchTool as SmolWebSearchTool
@@ -54,23 +55,51 @@ class WebSearchTool(Tool):
     }
     output_type = "string"
 
-    def __init__(self):
-        """Initialize the tool by checking for SearXNG configuration."""
+    def __init__(
+        self,
+        db=None,
+        db_path: str = None,
+        collector=None,
+        question_id: Optional[str] = None,
+        question_resolution_date: Optional[datetime] = None,
+        auto_collect_enabled: bool = False,
+        max_auto_collect: int = 5,
+        domain: str = "general",
+    ):
+        """Initialize WebSearchTool with optional auto-collect.
+
+        Args:
+            auto_collect_enabled: If True, automatically collect articles with publishedDate < question_resolution_date
+            question_id, question_resolution_date: Required if auto_collect_enabled=True
+            db, db_path, collector, domain, max_auto_collect: Passed to ArticleCollectorTool if enabled
+        """
+        # Validate auto-collect requirements
+        if auto_collect_enabled and (not question_id or not question_resolution_date):
+            raise ValueError("question_id and question_resolution_date required when auto_collect_enabled=True")
+
+        self.auto_collect_enabled = auto_collect_enabled
+        self.max_auto_collect = max_auto_collect
+        self.domain = domain
+        self.question_resolution_date = question_resolution_date
+
+        # Initialize article collector if enabled
+        if auto_collect_enabled:
+            from src.tools.article_collector import ArticleCollectorTool
+            self.article_collector = ArticleCollectorTool(db=db, db_path=db_path, collector=collector, question_id=question_id)
+            logger.info(f"Auto-collect enabled (question_id={question_id}, max={max_auto_collect})")
+        else:
+            self.article_collector = None
+
+        # Set up search backend
         self.searxng_base_url = os.getenv("SEARXNG_BASE_URL")
         self.use_searxng = bool(self.searxng_base_url)
-        
+
         if self.use_searxng:
             logger.info(f"Using SearXNG at {self.searxng_base_url}")
-            # Add headers to avoid 403 errors from SearXNG
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Accept": "application/json",
-                "Accept-Language": "en-US,en;q=0.9",
-            }
             self.client = httpx.Client(
-                base_url=self.searxng_base_url, 
-                timeout=30.0,
-                headers=headers,
+                base_url=self.searxng_base_url, timeout=30.0,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                        "Accept": "application/json", "Accept-Language": "en-US,en;q=0.9"},
                 follow_redirects=True
             )
         else:
@@ -87,13 +116,13 @@ class WebSearchTool(Tool):
     ) -> str:
         """
         Perform a web search using either SearXNG or the default search tool.
-        
+
         Args:
             query: The search query string
             categories: Optional categories for SearXNG (ignored for default search)
             language: Optional language code for SearXNG (ignored for default search)
             page: Optional page number for SearXNG (ignored for default search)
-        
+
         Returns:
             Search results as a string
         """
@@ -102,6 +131,87 @@ class WebSearchTool(Tool):
         else:
             # Use the fallback tool, which only accepts query parameter
             return self.fallback_tool.forward(query=query)
+
+    def _get_structured_results(
+        self,
+        query: str,
+        categories: Optional[str] = None,
+        language: Optional[str] = None,
+        page: Optional[int] = 1,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get structured search results before markdown formatting.
+
+        This method provides programmatic access to search result metadata,
+        including publishedDate when available from SearXNG.
+
+        Args:
+            query: The search query string
+            categories: Optional categories for SearXNG
+            language: Optional language code for SearXNG
+            page: Optional page number for SearXNG
+
+        Returns:
+            List of result dicts with keys: title, url, content, engines, publishedDate
+            publishedDate may be None if not available
+            Empty list if search fails or using fallback tool
+        """
+        if not self.use_searxng:
+            # Fallback tool doesn't provide structured results with publishedDate
+            logger.warning("Fallback tool doesn't support structured results")
+            return []
+
+        try:
+            params = {
+                "q": query,
+                "format": "json",
+                "page": page or 1,
+            }
+
+            # Add optional parameters if provided
+            if categories:
+                params["categories"] = categories
+            if language:
+                params["language"] = language
+
+            response = self.client.get("/search", params=params)
+
+            # If JSON format is forbidden (403), fall back
+            if response.status_code == 403:
+                logger.warning("SearXNG JSON format restricted, no structured results available")
+                return []
+
+            response.raise_for_status()
+
+            # Parse and return structured results
+            try:
+                data = json.loads(response.text)
+                results = data.get("results", [])
+
+                # Build structured result list
+                structured = []
+                for result in results:
+                    structured.append({
+                        "title": result.get("title", "No title"),
+                        "url": result.get("url", ""),
+                        "content": result.get("content", "No description available"),
+                        "engines": result.get("engines", []),
+                        "publishedDate": result.get("publishedDate", None),
+                    })
+                return structured
+            except json.JSONDecodeError:
+                logger.error("Failed to parse SearXNG JSON response")
+                return []
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"SearXNG returned status {e.response.status_code}")
+            return []
+        except httpx.RequestError as e:
+            logger.error(f"Failed to connect to SearXNG at {self.searxng_base_url}: {str(e)}")
+            return []
+        except Exception as e:
+            logger.error(f"Error querying SearXNG: {str(e)}")
+            return []
 
     def _search_with_searxng(
         self,
@@ -112,81 +222,57 @@ class WebSearchTool(Tool):
     ) -> str:
         """
         Perform a search using SearXNG instance.
-        
+
         Args:
             query: The search query string
             categories: Optional categories to search
             language: Optional language code
             page: Optional page number
-        
+
         Returns:
-            JSON string with search results or error message
+            Formatted markdown string with search results (+ collection summary if auto-collect enabled)
         """
-        try:
-            params = {
-                "q": query,
-                "format": "json",
-                "page": page or 1,
-            }
-            
-            # Add optional parameters if provided
-            if categories:
-                params["categories"] = categories
-            if language:
-                params["language"] = language
+        # Get structured results (DRY: reuse query logic)
+        structured_results = self._get_structured_results(query, categories, language, page)
 
-            response = self.client.get("/search", params=params)
-            
-            # If JSON format is forbidden (403), try without format parameter
-            if response.status_code == 403:
-                logger.warning("SearXNG JSON format restricted, falling back to smolagents WebSearchTool")
-                # Fall back to the default tool
-                if hasattr(self, 'fallback_tool'):
-                    return self.fallback_tool.forward(query=query)
-                else:
-                    self.fallback_tool = SmolWebSearchTool()
-                    return self.fallback_tool.forward(query=query)
-            
-            response.raise_for_status()
-            
-            # Parse and format the JSON response
-            try:
-                data = json.loads(response.text)
-                return self._format_search_results(data)
-            except json.JSONDecodeError:
-                # If parsing fails, return raw response
-                return response.text
-            
-        except httpx.HTTPStatusError as e:
-            error_msg = f"Error: SearXNG returned status {e.response.status_code}"
-            if e.response.text:
-                error_msg += f": {e.response.text[:200]}"  # Limit error text length
-            error_msg += f"\nURL: {e.request.url}\nHeaders sent: {dict(e.request.headers)}"
-            return error_msg
-        except httpx.RequestError as e:
-            return f"Error: Failed to connect to SearXNG at {self.searxng_base_url}: {str(e)}"
-        except Exception as e:
-            return f"Error querying SearXNG: {str(e)}"
+        # If no results (error or fallback), use fallback tool
+        if not structured_results:
+            if hasattr(self, 'fallback_tool'):
+                return self.fallback_tool.forward(query=query)
+            else:
+                self.fallback_tool = SmolWebSearchTool()
+                return self.fallback_tool.forward(query=query)
 
-    def _format_search_results(self, data: dict) -> str:
+        # Format structured results as markdown
+        search_results = self._format_search_results_from_list(query, structured_results)
+
+        # If auto-collect disabled, return search results only
+        if not self.auto_collect_enabled:
+            return search_results
+
+        # Auto-collect eligible articles
+        collection_summary = self._auto_collect_articles(structured_results)
+
+        # Append collection summary to search results
+        return f"{search_results}\n\n{collection_summary}"
+
+    def _format_search_results_from_list(self, query: str, results: List[Dict[str, Any]]) -> str:
         """
-        Format SearXNG JSON results into a readable markdown string.
-        
+        Format structured search results into a readable markdown string.
+
         Args:
-            data: Parsed JSON response from SearXNG
-        
+            query: The search query
+            results: List of structured result dicts
+
         Returns:
             Formatted markdown string with search results
         """
-        query = data.get("query", "")
-        results = data.get("results", [])
-        
         if not results:
             return f"No results found for query: '{query}'"
-        
+
         # Build formatted output
         output = [f"# Search Results for: {query}\n"]
-        
+
         # Limit to top 10 results for readability
         for i, result in enumerate(results[:10], 1):
             title = result.get("title", "No title")
@@ -194,26 +280,108 @@ class WebSearchTool(Tool):
             content = result.get("content", "No description available")
             engines = result.get("engines", [])
             published_date = result.get("publishedDate", None)
-            
+
             # Clean up content - remove extra whitespace and limit length
             content = " ".join(content.split())
             if len(content) > 200:
                 content = content[:197] + "..."
-            
+
             output.append(f"## {i}. {title}")
             output.append(f"**URL:** {url}")
             output.append(f"**Description:** {content}")
-            output.append(f"**Published Date:** {published_date}" if published_date else "")
-            
+            if published_date:
+                output.append(f"**Published Date:** {published_date}")
+
             if engines:
                 output.append(f"**Sources:** {', '.join(engines)}")
             output.append("")  # Empty line for spacing
-        
+
         return "\n".join(output)
+
+    def _format_search_results(self, data: dict) -> str:
+        """
+        Format SearXNG JSON results into a readable markdown string.
+
+        Args:
+            data: Parsed JSON response from SearXNG
+
+        Returns:
+            Formatted markdown string with search results
+        """
+        query = data.get("query", "")
+        results = data.get("results", [])
+
+        # Convert to structured list format and reuse formatting logic (DRY)
+        structured_results = []
+        for result in results:
+            structured_results.append({
+                "title": result.get("title", "No title"),
+                "url": result.get("url", ""),
+                "content": result.get("content", "No description available"),
+                "engines": result.get("engines", []),
+                "publishedDate": result.get("publishedDate", None),
+            })
+
+        return self._format_search_results_from_list(query, structured_results)
+
+    def _auto_collect_articles(self, structured_results: List[Dict[str, Any]]) -> str:
+        """Automatically collect articles that meet temporal criteria.
+
+        Args:
+            structured_results: List of structured search result dicts
+
+        Returns:
+            Brief summary of collection activity
+        """
+        from src.utils.date_utils import parse_flexible_datetime
+
+        collected = []
+        skipped = {"no_date": 0, "after_resolution": 0, "error": 0}
+
+        for result in structured_results[:self.max_auto_collect * 2]:  # Check extra results in case some are skipped
+            if len(collected) >= self.max_auto_collect:
+                break
+
+            url, title, published_date_str = result.get("url"), result.get("title", ""), result.get("publishedDate")
+
+            if not url or not published_date_str:
+                if not published_date_str:
+                    skipped["no_date"] += 1
+                continue
+
+            try:
+                published_date = parse_flexible_datetime(published_date_str)
+                if published_date >= self.question_resolution_date:
+                    skipped["after_resolution"] += 1
+                    continue
+
+                # Collect article
+                engines = result.get("engines", [])
+                source = engines[0] if engines else url.split("/")[2] if "/" in url else "Unknown"
+
+                self.article_collector.forward(
+                    url=url, title=title, source=source,
+                    published_date=published_date.isoformat(),
+                    domain=self.domain, author=None
+                )
+                collected.append(title[:50] + "..." if len(title) > 50 else title)
+
+            except Exception as e:
+                logger.debug(f"Skipped {url}: {e}")
+                skipped["error"] += 1
+
+        # Build concise summary
+        total_skipped = sum(skipped.values())
+        summary = f"\n---\n**Auto-collected {len(collected)} article(s)**"
+        if total_skipped > 0:
+            details = [f"{v} {k.replace('_', ' ')}" for k, v in skipped.items() if v > 0]
+            summary += f" (skipped {total_skipped}: {', '.join(details)})"
+
+        return summary
 
     def __del__(self):
         """Clean up HTTP client when tool is destroyed."""
-        if self.client:
+        if hasattr(self, 'client') and self.client:
             try:
                 self.client.close()
             except Exception:
