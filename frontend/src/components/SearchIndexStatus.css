@@ -131,6 +131,17 @@
   border-color: #5a6268;
 }
 
+.status-btn.warning {
+  background: #ff9800;
+  color: white;
+  border-color: #ff9800;
+}
+
+.status-btn.warning:hover:not(:disabled) {
+  background: #f57c00;
+  border-color: #f57c00;
+}
+
 .status-btn.icon-btn {
   padding: 6px 10px;
   font-size: 0.875rem;

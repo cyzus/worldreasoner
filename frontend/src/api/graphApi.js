@@ -179,3 +179,11 @@ export async function buildSearchIndex(rebuild = false, embeddingModel = null, b
   })
   return response.data
 }
+
+/**
+ * Clean up orphaned embeddings (embeddings for deleted articles)
+ */
+export async function cleanupOrphanedEmbeddings() {
+  const response = await axios.post(`${API_BASE_URL}/search/cleanup`)
+  return response.data
+}

@@ -147,7 +147,7 @@ class HybridSearch:
 
             conn.commit()
 
-    async def index_articles_batch(self, articles: List[Article], batch_size: int = 100):
+    async def index_articles_batch(self, articles: List[Article], batch_size: int = 10):
         """Index multiple articles efficiently using async batching.
 
         Args:
@@ -498,8 +498,12 @@ class HybridSearch:
             cursor.execute("SELECT COUNT(*) as count FROM articles_fts")
             fts_count = cursor.fetchone()['count']
 
-            # Embeddings count
-            cursor.execute("SELECT COUNT(*) as count FROM article_embeddings")
+            # Embeddings count for CURRENT model
+            cursor.execute("""
+                SELECT COUNT(*) as count 
+                FROM article_embeddings 
+                WHERE model_name = ?
+            """, (self.embedding_model,))
             embeddings_count = cursor.fetchone()['count']
 
             # Embeddings by model
@@ -533,3 +537,51 @@ class HybridSearch:
 
         logger.info("Rebuilding indexes...")
         await self.index_articles_batch(articles)
+
+    def cleanup_orphaned_embeddings(self) -> int:
+        """Remove embeddings for articles that no longer exist in the database.
+        
+        Returns:
+            Number of orphaned embeddings removed
+        """
+        from .database import GenericDatabase
+        from ..domain.models import Article
+        
+        logger.info("Checking for orphaned embeddings...")
+        
+        # Get all article IDs from the main articles table
+        db = GenericDatabase(str(self.db_path))
+        db.create_table(Article)
+        valid_article_ids = {a.id for a in db.get_many(Article)}
+        
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Get all article IDs from embeddings
+            cursor.execute("SELECT DISTINCT article_id FROM article_embeddings")
+            embedded_ids = {row['article_id'] for row in cursor.fetchall()}
+            
+            # Find orphaned IDs
+            orphaned_ids = embedded_ids - valid_article_ids
+            
+            if not orphaned_ids:
+                logger.info("No orphaned embeddings found")
+                return 0
+            
+            # Delete orphaned embeddings
+            placeholders = ','.join(['?'] * len(orphaned_ids))
+            cursor.execute(
+                f"DELETE FROM article_embeddings WHERE article_id IN ({placeholders})",
+                list(orphaned_ids)
+            )
+            
+            # Also clean up FTS
+            cursor.execute(
+                f"DELETE FROM articles_fts WHERE article_id IN ({placeholders})",
+                list(orphaned_ids)
+            )
+            
+            conn.commit()
+            
+        logger.info(f"Removed {len(orphaned_ids)} orphaned embeddings")
+        return len(orphaned_ids)

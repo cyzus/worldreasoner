@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { fetchSearchIndexStatus, buildSearchIndex } from '../api/graphApi'
+import { fetchSearchIndexStatus, buildSearchIndex, cleanupOrphanedEmbeddings } from '../api/graphApi'
 import './SearchIndexStatus.css'
 
 /**
@@ -9,6 +9,7 @@ const SearchIndexStatus = ({ databasePath, visible = true }) => {
   const [status, setStatus] = useState(null)
   const [loading, setLoading] = useState(false)
   const [building, setBuilding] = useState(false)
+  const [cleaning, setCleaning] = useState(false)
   const [error, setError] = useState(null)
   const [dismissed, setDismissed] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
@@ -53,6 +54,26 @@ const SearchIndexStatus = ({ databasePath, visible = true }) => {
     }
   }
 
+  const handleCleanup = async () => {
+    try {
+      setCleaning(true)
+      setError(null)
+      const result = await cleanupOrphanedEmbeddings()
+
+      if (result.success) {
+        // Reload status after cleanup
+        await loadStatus()
+      } else {
+        setError(result.message)
+      }
+    } catch (err) {
+      console.error('Error cleaning up orphaned embeddings:', err)
+      setError(err.message)
+    } finally {
+      setCleaning(false)
+    }
+  }
+
   const handleDismiss = () => {
     setDismissed(true)
   }
@@ -81,6 +102,9 @@ const SearchIndexStatus = ({ databasePath, visible = true }) => {
   const needsIndexing = status.needs_indexing
   const isUpToDate = !needsIndexing && status.total_articles > 0
   const noArticles = status.total_articles === 0
+  
+  // Check if there are orphaned embeddings (more embeddings than articles)
+  const hasOrphans = status.embeddings_indexed > status.total_articles
 
   // Don't show banner if up to date (unless user wants to see details)
   if (isUpToDate && !showDetails) {
@@ -116,7 +140,7 @@ const SearchIndexStatus = ({ databasePath, visible = true }) => {
         </div>
 
         <div className="status-actions">
-          {needsIndexing && !building && (
+          {needsIndexing && !building && !cleaning && (
             <button
               className="status-btn primary"
               onClick={() => handleBuildIndex(false)}
@@ -126,7 +150,7 @@ const SearchIndexStatus = ({ databasePath, visible = true }) => {
             </button>
           )}
 
-          {!building && status.total_articles > 0 && (
+          {!building && !cleaning && status.total_articles > 0 && (
             <button
               className="status-btn secondary"
               onClick={() => handleBuildIndex(true)}
@@ -136,10 +160,20 @@ const SearchIndexStatus = ({ databasePath, visible = true }) => {
             </button>
           )}
 
+          {!building && !cleaning && hasOrphans && (
+            <button
+              className="status-btn warning"
+              onClick={handleCleanup}
+              title="Remove embeddings for deleted articles"
+            >
+              🗑️ Cleanup
+            </button>
+          )}
+
           <button
             className="status-btn icon-btn"
             onClick={handleRefresh}
-            disabled={building}
+            disabled={building || cleaning}
             title="Refresh status"
           >
             🔄
@@ -191,12 +225,14 @@ const SearchIndexStatus = ({ databasePath, visible = true }) => {
         </div>
       )}
 
-      {building && (
+      {(building || cleaning) && (
         <div className="status-progress">
           <div className="progress-bar">
             <div className="progress-fill"></div>
           </div>
-          <div className="progress-text">Indexing articles...</div>
+          <div className="progress-text">
+            {building ? 'Indexing articles...' : 'Cleaning up orphaned embeddings...'}
+          </div>
         </div>
       )}
     </div>

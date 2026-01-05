@@ -47,6 +47,13 @@ class SearchIndexBuildResponse(BaseModel):
     status: str
 
 
+class CleanupResponse(BaseModel):
+    """Response for cleanup operation."""
+    success: bool
+    message: str
+    orphaned_removed: int
+
+
 @router.get("/status", response_model=SearchIndexStatus)
 async def get_search_index_status():
     """Get the current status of search indexes.
@@ -166,4 +173,29 @@ async def build_search_index(request: SearchIndexBuildRequest):
 
     except Exception as e:
         logger.error(f"Failed to build search index: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/cleanup", response_model=CleanupResponse)
+async def cleanup_orphaned_embeddings():
+    """Clean up orphaned embeddings (embeddings for deleted articles).
+    
+    Returns:
+        Cleanup status and count of removed embeddings
+    """
+    try:
+        db_path = get_current_db_path()
+        config = get_config()
+        embedding_model = config.llm.embedding_model
+        
+        search = HybridSearch(db_path, embedding_model=embedding_model)
+        orphaned_count = search.cleanup_orphaned_embeddings()
+        
+        return CleanupResponse(
+            success=True,
+            message=f"Removed {orphaned_count} orphaned embeddings",
+            orphaned_removed=orphaned_count
+        )
+    except Exception as e:
+        logger.error(f"Failed to cleanup orphaned embeddings: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
