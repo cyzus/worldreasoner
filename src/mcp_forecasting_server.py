@@ -323,24 +323,6 @@ def _get_hybrid_search() -> HybridSearch:
         return hybrid_search
 
 
-# ============================================================================
-# Pydantic Models for Parameters
-# ============================================================================
-
-class DomainFilter(BaseModel):
-    """Domain filter parameter."""
-    value: str | None = Field(None, description=f"Optional domain filter ({', '.join(enum_to_list(Domain))})")
-
-
-class MaxResults(BaseModel):
-    """Maximum results parameter."""
-    value: int = Field(10, description="Maximum number of results to return", ge=1, le=100)
-
-
-class ArticlesAccessed(BaseModel):
-    """Articles accessed parameter."""
-    value: List[str] | None = Field(None, description="Optional list of article IDs you reviewed")
-
 
 # ============================================================================
 # MCP Tools
@@ -415,8 +397,8 @@ def get_question(ctx: Context) -> str:
 async def temporal_search_articles(
     ctx: Context,
     query: str,
-    domain: DomainFilter = DomainFilter(),
-    max_results: MaxResults = MaxResults()
+    domain: str,
+    max_results: int = 10
 ) -> str:
     """Search for articles with temporal filtering using hybrid search.
 
@@ -446,7 +428,7 @@ async def temporal_search_articles(
         # Returns article IDs ranked by hybrid score (FTS5 + embeddings)
         article_ids = await search_engine.search(
             query=query,
-            max_results=max_results.value,
+            max_results=max_results,
             cutoff_date=simulated_date,
             method="hybrid",
             alpha=0.5  # Equal weight to keyword and semantic search
@@ -464,14 +446,14 @@ async def temporal_search_articles(
             article = temporal_db.get(Article, article_id)
             if article:
                 # Apply domain filter if specified
-                if domain.value and len(article_ids) > max_results.value * 10:
-                    domain_filter = parse_domain(domain.value)
+                if domain and len(article_ids) > max_results * 10:
+                    domain_filter = parse_domain(domain)
                     if domain_filter is not None and article.domain != domain_filter:
                         continue
                 matches.append(article)
 
         # Limit results after domain filtering
-        matches = matches[:max_results.value]
+        matches = matches[:max_results]
 
         # Format response
         result = {
@@ -680,7 +662,7 @@ def submit_forecast(
     prediction: str,
     confidence: float,
     reasoning: str,
-    articles_accessed: ArticlesAccessed = ArticlesAccessed()
+    articles_accessed: list[str]
 ) -> str:
     """Submit a forecast for the current question.
 
@@ -743,11 +725,11 @@ def submit_forecast(
             question_id=question_id,
             target_event_id=question.target_event_id,
             prediction=parsed_prediction,
-            confidence=confidence.value,
+            confidence=confidence,
             reasoning=reasoning,
             timestamp=datetime.now(timezone.utc),
             simulated_date=simulated_date,
-            articles_accessed=articles_accessed.value or [],
+            articles_accessed=articles_accessed or [],
             searches_performed=[],  # Could track this if needed
             model_name=model_name,
             mode=ForecastMode(mode),
@@ -783,7 +765,7 @@ def submit_forecast(
             "forecast_id": forecast_id,
             "question_id": question_id,
             "prediction": parsed_prediction,
-            "confidence": confidence.value,
+            "confidence": confidence,
             "simulated_date": simulated_date.isoformat(),
             "submitted_at": forecast.timestamp.isoformat(),
             "status": "submitted",
