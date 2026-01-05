@@ -42,7 +42,7 @@ NOTE: the question has already been resolved on {resolution_date} with known gro
 QUESTION ID: {question_id}
 QUESTION: {question_text}
 RESOLUTION DATE: {resolution_date}
-GROUND TRUTH: {ground_truth}
+GROUND TRUTH (the KNOWN outcome): {ground_truth}
 {target_event_info}
 
 PROCESS:
