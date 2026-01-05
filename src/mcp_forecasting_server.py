@@ -337,11 +337,6 @@ class MaxResults(BaseModel):
     value: int = Field(10, description="Maximum number of results to return", ge=1, le=100)
 
 
-class Confidence(BaseModel):
-    """Confidence parameter."""
-    value: float = Field(..., description="Confidence level (0.0 to 1.0)", ge=0.0, le=1.0)
-
-
 class ArticlesAccessed(BaseModel):
     """Articles accessed parameter."""
     value: List[str] | None = Field(None, description="Optional list of article IDs you reviewed")
@@ -683,7 +678,7 @@ def inspect_forecast_graph(ctx: Context) -> str:
 def submit_forecast(
     ctx: Context,
     prediction: str,
-    confidence: Confidence,
+    confidence: float,
     reasoning: str,
     articles_accessed: ArticlesAccessed = ArticlesAccessed()
 ) -> str:
