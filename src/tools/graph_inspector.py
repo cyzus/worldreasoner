@@ -8,6 +8,23 @@ from smolagents import Tool
 from src.domain.models import CausalHypothesis, Event
 from src.core.database import GenericDatabase
 from src.utils.graph_visualization import GraphVisualizer
+from src.utils.event_analysis import (
+    filter_events_by_time_window,
+    analyze_event_timeline,
+    identify_event_gaps,
+    calculate_event_temporal_quality,
+    get_event_temporal_recommendation
+)
+from src.utils.date_utils import ensure_timezone_aware
+from src.utils.formatting_utils import (
+    format_inspector_header,
+    format_section_header,
+    format_time_window,
+    format_coverage_range,
+    render_monthly_bar_chart,
+    format_timeline_gaps,
+    format_metric_line
+)
 
 
 class GraphInspectorTool(Tool):
@@ -29,6 +46,7 @@ class GraphInspectorTool(Tool):
     Use this tool to see a visual representation of your causal explanation:
     - Text-based tree showing causal chains (Root → Intermediate → Target)
     - Event details with descriptions
+    - Temporal coverage analysis (event timeline distribution)
     - Causal chain depths and paths
     - Evidence support for each hypothesis
     - Quality metrics and recommendations
@@ -40,7 +58,7 @@ class GraphInspectorTool(Tool):
     4. Link them with causal_reasoner: Root → Intermediate → Target
 
     Returns:
-        str: Multi-section text with visual graph, causal chains, and statistics
+        str: Multi-section text with visual graph, temporal coverage, causal chains, and statistics
     """
     inputs = {}
     output_type = "string"
@@ -87,9 +105,41 @@ class GraphInspectorTool(Tool):
         for hyp in question_hypotheses:
             event_ids.add(hyp.source_event_id)
             event_ids.add(hyp.target_event_id)
-        
+
         # Fetch event details
         events = {eid: self.db.get(Event, eid) for eid in event_ids}
+
+        # Analyze temporal coverage of events
+        event_list = [e for e in events.values() if e is not None]
+        temporal_data = None
+        temporal_quality = None
+        temporal_gaps = []
+
+        if question and event_list:
+            # Filter events by time window
+            filtered_events = filter_events_by_time_window(
+                event_list,
+                question.resolution_date,
+                question.estimated_start_time
+            )
+
+            # Analyze event timeline
+            temporal_data = analyze_event_timeline(
+                filtered_events,
+                question.resolution_date,
+                coverage_start=question.estimated_start_time
+            )
+
+            # Identify temporal gaps
+            temporal_gaps = identify_event_gaps(temporal_data)
+
+            # Calculate temporal quality
+            temporal_quality = calculate_event_temporal_quality(
+                filtered_events,
+                temporal_data,
+                temporal_gaps,
+                coverage_start=question.estimated_start_time
+            )
         
         # Find orphan events (related to question but not in any hypothesis)
         orphan_event_ids = set()
@@ -114,9 +164,10 @@ class GraphInspectorTool(Tool):
         
         # Generate visualization
         output = self._format_graph_visualization(
-            question, events, graph, hypothesis_map, graph_stats, orphan_events
+            question, events, graph, hypothesis_map, graph_stats, orphan_events,
+            temporal_data, temporal_quality, temporal_gaps
         )
-        
+
         return output
 
 
@@ -126,11 +177,8 @@ class GraphInspectorTool(Tool):
 
     def _format_empty_graph(self) -> str:
         """Format output for empty graph."""
-        return f"""
-╔════════════════════════════════════════════════════════════════╗
-║                    CAUSAL GRAPH INSPECTOR                      ║
-╚════════════════════════════════════════════════════════════════╝
-
+        header = format_inspector_header("CAUSAL GRAPH INSPECTOR")
+        return f"""{header}
 Question ID: {self.question_id}
 
 STATUS: Empty Graph
@@ -151,7 +199,10 @@ RECOMMENDATION:
         graph: Dict[str, List[str]],
         hypothesis_map: Dict[tuple, CausalHypothesis],
         stats: Dict,
-        orphan_events: Dict[str, Event]
+        orphan_events: Dict[str, Event],
+        temporal_data: Optional[Dict] = None,
+        temporal_quality: Optional[Dict] = None,
+        temporal_gaps: Optional[List[Dict]] = None
     ) -> str:
         """Format the graph as a visual text representation.
 
@@ -167,24 +218,18 @@ RECOMMENDATION:
             Formatted multi-section text
         """
         sections = []
-        
+
         # Header
-        sections.append("""
-╔════════════════════════════════════════════════════════════════╗
-║                    CAUSAL GRAPH INSPECTOR                      ║
-╚════════════════════════════════════════════════════════════════╝
-""")
-        
+        sections.append(format_inspector_header("CAUSAL GRAPH INSPECTOR"))
+
         # Question info
         if question:
             sections.append(f"Question: {question.question_text[:80]}...")
             sections.append(f"Question ID: {self.question_id}")
             sections.append("")
-        
+
         # Visual graph section
-        sections.append("CAUSAL GRAPH STRUCTURE")
-        sections.append("━" * 64)
-        sections.append("")
+        sections.extend(format_section_header("CAUSAL GRAPH STRUCTURE"))
         
         target_event_id = question.target_event_id if question else None
         if target_event_id and target_event_id in events:
@@ -209,12 +254,62 @@ RECOMMENDATION:
                     sections.append(f"    └─→ {source_desc} {conf}")
                 sections.append("")
         
-        # Orphan events section (NEW)
+        # Temporal coverage section
+        if temporal_data and temporal_data.get("has_dates"):
+            sections.extend(format_section_header("EVENT TEMPORAL COVERAGE"))
+
+            # Time window display
+            sections.extend(format_time_window(
+                question.resolution_date,
+                question.estimated_start_time
+            ))
+
+            # Coverage range
+            earliest = temporal_data.get('earliest')
+            latest = temporal_data.get('latest')
+            if earliest and latest:
+                sections.extend(format_coverage_range(
+                    earliest,
+                    latest,
+                    question.resolution_date,
+                    question.estimated_start_time,
+                    temporal_data['span_days'],
+                    item_type="Event"
+                ))
+
+            sections.append("")
+
+            # Monthly bar chart
+            sections.extend(render_monthly_bar_chart(
+                temporal_data.get('monthly', {}),
+                item_type="Events"
+            ))
+
+            # Temporal gaps (compact format)
+            if temporal_gaps:
+                sections.extend(format_timeline_gaps(
+                    temporal_gaps,
+                    min_gap_label=">30 days",
+                    max_display=3,
+                    compact=True
+                ))
+
+            # Temporal quality metrics
+            if temporal_quality:
+                sections.append(format_metric_line("Temporal Quality", temporal_quality['temporal_score']))
+                sections.append(format_metric_line("Coverage Score", temporal_quality['coverage_score']))
+                sections.append(format_metric_line("Distribution", temporal_quality['distribution_score']))
+                if temporal_quality['gap_severity'] > 0:
+                    sections.append(format_metric_line("Gap Severity", temporal_quality['gap_severity'], " (penalty)"))
+                sections.append("")
+        elif temporal_data is not None:
+            sections.extend(format_section_header("EVENT TEMPORAL COVERAGE"))
+            sections.append("  ⚠ No event dates available - cannot assess temporal coverage")
+            sections.append("")
+
+        # Orphan events section
         if orphan_events:
-            sections.append("")
-            sections.append("⚠ ORPHAN EVENTS (Related but Disconnected)")
-            sections.append("━" * 64)
-            sections.append("")
+            sections.extend(format_section_header("⚠ ORPHAN EVENTS (Related but Disconnected)"))
             sections.append(f"Found {len(orphan_events)} event(s) related to this question but")
             sections.append("not connected via causal hypotheses:")
             sections.append("")
@@ -234,10 +329,7 @@ RECOMMENDATION:
             sections.append("  → These events may provide missing context or root causes")
         
         # Causal chains section
-        sections.append("")
-        sections.append("CAUSAL CHAINS (Root → Target)")
-        sections.append("━" * 64)
-        sections.append("")
+        sections.extend(format_section_header("CAUSAL CHAINS (Root → Target)"))
         
         if target_event_id:
             chains = self._find_all_causal_chains(target_event_id, events, graph, hypothesis_map)
@@ -265,10 +357,7 @@ RECOMMENDATION:
                 sections.append("")
         
         # Statistics section
-        sections.append("")
-        sections.append("GRAPH STATISTICS")
-        sections.append("━" * 64)
-        sections.append("")
+        sections.extend(format_section_header("GRAPH STATISTICS"))
         sections.append(f"  Events:           {stats['event_count']}")
         sections.append(f"  Hypotheses:       {stats['hypothesis_count']}")
         sections.append(f"  Max Depth:        {stats['max_depth']} levels")
@@ -280,13 +369,27 @@ RECOMMENDATION:
         sections.append(f"  Quality Score:    {stats['quality_score']:.2f}")
         if orphan_events:
             sections.append(f"  Orphan Events:    {len(orphan_events)} ⚠")
+        if temporal_quality:
+            sections.append(f"  Temporal Score:   {temporal_quality['temporal_score']:.2f}")
         sections.append("")
-        
-        # Recommendation
-        recommendation = self._get_recommendation(stats)
-        sections.append("RECOMMENDATION")
-        sections.append("━" * 64)
-        sections.append(f"  {recommendation}")
+
+        # Recommendations
+        sections.extend(format_section_header("RECOMMENDATION"))
+
+        # Graph structure recommendation
+        graph_recommendation = self._get_recommendation(stats)
+        sections.append(f"  Graph: {graph_recommendation}")
+
+        # Temporal coverage recommendation
+        if temporal_data and temporal_quality:
+            temporal_recommendation = get_event_temporal_recommendation(
+                temporal_quality,
+                temporal_gaps or [],
+                temporal_data,
+                question.estimated_start_time if question else None
+            )
+            sections.append(f"  Temporal: {temporal_recommendation}")
+
         sections.append("")
         
         return "\n".join(sections)

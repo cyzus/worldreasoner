@@ -13,6 +13,10 @@ from src.domain.models.forecast_graph import ForecastEvent, ForecastHypothesis
 from src.core.database import GenericDatabase
 from src.utils.logging import logger
 from src.utils.graph_visualization import GraphVisualizer
+from src.utils.formatting_utils import (
+    format_inspector_header,
+    format_section_header
+)
 
 
 class ForecastGraphInspectorTool(Tool):
@@ -173,11 +177,8 @@ class ForecastGraphInspectorTool(Tool):
 
     def _format_empty_graph(self) -> str:
         """Format output for empty graph."""
-        return f"""
-╔════════════════════════════════════════════════════════════════╗
-║              FORECAST CAUSAL GRAPH INSPECTOR                   ║
-╚════════════════════════════════════════════════════════════════╝
-
+        header = format_inspector_header("FORECAST CAUSAL GRAPH INSPECTOR")
+        return f"""{header}
 Session ID: {self.session_id}
 
 STATUS: Empty Graph
@@ -210,22 +211,16 @@ RECOMMENDATION:
             Formatted multi-section text
         """
         sections = []
-        
+
         # Header
-        sections.append("""
-╔════════════════════════════════════════════════════════════════╗
-║              FORECAST CAUSAL GRAPH INSPECTOR                   ║
-╚════════════════════════════════════════════════════════════════╝
-""")
-        
+        sections.append(format_inspector_header("FORECAST CAUSAL GRAPH INSPECTOR"))
+
         # Session info
         sections.append(f"Session ID: {self.session_id}")
         sections.append("")
-        
+
         # Visual graph section
-        sections.append("CAUSAL GRAPH STRUCTURE")
-        sections.append("━" * 64)
-        sections.append("")
+        sections.extend(format_section_header("CAUSAL GRAPH STRUCTURE"))
         
         # Find potential target events (effects with no outgoing edges)
         all_sources = set()
@@ -262,10 +257,7 @@ RECOMMENDATION:
                 sections.append("")
         
         # Causal chains section
-        sections.append("")
-        sections.append("CAUSAL CHAINS (Root → Target)")
-        sections.append("━" * 64)
-        sections.append("")
+        sections.extend(format_section_header("CAUSAL CHAINS (Root → Target)"))
         
         if potential_targets:
             all_chains = []
@@ -301,10 +293,7 @@ RECOMMENDATION:
             sections.append("")
         
         # Statistics section
-        sections.append("")
-        sections.append("GRAPH STATISTICS")
-        sections.append("━" * 64)
-        sections.append("")
+        sections.extend(format_section_header("GRAPH STATISTICS"))
         sections.append(f"  Events:           {stats['events']}")
         sections.append(f"  Hypotheses:       {stats['hypotheses']}")
         sections.append(f"  Max Depth:        {stats['max_depth']} levels")
@@ -317,8 +306,7 @@ RECOMMENDATION:
         
         # Recommendation
         recommendation = self._get_recommendation(stats)
-        sections.append("RECOMMENDATION")
-        sections.append("━" * 64)
+        sections.extend(format_section_header("RECOMMENDATION"))
         sections.append(f"  {recommendation}")
         sections.append("")
         

@@ -15,6 +15,15 @@ from src.utils.article_analysis import (
     get_recommendation
 )
 from src.utils.date_utils import ensure_timezone_aware
+from src.utils.formatting_utils import (
+    format_inspector_header,
+    format_section_header,
+    format_time_window,
+    format_coverage_range,
+    render_monthly_bar_chart,
+    format_timeline_gaps,
+    format_metric_line
+)
 
 
 class ArticleInspectorTool(Tool):
@@ -119,18 +128,13 @@ class ArticleInspectorTool(Tool):
         Returns:
             Formatted empty state message
         """
-        time_window = ""
-        if question.estimated_start_time:
-            time_window = f"\nTime Window: {question.estimated_start_time.strftime('%Y-%m-%d')} → {question.resolution_date.strftime('%Y-%m-%d')}"
-        else:
-            time_window = f"\nResolution Date: {question.resolution_date.strftime('%Y-%m-%d')}"
+        header = format_inspector_header("ARTICLE COVERAGE INSPECTOR")
+        time_window_lines = format_time_window(question.resolution_date, question.estimated_start_time, indent="")
+        time_window = "\n".join(time_window_lines)
 
-        return f"""
-╔════════════════════════════════════════════════════════════════╗
-║                   ARTICLE COVERAGE INSPECTOR                   ║
-╚════════════════════════════════════════════════════════════════╝
-
-Question ID: {self.question_id}{time_window}
+        return f"""{header}
+Question ID: {self.question_id}
+{time_window}
 
 STATUS: No Articles Collected
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -145,11 +149,8 @@ RECOMMENDATION:
 
     def _format_error(self, error: str) -> str:
         """Format error message."""
-        return f"""
-╔════════════════════════════════════════════════════════════════╗
-║                   ARTICLE COVERAGE INSPECTOR                   ║
-╚════════════════════════════════════════════════════════════════╝
-
+        header = format_inspector_header("ARTICLE COVERAGE INSPECTOR")
+        return f"""{header}
 ERROR: {error}
 """
 
@@ -178,84 +179,60 @@ ERROR: {error}
         sections = []
 
         # Header
-        sections.append("""
-╔════════════════════════════════════════════════════════════════╗
-║                   ARTICLE COVERAGE INSPECTOR                   ║
-╚════════════════════════════════════════════════════════════════╝
-""")
-
-        # Normalize question dates for formatting/comparison
-        q_resolution = ensure_timezone_aware(question.resolution_date)
-        q_start = ensure_timezone_aware(question.estimated_start_time) if question.estimated_start_time else None
+        sections.append(format_inspector_header("ARTICLE COVERAGE INSPECTOR"))
 
         # Overview
         sections.append(f"Question ID: {self.question_id}")
         sections.append(f"Total Articles: {len(articles)}")
 
         # Show time window
-        if q_start:
-            sections.append(
-                f"Time Window: {q_start.strftime('%Y-%m-%d')} "
-                f"→ {q_resolution.strftime('%Y-%m-%d')}"
-            )
-            window_days = (q_resolution - q_start).days
-            sections.append(f"Window Span: {window_days} days")
-        else:
-            sections.append(f"Resolution Date: {q_resolution.strftime('%Y-%m-%d')}")
+        sections.extend(format_time_window(
+            question.resolution_date,
+            question.estimated_start_time,
+            indent=""
+        ))
 
         sections.append("")
 
         # Timeline section
         if timeline_data.get("has_dates"):
-            sections.append("TIMELINE DISTRIBUTION")
-            sections.append("━" * 64)
-            sections.append("")
+            sections.extend(format_section_header("TIMELINE DISTRIBUTION"))
 
             # Show coverage range (considering estimated_start_time)
-            earliest = ensure_timezone_aware(timeline_data['earliest']) if timeline_data.get('earliest') else None
-            coverage_start = q_start or earliest
-            sections.append(
-                f"  Coverage Range: {coverage_start.strftime('%Y-%m-%d')} "
-                f"→ {q_resolution.strftime('%Y-%m-%d')}"
-            )
-            sections.append(
-                f"  Article Range:  {earliest.strftime('%Y-%m-%d')} "
-                f"→ {q_resolution.strftime('%Y-%m-%d')} "
-                f"({timeline_data['span_days']} days)"
-            )
+            earliest = timeline_data.get('earliest')
+            latest = ensure_timezone_aware(question.resolution_date)
+            q_start = question.estimated_start_time
 
-            # Note if articles don't cover the full window
-            if q_start and earliest and earliest > q_start:
-                gap_days = (earliest - q_start).days
-                sections.append(f"  ⚠ Missing early coverage: {gap_days} days gap from start")
+            if earliest:
+                # Note: For articles, we show to resolution_date (not latest article date)
+                sections.extend(format_coverage_range(
+                    earliest,
+                    latest,
+                    question.resolution_date,
+                    question.estimated_start_time,
+                    timeline_data['span_days'],
+                    item_type="Article"
+                ))
 
             sections.append("")
 
             # Monthly bar chart
-            sections.append("  Articles by Month:")
-            monthly = timeline_data['monthly']
-            max_count = max(monthly.values()) if monthly else 1
-            for month in sorted(monthly.keys()):
-                count = monthly[month]
-                bar_len = int((count / max_count) * 30)
-                bar = "█" * bar_len
-                sections.append(f"    {month}: {bar} ({count})")
-            sections.append("")
-        
+            sections.extend(render_monthly_bar_chart(
+                timeline_data.get('monthly', {}),
+                item_type="Articles"
+            ))
+
         # Gaps section
         if gaps:
-            sections.append("TIMELINE GAPS (>7 days)")
-            sections.append("━" * 64)
-            sections.append("")
-            for gap in gaps[:5]:  # Show top 5 gaps
-                sections.append(f"  ⚠ {gap['start'].strftime('%Y-%m-%d')} → {gap['end'].strftime('%Y-%m-%d')}")
-                sections.append(f"     Gap: {gap['days']} days")
-            sections.append("")
+            sections.extend(format_timeline_gaps(
+                gaps,
+                min_gap_label=">7 days",
+                max_display=5,
+                compact=False
+            ))
         
         # Source diversity
-        sections.append("SOURCE DIVERSITY")
-        sections.append("━" * 64)
-        sections.append("")
+        sections.extend(format_section_header("SOURCE DIVERSITY"))
         sections.append(f"  Unique Sources:  {source_data['unique_sources']}")
         sections.append(f"  Unique Domains:  {source_data['unique_domains']}")
         sections.append("")
@@ -265,9 +242,7 @@ ERROR: {error}
         sections.append("")
         
         # Coverage quality
-        sections.append("COVERAGE QUALITY")
-        sections.append("━" * 64)
-        sections.append("")
+        sections.extend(format_section_header("COVERAGE QUALITY"))
         sections.append(f"  Quality Score:  {quality['score']:.2f}/1.00")
         sections.append(f"  Volume:         {quality['volume_score']:.2f} ({len(articles)} articles)")
         sections.append(f"  Diversity:      {quality['diversity_score']:.2f} ({source_data['unique_sources']} sources)")
@@ -279,8 +254,7 @@ ERROR: {error}
 
         # Recommendation
         recommendation = get_recommendation(quality, gaps, source_data, timeline_data)
-        sections.append("RECOMMENDATION")
-        sections.append("━" * 64)
+        sections.extend(format_section_header("RECOMMENDATION"))
         sections.append(f"  {recommendation}")
         sections.append("")
 
