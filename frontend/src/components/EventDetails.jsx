@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, memo } from 'react'
 import { fetchEventArticles, fetchEventQuestions } from '../api/graphApi'
 import './EventDetails.css'
 
-const EventDetails = ({ node, onClose, onShowNeighborhood }) => {
+const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborhood }) {
   const [articles, setArticles] = useState([])
   const [questions, setQuestions] = useState([])
   const [loadingArticles, setLoadingArticles] = useState(false)
@@ -218,6 +218,6 @@ const EventDetails = ({ node, onClose, onShowNeighborhood }) => {
       </div>
     </div>
   )
-}
+})
 
 export default EventDetails

@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, memo } from 'react'
 import QuestionEditModal from './QuestionEditModal'
+import { useDebounce } from '../hooks/useDebounce'
 import './QuestionList.css'
 
-const QuestionList = ({
+const QuestionList = memo(function QuestionList({
   questions,
   selectedQuestionId,
   onQuestionSelect,
@@ -11,8 +12,9 @@ const QuestionList = ({
   onQuestionsSelected = null,
   onQuestionUpdated = null,
   onQuestionDeleted = null
-}) => {
+}) {
   const [searchTerm, setSearchTerm] = useState('')
+  const debouncedSearchTerm = useDebounce(searchTerm, 300)
   const [domainFilter, setDomainFilter] = useState('all')
   const [difficultyFilter, setDifficultyFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
@@ -34,8 +36,8 @@ const QuestionList = ({
   // Filter questions based on all criteria
   const filteredQuestions = useMemo(() => {
     return questions.filter(q => {
-      // Search term
-      if (searchTerm && !q.question_text.toLowerCase().includes(searchTerm.toLowerCase())) {
+      // Search term (debounced for better performance)
+      if (debouncedSearchTerm && !q.question_text.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) {
         return false
       }
 
@@ -57,7 +59,7 @@ const QuestionList = ({
 
       return true
     })
-  }, [questions, searchTerm, domainFilter, difficultyFilter, sourceFilter])
+  }, [questions, debouncedSearchTerm, domainFilter, difficultyFilter, sourceFilter])
 
   const handleClearFilters = () => {
     setSearchTerm('')
@@ -66,6 +68,7 @@ const QuestionList = ({
     setSourceFilter('all')
   }
 
+  // Show "Clear" button immediately when user types (before debounce delay)
   const hasActiveFilters = searchTerm || domainFilter !== 'all' || difficultyFilter !== 'all' || sourceFilter !== 'all'
 
   // Multi-select handlers
@@ -359,6 +362,6 @@ const QuestionList = ({
       )}
     </div>
   )
-}
+})
 
 export default QuestionList

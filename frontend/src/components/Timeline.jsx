@@ -1,7 +1,7 @@
-import React, { useRef, useEffect, useState } from 'react'
+import React, { useRef, useEffect, useState, memo } from 'react'
 import './Timeline.css'
 
-const Timeline = ({ graphData, onTimeRangeChange, onEventClick, selectedNode, selectedQuestionId, questionRelatedEvents }) => {
+const Timeline = memo(function Timeline({ graphData, onTimeRangeChange, onEventClick, selectedNode, selectedQuestionId, questionRelatedEvents }) {
   const timelineRef = useRef(null)
   const [timeRange, setTimeRange] = useState({ start: null, end: null })
   const [hoveredEvent, setHoveredEvent] = useState(null)
@@ -335,6 +335,6 @@ const Timeline = ({ graphData, onTimeRangeChange, onEventClick, selectedNode, se
       </div>
     </div>
   )
-}
+})
 
 export default Timeline

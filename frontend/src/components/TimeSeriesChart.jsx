@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, memo } from 'react'
 import * as d3 from 'd3'
 
 /**
@@ -7,7 +7,7 @@ import * as d3 from 'd3'
  * Shows market probability over time with events overlaid as markers.
  * The target event is highlighted with a gold marker.
  */
-export default function TimeSeriesChart({
+const TimeSeriesChart = memo(function TimeSeriesChart({
   priceHistory,
   events = [],
   targetEventId,
@@ -611,4 +611,6 @@ export default function TimeSeriesChart({
       )}
     </div>
   )
-}
+})
+
+export default TimeSeriesChart

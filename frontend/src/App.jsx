@@ -207,10 +207,10 @@ function App() {
   }, [loadGraph, loadStatistics, loadQuestions])
 
   // Handle filter changes
-  const handleFilterChange = (newFilters) => {
+  const handleFilterChange = useCallback((newFilters) => {
     setFilters(newFilters)
     loadGraph(newFilters)
-  }
+  }, [loadGraph])
 
   // Handle database change
   const handleDatabaseChange = useCallback(async (dbPath) => {
@@ -240,12 +240,12 @@ function App() {
   }, [filters, loadGraph, loadStatistics, loadQuestions])
 
   // Handle node selection
-  const handleNodeClick = (node) => {
+  const handleNodeClick = useCallback((node) => {
     setSelectedNode(node)
-  }
+  }, [])
 
   // Handle neighborhood view (client-side filtering)
-  const handleShowNeighborhood = (nodeId, depth = 2) => {
+  const handleShowNeighborhood = useCallback((nodeId, depth = 2) => {
     // Find the center node
     const centerNode = fullGraphData.nodes.find(n => n.id === nodeId)
     if (!centerNode) return
@@ -306,12 +306,12 @@ function App() {
     // Clear time filter and question filter when showing neighborhood
     setTimeFilter(null)
     setSelectedQuestionId(null)
-  }
+  }, [fullGraphData])
 
   // Handle time range change from timeline (client-side filtering)
-  const handleTimeRangeChange = (startDate, endDate) => {
+  const handleTimeRangeChange = useCallback((startDate, endDate) => {
     applyTimeFilter(startDate, endDate)
-  }
+  }, [applyTimeFilter])
 
   // Fetch price history for selected question with given interval
   const fetchPriceHistory = useCallback(async (questionId, interval) => {

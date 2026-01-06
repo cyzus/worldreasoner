@@ -1,8 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, memo } from 'react';
 import * as d3 from 'd3';
 import './ForecastGraph.css';
 
-const ForecastGraph = ({ graphData }) => {
+const ForecastGraph = memo(function ForecastGraph({ graphData }) {
   const svgRef = useRef(null);
   const containerRef = useRef(null);
 
@@ -315,6 +315,6 @@ const ForecastGraph = ({ graphData }) => {
       <svg ref={svgRef}></svg>
     </div>
   );
-};
+});
 
 export default ForecastGraph;

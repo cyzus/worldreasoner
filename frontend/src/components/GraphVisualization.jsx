@@ -1,9 +1,9 @@
-import React, { useRef, useEffect } from 'react'
+import React, { useRef, useEffect, memo } from 'react'
 import ForceGraph2D from 'react-force-graph-2d'
 import * as d3 from 'd3'
 import './GraphVisualization.css'
 
-const GraphVisualization = ({ graphData, onNodeClick, selectedNode, forceSettings }) => {
+const GraphVisualization = memo(function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSettings }) {
   const graphRef = useRef()
   const animationFrameRef = useRef()
   const timeRef = useRef(0)
@@ -138,6 +138,7 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode, forceSetting
 
   // Update pulse time for outcome nodes at reduced frequency (30 fps instead of 60)
   // This prevents calling Date.now() on every paint call
+  // OPTIMIZATION: Pause animation when page is hidden to save CPU/GPU
   useEffect(() => {
     const hasOutcomeNode = graphData.nodes.some(node => node.isOutcome)
     if (!hasOutcomeNode) {
@@ -152,6 +153,12 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode, forceSetting
     const updateInterval = 1000 / 30 // 30 fps for smooth pulsing
 
     const updatePulseTime = (timestamp) => {
+      // Skip animation if page is hidden (browser tab not active)
+      if (document.hidden) {
+        pulseAnimationRef.current = requestAnimationFrame(updatePulseTime)
+        return
+      }
+
       if (timestamp - lastUpdate >= updateInterval) {
         pulseTimeRef.current = Date.now()
         lastUpdate = timestamp
@@ -165,11 +172,24 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode, forceSetting
 
     pulseAnimationRef.current = requestAnimationFrame(updatePulseTime)
 
+    // Add visibility change listener to handle tab switching
+    const handleVisibilityChange = () => {
+      if (!document.hidden && hasOutcomeNode) {
+        // Resume animation when page becomes visible
+        if (!pulseAnimationRef.current) {
+          pulseAnimationRef.current = requestAnimationFrame(updatePulseTime)
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
     return () => {
       if (pulseAnimationRef.current) {
         cancelAnimationFrame(pulseAnimationRef.current)
         pulseAnimationRef.current = null
       }
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [graphData.nodes])
 
@@ -480,6 +500,6 @@ const GraphVisualization = ({ graphData, onNodeClick, selectedNode, forceSetting
       />
     </div>
   )
-}
+})
 
 export default GraphVisualization
