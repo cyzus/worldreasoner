@@ -63,6 +63,8 @@ function App() {
   // Local state (not in stores)
   const [statistics, setStatistics] = useState(null)
   const [questions, setQuestions] = useState([])
+  // Store question-filtered data (before time filter) to enable bidirectional time traversal
+  const [baseGraphData, setBaseGraphData] = useState({ nodes: [], links: [] })
 
   // Load full graph data once
   const loadGraph = useCallback(async (queryParams = {}) => {
@@ -112,6 +114,7 @@ function App() {
 
       setFullGraphData(cleanGraphData)
       setGraphData(cleanGraphData) // Initially show all
+      setBaseGraphData(cleanGraphData) // Initialize base for time filtering
     } catch (err) {
       setError(`Failed to load graph: ${err.message}`)
       console.error('Graph load error:', err)
@@ -150,10 +153,12 @@ function App() {
         .filter(link => !link.isSynthetic && link.type !== 'potentially_relevant')
 
       console.log('[TimeFilter] Resetting to full data:', resetNodes.length, 'nodes')
-      setGraphData({
+      const fullData = {
         nodes: resetNodes,
         links: resetLinks
-      })
+      }
+      setGraphData(fullData)
+      setBaseGraphData(fullData) // Reset base to full data
       setTimeFilter(null)
       setSelectedQuestionId(null)
       return
@@ -162,9 +167,9 @@ function App() {
     setTimeFilter({ start: startDate, end: endDate })
 
     // IMPORTANT: Time filter should NOT clear question filter
-    // Instead, it should apply on top of current graphData (which may already be question-filtered)
-    // Use current graphData as the base, not fullGraphData
-    const baseData = graphData.nodes.length > 0 ? graphData : fullGraphData
+    // Use baseGraphData which contains question-filtered data (or fullGraphData if no question selected)
+    // This allows bidirectional time traversal (expanding and contracting the time window)
+    const baseData = baseGraphData.nodes.length > 0 ? baseGraphData : fullGraphData
     
     // Filter nodes by date
     const filteredNodes = baseData.nodes
@@ -189,9 +194,10 @@ function App() {
       })
 
     // Update with new filtered data
+    // Create new arrays to ensure React detects the change
     setGraphData({
-      nodes: filteredNodes,
-      links: filteredLinks,
+      nodes: [...filteredNodes],
+      links: [...filteredLinks],
     })
 
     // DO NOT clear question filter - time filter works on top of question filter
@@ -318,10 +324,12 @@ function App() {
       target: typeof link.target === 'object' ? link.target.id : link.target
     }))
 
-    setGraphData({
+    const neighborhoodData = {
       nodes: neighborhoodNodes,
       links: neighborhoodLinks,
-    })
+    }
+    setGraphData(neighborhoodData)
+    setBaseGraphData(neighborhoodData) // Update base for time filtering
 
     // Clear time filter and question filter when showing neighborhood
     setTimeFilter(null)
@@ -381,10 +389,12 @@ function App() {
 
       console.log(`Resetting graph: ${resetNodes.length} nodes, ${resetLinks.length} links (filtered from ${fullGraphData.links.length})`)
 
-      setGraphData({
+      const resetData = {
         nodes: resetNodes,
         links: resetLinks
-      })
+      }
+      setGraphData(resetData)
+      setBaseGraphData(resetData) // Reset base to full data
       setSelectedQuestionId(null)
       setTimeFilter(null)
       setPriceHistoryData(null) // Clear price history
@@ -519,10 +529,12 @@ function App() {
       const combinedLinks = [...filteredLinks, ...syntheticLinks]
       console.log('Setting graph data with links:', combinedLinks.length, 'total (', filteredLinks.length, 'real +', syntheticLinks.length, 'synthetic)')
 
-      setGraphData({
+      const questionFilteredData = {
         nodes: filteredNodes,
         links: combinedLinks,
-      })
+      }
+      setGraphData(questionFilteredData)
+      setBaseGraphData(questionFilteredData) // Store as base for time filtering
 
       // Time filter will be preserved and applied on top if active
     } catch (error) {
@@ -577,7 +589,9 @@ function App() {
         })
       }
 
-      setGraphData({ nodes: filteredNodes, links: [...filteredLinks, ...syntheticLinks] })
+      const fallbackData = { nodes: filteredNodes, links: [...filteredLinks, ...syntheticLinks] }
+      setGraphData(fallbackData)
+      setBaseGraphData(fallbackData) // Store as base for time filtering
       setTimeFilter(null)
     }
   }, [fullGraphData, questions])

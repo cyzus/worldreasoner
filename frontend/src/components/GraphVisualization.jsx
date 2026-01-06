@@ -1,9 +1,9 @@
-import React, { useRef, useEffect, memo } from 'react'
+import React, { useRef, useEffect } from 'react'
 import ForceGraph2D from 'react-force-graph-2d'
 import * as d3 from 'd3'
 import './GraphVisualization.css'
 
-const GraphVisualization = memo(function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSettings }) {
+function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSettings }) {
   const graphRef = useRef()
   const animationFrameRef = useRef()
   const timeRef = useRef(0)
@@ -12,7 +12,6 @@ const GraphVisualization = memo(function GraphVisualization({ graphData, onNodeC
   const draggedNodeRef = useRef(null) // Track currently dragged node
   const pulseTimeRef = useRef(Date.now()) // Cache time for pulsing animation
   const pulseAnimationRef = useRef(null) // Track pulsing animation frame
-
 
   // Preserve node positions when filtering to prevent jarring movements
   useEffect(() => {
@@ -500,6 +499,6 @@ const GraphVisualization = memo(function GraphVisualization({ graphData, onNodeC
       />
     </div>
   )
-})
+}
 
 export default GraphVisualization
