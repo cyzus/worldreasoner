@@ -402,14 +402,8 @@ async def temporal_search_articles(
 ) -> str:
     """Search for articles with temporal filtering using hybrid search.
 
-    Uses a combination of keyword search (FTS5/BM25) and semantic search
-    (embeddings) to find the most relevant articles published BEFORE the
+    Find the most relevant articles published BEFORE the
     simulated date.
-
-    The hybrid approach provides:
-    - Fast keyword matching for exact terms
-    - Semantic understanding for related concepts
-    - BM25 + embedding fusion for best relevance
 
     Returns:
         JSON string with article summaries (only from before simulated date)
@@ -424,17 +418,17 @@ async def temporal_search_articles(
         # Get appropriate HybridSearch instance (handles per-request database switching)
         search_engine = _get_hybrid_search()
 
-        # Perform hybrid search with temporal filtering
+        # Perform search with temporal filtering
         # Returns article IDs ranked by hybrid score (FTS5 + embeddings)
         article_ids = await search_engine.search(
             query=query,
             max_results=max_results,
             cutoff_date=simulated_date,
-            method="hybrid",
+            method="fts", # "hybrid" "semantic" "fts"
             alpha=0.5  # Equal weight to keyword and semantic search
         )
 
-        logger.info(f"Hybrid search found {len(article_ids)} results")
+        logger.info(f"Found {len(article_ids)} results")
 
         # Get temporal database for fetching full articles
         temporal_db = _get_temporal_db(simulated_date)
@@ -458,7 +452,6 @@ async def temporal_search_articles(
         # Format response
         result = {
             "query": query,
-            "search_method": "hybrid (FTS5 + embeddings)",
             "simulated_date": simulated_date.isoformat(),
             "note": f"Only showing articles from BEFORE the simulated date ({simulated_date.date()})",
             "count": len(matches),

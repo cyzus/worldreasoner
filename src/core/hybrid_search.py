@@ -122,8 +122,10 @@ class HybridSearch:
             cursor = conn.cursor()
 
             # Index in FTS5
+            # FTS5 doesn't support primary keys, so DELETE first to avoid duplicates
+            cursor.execute("DELETE FROM articles_fts WHERE article_id = ?", (article.id,))
             cursor.execute("""
-                INSERT OR REPLACE INTO articles_fts (article_id, title, content)
+                INSERT INTO articles_fts (article_id, title, content)
                 VALUES (?, ?, ?)
             """, (article.id, article.title, article.content))
 
@@ -186,10 +188,15 @@ class HybridSearch:
         fts_data = [(a.id, a.title, a.content) for a in articles_to_index]
 
         # Insert FTS5 data upfront (lightweight operation)
+        # FTS5 doesn't support primary keys, so DELETE first to avoid duplicates
         with self._get_connection() as conn:
             cursor = conn.cursor()
+            # Delete existing entries for these article IDs
+            article_ids_to_delete = [(a.id,) for a in articles_to_index]
+            cursor.executemany("DELETE FROM articles_fts WHERE article_id = ?", article_ids_to_delete)
+            # Now insert fresh data
             cursor.executemany("""
-                INSERT OR REPLACE INTO articles_fts (article_id, title, content)
+                INSERT INTO articles_fts (article_id, title, content)
                 VALUES (?, ?, ?)
             """, fts_data)
             conn.commit()
