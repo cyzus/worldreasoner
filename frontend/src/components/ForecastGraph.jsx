@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, memo } from 'react';
-import * as d3 from 'd3';
+import { select } from 'd3-selection';
+import { zoom } from 'd3-zoom';
+import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from 'd3-force';
+import { drag } from 'd3-drag';
 import './ForecastGraph.css';
 
 const ForecastGraph = memo(function ForecastGraph({ graphData }) {
@@ -17,7 +20,7 @@ const ForecastGraph = memo(function ForecastGraph({ graphData }) {
     }
 
     try {
-      const svg = d3.select(svgRef.current);
+      const svg = select(svgRef.current);
       svg.selectAll('*').remove();
 
       // Get container width with fallback
@@ -63,20 +66,20 @@ const ForecastGraph = memo(function ForecastGraph({ graphData }) {
        .attr('height', height);
 
     // Add zoom behavior
-    const zoom = d3.zoom()
+    const zoomBehavior = zoom()
       .scaleExtent([0.1, 4])
       .on('zoom', (event) => {
         g.attr('transform', event.transform);
       });
 
-    svg.call(zoom);
+    svg.call(zoomBehavior);
 
     // Create force simulation with better spacing
-    const simulation = d3.forceSimulation(nodes)
-      .force('link', d3.forceLink(links).id(d => d.id).distance(200))
-      .force('charge', d3.forceManyBody().strength(-500))
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(80));
+    const simulation = forceSimulation(nodes)
+      .force('link', forceLink(links).id(d => d.id).distance(200))
+      .force('charge', forceManyBody().strength(-500))
+      .force('center', forceCenter(width / 2, height / 2))
+      .force('collision', forceCollide().radius(80));
 
     // Add arrow markers for directed edges
     svg.append('defs').selectAll('marker')
@@ -143,7 +146,7 @@ const ForecastGraph = memo(function ForecastGraph({ graphData }) {
         .attr('stroke-width', 3)
         .style('cursor', 'pointer')
         .style('filter', 'drop-shadow(0px 2px 4px rgba(0,0,0,0.2))')
-        .call(d3.drag()
+        .call(drag()
           .on('start', dragStarted)
           .on('drag', dragged)
           .on('end', dragEnded));
@@ -173,9 +176,9 @@ const ForecastGraph = memo(function ForecastGraph({ graphData }) {
 
     // Position background rectangles based on text size
     labelGroup.each(function(d) {
-      const textNode = d3.select(this).select('text').node();
+      const textNode = select(this).select('text').node();
       const bbox = textNode.getBBox();
-      d3.select(this).select('rect')
+      select(this).select('rect')
         .attr('x', bbox.x - 4)
         .attr('y', bbox.y - 2)
         .attr('width', bbox.width + 8)
@@ -183,7 +186,7 @@ const ForecastGraph = memo(function ForecastGraph({ graphData }) {
     });
 
     // Add tooltips with better styling
-    const tooltip = d3.select('body').append('div')
+    const tooltip = select('body').append('div')
       .attr('class', 'forecast-graph-tooltip')
       .style('position', 'absolute')
       .style('visibility', 'hidden')
@@ -198,7 +201,7 @@ const ForecastGraph = memo(function ForecastGraph({ graphData }) {
       .style('z-index', 10000);
 
     node.on('mouseover', function(event, d) {
-      d3.select(this)
+      select(this)
         .attr('r', 30)
         .attr('stroke-width', 4);
 
@@ -214,14 +217,14 @@ const ForecastGraph = memo(function ForecastGraph({ graphData }) {
         .style('left', (event.pageX + 10) + 'px');
     })
     .on('mouseout', function() {
-      d3.select(this)
+      select(this)
         .attr('r', 25)
         .attr('stroke-width', 3);
       tooltip.style('visibility', 'hidden');
     });
 
     link.on('mouseover', function(event, d) {
-      d3.select(this)
+      select(this)
         .attr('stroke-width', Math.max(3, d.strength * 4));
 
       tooltip.style('visibility', 'visible')
@@ -237,7 +240,7 @@ const ForecastGraph = memo(function ForecastGraph({ graphData }) {
         .style('left', (event.pageX + 10) + 'px');
     })
     .on('mouseout', function(event, d) {
-      d3.select(this)
+      select(this)
         .attr('stroke-width', Math.max(1, d.strength * 3));
       tooltip.style('visibility', 'hidden');
     });

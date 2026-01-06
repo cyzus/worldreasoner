@@ -1,5 +1,12 @@
 import React, { useEffect, useRef, useState, memo } from 'react'
-import * as d3 from 'd3'
+import { select } from 'd3-selection'
+import { scaleTime, scaleLinear, scaleOrdinal } from 'd3-scale'
+import { extent, group, bisector } from 'd3-array'
+import { axisLeft, axisBottom } from 'd3-axis'
+import { timeMonth, timeWeek, timeDay } from 'd3-time'
+import { timeFormat } from 'd3-time-format'
+import { line, curveMonotoneX } from 'd3-shape'
+import { pointer } from 'd3-selection'
 
 /**
  * TimeSeriesChart - Displays Polymarket price history with event markers
@@ -25,7 +32,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
     if (!priceHistory || typeof priceHistory !== 'object' || Object.keys(priceHistory).length === 0) return
 
     // Clear previous chart
-    const svg = d3.select(svgRef.current)
+    const svg = select(svgRef.current)
     svg.selectAll('*').remove()
 
     // Base Margins
@@ -65,8 +72,8 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
     }
 
     // Create X scale first to calculate event positions
-    const xExtent = d3.extent(allData, d => d.timestamp)
-    const xScale = d3.scaleTime()
+    const xExtent = extent(allData, d => d.timestamp)
+    const xScale = scaleTime()
       .domain([new Date(xExtent[0]), new Date(xExtent[1])])
       .range([0, innerWidth])
 
@@ -132,13 +139,13 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
       .append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`)
 
-    const yScale = d3.scaleLinear()
+    const yScale = scaleLinear()
       .domain([0, 1])
       .range([innerHeight, 0])
       .nice()
 
     // Color scale for different outcomes
-    const colorScale = d3.scaleOrdinal()
+    const colorScale = scaleOrdinal()
       .domain(outcomes)
       .range(['#4CAF50', '#F44336', '#2196F3', '#FF9800'])
 
@@ -146,7 +153,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
     g.append('g')
       .attr('class', 'grid')
       .attr('opacity', 0.15)
-      .call(d3.axisLeft(yScale)
+      .call(axisLeft(yScale)
         .tickSize(-innerWidth)
         .tickFormat('')
       )
@@ -158,29 +165,29 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
     const daysRange = timeRange / (1000 * 60 * 60 * 24)
     
     // Choose appropriate tick interval based on data range
-    let tickInterval, tickFormat
+    let tickInterval, tickFormatFunc
     if (daysRange > 180) {
-      tickInterval = d3.timeMonth.every(1)
-      tickFormat = d3.timeFormat('%b %Y')
+      tickInterval = timeMonth.every(1)
+      tickFormatFunc = timeFormat('%b %Y')
     } else if (daysRange > 60) {
-      tickInterval = d3.timeWeek.every(2)
-      tickFormat = d3.timeFormat('%b %d')
+      tickInterval = timeWeek.every(2)
+      tickFormatFunc = timeFormat('%b %d')
     } else if (daysRange > 30) {
-      tickInterval = d3.timeWeek.every(1)
-      tickFormat = d3.timeFormat('%b %d')
+      tickInterval = timeWeek.every(1)
+      tickFormatFunc = timeFormat('%b %d')
     } else if (daysRange > 7) {
-      tickInterval = d3.timeDay.every(3)
-      tickFormat = d3.timeFormat('%b %d')
+      tickInterval = timeDay.every(3)
+      tickFormatFunc = timeFormat('%b %d')
     } else {
-      tickInterval = d3.timeDay.every(1)
-      tickFormat = d3.timeFormat('%b %d')
+      tickInterval = timeDay.every(1)
+      tickFormatFunc = timeFormat('%b %d')
     }
-    
+
     const xAxis = g.append('g')
       .attr('transform', `translate(0,${innerHeight})`)
-      .call(d3.axisBottom(xScale)
+      .call(axisBottom(xScale)
         .ticks(tickInterval)
-        .tickFormat(tickFormat)
+        .tickFormat(tickFormatFunc)
       )
 
     xAxis.selectAll('text')
@@ -197,7 +204,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
 
     // Add Y axis
     const yAxis = g.append('g')
-      .call(d3.axisLeft(yScale).ticks(5).tickFormat(d => `${(d * 100).toFixed(0)}%`))
+      .call(axisLeft(yScale).ticks(5).tickFormat(d => `${(d * 100).toFixed(0)}%`))
 
     yAxis.selectAll('text')
       .style('fill', '#495057')
@@ -230,13 +237,13 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
       .text('Market Probability')
 
     // Create line generator
-    const line = d3.line()
+    const lineGenerator = line()
       .x(d => xScale(new Date(d.timestamp)))
       .y(d => yScale(d.price))
-      .curve(d3.curveMonotoneX)
+      .curve(curveMonotoneX)
 
     // Group data by outcome
-    const dataByOutcome = d3.group(allData, d => d.outcome)
+    const dataByOutcome = group(allData, d => d.outcome)
 
     // Draw price lines
     dataByOutcome.forEach((data, outcome) => {
@@ -245,7 +252,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
         .attr('fill', 'none')
         .attr('stroke', colorScale(outcome))
         .attr('stroke-width', 2.5)
-        .attr('d', line)
+        .attr('d', lineGenerator)
         .style('opacity', 0.9)
     })
 
@@ -303,13 +310,13 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
           .style('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))')
           .on('mouseenter', function() {
             setHoveredEvent(event)
-            d3.select(this)
+            select(this)
               .attr('r', isTarget ? 10 : 8)
               .attr('stroke-width', 3)
           })
           .on('mouseleave', function() {
             setHoveredEvent(null)
-            d3.select(this)
+            select(this)
               .attr('r', isTarget ? 8 : 6)
               .attr('stroke-width', 2)
           })
@@ -438,7 +445,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
       .attr('fill', 'none')
       .attr('pointer-events', 'all')
       .on('mousemove', function(event) {
-        const [mouseX] = d3.pointer(event)
+        const [mouseX] = pointer(event)
         const hoveredDate = xScale.invert(mouseX)
 
         tooltipLine
@@ -452,8 +459,8 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
         const priceInfo = []
         dataByOutcome.forEach((data, outcome) => {
           // Binary search for closest point
-          const bisect = d3.bisector(d => d.timestamp).left
-          const idx = bisect(data, hoveredDate.getTime())
+          const bisectFunc = bisector(d => d.timestamp).left
+          const idx = bisectFunc(data, hoveredDate.getTime())
           const closestPoint = data[idx] || data[data.length - 1]
 
           if (closestPoint) {

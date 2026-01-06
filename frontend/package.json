@@ -10,16 +10,21 @@
     "lint": "eslint src"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.90.16",
+    "@tanstack/react-query-devtools": "^5.91.2",
     "axios": "^1.7.0",
     "d3": "^7.9.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-force-graph-2d": "^1.25.4"
+    "react-force-graph-2d": "^1.25.4",
+    "zustand": "^5.0.9"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9.0.0",
     "eslint-plugin-react": "^7.37.0",
+    "rollup-plugin-visualizer": "^6.0.5",
+    "terser": "^5.44.1",
     "vite": "^6.0.0"
   }
 }

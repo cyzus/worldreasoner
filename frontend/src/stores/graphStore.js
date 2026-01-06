@@ -1,0 +1,42 @@
+import { create } from 'zustand'
+import { devtools } from 'zustand/middleware'
+
+export const useGraphStore = create(
+  devtools((set, get) => ({
+    // State
+    fullGraphData: { nodes: [], links: [] },
+    graphData: { nodes: [], links: [] },
+    selectedNode: null,
+    centerNode: null,
+    filters: {
+      nodeTypes: [],
+      maxNodes: 1000,
+      maxEdges: 5000,
+      minEdgeWeight: 0,
+    },
+    timeFilter: null, // { start: Date, end: Date }
+    loading: false,
+    error: null,
+
+    // Actions
+    setFullGraphData: (data) => set({ fullGraphData: data }),
+    setGraphData: (data) => set({ graphData: data }),
+    setSelectedNode: (node) => set({
+      selectedNode: node,
+      centerNode: node
+    }),
+    clearSelectedNode: () => set({ selectedNode: null }),
+    setFilters: (filters) => set({ filters }),
+    setTimeFilter: (timeFilter) => set({ timeFilter }),
+    setLoading: (loading) => set({ loading }),
+    setError: (error) => set({ error }),
+
+    // Computed selectors
+    getNodeById: (id) => {
+      const { graphData } = get()
+      return graphData.nodes.find(n => n.id === id)
+    },
+  }), {
+    name: 'graph-store'
+  })
+)

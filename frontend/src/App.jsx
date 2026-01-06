@@ -1,48 +1,68 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react'
 import GraphVisualization from './components/GraphVisualization'
 import ControlPanel from './components/ControlPanel'
 import EventDetails from './components/EventDetails'
 import QuestionList from './components/QuestionList'
-import PipelinePage from './components/PipelinePage'
-import QuestionCollectionPage from './components/QuestionCollectionPage'
-import ForecastPage from './components/ForecastPage'
-import EventGraphsPage from './components/EventGraphsPage'
-import Timeline from './components/Timeline'
-import TimeSeriesChart from './components/TimeSeriesChart'
 import DatabaseDropdown from './components/DatabaseDropdown'
 import SearchIndexStatus from './components/SearchIndexStatus'
+import Timeline from './components/Timeline'
+import TimeSeriesChart from './components/TimeSeriesChart'
+
+// Lazy load heavy page components for code splitting
+const PipelinePage = lazy(() => import('./components/PipelinePage'))
+const QuestionCollectionPage = lazy(() => import('./components/QuestionCollectionPage'))
+const ForecastPage = lazy(() => import('./components/ForecastPage'))
+const EventGraphsPage = lazy(() => import('./components/EventGraphsPage'))
 import { fetchGraph, fetchStatistics, fetchQuestions, fetchQuestionEvents, fetchQuestionPriceHistory } from './api/graphApi'
+import { useGraphStore } from './stores/graphStore'
+import { useQuestionStore } from './stores/questionStore'
+import { useUIStore } from './stores/uiStore'
 import './App.css'
 
 function App() {
-  const [fullGraphData, setFullGraphData] = useState({ nodes: [], links: [] }) // Full dataset
-  const [graphData, setGraphData] = useState({ nodes: [], links: [] }) // Filtered dataset
+  // Graph store
+  const fullGraphData = useGraphStore(state => state.fullGraphData)
+  const setFullGraphData = useGraphStore(state => state.setFullGraphData)
+  const graphData = useGraphStore(state => state.graphData)
+  const setGraphData = useGraphStore(state => state.setGraphData)
+  const selectedNode = useGraphStore(state => state.selectedNode)
+  const setSelectedNode = useGraphStore(state => state.setSelectedNode)
+  const loading = useGraphStore(state => state.loading)
+  const setLoading = useGraphStore(state => state.setLoading)
+  const error = useGraphStore(state => state.error)
+  const setError = useGraphStore(state => state.setError)
+  const filters = useGraphStore(state => state.filters)
+  const setFilters = useGraphStore(state => state.setFilters)
+  const timeFilter = useGraphStore(state => state.timeFilter)
+  const setTimeFilter = useGraphStore(state => state.setTimeFilter)
+
+  // Question store
+  const selectedQuestionId = useQuestionStore(state => state.selectedQuestionId)
+  const setSelectedQuestionId = useQuestionStore(state => state.setSelectedQuestion)
+  const priceHistoryData = useQuestionStore(state => state.priceHistoryData)
+  const setPriceHistoryData = useQuestionStore(state => state.setPriceHistoryData)
+  const loadingPriceHistory = useQuestionStore(state => state.loadingPriceHistory)
+  const setLoadingPriceHistory = useQuestionStore(state => state.setLoadingPriceHistory)
+  const questionRelatedEvents = useQuestionStore(state => state.questionRelatedEvents)
+  const setQuestionRelatedEvents = useQuestionStore(state => state.setQuestionRelatedEvents)
+  const priceHistoryInterval = useQuestionStore(state => state.priceHistoryInterval)
+  const setPriceHistoryInterval = useQuestionStore(state => state.setPriceHistoryInterval)
+  const previewQuestions = useQuestionStore(state => state.previewQuestions)
+  const setPreviewQuestions = useQuestionStore(state => state.setPreviewQuestions)
+  const previewSourceTab = useQuestionStore(state => state.previewSourceTab)
+  const setPreviewSourceTab = useQuestionStore(state => state.setPreviewSourceTab)
+  const previewSource = useQuestionStore(state => state.previewSource)
+  const setPreviewSource = useQuestionStore(state => state.setPreviewSource)
+
+  // UI store
+  const leftPanelTab = useUIStore(state => state.leftPanelTab)
+  const setLeftPanelTab = useUIStore(state => state.setLeftPanelTab)
+  const currentDatabasePath = useUIStore(state => state.currentDatabasePath)
+  const setCurrentDatabasePath = useUIStore(state => state.setCurrentDatabasePath)
+
+  // Local state (not in stores)
   const [statistics, setStatistics] = useState(null)
-  const [selectedNode, setSelectedNode] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const [filters, setFilters] = useState({
-    nodeTypes: [],
-    maxNodes: 1000,
-    maxEdges: 5000,
-    minEdgeWeight: 0,
-  })
-  const [timeFilter, setTimeFilter] = useState(null) // { start: Date, end: Date }
-  const [questions, setQuestions] = useState([]) // List of all questions
-  const [selectedQuestionId, setSelectedQuestionId] = useState(null) // Currently selected question filter
-  const [leftPanelTab, setLeftPanelTab] = useState('eventgraphs') // 'eventgraphs', 'collection', 'forecast', or 'pipelines'
-  const [priceHistoryData, setPriceHistoryData] = useState(null) // Price history for selected question
-  const [loadingPriceHistory, setLoadingPriceHistory] = useState(false) // Loading state for price history
-  const [questionRelatedEvents, setQuestionRelatedEvents] = useState([]) // All events related to selected question
-  const [priceHistoryInterval, setPriceHistoryInterval] = useState('max') // Price history interval (max, 1d, 1h, 5m)
-
-  // Question collection preview state (persists across navigation)
-  const [previewQuestions, setPreviewQuestions] = useState([])
-  const [previewSourceTab, setPreviewSourceTab] = useState('polymarket')
-  const [previewSource, setPreviewSource] = useState(null) // Track which source the preview came from
-
-  // Current database path for search index status
-  const [currentDatabasePath, setCurrentDatabasePath] = useState(null)
+  const [questions, setQuestions] = useState([])
 
   // Load full graph data once
   const loadGraph = useCallback(async (queryParams = {}) => {
@@ -656,55 +676,57 @@ function App() {
           </button>
         </div>
 
-        {leftPanelTab === 'eventgraphs' ? (
-          /* Event Graphs page with nested tabs */
-          <EventGraphsPage
-            fullGraphData={fullGraphData}
-            graphData={graphData}
-            selectedNode={selectedNode}
-            onNodeClick={handleNodeClick}
-            loading={loading}
-            error={error}
-            filters={filters}
-            onFilterChange={handleFilterChange}
-            onRefresh={() => loadGraph(filters)}
-            questions={questions}
-            selectedQuestionId={selectedQuestionId}
-            onQuestionFilter={(questionId) => {
-              setSelectedQuestionId(questionId)
-              handleQuestionFilter(questionId)
-            }}
-            onShowNeighborhood={handleShowNeighborhood}
-            onTimeRangeChange={handleTimeRangeChange}
-            priceHistoryData={priceHistoryData}
-            loadingPriceHistory={loadingPriceHistory}
-            questionRelatedEvents={questionRelatedEvents}
-            priceHistoryInterval={priceHistoryInterval}
-            setPriceHistoryInterval={setPriceHistoryInterval}
-            onQuestionUpdated={handleQuestionUpdated}
-            onQuestionDeleted={handleQuestionDeleted}
-          />
-        ) : leftPanelTab === 'collection' ? (
-          /* Full-width collection page */
-          <QuestionCollectionPage
-            onQuestionsAdded={handleQuestionsAdded}
-            previewQuestions={previewQuestions}
-            setPreviewQuestions={setPreviewQuestions}
-            sourceTab={previewSourceTab}
-            setSourceTab={setPreviewSourceTab}
-            previewSource={previewSource}
-            setPreviewSource={setPreviewSource}
-          />
-        ) : leftPanelTab === 'forecast' ? (
-          /* Full-width forecast page */
-          <ForecastPage />
-        ) : leftPanelTab === 'pipelines' ? (
-          /* Full-width pipeline page */
-          <PipelinePage
-            questions={questions}
-            onJobComplete={handleJobComplete}
-          />
-        ) : null}
+        <Suspense fallback={<div className="loading-fallback">Loading...</div>}>
+          {leftPanelTab === 'eventgraphs' ? (
+            /* Event Graphs page with nested tabs */
+            <EventGraphsPage
+              fullGraphData={fullGraphData}
+              graphData={graphData}
+              selectedNode={selectedNode}
+              onNodeClick={handleNodeClick}
+              loading={loading}
+              error={error}
+              filters={filters}
+              onFilterChange={handleFilterChange}
+              onRefresh={() => loadGraph(filters)}
+              questions={questions}
+              selectedQuestionId={selectedQuestionId}
+              onQuestionFilter={(questionId) => {
+                setSelectedQuestionId(questionId)
+                handleQuestionFilter(questionId)
+              }}
+              onShowNeighborhood={handleShowNeighborhood}
+              onTimeRangeChange={handleTimeRangeChange}
+              priceHistoryData={priceHistoryData}
+              loadingPriceHistory={loadingPriceHistory}
+              questionRelatedEvents={questionRelatedEvents}
+              priceHistoryInterval={priceHistoryInterval}
+              setPriceHistoryInterval={setPriceHistoryInterval}
+              onQuestionUpdated={handleQuestionUpdated}
+              onQuestionDeleted={handleQuestionDeleted}
+            />
+          ) : leftPanelTab === 'collection' ? (
+            /* Full-width collection page */
+            <QuestionCollectionPage
+              onQuestionsAdded={handleQuestionsAdded}
+              previewQuestions={previewQuestions}
+              setPreviewQuestions={setPreviewQuestions}
+              sourceTab={previewSourceTab}
+              setSourceTab={setPreviewSourceTab}
+              previewSource={previewSource}
+              setPreviewSource={setPreviewSource}
+            />
+          ) : leftPanelTab === 'forecast' ? (
+            /* Full-width forecast page */
+            <ForecastPage />
+          ) : leftPanelTab === 'pipelines' ? (
+            /* Full-width pipeline page */
+            <PipelinePage
+              questions={questions}
+              onJobComplete={handleJobComplete}
+            />
+          ) : null}
+        </Suspense>
       </div>
     </div>
   )
