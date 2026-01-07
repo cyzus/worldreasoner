@@ -2,7 +2,7 @@
   position: absolute;
   top: 1rem;
   right: 1rem;
-  width: 400px;
+  width: 450px;
   background: #ffffff;
   border: 1px solid #dee2e6;
   border-radius: 8px;
@@ -20,6 +20,7 @@
     opacity: 0;
     transform: translateX(20px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -46,7 +47,7 @@
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
-  padding: 0.25rem 0.75rem;
+  padding: 0.3rem 0.75rem;
   border-radius: 4px;
   letter-spacing: 0.05em;
   background-color: #e9ecef;
@@ -77,6 +78,7 @@
   font-weight: 600;
   margin: 0;
   line-height: 1.4;
+  word-wrap: break-word;
 }
 
 /* Content */
@@ -84,40 +86,51 @@
   padding: 1.25rem;
   overflow-y: auto;
   flex: 1;
-  min-height: 0; /* Crucial for nested flex scrolling */
+  min-height: 0;
+  /* Crucial for nested flex scrolling */
 }
 
-/* Metrics Grid */
+/* Metrics Grid - Fixed to prevent text overflow */
 .metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 0.75rem;
   margin-bottom: 1.5rem;
   background: #f8f9fa;
-  padding: 0.75rem;
+  padding: 1rem;
   border-radius: 6px;
   border: 1px solid #e9ecef;
 }
 
 .metric-item {
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
   align-items: center;
-  text-align: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.metric-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
 }
 
 .metric-label {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: #6c757d;
   text-transform: uppercase;
-  margin-bottom: 0.25rem;
   font-weight: 600;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
 }
 
 .metric-value {
   font-size: 0.875rem;
   font-weight: 600;
   color: #212529;
+  text-align: right;
+  word-wrap: break-word;
+  max-width: 70%;
 }
 
 .status-value {
@@ -134,6 +147,9 @@
   font-weight: 600;
   color: #495057;
   margin: 0 0 0.5rem 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.75rem;
 }
 
 .description-block p {
@@ -141,6 +157,7 @@
   color: #212529;
   line-height: 1.6;
   margin: 0;
+  word-wrap: break-word;
 }
 
 /* Stats Row */
@@ -184,7 +201,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.75rem 1rem;
+  padding: 0.875rem 1rem;
   background: #ffffff;
   border: none;
   cursor: pointer;
@@ -201,6 +218,11 @@
 .section-toggle.active {
   background-color: #f8f9fa;
   border-bottom: 1px solid #dee2e6;
+}
+
+.toggle-text {
+  font-weight: 600;
+  color: #495057;
 }
 
 .toggle-meta {
@@ -224,21 +246,24 @@
 }
 
 /* Cards (Articles & Questions) */
-.article-card, .question-card {
+.article-card,
+.question-card {
   background: #ffffff;
-  padding: 0.75rem;
-  border-radius: 4px;
+  padding: 0.875rem;
+  border-radius: 6px;
   border: 1px solid #dee2e6;
   margin-bottom: 0.75rem;
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
-.article-card:hover, .question-card:hover {
+.article-card:hover,
+.question-card:hover {
   transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
-.article-card:last-child, .question-card:last-child {
+.article-card:last-child,
+.question-card:last-child {
   margin-bottom: 0;
 }
 
@@ -257,6 +282,7 @@
   line-height: 1.4;
   flex: 1;
   margin-right: 0.5rem;
+  word-wrap: break-word;
 }
 
 .article-date {
@@ -270,29 +296,31 @@
   font-size: 0.7rem;
   color: #495057;
   background: #e9ecef;
-  padding: 0.125rem 0.375rem;
+  padding: 0.25rem 0.5rem;
   border-radius: 4px;
   margin-bottom: 0.5rem;
   font-weight: 500;
 }
 
 .article-excerpt {
-  font-size: 0.8rem;
+  font-size: 0.8125rem;
   color: #495057;
   margin: 0 0 0.5rem 0;
-  line-height: 1.5;
+  line-height: 1.6;
+  word-wrap: break-word;
 }
 
 .article-link {
   font-size: 0.75rem;
-  color: #0d6efd;
+  color: #4a90e2;
   text-decoration: none;
   font-weight: 500;
+  transition: color 0.2s;
 }
 
 .article-link:hover {
   text-decoration: underline;
-  color: #0a58ca;
+  color: #2563eb;
 }
 
 /* Question Card Specifics */
@@ -301,17 +329,20 @@
   font-weight: 500;
   color: #212529;
   margin-bottom: 0.5rem;
+  line-height: 1.5;
+  word-wrap: break-word;
 }
 
 .question-tags {
   display: flex;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .tag {
   font-size: 0.7rem;
-  padding: 0.125rem 0.375rem;
+  padding: 0.25rem 0.5rem;
   border-radius: 4px;
   border: 1px solid #dee2e6;
   background: #f8f9fa;
@@ -323,12 +354,13 @@
   color: #6c757d;
   border-top: 1px solid #e9ecef;
   padding-top: 0.5rem;
+  margin-top: 0.5rem;
 }
 
 /* Actions Footer */
 .actions-footer {
-  margin-top: 1rem;
-  padding-top: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
   border-top: 1px solid #dee2e6;
   flex-shrink: 0;
 }
@@ -337,8 +369,9 @@
   font-size: 0.75rem;
   text-transform: uppercase;
   color: #6c757d;
-  margin: 0 0 0.75rem 0;
+  margin: 0 0 0.875rem 0;
   font-weight: 600;
+  letter-spacing: 0.05em;
 }
 
 .button-group {
@@ -348,23 +381,24 @@
 
 .action-btn {
   flex: 1;
-  padding: 0.5rem;
-  border-radius: 4px;
+  padding: 0.625rem 1rem;
+  border-radius: 6px;
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
+  text-align: center;
 }
 
 .action-btn.primary {
-  background: #212529;
+  background: #4a90e2;
   color: white;
-  border: 1px solid #212529;
+  border: 1px solid #4a90e2;
 }
 
 .action-btn.primary:hover {
-  background: #343a40;
-  border-color: #343a40;
+  background: #2563eb;
+  border-color: #2563eb;
 }
 
 .action-btn.secondary {
@@ -376,13 +410,15 @@
 .action-btn.secondary:hover {
   background: #f8f9fa;
   border-color: #adb5bd;
+  color: #212529;
 }
 
-.loading-message, .empty-message {
+.loading-message,
+.empty-message {
   text-align: center;
   color: #6c757d;
   font-size: 0.875rem;
-  padding: 1rem;
+  padding: 1.5rem;
 }
 
 /* Scrollbar styling */

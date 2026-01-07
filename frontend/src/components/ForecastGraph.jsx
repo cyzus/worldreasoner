@@ -39,10 +39,21 @@ const ForecastGraph = memo(function ForecastGraph({
     const nodes = graphData.events.map(event => ({
       id: event.id,
       name: event.title || event.name || event.id,
-      title: event.title || event.name || event.id,
+      type: event.event_type || event.type || 'event',  // Match evidence graph structure
       domain: event.domain || 'unknown',
-      description: event.description || '',
       isOutcome: event.id === targetEventId,
+      // Structure properties to match evidence graph format
+      properties: {
+        event_type: event.event_type || event.properties?.event_type || event.type,
+        description: event.description || event.properties?.description || '',
+        occurred_date: event.occurred_date || event.properties?.occurred_date,
+        predicted_date: event.predicted_date || event.properties?.predicted_date,
+        resolution_date: event.resolution_date || event.properties?.resolution_date,
+        status: event.status || event.properties?.status,
+        tags: event.tags || event.properties?.tags || [],
+        ...event.properties  // Preserve any additional properties
+      },
+      // Keep any additional fields from the original event
       ...event
     }))
 

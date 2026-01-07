@@ -79,34 +79,61 @@ const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborh
     <div className="event-details">
       <div className="details-header">
         <div className="header-top">
-          <span className={`node-type-badge ${node.type.toLowerCase()}`}>{node.type}</span>
+          <span
+            className="node-type-badge"
+            style={{
+              textTransform: 'capitalize',
+              backgroundColor: '#e7f3ff',
+              color: '#2563eb',
+              border: '1px solid #bfdbfe',
+              fontSize: '0.75rem',
+              fontWeight: '600',
+              padding: '0.35rem 0.85rem',
+              borderRadius: '6px',
+              letterSpacing: '0.025em'
+            }}
+          >
+            {node.domain || 'General'}
+          </span>
           <button className="close-btn" onClick={onClose} aria-label="Close details">
             ×
           </button>
         </div>
-        <h3>{node.name}</h3>
+        <h3 style={{
+          fontSize: '1.25rem',
+          fontWeight: '600',
+          lineHeight: '1.5',
+          marginTop: '0.875rem',
+          color: '#1f2937'
+        }}>
+          {node.name}
+        </h3>
       </div>
 
       <div className="details-content">
-        <div className="metrics-grid">
-          <div className="metric-item">
-            <span className="metric-label">Importance</span>
-            <span className="metric-value">{node.properties?.importance?.toFixed(2) || 'N/A'}</span>
+        <div className="metrics-grid" style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+          <div className="metric-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '0.75rem', borderBottom: '1px solid #e9ecef' }}>
+            <span className="metric-label" style={{ fontSize: '0.8125rem', color: '#6c757d', fontWeight: '500' }}>Event Type</span>
+            <span className="metric-value" style={{ textAlign: 'right', wordBreak: 'break-word', maxWidth: '65%', fontSize: '0.9375rem', fontWeight: '600', color: '#212529', textTransform: 'capitalize' }}>
+              {node.properties?.event_type || node.event_type || 'N/A'}
+            </span>
           </div>
-          
+
           {(node.properties?.occurred_date || node.properties?.predicted_date) && (
-            <div className="metric-item">
-              <span className="metric-label">Date</span>
-              <span className="metric-value">
+            <div className="metric-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '0.75rem', borderBottom: '1px solid #e9ecef' }}>
+              <span className="metric-label" style={{ fontSize: '0.8125rem', color: '#6c757d', fontWeight: '500' }}>Date</span>
+              <span className="metric-value" style={{ textAlign: 'right', wordBreak: 'break-word', maxWidth: '65%', fontSize: '0.9375rem', fontWeight: '600', color: '#212529' }}>
                 {formatDate(node.properties?.occurred_date || node.properties?.predicted_date)}
               </span>
             </div>
           )}
 
           {node.properties?.status && (
-            <div className="metric-item">
-              <span className="metric-label">Status</span>
-              <span className="metric-value status-value">{node.properties.status}</span>
+            <div className="metric-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '0.75rem', borderBottom: '1px solid #e9ecef' }}>
+              <span className="metric-label" style={{ fontSize: '0.8125rem', color: '#6c757d', fontWeight: '500' }}>Status</span>
+              <span className="metric-value status-value" style={{ textAlign: 'right', wordBreak: 'break-word', maxWidth: '65%', fontSize: '0.9375rem', fontWeight: '600', color: '#212529', textTransform: 'capitalize' }}>
+                {node.properties.status}
+              </span>
             </div>
           )}
         </div>
