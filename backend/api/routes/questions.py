@@ -45,6 +45,7 @@ class QuestionListItem(BaseModel):
     related_event_ids: List[str]
     quality_score: Optional[float] = None
     resolution_date: Optional[str] = None
+    estimated_start_time: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
 
 
@@ -501,6 +502,7 @@ async def get_questions(
                 related_event_ids=q.related_event_ids,
                 quality_score=q.quality_score,
                 resolution_date=q.resolution_date.isoformat() if q.resolution_date else None,
+                estimated_start_time=q.estimated_start_time.isoformat() if q.estimated_start_time else None,
                 metadata=q.metadata,
             )
             for q in questions
