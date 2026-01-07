@@ -61,7 +61,7 @@ class HindsightAgent(BaseAgent):
                 ArticleCollectorTool(db_path=db_path, question_id=question_id),  # Provenance-aware
                 ArticleInspectorTool(db_path=db_path, question_id=question_id),  # Check coverage
                 WebFetchTool(),
-                WebSearchTool(),
+                WebSearchTool(db_path=db_path, question_id=question_id),  # Provenance-aware
             ],
             max_steps=15,
             stream_outputs=False,

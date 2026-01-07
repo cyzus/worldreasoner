@@ -57,11 +57,9 @@ class WebSearchTool(Tool):
 
     def __init__(
         self,
-        db=None,
         db_path: str = None,
         collector=None,
         question_id: Optional[str] = None,
-        question_resolution_date: Optional[datetime] = None,
         auto_collect_enabled: bool = False,
         max_auto_collect: int = 5,
         domain: str = "general",
@@ -73,19 +71,24 @@ class WebSearchTool(Tool):
             question_id, question_resolution_date: Required if auto_collect_enabled=True
             db, db_path, collector, domain, max_auto_collect: Passed to ArticleCollectorTool if enabled
         """
-        # Validate auto-collect requirements
-        if auto_collect_enabled and (not question_id or not question_resolution_date):
-            raise ValueError("question_id and question_resolution_date required when auto_collect_enabled=True")
-
-        self.auto_collect_enabled = auto_collect_enabled
+        self.db = None
+        if db_path:
+            from src.core.database import GenericDatabase
+            self.db = GenericDatabase(db_path)
+        if self.db and question_id:
+            from src.domain.models.question import Question
+            self.question_id = question_id
+            self.question = self.db.get(Question, ids=question_id)
+            self.auto_collect_enabled = self.question is not None
+            self.question_resolution_date = self.question.resolution_date if self.question else None
+            
         self.max_auto_collect = max_auto_collect
         self.domain = domain
-        self.question_resolution_date = question_resolution_date
 
         # Initialize article collector if enabled
-        if auto_collect_enabled:
+        if self.auto_collect_enabled:
             from src.tools.article_collector import ArticleCollectorTool
-            self.article_collector = ArticleCollectorTool(db=db, db_path=db_path, collector=collector, question_id=question_id)
+            self.article_collector = ArticleCollectorTool(db=self.db, db_path=db_path, collector=collector, question_id=self.question_id)
             logger.info(f"Auto-collect enabled (question_id={question_id}, max={max_auto_collect})")
         else:
             self.article_collector = None
