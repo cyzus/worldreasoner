@@ -131,7 +131,7 @@ function EventGraphsPage({
   }, [selectedForecastId])
 
   return (
-    <div className="event-graphs-page">
+    <div className="event-graphs-page page-container">
       {/* Nested tabs */}
       <div className="nested-tabs">
         <button
@@ -149,9 +149,9 @@ function EventGraphsPage({
       </div>
 
       {/* Main layout with sidebar and graph */}
-      <div className="main-layout">
-        <div className="left-sidebar">
-          <div className="sidebar-content">
+      <div className="page-content">
+        <div className="page-sidebar">
+          <div className="scroll-container">
             {nestedTab === 'controls' && (
               <ControlPanel
                 filters={filters}
@@ -180,7 +180,7 @@ function EventGraphsPage({
           </div>
         </div>
 
-        <div className="graph-main">
+        <div className="page-main" style={{ padding: '0 16px 16px 16px' }}>
           {/* Forecast controls - show when question is selected */}
           {selectedQuestionId && (
             <div style={{
@@ -191,7 +191,9 @@ function EventGraphsPage({
               borderRadius: '8px',
               alignItems: 'center',
               flexWrap: 'wrap',
-              flexShrink: 0
+              flexShrink: 0,
+              marginBottom: '16px',
+              border: '1px solid #dee2e6'
             }}>
               {/* Loading state */}
               {loadingForecasts && (
@@ -322,12 +324,13 @@ function EventGraphsPage({
 
           {/* Graph display area */}
           <div style={{
-            height: '600px',
+            flex: 1,
             display: 'flex',
             gap: '16px',
             flexDirection: graphView === 'both' ? 'row' : 'column',
             overflow: graphView === 'both' ? 'auto' : 'hidden',
-            flexShrink: 0
+            minHeight: 0,
+            marginBottom: '16px'
           }}>
             {/* Evidence collection graph */}
             {(graphView === 'evidence' || graphView === 'both') && (
@@ -412,7 +415,7 @@ function EventGraphsPage({
 
           {/* Price history chart for Polymarket questions */}
           {selectedQuestionId && questions.find(q => q.id === selectedQuestionId)?.source === 'polymarket' && (
-            <div style={{ padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '8px', minHeight: '100px', border: '1px solid #dee2e6', flexShrink: 0 }}>
+            <div style={{ padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '8px', minHeight: '100px', border: '1px solid #dee2e6', flexShrink: 0, marginTop: '16px' }}>
               {/* Time interval controls - always visible */}
               <div style={{
                 display: 'flex',

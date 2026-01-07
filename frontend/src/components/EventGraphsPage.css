@@ -1,19 +1,17 @@
+/* Main container tweaks */
 .event-graphs-page {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  /* No layout properties needed, handled by page-container */
 }
 
 /* Nested tabs */
 .event-graphs-page .nested-tabs {
   display: flex;
   gap: 10px;
-  margin-bottom: 12px;
+  margin: 16px 20px 0 20px;
   background: white;
   padding: 0 20px;
   border-radius: 8px;
+  flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
@@ -39,42 +37,7 @@
   font-weight: 600;
 }
 
-/* Main layout */
-.event-graphs-page .main-layout {
-  flex: 1;
-  display: flex;
-  gap: 12px;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.event-graphs-page .left-sidebar {
-  flex: 0 0 480px;
-  min-width: 480px;
-  overflow-y: auto;
-  background-color: white;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
-.event-graphs-page .sidebar-content {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.event-graphs-page .graph-main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-bottom: 20px;
-}
-
+/* Graph container specific overrides */
 .event-graphs-page .graph-container {
   flex: 1;
   position: relative;
@@ -84,25 +47,37 @@
   overflow: hidden;
 }
 
-/* Scrollbar styling */
-.event-graphs-page .left-sidebar::-webkit-scrollbar,
-.event-graphs-page .graph-main::-webkit-scrollbar {
+/* Scrollbar styling - applying to new standard structure */
+.left-sidebar::-webkit-scrollbar,
+.page-sidebar::-webkit-scrollbar,
+.graph-main::-webkit-scrollbar,
+.page-main::-webkit-scrollbar,
+.scroll-container::-webkit-scrollbar {
   width: 8px;
 }
 
-.event-graphs-page .left-sidebar::-webkit-scrollbar-track,
-.event-graphs-page .graph-main::-webkit-scrollbar-track {
+.left-sidebar::-webkit-scrollbar-track,
+.page-sidebar::-webkit-scrollbar-track,
+.graph-main::-webkit-scrollbar-track,
+.page-main::-webkit-scrollbar-track,
+.scroll-container::-webkit-scrollbar-track {
   background: #f1f1f1;
   border-radius: 4px;
 }
 
-.event-graphs-page .left-sidebar::-webkit-scrollbar-thumb,
-.event-graphs-page .graph-main::-webkit-scrollbar-thumb {
+.left-sidebar::-webkit-scrollbar-thumb,
+.page-sidebar::-webkit-scrollbar-thumb,
+.graph-main::-webkit-scrollbar-thumb,
+.page-main::-webkit-scrollbar-thumb,
+.scroll-container::-webkit-scrollbar-thumb {
   background: #c0c0c0;
   border-radius: 4px;
 }
 
-.event-graphs-page .left-sidebar::-webkit-scrollbar-thumb:hover,
-.event-graphs-page .graph-main::-webkit-scrollbar-thumb:hover {
+.left-sidebar::-webkit-scrollbar-thumb:hover,
+.page-sidebar::-webkit-scrollbar-thumb:hover,
+.graph-main::-webkit-scrollbar-thumb:hover,
+.page-main::-webkit-scrollbar-thumb:hover,
+.scroll-container::-webkit-scrollbar-thumb:hover {
   background: #a0a0a0;
 }

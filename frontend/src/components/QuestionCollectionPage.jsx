@@ -17,11 +17,11 @@ import './QuestionCollectionPage.css'
 function QuestionCollectionPage({
   onQuestionsAdded,
   previewQuestions = [],
-  setPreviewQuestions = () => {},
+  setPreviewQuestions = () => { },
   sourceTab = 'polymarket',
-  setSourceTab = () => {},
+  setSourceTab = () => { },
   previewSource = null,
-  setPreviewSource = () => {}
+  setPreviewSource = () => { }
 }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -51,7 +51,7 @@ function QuestionCollectionPage({
    */
   const handleFetchPreview = useCallback(async (config) => {
     console.log('[QuestionCollectionPage] Fetching preview with config:', config, 'source:', sourceTab)
-    
+
     setLoading(true)
     setError(null)
     setSuccess(null)
@@ -63,9 +63,9 @@ function QuestionCollectionPage({
         source: sourceTab,
         ...config,
       }
-      
+
       console.log('[QuestionCollectionPage] Request body:', JSON.stringify(requestBody, null, 2))
-      
+
       const response = await fetch('http://localhost:8018/api/questions/preview', {
         method: 'POST',
         headers: {
@@ -168,7 +168,7 @@ function QuestionCollectionPage({
   }, [onQuestionsAdded, setPreviewQuestions])
 
   return (
-    <div className="collection-page">
+    <div className="collection-page page-container">
       <div className="collection-header">
         <h2>🔍 Question Collection</h2>
         <p className="collection-subtitle">
@@ -212,43 +212,51 @@ function QuestionCollectionPage({
 
       {/* Status messages */}
       {error && (
-        <div className="message error-message">
+        <div className="message error-message" style={{ margin: '0 20px 12px 20px' }}>
           ⚠️ {error}
         </div>
       )}
       {success && (
-        <div className="message success-message">
+        <div className="message success-message" style={{ margin: '0 20px 12px 20px' }}>
           {success}
         </div>
       )}
 
       {/* Manual tab shows form, other tabs show collection interface */}
-      {sourceTab === 'manual' ? (
-        <div className="manual-form-wrapper">
-          <ManualQuestionForm onQuestionCreated={handleManualQuestionCreated} />
-        </div>
-      ) : (
-        <div className="collection-content">
-          {/* Left panel: Configuration */}
-          <div className="config-panel">
-            <CollectionConfigPanel
-              source={sourceTab}
-              onFetch={handleFetchPreview}
-              loading={loading}
-            />
+      <div className="page-content">
+        {sourceTab === 'manual' ? (
+          <div className="page-main">
+            <div className="scroll-container">
+              <ManualQuestionForm onQuestionCreated={handleManualQuestionCreated} />
+            </div>
           </div>
+        ) : (
+          <>
+            {/* Left panel: Configuration */}
+            <div className="page-sidebar">
+              <div className="scroll-container">
+                <CollectionConfigPanel
+                  source={sourceTab}
+                  onFetch={handleFetchPreview}
+                  loading={loading}
+                />
+              </div>
+            </div>
 
-          {/* Right panel: Preview and selection */}
-          <div className="preview-panel">
-            <QuestionPreviewList
-              questions={filteredPreviewQuestions}
-              onSaveSelected={handleSaveSelected}
-              loading={loading}
-              source={sourceTab}
-            />
-          </div>
-        </div>
-      )}
+            {/* Right panel: Preview and selection */}
+            <div className="page-main">
+              <div className="scroll-container">
+                <QuestionPreviewList
+                  questions={filteredPreviewQuestions}
+                  onSaveSelected={handleSaveSelected}
+                  loading={loading}
+                  source={sourceTab}
+                />
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
