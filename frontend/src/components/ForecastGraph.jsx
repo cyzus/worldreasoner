@@ -254,13 +254,16 @@ const ForecastGraph = memo(function ForecastGraph({
         backgroundColor="#ffffff"
         cooldownTicks={100}
         warmupTicks={0}
+        onEngineStop={() => {
+          // Let simulation rest when not interacting
+        }}
         d3AlphaDecay={0.02}
         d3VelocityDecay={0.4}
         enableNodeDrag={true}
         enableZoomInteraction={true}
         enablePanInteraction={true}
-        minZoom={0.1}
-        maxZoom={8}
+        minZoom={0.5}  // Allow zooming out
+        maxZoom={2.5}  // Prevent giant nodes (was implicit default ~8)
       />
 
       <GraphLegend />
