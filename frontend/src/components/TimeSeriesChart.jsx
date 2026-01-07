@@ -20,7 +20,9 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
   targetEventId,
   outcomes = ['Yes', 'No'],
   width = 900,
-  height = 400
+  height = 400,
+  activeInterval = 'max',
+  onIntervalChange
 }) {
   const svgRef = useRef()
   const [hoveredEvent, setHoveredEvent] = useState(null)
@@ -118,7 +120,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
       })
 
       maxLevel = Math.max(0, ...eventNodes.map(n => n.level))
-      
+
       // Update eventsInTimeRange with level info
       // We need to map back to the original events or use the enriched nodes
       // Let's replace the array with our enriched nodes
@@ -131,7 +133,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
     // We need enough space above 0.
     const requiredTop = 40 + (maxLevel * levelHeight)
     margin.top = Math.max(margin.top, requiredTop)
-    
+
     const innerHeight = height - margin.top - margin.bottom
 
     // Create main group with updated margins
@@ -163,7 +165,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
     // Add X axis with smart tick calculation
     const timeRange = xScale.domain()[1] - xScale.domain()[0]
     const daysRange = timeRange / (1000 * 60 * 60 * 24)
-    
+
     // Choose appropriate tick interval based on data range
     let tickInterval, tickFormatFunc
     if (daysRange > 180) {
@@ -308,13 +310,13 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
           .attr('stroke-width', 2)
           .style('cursor', 'pointer')
           .style('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))')
-          .on('mouseenter', function() {
+          .on('mouseenter', function () {
             setHoveredEvent(event)
             select(this)
               .attr('r', isTarget ? 10 : 8)
               .attr('stroke-width', 3)
           })
-          .on('mouseleave', function() {
+          .on('mouseleave', function () {
             setHoveredEvent(null)
             select(this)
               .attr('r', isTarget ? 8 : 6)
@@ -444,7 +446,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
       .attr('height', innerHeight)
       .attr('fill', 'none')
       .attr('pointer-events', 'all')
-      .on('mousemove', function(event) {
+      .on('mousemove', function (event) {
         const [mouseX] = pointer(event)
         const hoveredDate = xScale.invert(mouseX)
 
@@ -485,7 +487,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
 
         setHoveredPrice(priceInfo)
       })
-      .on('mouseleave', function() {
+      .on('mouseleave', function () {
         tooltipLine.style('opacity', 0)
         tooltipCircles.forEach(({ circle }) => circle.style('opacity', 0))
         setHoveredPrice(null)
@@ -523,20 +525,46 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
             </span>
           )}
         </h3>
-        <button 
-          onClick={() => setIsExpanded(!isExpanded)}
-          style={{
-            background: 'none',
-            border: '1px solid #dee2e6',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            padding: '4px 8px',
-            fontSize: '12px',
-            color: '#6c757d'
-          }}
-        >
-          {isExpanded ? 'Hide Graph' : 'Show Graph'}
-        </button>
+
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {/* Interval Controls */}
+          <div style={{ display: 'flex', border: '1px solid #dee2e6', borderRadius: '4px', overflow: 'hidden' }}>
+            {['max', '1w', '1d', '6h', '1h', '1m'].map(interval => (
+              <button
+                key={interval}
+                onClick={() => onIntervalChange && onIntervalChange(interval)}
+                style={{
+                  background: activeInterval === interval ? '#e9ecef' : '#fff',
+                  border: 'none',
+                  borderRight: interval !== '1m' ? '1px solid #dee2e6' : 'none',
+                  padding: '4px 8px',
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                  fontWeight: activeInterval === interval ? '600' : '400',
+                  color: activeInterval === interval ? '#212529' : '#6c757d'
+                }}
+              >
+                {interval === 'max' ? 'Max' : interval.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            style={{
+              background: 'none',
+              border: '1px solid #dee2e6',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              padding: '4px 8px',
+              fontSize: '12px',
+              color: '#6c757d',
+              marginLeft: '8px'
+            }}
+          >
+            {isExpanded ? 'Hide' : 'Show'}
+          </button>
+        </div>
       </div>
 
       {isExpanded && (

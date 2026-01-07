@@ -3,7 +3,7 @@ import ForceGraph2D from 'react-force-graph-2d'
 import * as d3 from 'd3'
 import './GraphVisualization.css'
 
-function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSettings }) {
+function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSettings, targetEventId }) {
   const graphRef = useRef()
   const animationFrameRef = useRef()
   const timeRef = useRef(0)
@@ -47,20 +47,45 @@ function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSetting
     }
   }, [graphData])
 
-  // Initial zoom to fit when data first loads
+  // Center on target event or fit to bounds
   useEffect(() => {
-    if (graphRef.current && graphData.nodes.length > 0 && !hasZoomedRef.current) {
-      // Delay to let nodes initialize positions
-      const timer = setTimeout(() => {
-        if (graphRef.current) {
-          graphRef.current.zoomToFit(400, 80)
-          hasZoomedRef.current = true
-        }
-      }, 800) // Wait for initial layout
+    // If no graph instance or data, do nothing
+    if (!graphRef.current || graphData.nodes.length === 0) return
 
-      return () => clearTimeout(timer)
+    // Function to attempt centering
+    const attemptCenter = (attempts = 0) => {
+      if (!graphRef.current) return
+
+      const nodes = graphRef.current.graphData().nodes
+      if (!nodes || nodes.length === 0) return
+
+      let aimedAtTarget = false
+      if (targetEventId) {
+        const targetNode = nodes.find(n => n.id === targetEventId)
+        if (targetNode && Number.isFinite(targetNode.x) && Number.isFinite(targetNode.y)) {
+          // Found target with valid coordinates
+          graphRef.current.centerAt(targetNode.x, targetNode.y, 1000)
+          graphRef.current.zoom(1.8, 1000)
+          aimedAtTarget = true
+        }
+      }
+
+      if (!aimedAtTarget) {
+        if (!hasZoomedRef.current && !targetEventId) {
+          graphRef.current.zoomToFit(400, 50)
+          hasZoomedRef.current = true
+        } else if (targetEventId && attempts < 5) {
+          // Retry if we have a target but couldn't find/center it (likely coords not ready)
+          setTimeout(() => attemptCenter(attempts + 1), 500)
+        }
+      }
     }
-  }, [graphData.nodes.length]) // Only when node count changes
+
+    // Trigger attempt
+    const t = setTimeout(() => attemptCenter(), 500)
+
+    return () => clearTimeout(t)
+  }, [graphData, targetEventId])
 
 
   // Configure Obsidian-style forces and keep simulation running
@@ -341,13 +366,13 @@ function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSetting
 
   // Helper function to lighten colors
   const lightenColor = (color, percent) => {
-    const num = parseInt(color.replace("#",""), 16)
+    const num = parseInt(color.replace("#", ""), 16)
     const amt = Math.round(2.55 * percent)
     const R = (num >> 16) + amt
     const G = (num >> 8 & 0x00FF) + amt
     const B = (num & 0x0000FF) + amt
-    return "#" + (0x1000000 + (R<255?R<1?0:R:255)*0x10000 +
-      (G<255?G<1?0:G:255)*0x100 + (B<255?B<1?0:B:255))
+    return "#" + (0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
+      (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 + (B < 255 ? B < 1 ? 0 : B : 255))
       .toString(16).slice(1)
   }
 
@@ -358,7 +383,7 @@ function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSetting
 
     // Check if nodes have valid coordinates
     if (!start.x || !start.y || !end.x || !end.y ||
-        !isFinite(start.x) || !isFinite(start.y) || !isFinite(end.x) || !isFinite(end.y)) {
+      !isFinite(start.x) || !isFinite(start.y) || !isFinite(end.x) || !isFinite(end.y)) {
       return
     }
 

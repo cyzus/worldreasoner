@@ -238,7 +238,7 @@ const Timeline = memo(function Timeline({ graphData, onTimeRangeChange, onEventC
             onClick={handleClearFilter}
             title="Reset to full view"
           >
-            Reset
+            Reset Time
           </button>
         </div>
       </div>

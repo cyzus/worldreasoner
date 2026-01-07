@@ -6,6 +6,8 @@ import EventDetails from './EventDetails'
 import Timeline from './Timeline'
 import TimeSeriesChart from './TimeSeriesChart'
 import ForecastGraph from './ForecastGraph'
+import LinkDistanceIcon from './ForceControls' // Make sure this import is correct or remove if not used
+import QuestionStatistics from './QuestionStatistics'
 import ArticleCoverage from './ArticleCoverage'
 import './EventGraphsPage.css'
 
@@ -35,7 +37,9 @@ function EventGraphsPage({
   onQuestionUpdated,
   onQuestionDeleted,
 }) {
-  const [nestedTab, setNestedTab] = useState('questions') // 'controls' or 'questions'
+  const [nestedTab, setNestedTab] = useState('questions') // 'questions', 'statistics', 'controls'
+
+
 
   // Graph force settings (moved from GraphVisualization)
   const [forceSettings, setForceSettings] = useState({
@@ -141,6 +145,12 @@ function EventGraphsPage({
           📋 Questions ({questions.length})
         </button>
         <button
+          className={`nested-tab ${nestedTab === 'statistics' ? 'active' : ''}`}
+          onClick={() => setNestedTab('statistics')}
+        >
+          📊 Statistics
+        </button>
+        <button
           className={`nested-tab ${nestedTab === 'controls' ? 'active' : ''}`}
           onClick={() => setNestedTab('controls')}
         >
@@ -158,11 +168,15 @@ function EventGraphsPage({
                 onFilterChange={onFilterChange}
                 onRefresh={onRefresh}
                 loading={loading}
-                questions={questions}
-                onQuestionFilter={onQuestionFilter}
                 forceSettings={forceSettings}
                 onForceChange={setForceSettings}
               />
+            )}
+
+            {nestedTab === 'statistics' && (
+              <div style={{ padding: '12px' }}>
+                <QuestionStatistics questions={questions} />
+              </div>
             )}
 
             {nestedTab === 'questions' && (
@@ -338,26 +352,28 @@ function EventGraphsPage({
                 flex: 1,
                 minWidth: graphView === 'both' ? '400px' : 'auto',
                 minHeight: 0,
-                overflow: 'hidden'
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column'
               }}>
-                <h4 style={{
-                  margin: '0 0 12px 0',
-                  fontSize: '16px',
-                  fontWeight: '600',
-                  display: graphView === 'both' ? 'block' : 'none'
-                }}>
-                  Evidence Collection Graph
-                </h4>
-                {loading && <div className="loading">Loading graph...</div>}
-                {error && <div className="error">{error}</div>}
-                {!loading && !error && (
-                  <GraphVisualization
-                    graphData={graphData}
-                    onNodeClick={onNodeClick}
-                    selectedNode={selectedNode}
-                    forceSettings={forceSettings}
-                  />
-                )}
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid #eee', background: '#fff' }}>
+                  <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
+                    Evidence Collection Graph
+                  </h4>
+                </div>
+                <div className="graph-main" style={{ flex: 1, position: 'relative' }}>
+                  {loading && <div className="loading">Loading graph...</div>}
+                  {error && <div className="error">{error}</div>}
+                  {!loading && !error && (
+                    <GraphVisualization
+                      graphData={graphData}
+                      onNodeClick={onNodeClick}
+                      selectedNode={selectedNode}
+                      forceSettings={forceSettings}
+                      targetEventId={selectedQuestionId ? questions.find(q => q.id === selectedQuestionId)?.target_event_id : null}
+                    />
+                  )}
+                </div>
               </div>
             )}
 
@@ -367,37 +383,44 @@ function EventGraphsPage({
                 flex: 1,
                 minWidth: graphView === 'both' ? '400px' : 'auto',
                 minHeight: 0,
-                overflow: 'hidden'
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column'
               }}>
-                <h4 style={{
-                  margin: '0 0 12px 0',
-                  fontSize: '16px',
-                  fontWeight: '600',
-                  display: graphView === 'both' ? 'block' : 'none'
-                }}>
-                  Forecast Reasoning Graph
-                </h4>
-                {loadingForecastGraph && (
-                  <div className="loading">Loading forecast graph...</div>
-                )}
-                {!loadingForecastGraph && forecastGraphData && (
-                  <ForecastGraph graphData={forecastGraphData} />
-                )}
-                {!loadingForecastGraph && !forecastGraphData && (
-                  <div style={{
-                    padding: '40px',
-                    textAlign: 'center',
-                    color: '#6c757d',
-                    border: '1px solid #dee2e6',
-                    borderRadius: '8px',
-                    backgroundColor: '#f8f9fa'
-                  }}>
-                    <p>No causal reasoning graph available for this forecast.</p>
-                    <p style={{ fontSize: '14px', color: '#adb5bd', marginTop: '8px' }}>
-                      Enable "Causal Reasoning Tools" when running forecasts to build causal graphs.
-                    </p>
-                  </div>
-                )}
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid #eee', background: '#fff' }}>
+                  <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
+                    Forecast Reasoning Graph
+                  </h4>
+                </div>
+                <div className="graph-main" style={{ flex: 1, position: 'relative' }}>
+                  {loadingForecastGraph && (
+                    <div className="loading">Loading forecast graph...</div>
+                  )}
+                  {!loadingForecastGraph && forecastGraphData && (
+                    <ForecastGraph
+                      graphData={forecastGraphData}
+                      key={graphView}
+                      targetEventId={selectedQuestionId ? questions.find(q => q.id === selectedQuestionId)?.target_event_id : null}
+                    />
+                  )}
+                  {!loadingForecastGraph && !forecastGraphData && (
+                    <div style={{
+                      padding: '40px',
+                      textAlign: 'center',
+                      color: '#6c757d',
+                      backgroundColor: '#f8f9fa',
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center'
+                    }}>
+                      <p>No causal reasoning graph available.</p>
+                      <p style={{ fontSize: '13px', color: '#adb5bd', marginTop: '8px' }}>
+                        Run a forecast with "Causal Reasoning" enabled.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -413,103 +436,36 @@ function EventGraphsPage({
             />
           </div>
 
-          {/* Price history chart for Polymarket questions */}
+          {/* Price history chart for Polymarket questions - Simplified UI */}
           {selectedQuestionId && questions.find(q => q.id === selectedQuestionId)?.source === 'polymarket' && (
-            <div style={{ padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '8px', minHeight: '100px', border: '1px solid #dee2e6', flexShrink: 0, marginTop: '16px' }}>
-              {/* Time interval controls - always visible */}
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '10px 20px 0 20px',
-                gap: '10px',
-                borderBottom: '1px solid #333',
-                paddingBottom: '10px',
-                marginBottom: '10px'
-              }}>
-                <div style={{ color: '#888', fontSize: '12px', fontStyle: 'italic' }}>
-                  {!loadingPriceHistory && priceHistoryData && priceHistoryData.price_history && (() => {
-                    // Calculate actual date range from price data
-                    const allTimestamps = []
-                    Object.values(priceHistoryData.price_history).forEach(history => {
-                      history.forEach(point => allTimestamps.push(point.t * 1000))
-                    })
-                    if (allTimestamps.length > 0) {
-                      const minDate = new Date(Math.min(...allTimestamps))
-                      const maxDate = new Date(Math.max(...allTimestamps))
-                      const daysDiff = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24))
-                      return `Showing ${daysDiff + 1} day${daysDiff !== 0 ? 's' : ''} of market data`
-                    }
-                    return ''
-                  })()}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ color: '#999', fontSize: '13px' }}>Time Range:</span>
-                  {['max', '1w', '1d', '6h', '1h', '1m'].map(interval => (
-                    <button
-                      key={interval}
-                      onClick={() => setPriceHistoryInterval(interval)}
-                      disabled={loadingPriceHistory}
-                      style={{
-                        padding: '6px 12px',
-                        backgroundColor: priceHistoryInterval === interval ? '#4CAF50' : '#333',
-                        color: priceHistoryInterval === interval ? '#fff' : '#ddd',
-                        border: priceHistoryInterval === interval ? '2px solid #4CAF50' : '1px solid #555',
-                        borderRadius: '4px',
-                        cursor: loadingPriceHistory ? 'not-allowed' : 'pointer',
-                        fontSize: '12px',
-                        fontWeight: priceHistoryInterval === interval ? 'bold' : 'normal',
-                        transition: 'all 0.2s',
-                        opacity: loadingPriceHistory ? 0.5 : 1
-                      }}
-                      onMouseEnter={(e) => {
-                        if (priceHistoryInterval !== interval && !loadingPriceHistory) {
-                          e.target.style.backgroundColor = '#444'
-                          e.target.style.borderColor = '#666'
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (priceHistoryInterval !== interval && !loadingPriceHistory) {
-                          e.target.style.backgroundColor = '#333'
-                          e.target.style.borderColor = '#555'
-                        }
-                      }}
-                    >
-                      {interval === 'max' ? 'All' : interval.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Loading state */}
-              {loadingPriceHistory && (
-                <div style={{ color: '#495057', textAlign: 'center', padding: '40px', fontSize: '15px', fontWeight: 500 }}>
-                  ⏳ Loading market price history...
-                </div>
-              )}
-
-              {/* Chart display */}
+            <div style={{ marginTop: '16px' }}>
               {!loadingPriceHistory && priceHistoryData && priceHistoryData.price_history && Object.keys(priceHistoryData.price_history).length > 0 && (
                 <TimeSeriesChart
                   priceHistory={priceHistoryData.price_history}
                   events={questionRelatedEvents}
                   targetEventId={questions.find(q => q.id === selectedQuestionId)?.target_event_id}
                   outcomes={priceHistoryData.outcomes || ['Yes', 'No']}
+                  activeInterval={priceHistoryInterval}
+                  onIntervalChange={setPriceHistoryInterval}
                 />
+              )}
+
+              {/* Loading state - only show if no data yet */}
+              {loadingPriceHistory && (!priceHistoryData || !priceHistoryData.price_history) && (
+                <div className="price-history-loading">
+                  ⏳ Loading market price history...
+                </div>
               )}
 
               {/* Error/no data state */}
               {!loadingPriceHistory && (!priceHistoryData || !priceHistoryData.price_history || Object.keys(priceHistoryData.price_history).length === 0) && (
-                <div style={{ color: '#6c757d', textAlign: 'center', padding: '40px', fontSize: '14px' }}>
-                  ℹ️ No price data available for this time range
-                  <br />
-                  <span style={{ fontSize: '12px', color: '#adb5bd' }}>
-                    Try selecting a different time range above
-                  </span>
+                <div className="price-history-empty">
+                  ℹ️ No price data available for this Question
                 </div>
               )}
             </div>
           )}
+
         </div>
 
         {selectedNode && (

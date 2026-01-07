@@ -187,8 +187,6 @@ const QuestionList = memo(function QuestionList({
         </div>
       )}
 
-      {/* Statistics Panel */}
-      <QuestionStatistics questions={questions} />
 
       <div className="question-list-filters">
         <input
