@@ -256,10 +256,13 @@ function CausalPathProgress({ questionId }) {
             {pathCount > 1 ? `Path ${selectedPathIndex + 1} of ${pathCount}` : 'Causal Path'} ({currentPath.length} events):
           </div>
 
-          {currentPath.map((node, idx) => {
+          {/* Reverse path to show chronological order: root (earliest) → target (latest) */}
+          {[...currentPath].reverse().map((node, idx) => {
             const isConfirmed = node.status === 'occurred'
             const isPending = node.status !== 'occurred'
             const isLast = idx === currentPath.length - 1
+            // Get the next node in the REVERSED array to access its edge_from_parent
+            const nextNodeInReversed = idx < currentPath.length - 1 ? [...currentPath].reverse()[idx + 1] : null
 
             return (
               <div key={node.event_id} style={{ marginBottom: isLast ? '0' : '8px' }}>
@@ -316,39 +319,44 @@ function CausalPathProgress({ questionId }) {
                           })}
                         </span>
                       )}
-                      {node.edge_from_parent?.relation_type && (
-                        <span style={{
-                          backgroundColor: '#f3f4f6',
-                          padding: '1px 6px',
-                          borderRadius: '3px',
-                          fontSize: '10px',
-                          fontWeight: '500'
-                        }}>
-                          {node.edge_from_parent.relation_type}
-                        </span>
-                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* Arrow between events */}
+                {/* Arrow between events - show relation on the arrow itself */}
                 {!isLast && (
                   <div style={{
                     marginLeft: '10px',
                     paddingLeft: '10px',
                     borderLeft: '2px solid #e5e7eb',
-                    height: '16px',
-                    position: 'relative'
+                    height: '24px',
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'center'
                   }}>
                     <div style={{
                       position: 'absolute',
                       left: '-5px',
-                      top: '8px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
                       fontSize: '10px',
                       color: '#9ca3af'
                     }}>
                       ↓
                     </div>
+                    {nextNodeInReversed?.edge_from_parent?.relation_type && (
+                      <span style={{
+                        marginLeft: '8px',
+                        backgroundColor: '#f3f4f6',
+                        padding: '1px 6px',
+                        borderRadius: '3px',
+                        fontSize: '9px',
+                        fontWeight: '500',
+                        color: '#6b7280'
+                      }}>
+                        {nextNodeInReversed.edge_from_parent.relation_type}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
