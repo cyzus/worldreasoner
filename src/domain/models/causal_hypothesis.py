@@ -34,7 +34,7 @@ class CausalHypothesis(BaseModel):
         description="Event ID of the effect (the outcome)"
     )
     relation_type: CausalRelationType = Field(
-        default=CausalRelationType.CAUSES,
+        default=CausalRelationType.CORRELATES,
         description="Type of causal relationship"
     )
 

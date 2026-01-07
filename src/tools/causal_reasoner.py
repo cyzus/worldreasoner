@@ -74,7 +74,7 @@ class CausalReasonerTool(Tool):
         },
         "relation_type": {
             "type": "string",
-            "description": "Type of causation: causes, enables, prevents, correlates, or conditional"
+            "description": f"Type of relations: {', '.join([t.value for t in CausalRelationType])}"
         },
         "strength": {
             "type": "number",
