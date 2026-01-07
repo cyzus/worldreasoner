@@ -25,15 +25,32 @@ export const hexToRgba = (hex, alpha) => {
     return `rgba(108, 117, 125, ${alpha})` // Fallback grey
 }
 
+// Helper to check if node should be visible based on time filter
+const isNodeVisible = (node, timeFilter) => {
+    if (!timeFilter || !timeFilter.start || !timeFilter.end) return true
+
+    // Check for date properties
+    const dateStr = node.properties?.occurred_date || node.properties?.predicted_date
+    if (!dateStr) return false // Hide nodes without dates when filter is active
+
+    const date = new Date(dateStr)
+    return date >= timeFilter.start && date <= timeFilter.end
+}
+
 /**
  * Paint a node on the canvas
  * @param {Object} node - Node data
  * @param {CanvasRenderingContext2D} ctx - Canvas context
  * @param {number} globalScale - Current zoom level
- * @param {Object} options - Additional options (selectedNode, targetEventId, pulseTime)
+ * @param {Object} options - Additional options (selectedNode, targetEventId, pulseTime, timeFilter)
  */
 export const paintNode = (node, ctx, globalScale, options = {}) => {
-    const { selectedNode, targetEventId, pulseTime } = options
+    const { selectedNode, targetEventId, pulseTime, timeFilter } = options
+
+    // Check visibility first
+    if (!isNodeVisible(node, timeFilter)) {
+        return
+    }
 
     // Check if node has valid coordinates
     if (!node.x || !node.y || !isFinite(node.x) || !isFinite(node.y)) {
@@ -159,10 +176,17 @@ export const paintNode = (node, ctx, globalScale, options = {}) => {
  * @param {Object} link - Link data
  * @param {CanvasRenderingContext2D} ctx - Canvas context
  * @param {number} globalScale - Current zoom level
+ * @param {Object} options - Additional options (timeFilter)
  */
-export const paintLink = (link, ctx, globalScale) => {
+export const paintLink = (link, ctx, globalScale, options = {}) => {
+    const { timeFilter } = options
     const start = link.source
     const end = link.target
+
+    // Check visibility first - both nodes must be visible
+    if (!isNodeVisible(start, timeFilter) || !isNodeVisible(end, timeFilter)) {
+        return
+    }
 
     if (!start.x || !start.y || !end.x || !end.y ||
         !isFinite(start.x) || !isFinite(start.y) || !isFinite(end.x) || !isFinite(end.y)) {

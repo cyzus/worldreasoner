@@ -36,6 +36,7 @@ function EventGraphsPage({
   setPriceHistoryInterval,
   onQuestionUpdated,
   onQuestionDeleted,
+  timeFilter,
 }) {
   const [nestedTab, setNestedTab] = useState('questions') // 'questions', 'statistics', 'controls'
 
@@ -370,6 +371,7 @@ function EventGraphsPage({
                       onNodeClick={onNodeClick}
                       selectedNode={selectedNode}
                       forceSettings={forceSettings}
+                      timeFilter={timeFilter}
                       targetEventId={selectedQuestionId ? questions.find(q => q.id === selectedQuestionId)?.target_event_id : null}
                     />
                   )}

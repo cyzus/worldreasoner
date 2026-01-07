@@ -6,7 +6,7 @@ import { GraphStyles } from '../styles/GraphStyles'
 import { paintNode as sharedPaintNode, paintLink as sharedPaintLink, GraphLegend } from '../utils/graphRendering.jsx'
 
 
-function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSettings, targetEventId }) {
+function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSettings, targetEventId, timeFilter }) {
   const graphRef = useRef()
   const animationFrameRef = useRef()
   const timeRef = useRef(0)
@@ -216,6 +216,8 @@ function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSetting
 
   }, [graphData, forceSettings])
 
+
+
   // Update pulse time for outcome nodes at reduced frequency (30 fps instead of 60)
   // This prevents calling Date.now() on every paint call
   // OPTIMIZATION: Pause animation when page is hidden to save CPU/GPU
@@ -302,6 +304,29 @@ function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSetting
 
 
 
+  // Optimize time filter access for canvas rendering without prop churn
+  const timeFilterRef = useRef(timeFilter)
+  useEffect(() => {
+    timeFilterRef.current = timeFilter
+  }, [timeFilter])
+
+  // Stable callback for node painting
+  const handleNodePaint = React.useCallback((node, ctx, globalScale) => {
+    sharedPaintNode(node, ctx, globalScale, {
+      selectedNode,
+      targetEventId,
+      timeFilter: timeFilterRef.current, // Read from ref to avoid recreating callback
+      pulseTime: pulseTimeRef.current
+    })
+  }, [selectedNode, targetEventId])
+
+  // Stable callback for link painting
+  const handleLinkPaint = React.useCallback((link, ctx, globalScale) => {
+    sharedPaintLink(link, ctx, globalScale, {
+      timeFilter: timeFilterRef.current
+    })
+  }, [])
+
   return (
     <div className="graph-visualization" ref={containerRef} style={{ width: '100%', height: '100%' }}>
       <ForceGraph2D
@@ -309,42 +334,29 @@ function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSetting
         width={dimensions.width}
         height={dimensions.height}
         graphData={graphData}
-        nodeId="id" // CRITICAL: Stable node identity prevents simulation restart
+        nodeId="id"
         linkSource="source"
         linkTarget="target"
         nodeLabel={(node) => node.name}
-        nodeCanvasObject={(node, ctx, globalScale) => {
-          sharedPaintNode(node, ctx, globalScale, {
-            selectedNode,
-            targetEventId,
-            pulseTime: pulseTimeRef.current
-          })
-        }}
+        nodeCanvasObject={handleNodePaint}
         nodeCanvasObjectMode={() => 'replace'}
-        linkCanvasObject={sharedPaintLink}
+        linkCanvasObject={handleLinkPaint}
         linkCanvasObjectMode={() => 'replace'}
         onNodeClick={(node, event) => {
-          // Single-click for details
           onNodeClick(node)
         }}
         onNodeDrag={(node) => {
-          // Track dragged node without reheating simulation during drag
-          // This prevents performance issues from continuous simulation updates
           draggedNodeRef.current = node
         }}
         onNodeDragEnd={(node) => {
-          // Release node - let forces take over
           node.fx = undefined
           node.fy = undefined
           draggedNodeRef.current = null
-
-          // Only reheat simulation after drag ends for smooth settling
           if (graphRef.current?.d3ReheatSimulation) {
             graphRef.current.d3ReheatSimulation()
           }
         }}
         onBackgroundClick={() => {
-          // If there was a dragged node that didn't get released, release it now
           if (draggedNodeRef.current) {
             delete draggedNodeRef.current.fx
             delete draggedNodeRef.current.fy
@@ -354,22 +366,16 @@ function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSetting
         backgroundColor="#ffffff"
         linkColor={link => GraphStyles.linkColors[link.type] || GraphStyles.linkColors.default}
         linkWidth={link => (link.value || 1) * 1.5}
-        linkDirectionalArrowLength={3.5}
-        linkDirectionalArrowRelPos={1}
         linkCurvature={0.25}
-        cooldownTicks={50} // Reduced from 200 for faster settling after drag
-        warmupTicks={0}
-        d3AlphaDecay={0.02} // Increased from 0.01 for faster stopping
-        d3VelocityDecay={0.4} // Increased friction for quicker settling
-        d3AlphaMin={0.005} // Higher threshold to stop simulation sooner
+        d3AlphaDecay={0.05} // Faster decay to stabilize quickly
+        d3VelocityDecay={0.8} // High friction to prevent vibration
         onEngineStop={() => {
-          // Let simulation rest when not interacting
         }}
         enableNodeDrag={true}
         enableZoomInteraction={true}
         enablePanInteraction={true}
-        minZoom={0.25}  // Allow zooming out reasonably
-        maxZoom={4}     // Allow zooming in for details but prevent excessive scaling
+        minZoom={0.25}
+        maxZoom={4}
       />
 
       {/* Legend overlay - matching ForecastGraph */}
