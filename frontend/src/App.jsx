@@ -82,6 +82,7 @@ function App() {
           id: node.id,
           name: node.label,
           type: node.node_type,
+          domain: node.properties?.domain || node.domain || 'general',
           size: node.size,
           color: node.color,
           properties: node.properties,
@@ -125,11 +126,11 @@ function App() {
 
   // Client-side temporal filtering
   const applyTimeFilter = useCallback((startDate, endDate) => {
-    console.log('[TimeFilter] Called with:', { 
-      start: startDate?.toISOString(), 
+    console.log('[TimeFilter] Called with:', {
+      start: startDate?.toISOString(),
       end: endDate?.toISOString(),
       totalNodes: fullGraphData.nodes.length,
-      selectedQuestion: selectedQuestionId 
+      selectedQuestion: selectedQuestionId
     })
 
     if (!startDate || !endDate) {
@@ -141,7 +142,7 @@ function App() {
         setTimeFilter(null)
         return
       }
-      
+
       // No filters at all - show all data and clear outcome markers
       const resetNodes = fullGraphData.nodes
       resetNodes.forEach(node => {
@@ -170,7 +171,7 @@ function App() {
     // Use baseGraphData which contains question-filtered data (or fullGraphData if no question selected)
     // This allows bidirectional time traversal (expanding and contracting the time window)
     const baseData = baseGraphData.nodes.length > 0 ? baseGraphData : fullGraphData
-    
+
     // Filter nodes by date
     const filteredNodes = baseData.nodes
       .filter(node => {
@@ -385,7 +386,7 @@ function App() {
       // Filter out any synthetic links and create fresh copies
       const resetLinks = fullGraphData.links
         .filter(link => !link.isSynthetic && link.type !== 'potentially_relevant')
-        .map(link => ({...link}))
+        .map(link => ({ ...link }))
 
       console.log(`Resetting graph: ${resetNodes.length} nodes, ${resetLinks.length} links (filtered from ${fullGraphData.links.length})`)
 

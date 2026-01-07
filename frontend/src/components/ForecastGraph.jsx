@@ -1,292 +1,208 @@
-import React, { useEffect, useRef, memo, useState } from 'react';
-import { select } from 'd3-selection';
-import { zoom, zoomIdentity } from 'd3-zoom';
-import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from 'd3-force';
-import { drag } from 'd3-drag';
-import './ForecastGraph.css';
+import React, { useRef, useEffect, memo } from 'react'
+import ForceGraph2D from 'react-force-graph-2d'
+import { paintNode, paintLink, GraphLegend } from '../utils/graphRendering.jsx'
+import { GraphStyles } from '../styles/GraphStyles'
+import './ForecastGraph.css'
 
-const ForecastGraph = memo(function ForecastGraph({ graphData, targetEventId }) {
-  const svgRef = useRef(null);
-  const containerRef = useRef(null);
-  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+/**
+ * ForecastGraph - Displays causal reasoning graph using react-force-graph-2d
+ * Now uses the same rendering approach as GraphVisualization for consistency
+ */
+const ForecastGraph = memo(function ForecastGraph({
+  graphData,
+  targetEventId,
+  onNodeClick,
+  selectedNode
+}) {
+  const graphRef = useRef()
+  const hasZoomedRef = useRef(false)
+  const pulseTimeRef = useRef(Date.now())
+  const pulseAnimationRef = useRef(null)
 
-  // Handle resizing
+  // Transform forecast graph data to force-graph format
+  const transformedData = React.useMemo(() => {
+    // Handle null/undefined graphData
+    if (!graphData) {
+      return { nodes: [], links: [] }
+    }
+
+    // Check if graphData already has nodes/links (GraphVisualization format)
+    if (graphData.nodes && graphData.links) {
+      return graphData
+    }
+
+    // Check if graphData has events/hypotheses (ForecastGraph API format)
+    if (!graphData.events || !graphData.hypotheses) {
+      return { nodes: [], links: [] }
+    }
+
+    const nodes = graphData.events.map(event => ({
+      id: event.id,
+      name: event.title || event.name || event.id,
+      title: event.title || event.name || event.id,
+      domain: event.domain || 'unknown',
+      description: event.description || '',
+      isOutcome: event.id === targetEventId,
+      ...event
+    }))
+
+    const eventIds = new Set(nodes.map(n => n.id))
+
+    const links = graphData.hypotheses
+      .filter(hyp => {
+        const hasSource = eventIds.has(hyp.source_event_id || hyp.source)
+        const hasTarget = eventIds.has(hyp.target_event_id || hyp.target)
+        return hasSource && hasTarget
+      })
+      .map(hyp => ({
+        source: hyp.source_event_id || hyp.source,
+        target: hyp.target_event_id || hyp.target,
+        type: hyp.relation_type || hyp.type || 'unknown',
+        relation_type: hyp.relation_type || hyp.type || 'unknown',
+        weight: hyp.strength || hyp.weight || 0.5,
+        strength: hyp.strength || hyp.weight || 0.5,
+        confidence: hyp.confidence,
+        reasoning: hyp.reasoning,
+        ...hyp
+      }))
+
+    return { nodes, links }
+  }, [graphData, targetEventId])
+
+  // Pulse animation for target node
   useEffect(() => {
-    if (!containerRef.current) return;
+    const hasTargetNode = transformedData.nodes.some(node => node.id === targetEventId)
+    if (!hasTargetNode) {
+      if (pulseAnimationRef.current) {
+        cancelAnimationFrame(pulseAnimationRef.current)
+        pulseAnimationRef.current = null
+      }
+      return
+    }
+
+    let lastUpdate = 0
+    const updateInterval = 1000 / 30
+
+    const updatePulseTime = (timestamp) => {
+      if (document.hidden) {
+        pulseAnimationRef.current = requestAnimationFrame(updatePulseTime)
+        return
+      }
+
+      if (timestamp - lastUpdate >= updateInterval) {
+        pulseTimeRef.current = Date.now()
+        lastUpdate = timestamp
+        if (graphRef.current) {
+          graphRef.current.refresh()
+        }
+      }
+      pulseAnimationRef.current = requestAnimationFrame(updatePulseTime)
+    }
+
+    pulseAnimationRef.current = requestAnimationFrame(updatePulseTime)
+
+    return () => {
+      if (pulseAnimationRef.current) {
+        cancelAnimationFrame(pulseAnimationRef.current)
+        pulseAnimationRef.current = null
+      }
+    }
+  }, [transformedData.nodes, targetEventId])
+
+  const containerRef = useRef()
+  const [dimensions, setDimensions] = React.useState({ width: 0, height: 0 })
+
+  // Monitor container size
+  useEffect(() => {
+    if (!containerRef.current) return
 
     const updateDimensions = () => {
       if (containerRef.current) {
         setDimensions({
-          width: containerRef.current.clientWidth,
-          height: containerRef.current.clientHeight
-        });
+          width: containerRef.current.offsetWidth,
+          height: containerRef.current.offsetHeight
+        })
       }
-    };
+    }
 
-    updateDimensions();
+    // Initial measure
+    updateDimensions()
 
-    const observer = new ResizeObserver(updateDimensions);
-    observer.observe(containerRef.current);
+    const resizeObserver = new ResizeObserver(() => {
+      updateDimensions()
+    })
 
-    return () => observer.disconnect();
-  }, []);
+    resizeObserver.observe(containerRef.current)
 
+    return () => resizeObserver.disconnect()
+  }, [])
+
+  // Center on target event or fit to viewport
   useEffect(() => {
-    if (!graphData || !graphData.events || !graphData.hypotheses || dimensions.width === 0 || dimensions.height === 0) {
-      return;
-    }
+    // Only attempt centering if we have valid dimensions and data
+    if (!graphRef.current || transformedData.nodes.length === 0 || dimensions.width === 0) return
 
-    const { width, height } = dimensions;
+    // Reset zoom state when data changes to allow re-centering
+    hasZoomedRef.current = false
 
-    try {
-      const svg = select(svgRef.current);
-      svg.selectAll('*').remove(); // Clear previous graph
+    let attemptCount = 0
+    const maxAttempts = 10
 
-      // Create nodes from events
-      const nodes = graphData.events.map(event => ({
-        id: event.id,
-        title: event.title,
-        domain: event.domain,
-        type: 'event',
-        ...event
-      }));
+    const attemptCenter = () => {
+      if (!graphRef.current) return
 
-      // Get all event IDs for validation
-      const eventIds = new Set(nodes.map(n => n.id));
+      attemptCount++
+      const nodes = transformedData.nodes
 
-      // Create links from hypotheses - filter out broken references
-      const links = graphData.hypotheses
-        .filter(hyp => {
-          const sourceExists = eventIds.has(hyp.source_event_id);
-          const targetExists = eventIds.has(hyp.target_event_id);
-          return sourceExists && targetExists;
-        })
-        .map(hyp => ({
-          source: hyp.source_event_id,
-          target: hyp.target_event_id,
-          relation_type: hyp.relation_type,
-          strength: hyp.strength,
-          confidence: hyp.confidence,
-          reasoning: hyp.reasoning,
-          ...hyp
-        }));
+      // Check if nodes have positions from force simulation
+      const hasPositions = nodes.some(n => Number.isFinite(n.x) && Number.isFinite(n.y))
 
-      // Set up SVG groups
-      const g = svg.append('g');
-
-      // Define zoom behavior
-      const zoomBehavior = zoom()
-        .scaleExtent([0.1, 4])
-        .on('zoom', (event) => {
-          g.attr('transform', event.transform);
-        });
-
-      svg.call(zoomBehavior);
-
-      // Create force simulation
-      const simulation = forceSimulation(nodes)
-        .force('link', forceLink(links).id(d => d.id).distance(150))
-        .force('charge', forceManyBody().strength(-400))
-        .force('center', forceCenter(width / 2, height / 2))
-        .force('collision', forceCollide().radius(20)); // Increased collision radius
-
-      // Add arrow markers
-      svg.append('defs').selectAll('marker')
-        .data(['causes', 'enables', 'prevents', 'correlates_with', 'conditional'])
-        .join('marker')
-        .attr('id', d => `arrow-${d}`)
-        .attr('viewBox', '0 -5 10 10')
-        .attr('refX', 18) // Adjusted for node radius
-        .attr('refY', 0)
-        .attr('markerWidth', 6)
-        .attr('markerHeight', 6)
-        .attr('orient', 'auto')
-        .append('path')
-        .attr('fill', d => {
-          const colors = {
-            'causes': '#4CAF50',
-            'enables': '#2196F3',
-            'prevents': '#f44336',
-            'correlates_with': '#FF9800',
-            'conditional': '#9C27B0'
-          };
-          return colors[d] || '#666';
-        })
-        .attr('d', 'M0,-5L10,0L0,5');
-
-      // Draw links
-      const link = g.append('g')
-        .selectAll('line')
-        .data(links)
-        .join('line')
-        .attr('stroke', d => {
-          const colors = {
-            'causes': '#4CAF50',
-            'enables': '#2196F3',
-            'prevents': '#f44336',
-            'correlates_with': '#FF9800',
-            'conditional': '#9C27B0'
-          };
-          return colors[d.relation_type] || '#666';
-        })
-        .attr('stroke-width', d => Math.max(1.5, d.strength * 3))
-        .attr('stroke-opacity', 0.8)
-        .attr('marker-end', d => `url(#arrow-${d.relation_type})`);
-
-      // Draw nodes
-      const node = g.append('g')
-        .selectAll('circle')
-        .data(nodes)
-        .join('circle')
-        .attr('r', d => d.id === targetEventId ? 10 : 7) // Larger for target
-        .attr('fill', d => {
-          const domainColors = {
-            'finance': '#4CAF50',
-            'politics': '#2196F3',
-            'tech': '#9C27B0',
-            'health': '#f44336',
-            'climate': '#00BCD4',
-            'business': '#FF9800',
-            'general': '#757575'
-          };
-          return domainColors[d.domain] || '#757575';
-        })
-        .attr('stroke', d => d.id === targetEventId ? '#f59e0b' : '#fff') // Gold for target
-        .attr('stroke-width', d => d.id === targetEventId ? 3 : 2)
-        .style('cursor', 'pointer')
-        .style('filter', d => d.id === targetEventId ? 'drop-shadow(0px 0px 8px rgba(245, 158, 11, 0.6))' : 'drop-shadow(0px 1px 3px rgba(0,0,0,0.2))')
-        .call(drag()
-          .on('start', dragStarted)
-          .on('drag', dragged)
-          .on('end', dragEnded));
-
-      // Label group
-      const labels = g.append('g')
-        .selectAll('text')
-        .data(nodes)
-        .join('text')
-        .text(d => d.title.length > 25 ? d.title.substring(0, 25) + '...' : d.title)
-        .attr('dy', 20)
-        .attr('text-anchor', 'middle')
-        .attr('font-size', d => d.id === targetEventId ? 12 : 10)
-        .attr('font-weight', d => d.id === targetEventId ? '700' : '500')
-        .attr('fill', d => d.id === targetEventId ? '#333' : '#495057')
-        .style('pointer-events', 'none')
-        .style('text-shadow', '0 1px 3px rgba(255, 255, 255, 0.8)');
-
-      // Tooltips
-      const tooltip = select('body').select('.forecast-graph-tooltip');
-      // If tooltip doesn't exist (it might persist), select valid one or create
-      // Because we remove tooltip in cleanup, we should be fine creating a new one or reusing carefully
-      let tooltipDiv = select('body').selectAll('.forecast-graph-tooltip').filter(function () {
-        return this.style.display !== 'none';
-      });
-
-      if (tooltipDiv.empty()) {
-        tooltipDiv = select('body').append('div')
-          .attr('class', 'forecast-graph-tooltip')
-          .style('position', 'absolute')
-          .style('visibility', 'hidden')
-          .style('background-color', 'rgba(255, 255, 255, 0.98)')
-          .style('border', '1px solid #ccc')
-          .style('border-radius', '8px')
-          .style('padding', '12px 16px')
-          .style('box-shadow', '0 4px 12px rgba(0,0,0,0.15)')
-          .style('max-width', '350px')
-          .style('font-size', '13px')
-          .style('line-height', '1.5')
-          .style('z-index', 10000);
+      if (!hasPositions && attemptCount < maxAttempts) {
+        // Retry after a short delay to let force simulation run
+        setTimeout(attemptCenter, 200)
+        return
       }
 
-      node.on('mouseover', function (event, d) {
-        select(this)
-          .attr('r', d.id === targetEventId ? 12 : 9)
-          .attr('stroke-width', 3);
+      // Center on target event if specified
+      if (targetEventId) {
+        const targetNode = nodes.find(n => n.id === targetEventId)
+        if (targetNode && Number.isFinite(targetNode.x) && Number.isFinite(targetNode.y)) {
+          graphRef.current.centerAt(targetNode.x, targetNode.y, 1000)
+          graphRef.current.zoom(1.8, 1000)
+          hasZoomedRef.current = true
+          return
+        }
+      }
 
-        tooltipDiv.style('visibility', 'visible')
-          .html(`
-          <div style="font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #333;">
-            ${d.id === targetEventId ? '🎯 ' : ''}${d.title}
-          </div>
-          <div style="color: #666; margin-bottom: 6px;"><em>${d.domain}</em></div>
-          <div style="color: #555; font-size: 12px;">${d.description || ''}</div>
-        `);
-      })
-        .on('mousemove', function (event) {
-          tooltipDiv.style('top', (event.pageY - 10) + 'px')
-            .style('left', (event.pageX + 10) + 'px');
-        })
-        .on('mouseout', function (event, d) {
-          select(this)
-            .attr('r', d.id === targetEventId ? 10 : 7)
-            .attr('stroke-width', d.id === targetEventId ? 3 : 2);
-          tooltipDiv.style('visibility', 'hidden');
-        });
+      // Default: fit to viewport - always fit when data changes
+      graphRef.current.zoomToFit(400, 50)
+      hasZoomedRef.current = true
+    }
 
-      // Update positions on tick
-      simulation.on('tick', () => {
-        link
-          .attr('x1', d => d.source.x)
-          .attr('y1', d => d.source.y)
-          .attr('x2', d => d.target.x)
-          .attr('y2', d => d.target.y);
+    // Start attempting to center after a brief delay
+    // We add a dependency on dimensions to re-center when size changes
+    const timer = setTimeout(attemptCenter, 300)
+    return () => clearTimeout(timer)
+  }, [transformedData, targetEventId, dimensions])
 
-        node
-          .attr('cx', d => d.x)
-          .attr('cy', d => d.y);
+  // Handle window resize - re-center the graph
+  useEffect(() => {
+    const handleResize = () => {
+      if (!graphRef.current) return
 
-        labels
-          .attr('x', d => d.x)
-          .attr('y', d => d.y);
-      });
-
-      // Auto-center on target after simulation settles a bit
-      // Auto-center on target after simulation settles a bit
+      // Wait a bit for the container to resize
       setTimeout(() => {
-        let targetNode = null;
-        if (targetEventId) {
-          targetNode = nodes.find(n => n.id === targetEventId);
+        if (graphRef.current) {
+          graphRef.current.zoomToFit(400, 50)
         }
-
-        if (targetNode) {
-          // Calculate transform to center targetNode
-          const scale = 1.2;
-          const x = -targetNode.x * scale + width / 2;
-          const y = -targetNode.y * scale + height / 2;
-
-          svg.transition().duration(1000)
-            .call(zoomBehavior.transform, zoomIdentity.translate(x, y).scale(scale));
-        }
-      }, 800);
-
-      // Drag functions
-      function dragStarted(event, d) {
-        if (!event.active) simulation.alphaTarget(0.3).restart();
-        d.fx = d.x;
-        d.fy = d.y;
-      }
-
-      function dragged(event, d) {
-        d.fx = event.x;
-        d.fy = event.y;
-      }
-
-      function dragEnded(event, d) {
-        if (!event.active) simulation.alphaTarget(0);
-        d.fx = null;
-        d.fy = null;
-      }
-
-      // Cleanup
-      return () => {
-        tooltipDiv.remove();
-        simulation.stop();
-      };
-    } catch (error) {
-      console.error('ForecastGraph rendering error:', error);
+      }, 100)
     }
-  }, [graphData, dimensions, targetEventId]);
 
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  // Empty state
   if (!graphData || !graphData.events || graphData.events.length === 0) {
     return (
       <div className="forecast-graph-empty">
@@ -295,25 +211,61 @@ const ForecastGraph = memo(function ForecastGraph({ graphData, targetEventId }) 
           Enable "Causal Reasoning Tools" when running forecasts to build causal graphs.
         </p>
       </div>
-    );
+    )
   }
 
-  // Use a flex container for the graph + legend
   return (
-    <div ref={containerRef} className="forecast-graph-container" style={{ position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      {/* Legend overlay */}
-      <div className="forecast-graph-legend" style={{ position: 'absolute', top: 10, left: 10, zIndex: 10, background: 'rgba(255,255,255,0.8)', padding: '5px' }}>
-        <div><span style={{ backgroundColor: '#4CAF50' }}></span> Causes</div>
-        <div><span style={{ backgroundColor: '#2196F3' }}></span> Enables</div>
-        <div><span style={{ backgroundColor: '#f44336' }}></span> Prevents</div>
-        <div><span style={{ backgroundColor: '#FF9800' }}></span> Correlates</div>
-        <div><span style={{ backgroundColor: '#9C27B0' }}></span> Conditional</div>
-      </div>
-      {(dimensions.width > 0 && dimensions.height > 0) && (
-        <svg ref={svgRef} width={dimensions.width} height={dimensions.height} style={{ flex: 1, border: 'none', background: 'transparent' }}></svg>
-      )}
-    </div>
-  );
-});
+    <div
+      ref={containerRef}
+      className="graph-visualization"
+      style={{ width: '100%', height: '100%', position: 'relative' }}
+    >
+      <ForceGraph2D
+        ref={graphRef}
+        width={dimensions.width}
+        height={dimensions.height}
+        graphData={transformedData}
+        nodeLabel=""
+        nodeCanvasObject={(node, ctx, globalScale) => {
+          paintNode(node, ctx, globalScale, {
+            selectedNode,
+            targetEventId,
+            pulseTime: pulseTimeRef.current
+          })
+        }}
+        nodePointerAreaPaint={(node, color, ctx) => {
+          const nodeSize = node.isOutcome ? GraphStyles.nodeSize.target + 3 : GraphStyles.nodeSize.default + 3
+          ctx.beginPath()
+          ctx.arc(node.x, node.y, nodeSize + 2, 0, 2 * Math.PI, false)
+          ctx.fillStyle = color
+          ctx.fill()
+        }}
+        linkCanvasObject={(link, ctx, globalScale) => {
+          paintLink(link, ctx, globalScale)
+        }}
+        onNodeClick={(node) => {
+          if (onNodeClick) {
+            onNodeClick(node)
+          }
+        }}
+        onNodeHover={(node) => {
+          document.body.style.cursor = node ? 'pointer' : 'default'
+        }}
+        backgroundColor="#ffffff"
+        cooldownTicks={100}
+        warmupTicks={0}
+        d3AlphaDecay={0.02}
+        d3VelocityDecay={0.4}
+        enableNodeDrag={true}
+        enableZoomInteraction={true}
+        enablePanInteraction={true}
+        minZoom={0.1}
+        maxZoom={8}
+      />
 
-export default ForecastGraph;
+      <GraphLegend />
+    </div>
+  )
+})
+
+export default ForecastGraph

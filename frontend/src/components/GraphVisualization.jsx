@@ -2,6 +2,9 @@ import React, { useRef, useEffect } from 'react'
 import ForceGraph2D from 'react-force-graph-2d'
 import * as d3 from 'd3'
 import './GraphVisualization.css'
+import { GraphStyles } from '../styles/GraphStyles'
+import { paintNode as sharedPaintNode, paintLink as sharedPaintLink, GraphLegend } from '../utils/graphRendering.jsx'
+
 
 function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSettings, targetEventId }) {
   const graphRef = useRef()
@@ -47,45 +50,98 @@ function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSetting
     }
   }, [graphData])
 
-  // Center on target event or fit to bounds
+  const containerRef = useRef()
+  const [dimensions, setDimensions] = React.useState({ width: 0, height: 0 })
+
+  // Monitor container size
   useEffect(() => {
-    // If no graph instance or data, do nothing
-    if (!graphRef.current || graphData.nodes.length === 0) return
+    if (!containerRef.current) return
 
-    // Function to attempt centering
-    const attemptCenter = (attempts = 0) => {
-      if (!graphRef.current) return
-
-      const nodes = graphRef.current.graphData().nodes
-      if (!nodes || nodes.length === 0) return
-
-      let aimedAtTarget = false
-      if (targetEventId) {
-        const targetNode = nodes.find(n => n.id === targetEventId)
-        if (targetNode && Number.isFinite(targetNode.x) && Number.isFinite(targetNode.y)) {
-          // Found target with valid coordinates
-          graphRef.current.centerAt(targetNode.x, targetNode.y, 1000)
-          graphRef.current.zoom(1.8, 1000)
-          aimedAtTarget = true
-        }
-      }
-
-      if (!aimedAtTarget) {
-        if (!hasZoomedRef.current && !targetEventId) {
-          graphRef.current.zoomToFit(400, 50)
-          hasZoomedRef.current = true
-        } else if (targetEventId && attempts < 5) {
-          // Retry if we have a target but couldn't find/center it (likely coords not ready)
-          setTimeout(() => attemptCenter(attempts + 1), 500)
-        }
+    const updateDimensions = () => {
+      if (containerRef.current) {
+        setDimensions({
+          width: containerRef.current.offsetWidth,
+          height: containerRef.current.offsetHeight
+        })
       }
     }
 
-    // Trigger attempt
-    const t = setTimeout(() => attemptCenter(), 500)
+    // Initial measure
+    updateDimensions()
 
-    return () => clearTimeout(t)
-  }, [graphData, targetEventId])
+    const resizeObserver = new ResizeObserver(() => {
+      updateDimensions()
+    })
+
+    resizeObserver.observe(containerRef.current)
+
+    return () => resizeObserver.disconnect()
+  }, [])
+
+
+  // Center on target event or fit to viewport
+  useEffect(() => {
+    // Only attempt if we have data and dimensions
+    if (!graphRef.current || graphData.nodes.length === 0 || dimensions.width === 0) return
+
+    // Reset zoom state when data changes to allow re-centering
+    hasZoomedRef.current = false
+
+    let attemptCount = 0
+    const maxAttempts = 10
+
+    const attemptCenter = () => {
+      if (!graphRef.current) return
+
+      attemptCount++
+      const nodes = graphData.nodes
+
+      // Check if nodes have positions from force simulation
+      const hasPositions = nodes.some(n => Number.isFinite(n.x) && Number.isFinite(n.y))
+
+      if (!hasPositions && attemptCount < maxAttempts) {
+        // Retry after a short delay to let force simulation run
+        setTimeout(attemptCenter, 200)
+        return
+      }
+
+      // Center on target event if specified
+      if (targetEventId) {
+        const targetNode = nodes.find(n => n.id === targetEventId)
+        if (targetNode && Number.isFinite(targetNode.x) && Number.isFinite(targetNode.y)) {
+          graphRef.current.centerAt(targetNode.x, targetNode.y, 1000)
+          graphRef.current.zoom(1.8, 1000)
+          hasZoomedRef.current = true
+          return
+        }
+      }
+
+      // Default: fit to viewport - always fit when data changes
+      graphRef.current.zoomToFit(400, 50)
+      hasZoomedRef.current = true
+    }
+
+    // Start attempting to center after a brief delay
+    const timer = setTimeout(attemptCenter, 300)
+    return () => clearTimeout(timer)
+  }, [graphData, targetEventId, dimensions])
+
+  // Handle window resize - re-center the graph
+  useEffect(() => {
+    const handleResize = () => {
+      if (!graphRef.current) return
+
+      // Wait a bit for the container to resize
+      setTimeout(() => {
+        if (graphRef.current) {
+          graphRef.current.zoomToFit(400, 50)
+        }
+      }, 100)
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
 
   // Configure Obsidian-style forces and keep simulation running
@@ -254,7 +310,8 @@ function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSetting
 
     const label = node.name
     const fontSize = 11 / globalScale
-    const nodeSize = Math.max(4, node.size * 4)
+    // Use GraphStyles for consistent sizing - base size of 8px like ForecastGraph
+    const nodeSize = node.isOutcome ? GraphStyles.nodeSize.target + 3 : (GraphStyles.nodeSize.default + 3)
     const isSelected = selectedNode && selectedNode.id === node.id
     const isOutcome = node.isOutcome
 
@@ -294,8 +351,12 @@ function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSetting
       node.x - nodeSize / 3, node.y - nodeSize / 3, 0,
       node.x, node.y, nodeSize
     )
-    nodeGradient.addColorStop(0, lightenColor(node.color || '#888', 20))
-    nodeGradient.addColorStop(1, node.color || '#888')
+
+    // Use GraphStyles for color
+    const baseColor = GraphStyles.nodeColors[node.domain] || node.color || GraphStyles.nodeColors.general
+
+    nodeGradient.addColorStop(0, lightenColor(baseColor, 20))
+    nodeGradient.addColorStop(1, baseColor)
     ctx.fillStyle = nodeGradient
     ctx.fill()
 
@@ -376,6 +437,15 @@ function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSetting
       .toString(16).slice(1)
   }
 
+  // Helper function to convert hex to rgba
+  const hexToRgba = (hex, alpha) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+    if (result) {
+      return `rgba(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}, ${alpha})`
+    }
+    return `rgba(108, 117, 125, ${alpha})` // Fallback grey
+  }
+
   // Link canvas rendering
   const paintLink = (link, ctx, globalScale) => {
     const start = link.source
@@ -387,15 +457,18 @@ function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSetting
       return
     }
 
-    // Color and style based on edge type
+    // Color and style based on edge type - use GraphStyles for consistency
     const isSynthetic = link.isSynthetic || link.type === 'potentially_relevant'
-    const alpha = isSynthetic ? 0.4 : Math.min(0.6, Math.max(0.25, link.weight))
+    const alpha = isSynthetic ? 0.4 : Math.min(0.7, Math.max(0.4, link.weight || 0.5))
+
+    // Use GraphStyles for link colors, fallback to grey
+    const baseColor = GraphStyles.linkColors[link.type] || GraphStyles.linkColors.default || '#6c757d'
     const color = isSynthetic
       ? `rgba(156, 39, 176, ${alpha})`  // Purple for synthetic links
-      : `rgba(108, 117, 125, ${alpha})`  // Gray for regular links
+      : hexToRgba(baseColor, alpha)
     const lineWidth = isSynthetic
       ? 1 / globalScale  // Thinner for synthetic
-      : Math.max(1.5, link.weight * 2) / globalScale
+      : Math.max(1.5, (link.weight || 1) * 2.5) / globalScale
 
     // Calculate the angle and distance
     const dx = end.x - start.x
@@ -465,9 +538,11 @@ function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSetting
   }
 
   return (
-    <div className="graph-visualization">
+    <div className="graph-visualization" ref={containerRef} style={{ width: '100%', height: '100%' }}>
       <ForceGraph2D
         ref={graphRef}
+        width={dimensions.width}
+        height={dimensions.height}
         graphData={graphData}
         nodeId="id" // CRITICAL: Stable node identity prevents simulation restart
         linkSource="source"
@@ -506,8 +581,11 @@ function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSetting
           }
         }}
         backgroundColor="#ffffff"
-        linkDirectionalArrowLength={0} // We draw custom arrows
+        linkColor={link => GraphStyles.linkColors[link.type] || GraphStyles.linkColors.default}
+        linkWidth={link => (link.value || 1) * 1.5}
+        linkDirectionalArrowLength={3.5}
         linkDirectionalArrowRelPos={1}
+        linkCurvature={0.25}
         cooldownTicks={50} // Reduced from 200 for faster settling after drag
         warmupTicks={0}
         d3AlphaDecay={0.02} // Increased from 0.01 for faster stopping
@@ -522,6 +600,41 @@ function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSetting
         minZoom={0.1}  // Allow zooming out to see full graph
         maxZoom={8}    // Allow zooming in for details
       />
+
+      {/* Legend overlay - matching ForecastGraph */}
+      <div style={{
+        position: 'absolute',
+        top: 10,
+        left: 10,
+        zIndex: 10,
+        background: 'rgba(255,255,255,0.9)',
+        padding: '8px 12px',
+        borderRadius: '6px',
+        fontSize: '11px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        pointerEvents: 'none'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
+          <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.causes, display: 'inline-block', marginRight: 6 }}></span>
+          <span>Causes</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
+          <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.enables, display: 'inline-block', marginRight: 6 }}></span>
+          <span>Enables</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
+          <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.prevents, display: 'inline-block', marginRight: 6 }}></span>
+          <span>Prevents</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
+          <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.correlates_with, display: 'inline-block', marginRight: 6 }}></span>
+          <span>Correlates</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.conditional, display: 'inline-block', marginRight: 6 }}></span>
+          <span>Conditional</span>
+        </div>
+      </div>
     </div>
   )
 }

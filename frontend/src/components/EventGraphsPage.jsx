@@ -401,6 +401,8 @@ function EventGraphsPage({
                       graphData={forecastGraphData}
                       key={graphView}
                       targetEventId={selectedQuestionId ? questions.find(q => q.id === selectedQuestionId)?.target_event_id : null}
+                      onNodeClick={onNodeClick}
+                      selectedNode={selectedNode}
                     />
                   )}
                   {!loadingForecastGraph && !forecastGraphData && (
