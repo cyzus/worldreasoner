@@ -49,8 +49,8 @@
 }
 
 .event-graphs-page .left-sidebar {
-  flex: 0 0 350px;
-  min-width: 350px;
+  flex: 0 0 480px;
+  min-width: 480px;
   overflow-y: auto;
   background-color: white;
   border-radius: 8px;

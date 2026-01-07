@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, memo } from 'react'
 import QuestionEditModal from './QuestionEditModal'
+import QuestionStatistics from './QuestionStatistics'
 import { useDebounce } from '../hooks/useDebounce'
 import './QuestionList.css'
 
@@ -186,6 +187,9 @@ const QuestionList = memo(function QuestionList({
         </div>
       )}
 
+      {/* Statistics Panel */}
+      <QuestionStatistics questions={questions} />
+
       <div className="question-list-filters">
         <input
           type="text"
@@ -252,9 +256,8 @@ const QuestionList = memo(function QuestionList({
           filteredQuestions.map(q => (
             <div
               key={q.id}
-              className={`question-list-item ${
-                selectedQuestionId === q.id ? 'selected' : ''
-              } ${selectedIds.has(q.id) ? 'multi-selected' : ''}`}
+              className={`question-list-item ${selectedQuestionId === q.id ? 'selected' : ''
+                } ${selectedIds.has(q.id) ? 'multi-selected' : ''}`}
               onClick={(e) => toggleSelection(q.id, e)}
             >
               {multiSelectMode && (
@@ -293,28 +296,28 @@ const QuestionList = memo(function QuestionList({
                 </div>
                 <div className="question-item-text">{q.question_text}</div>
                 <div className="question-item-meta">
-                <div className="meta-item">
-                  <span className="meta-label">Type:</span>
-                  <span>{q.question_type}</span>
-                </div>
-                {q.source && (
                   <div className="meta-item">
-                    <span className="meta-label">Source:</span>
-                    <span>{q.source}</span>
+                    <span className="meta-label">Type:</span>
+                    <span>{q.question_type}</span>
                   </div>
-                )}
-                {q.target_event_id && (
-                  <div className="meta-item">
-                    <span className="meta-label">📍</span>
-                    <span>Has target event</span>
-                  </div>
-                )}
-                {q.related_event_ids && q.related_event_ids.length > 0 && (
-                  <div className="meta-item">
-                    <span className="meta-label">🔗</span>
-                    <span>{q.related_event_ids.length} related</span>
-                  </div>
-                )}
+                  {q.source && (
+                    <div className="meta-item">
+                      <span className="meta-label">Source:</span>
+                      <span>{q.source}</span>
+                    </div>
+                  )}
+                  {q.target_event_id && (
+                    <div className="meta-item">
+                      <span className="meta-label">📍</span>
+                      <span>Has target event</span>
+                    </div>
+                  )}
+                  {q.related_event_ids && q.related_event_ids.length > 0 && (
+                    <div className="meta-item">
+                      <span className="meta-label">🔗</span>
+                      <span>{q.related_event_ids.length} related</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
