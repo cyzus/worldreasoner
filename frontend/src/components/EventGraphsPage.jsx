@@ -9,6 +9,7 @@ import ForecastGraph from './ForecastGraph'
 import LinkDistanceIcon from './ForceControls' // Make sure this import is correct or remove if not used
 import QuestionStatistics from './QuestionStatistics'
 import ArticleCoverage from './ArticleCoverage'
+import CausalPathProgress from './CausalPathProgress'
 import './EventGraphsPage.css'
 
 /**
@@ -332,9 +333,18 @@ function EventGraphsPage({
             </div>
           )}
 
+          {/* Causal Path Progress */}
+          {selectedQuestionId && (
+            <div style={{ flexShrink: 0 }}>
+              <CausalPathProgress questionId={selectedQuestionId} />
+            </div>
+          )}
+
           {/* Article Coverage Analysis */}
           {selectedQuestionId && (
-            <ArticleCoverage questionId={selectedQuestionId} />
+            <div style={{ flexShrink: 0 }}>
+              <ArticleCoverage questionId={selectedQuestionId} />
+            </div>
           )}
 
           {/* Graph display area */}
@@ -367,6 +377,7 @@ function EventGraphsPage({
                   {error && <div className="error">{error}</div>}
                   {!loading && !error && (
                     <GraphVisualization
+                      key={`evidence-${graphView}-${selectedQuestionId || 'none'}`}
                       graphData={graphData}
                       onNodeClick={onNodeClick}
                       selectedNode={selectedNode}
@@ -400,8 +411,8 @@ function EventGraphsPage({
                   )}
                   {!loadingForecastGraph && forecastGraphData && (
                     <ForecastGraph
+                      key={`forecast-${graphView}-${selectedQuestionId || 'none'}`}
                       graphData={forecastGraphData}
-                      key={graphView}
                       targetEventId={selectedQuestionId ? questions.find(q => q.id === selectedQuestionId)?.target_event_id : null}
                       onNodeClick={onNodeClick}
                       selectedNode={selectedNode}
@@ -442,7 +453,7 @@ function EventGraphsPage({
 
           {/* Price history chart for Polymarket questions - Simplified UI */}
           {selectedQuestionId && questions.find(q => q.id === selectedQuestionId)?.source === 'polymarket' && (
-            <div style={{ marginTop: '16px' }}>
+            <div style={{ flexShrink: 0, marginTop: '16px' }}>
               {!loadingPriceHistory && priceHistoryData && priceHistoryData.price_history && Object.keys(priceHistoryData.price_history).length > 0 && (
                 <TimeSeriesChart
                   priceHistory={priceHistoryData.price_history}

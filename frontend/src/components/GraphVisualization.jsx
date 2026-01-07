@@ -378,40 +378,7 @@ function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSetting
         maxZoom={4}
       />
 
-      {/* Legend overlay - matching ForecastGraph */}
-      <div style={{
-        position: 'absolute',
-        top: 10,
-        left: 10,
-        zIndex: 10,
-        background: 'rgba(255,255,255,0.9)',
-        padding: '8px 12px',
-        borderRadius: '6px',
-        fontSize: '11px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-        pointerEvents: 'none'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-          <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.causes, display: 'inline-block', marginRight: 6 }}></span>
-          <span>Causes</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-          <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.enables, display: 'inline-block', marginRight: 6 }}></span>
-          <span>Enables</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-          <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.prevents, display: 'inline-block', marginRight: 6 }}></span>
-          <span>Prevents</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-          <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.correlates_with, display: 'inline-block', marginRight: 6 }}></span>
-          <span>Correlates</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.conditional, display: 'inline-block', marginRight: 6 }}></span>
-          <span>Conditional</span>
-        </div>
-      </div>
+      <GraphLegend />
     </div>
   )
 }

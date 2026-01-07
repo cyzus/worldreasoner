@@ -14,13 +14,20 @@ export const GraphStyles = {
     },
 
     // Link Colors (Relation based)
+    // Positive impact relations (lead toward target)
     linkColors: {
-        causes: '#4CAF50',      // Green
-        enables: '#2196F3',     // Blue
-        prevents: '#f44336',    // Red
-        correlates_with: '#FF9800', // Orange
-        conditional: '#9C27B0', // Purple
-        default: '#BDBDBD'      // Grey
+        causes: '#4CAF50',      // Green (neutral-positive)
+        enables: '#2196F3',     // Blue (enabling)
+        amplifies: '#22c55e',   // Bright green (increases intensity)
+        triggers: '#10b981',    // Emerald (immediate onset)
+        // Negative impact relations (lead away from target)
+        prevents: '#ef4444',    // Red (blocks)
+        inhibits: '#f97316',    // Orange-red (reduces likelihood)
+        // Neutral relations
+        correlates_with: '#8b5cf6', // Purple (correlation)
+        correlates: '#8b5cf6',      // Alias for correlates_with
+        conditional: '#ec4899', // Pink (conditional)
+        default: '#94a3b8'      // Slate grey
     },
 
     // Node Sizes

@@ -1030,6 +1030,108 @@ async def get_article_coverage(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/{question_id}/causal_path")
+async def get_causal_path_analysis(
+    question_id: str,
+    db: GenericDatabase = Depends(get_database),
+):
+    """Get causal path analysis for a question's target event.
+
+    Analyzes all causal paths leading to the target event, including:
+    - Path statistics (length, completion ratio)
+    - Event status (confirmed vs predicted)
+    - Path direction and strength
+    - Per-event path information
+
+    Args:
+        question_id: Question identifier
+
+    Returns:
+        Causal path analysis with statistics and event-level details
+    """
+    try:
+        from backend.services.causal_path_analyzer import CausalPathAnalyzer
+
+        logger.info(f"Analyzing causal paths for question {question_id}")
+
+        # Get question
+        question = db.get(Question, question_id)
+        if not question:
+            raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
+
+        # Check if question has a target event
+        if not question.target_event_id:
+            return {
+                "question_id": question_id,
+                "has_target_event": False,
+                "message": "Question has no target event"
+            }
+
+        # Analyze paths to target
+        analyzer = CausalPathAnalyzer(db)
+        analysis = analyzer.analyze_paths_to_target(
+            target_event_id=question.target_event_id,
+            max_depth=10,
+            max_paths=20
+        )
+
+        # Get path statistics
+        stats = analysis.get_path_statistics()
+
+        # Get all paths details
+        all_paths_details = []
+        for path in analysis.paths:
+            path_events = []
+            for node in path:
+                path_events.append({
+                    "event_id": node.event_id,
+                    "title": node.event.title,
+                    "status": node.event.status.value,
+                    "occurred_date": node.event.occurred_date.isoformat() if node.event.occurred_date else None,
+                    "depth": node.depth,
+                    "edge_from_parent": {
+                        "relation_type": node.edge_from_parent.relation_type.value if node.edge_from_parent else None,
+                        "strength": node.edge_from_parent.strength if node.edge_from_parent else None,
+                        "confidence": node.edge_from_parent.confidence if node.edge_from_parent else None,
+                    } if node.edge_from_parent else None
+                })
+            all_paths_details.append(path_events)
+
+        # Get related event IDs for this question
+        event_ids = list(analysis.all_events_in_paths)
+        if question.related_event_ids:
+            event_ids.extend(question.related_event_ids)
+        event_ids = list(set(event_ids))  # Deduplicate
+
+        # Get path information for each event
+        event_path_info = analyzer.get_path_for_events(event_ids, question.target_event_id)
+
+        logger.info(
+            f"Found {stats['total_paths']} paths to target, "
+            f"{stats['confirmed_events']}/{stats['total_events']} events confirmed"
+        )
+
+        return {
+            "question_id": question_id,
+            "target_event_id": question.target_event_id,
+            "has_target_event": True,
+            "statistics": stats,
+            "paths": all_paths_details,
+            "event_path_info": event_path_info,
+            "all_events_in_paths": list(analysis.all_events_in_paths),
+            "confirmed_events": list(analysis.confirmed_event_ids),
+            "predicted_events": list(analysis.predicted_event_ids)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to analyze causal paths: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class QuestionUpdateRequest(BaseModel):
     """Request to update a question."""
     question_text: Optional[str] = None

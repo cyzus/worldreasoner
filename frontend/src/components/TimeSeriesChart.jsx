@@ -26,6 +26,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
 }) {
   const svgRef = useRef()
   const [hoveredEvent, setHoveredEvent] = useState(null)
+  const [hoveredEventImpact, setHoveredEventImpact] = useState(null)
   const [hoveredPrice, setHoveredPrice] = useState(null)
   const [isExpanded, setIsExpanded] = useState(true)
 
@@ -280,6 +281,51 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
         .text(outcome)
     })
 
+    // Helper function to calculate price impact
+    const calculatePriceImpact = (eventDate, priceHistory, outcomes) => {
+      const eventTime = eventDate.getTime()
+      const before1h = eventTime - (1 * 60 * 60 * 1000)
+      const after4h = eventTime + (4 * 60 * 60 * 1000)
+
+      // Get price for first outcome (typically "Yes")
+      const firstTokenId = Object.keys(priceHistory)[0]
+      if (!firstTokenId) return null
+
+      const history = priceHistory[firstTokenId]
+      if (!Array.isArray(history) || history.length === 0) return null
+
+      // Find closest prices before and after event
+      let priceBefore = null
+      let priceAfter = null
+
+      // Binary search for closest before/after prices
+      for (let point of history) {
+        const pointTime = point.t * 1000 // Convert to ms
+        if (pointTime < eventTime && pointTime >= before1h) {
+          if (!priceBefore || Math.abs(pointTime - eventTime) < Math.abs(priceBefore.time - eventTime)) {
+            priceBefore = { price: point.p, time: pointTime }
+          }
+        }
+        if (pointTime > eventTime && pointTime <= after4h) {
+          if (!priceAfter || Math.abs(pointTime - eventTime) < Math.abs(priceAfter.time - eventTime)) {
+            priceAfter = { price: point.p, time: pointTime }
+          }
+        }
+      }
+
+      if (!priceBefore || !priceAfter) return null
+
+      const delta = priceAfter.price - priceBefore.price
+      const deltaPercent = delta * 100 // Already in 0-1 range
+
+      return {
+        delta: deltaPercent,
+        direction: delta > 0.02 ? 'up' : delta < -0.02 ? 'down' : 'neutral',
+        priceBefore: priceBefore.price,
+        priceAfter: priceAfter.price
+      }
+    }
+
     // Add event markers (if events provided)
     if (eventsInTimeRange.length > 0) {
       eventsInTimeRange.forEach((event, idx) => {
@@ -287,6 +333,10 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
         const isTarget = event.id === targetEventId
         const level = event.level || 0
         const yOffset = -15 - (level * levelHeight)
+
+        // Calculate market impact for this event
+        const eventDate = new Date(event.occurred_date || event.predicted_date)
+        const impact = calculatePriceImpact(eventDate, priceHistory, outcomes)
 
         // Event marker line (vertical line at event time)
         g.append('line')
@@ -312,12 +362,14 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
           .style('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))')
           .on('mouseenter', function () {
             setHoveredEvent(event)
+            setHoveredEventImpact(impact)
             select(this)
               .attr('r', isTarget ? 10 : 8)
               .attr('stroke-width', 3)
           })
           .on('mouseleave', function () {
             setHoveredEvent(null)
+            setHoveredEventImpact(null)
             select(this)
               .attr('r', isTarget ? 8 : 6)
               .attr('stroke-width', 2)
@@ -375,6 +427,52 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
             .style('font-weight', 'bold')
             .style('text-shadow', '0 1px 2px rgba(0,0,0,0.1)')
             .text(shortTitle)
+        }
+
+        // Add market impact indicator if available
+        if (impact && impact.direction !== 'neutral') {
+          const impactColor = impact.direction === 'up' ? '#22c55e' : '#ef4444'
+          const impactArrow = impact.direction === 'up' ? '↗' : '↘'
+
+          // Draw curved line from event to price line showing impact
+          const priceY = yScale(impact.priceAfter)
+
+          // Only draw if we have valid coordinates
+          if (isFinite(priceY)) {
+            const midX = x + 25
+            const midY = (yOffset + 10 + priceY) / 2
+
+            // Draw curved path
+            const path = `M ${x},${yOffset + 10} Q ${midX},${midY} ${x + 20},${priceY}`
+
+            g.append('path')
+              .attr('d', path)
+              .attr('fill', 'none')
+              .attr('stroke', impactColor)
+              .attr('stroke-width', 1.5)
+              .attr('opacity', 0.6)
+              .attr('stroke-dasharray', '3,2')
+              .style('pointer-events', 'none')
+
+            // Add arrow head
+            g.append('circle')
+              .attr('cx', x + 20)
+              .attr('cy', priceY)
+              .attr('r', 2)
+              .attr('fill', impactColor)
+              .style('pointer-events', 'none')
+
+            // Add impact label (delta percentage)
+            g.append('text')
+              .attr('x', x + 15)
+              .attr('y', midY - 2)
+              .attr('text-anchor', 'middle')
+              .style('fill', impactColor)
+              .style('font-size', '9px')
+              .style('font-weight', 'bold')
+              .style('text-shadow', '0 1px 2px rgba(255,255,255,0.8)')
+              .text(`${impactArrow} ${Math.abs(impact.delta).toFixed(1)}pp`)
+          }
         }
       })
 
@@ -620,7 +718,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
           padding: '12px 16px',
           color: '#495057',
           fontSize: '12px',
-          maxWidth: '350px',
+          maxWidth: '380px',
           pointerEvents: 'none',
           zIndex: 1000,
           boxShadow: '0 8px 24px rgba(0,0,0,0.15)'
@@ -633,7 +731,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
           <div style={{ fontWeight: '600', marginBottom: '6px', fontSize: '13px', lineHeight: '1.4', color: '#212529' }}>
             {hoveredEvent.title}
           </div>
-          <div style={{ fontSize: '11px', color: '#6c757d' }}>
+          <div style={{ fontSize: '11px', color: '#6c757d', marginBottom: hoveredEventImpact ? '8px' : '0' }}>
             📅 {new Date(hoveredEvent.occurred_date || hoveredEvent.predicted_date).toLocaleString('en-US', {
               month: 'short',
               day: 'numeric',
@@ -642,6 +740,53 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
               minute: '2-digit'
             })}
           </div>
+
+          {/* Market impact section */}
+          {hoveredEventImpact && (
+            <div style={{
+              paddingTop: '8px',
+              borderTop: '1px solid #e5e7eb',
+              marginTop: '4px'
+            }}>
+              <div style={{ fontSize: '11px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                Market Reaction (4h window):
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px' }}>
+                <span style={{ color: '#6b7280' }}>Before:</span>
+                <span style={{ fontWeight: '600', color: '#374151' }}>
+                  {(hoveredEventImpact.priceBefore * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px' }}>
+                <span style={{ color: '#6b7280' }}>After:</span>
+                <span style={{ fontWeight: '600', color: '#374151' }}>
+                  {(hoveredEventImpact.priceAfter * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div style={{
+                marginTop: '4px',
+                padding: '4px 8px',
+                backgroundColor: hoveredEventImpact.direction === 'up' ? '#dcfce7' : '#fee2e2',
+                borderRadius: '4px',
+                display: 'inline-block'
+              }}>
+                <span style={{
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  color: hoveredEventImpact.direction === 'up' ? '#15803d' : '#b91c1c'
+                }}>
+                  {hoveredEventImpact.direction === 'up' ? '↗' : '↘'} {hoveredEventImpact.direction === 'up' ? '+' : ''}{hoveredEventImpact.delta.toFixed(1)}pp
+                </span>
+                <span style={{
+                  fontSize: '10px',
+                  marginLeft: '6px',
+                  color: hoveredEventImpact.direction === 'up' ? '#166534' : '#991b1b'
+                }}>
+                  ({hoveredEventImpact.direction === 'up' ? 'Target more likely' : 'Target less likely'})
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

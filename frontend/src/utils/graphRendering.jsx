@@ -64,6 +64,11 @@ export const paintNode = (node, ctx, globalScale, options = {}) => {
     const nodeSize = isOutcome ? GraphStyles.nodeSize.target + 3 : GraphStyles.nodeSize.default + 3
     const isSelected = selectedNode && selectedNode.id === node.id
 
+    // Determine event status
+    const eventStatus = node.properties?.status || node.status || 'unknown'
+    const isConfirmed = eventStatus === 'occurred'
+    const isPredicted = eventStatus === 'predicted' || eventStatus === 'uncertain'
+
     // Calculate label opacity based on zoom level
     const labelOpacity = Math.min(1, Math.max(0, (globalScale - 0.3) / 0.7))
 
@@ -100,8 +105,59 @@ export const paintNode = (node, ctx, globalScale, options = {}) => {
         node.x, node.y, nodeSize
     )
 
-    // Use GraphStyles for color
-    const baseColor = GraphStyles.nodeColors[node.domain] || node.color || GraphStyles.nodeColors.general
+    // Choose color based on event status (single source of truth)
+    let baseColor
+    if (isOutcome) {
+        // Target event - gold
+        baseColor = GraphStyles.nodeColors.target
+    } else if (isConfirmed) {
+        // Confirmed events - green (with time-based variation)
+        const dateStr = node.properties?.occurred_date || node.occurred_date
+        if (dateStr) {
+            const eventDate = new Date(dateStr)
+            const now = new Date()
+            const ageInDays = (now - eventDate) / (1000 * 60 * 60 * 24)
+
+            // Older events = darker green, newer = lighter green
+            if (ageInDays > 180) {
+                baseColor = '#065f46' // Very dark green (old)
+            } else if (ageInDays > 90) {
+                baseColor = '#047857' // Dark green
+            } else if (ageInDays > 30) {
+                baseColor = '#059669' // Medium green
+            } else if (ageInDays > 7) {
+                baseColor = '#10b981' // Bright green
+            } else {
+                baseColor = '#34d399' // Light green (recent)
+            }
+        } else {
+            baseColor = '#10b981' // Default bright green
+        }
+    } else if (isPredicted) {
+        // Predicted events - blue/gray gradient
+        const dateStr = node.properties?.predicted_date || node.predicted_date
+        if (dateStr) {
+            const predictedDate = new Date(dateStr)
+            const now = new Date()
+            const daysUntil = (predictedDate - now) / (1000 * 60 * 60 * 24)
+
+            // Soon = darker blue, far future = lighter blue/gray
+            if (daysUntil < 7) {
+                baseColor = '#1e40af' // Dark blue (imminent)
+            } else if (daysUntil < 30) {
+                baseColor = '#3b82f6' // Medium blue
+            } else if (daysUntil < 90) {
+                baseColor = '#60a5fa' // Light blue
+            } else {
+                baseColor = '#93c5fd' // Very light blue (distant)
+            }
+        } else {
+            baseColor = '#6b7280' // Gray (no date)
+        }
+    } else {
+        // Unknown status - use domain color as fallback
+        baseColor = GraphStyles.nodeColors[node.domain] || node.color || GraphStyles.nodeColors.general
+    }
 
     nodeGradient.addColorStop(0, lightenColor(baseColor, 20))
     nodeGradient.addColorStop(1, baseColor)
@@ -268,32 +324,112 @@ export const GraphLegend = () => (
         top: 10,
         left: 10,
         zIndex: 10,
-        background: 'rgba(255,255,255,0.9)',
-        padding: '8px 12px',
-        borderRadius: '6px',
+        background: 'rgba(255,255,255,0.95)',
+        padding: '10px 14px',
+        borderRadius: '8px',
         fontSize: '11px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-        pointerEvents: 'none'
+        boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+        pointerEvents: 'none',
+        maxWidth: '200px'
     }}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-            <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.causes, display: 'inline-block', marginRight: 6 }}></span>
-            <span>Causes</span>
+        {/* Node colors section */}
+        <div style={{ marginBottom: '10px' }}>
+            <div style={{ fontWeight: '600', marginBottom: '6px', fontSize: '12px', color: '#374151' }}>
+                Event Status
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
+                <span style={{
+                    width: 12,
+                    height: 12,
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #34d399 0%, #10b981 100%)',
+                    display: 'inline-block',
+                    marginRight: 6,
+                    border: '1px solid rgba(0,0,0,0.1)'
+                }}></span>
+                <span style={{ fontSize: '10px' }}>Confirmed (occurred)</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
+                <span style={{
+                    width: 12,
+                    height: 12,
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #93c5fd 0%, #3b82f6 100%)',
+                    display: 'inline-block',
+                    marginRight: 6,
+                    border: '1px solid rgba(0,0,0,0.1)'
+                }}></span>
+                <span style={{ fontSize: '10px' }}>Predicted (pending)</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+                <span style={{
+                    width: 12,
+                    height: 12,
+                    borderRadius: '50%',
+                    backgroundColor: GraphStyles.nodeColors.target,
+                    display: 'inline-block',
+                    marginRight: 6,
+                    border: '2px solid #f59e0b'
+                }}></span>
+                <span style={{ fontSize: '10px', fontWeight: '600' }}>Target Event</span>
+            </div>
+            <div style={{ fontSize: '9px', color: '#9ca3af', marginTop: '4px', fontStyle: 'italic' }}>
+                Shade = time (darker = older/sooner)
+            </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-            <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.enables, display: 'inline-block', marginRight: 6 }}></span>
-            <span>Enables</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-            <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.prevents, display: 'inline-block', marginRight: 6 }}></span>
-            <span>Prevents</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-            <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.correlates_with, display: 'inline-block', marginRight: 6 }}></span>
-            <span>Correlates</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-            <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.conditional, display: 'inline-block', marginRight: 6 }}></span>
-            <span>Conditional</span>
+
+        {/* Causal relations section */}
+        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '8px' }}>
+            <div style={{ fontWeight: '600', marginBottom: '6px', fontSize: '12px', color: '#374151' }}>
+                Causal Relations
+            </div>
+
+            {/* Positive relations */}
+            <div style={{ marginBottom: '6px' }}>
+                <div style={{ fontSize: '10px', fontWeight: '600', color: '#059669', marginBottom: '3px' }}>Toward Target</div>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2px', marginLeft: '8px' }}>
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.amplifies, display: 'inline-block', marginRight: 6 }}></span>
+                    <span style={{ fontSize: '10px' }}>Amplifies</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2px', marginLeft: '8px' }}>
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.triggers, display: 'inline-block', marginRight: 6 }}></span>
+                    <span style={{ fontSize: '10px' }}>Triggers</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2px', marginLeft: '8px' }}>
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.enables, display: 'inline-block', marginRight: 6 }}></span>
+                    <span style={{ fontSize: '10px' }}>Enables</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', marginLeft: '8px' }}>
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.causes, display: 'inline-block', marginRight: 6 }}></span>
+                    <span style={{ fontSize: '10px' }}>Causes</span>
+                </div>
+            </div>
+
+            {/* Negative relations */}
+            <div style={{ marginBottom: '6px' }}>
+                <div style={{ fontSize: '10px', fontWeight: '600', color: '#dc2626', marginBottom: '3px' }}>Away from Target</div>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2px', marginLeft: '8px' }}>
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.prevents, display: 'inline-block', marginRight: 6 }}></span>
+                    <span style={{ fontSize: '10px' }}>Prevents</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', marginLeft: '8px' }}>
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.inhibits, display: 'inline-block', marginRight: 6 }}></span>
+                    <span style={{ fontSize: '10px' }}>Inhibits</span>
+                </div>
+            </div>
+
+            {/* Neutral relations */}
+            <div>
+                <div style={{ fontSize: '10px', fontWeight: '600', color: '#6b7280', marginBottom: '3px' }}>Other</div>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2px', marginLeft: '8px' }}>
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.correlates, display: 'inline-block', marginRight: 6 }}></span>
+                    <span style={{ fontSize: '10px' }}>Correlates</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', marginLeft: '8px' }}>
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.conditional, display: 'inline-block', marginRight: 6 }}></span>
+                    <span style={{ fontSize: '10px' }}>Conditional</span>
+                </div>
+            </div>
         </div>
     </div>
 )
