@@ -35,7 +35,10 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
     
     # Auto-generate inputs from Enum classes (single source of truth)
     inputs = {
-        "question_text": {"type": "string", "description": "The actual question text"},
+        "question_text": {
+            "type": "string",
+            "description": "The actual question text"
+        },
         "question_type": {
             "type": "string",
             "description": f"Question type - MUST be one of: {', '.join(enum_to_list(QuestionType))}",
@@ -46,17 +49,58 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             "description": f"Question domain - one of: {', '.join(enum_to_list(Domain))}",
             "enum": enum_to_list(Domain)
         },
-        "difficulty": {"type": "integer", "description": "Difficulty level 1-5"},
-        "resolution_date": {"type": "string", "description": "When question can be resolved (ISO 8601 WITH timezone, e.g. 2025-12-31T23:59:59Z or 2025-12-31T23:59:59+00:00; MUST include 'Z' or an explicit offset)"},
-        "resolution_criteria": {"type": "string", "description": "Objective rules for how to verify/resolve this question"},
-        "related_event_ids": {"type": "string", "description": "Comma-separated event IDs", "nullable": True},
-        "ground_truth": {"type": "string", "description": "Answer if already resolved", "nullable": True},
-        "resolution_reasoning": {"type": "string", "description": "Evidence/explanation for why ground_truth is what it is (only if ground_truth is provided)", "nullable": True},
-        "context": {"type": "string", "description": "Optional background information to help understand the question", "nullable": True},
-        "options": {"type": "string", "description": "For MCQ: comma-separated answer choices", "nullable": True},
-        "quantity_unit": {"type": "string", "description": "For quantity: unit (e.g., USD, users, GW)", "nullable": True},
-        "quantity_bounds": {"type": "string", "description": "For quantity: range as min:X,max:Y", "nullable": True},
-        "estimated_start_time": {"type": "string", "description": "When question becomes valid for forecasting (ISO 8601 WITH timezone). Should be BEFORE resolution_date and when sufficient context is available.", "nullable": True},
+        "difficulty": {
+            "type": "integer",
+            "description": "Difficulty level 1-5"
+        },
+        "resolution_date": {
+            "type": "string",
+            "description": "When question can be resolved (ISO 8601 WITH timezone, e.g. 2025-12-31T23:59:59Z or 2025-12-31T23:59:59+00:00; MUST include 'Z' or an explicit offset)"
+        },
+        "resolution_criteria": {
+            "type": "string",
+            "description": "Objective rules for how to verify/resolve this question"
+        },
+        "related_event_ids": {
+            "type": "string",
+            "description": "Comma-separated event IDs",
+            "nullable": True
+        },
+        "ground_truth": {
+            "type": "string",
+            "description": "Answer if already resolved",
+            "nullable": True
+        },
+        "resolution_reasoning": {
+            "type": "string",
+            "description": "Evidence/explanation for why ground_truth is what it is (only if ground_truth is provided)",
+            "nullable": True
+        },
+        "context": {
+            "type": "string",
+            "description": "Optional background information to help understand the question",
+            "nullable": True
+        },
+        "options": {
+            "type": "string",
+            "description": "For MCQ: comma-separated answer choices",
+            "nullable": True
+        },
+        "quantity_unit": {
+            "type": "string",
+            "description": "For quantity: unit (e.g., USD, users, GW)",
+            "nullable": True
+        },
+        "quantity_bounds": {
+            "type": "string",
+            "description": "For quantity: range as min:X,max:Y",
+            "nullable": True
+        },
+        "estimated_start_time": {
+            "type": "string",
+            "description": "When question becomes valid for forecasting (ISO 8601 WITH timezone). Should be BEFORE resolution_date and when sufficient context is available.",
+            "nullable": True
+        },
     }
     output_type = "string"  # JSON string
     

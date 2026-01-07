@@ -42,8 +42,15 @@ class WebFetchTool(Tool):
     """
     
     inputs = {
-        "url": {"type": "string", "description": "URL to fetch content from"},
-        "timeout": {"type": "integer", "description": "Timeout in seconds (default: 30)", "nullable": True},
+        "url": {
+            "type": "string",
+            "description": "URL to fetch content from"
+        },
+        "timeout": {
+            "type": "integer",
+            "description": "Timeout in seconds (default: 30)",
+            "nullable": True
+        },
     }
     output_type = "string"  # JSON string
     

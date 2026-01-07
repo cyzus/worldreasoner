@@ -17,8 +17,15 @@ class RssFetchTool(Tool):
     description = "Fetch items from an RSS/Atom feed URL and return item metadata as JSON"
 
     inputs = {
-        "feed_url": {"type": "string", "description": "RSS/Atom feed URL"},
-        "max_items": {"type": "integer", "description": "Maximum items to return", "nullable": True},
+        "feed_url": {
+            "type": "string",
+            "description": "RSS/Atom feed URL"
+        },
+        "max_items": {
+            "type": "integer",
+            "description": "Maximum items to return",
+            "nullable": True
+        },
     }
     output_type = "string"
 

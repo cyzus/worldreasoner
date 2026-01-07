@@ -62,33 +62,33 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
     # Auto-generate inputs from Enum classes (single source of truth)
     inputs = {
         "title": {
-            "type": "string", 
+            "type": "string",
             "description": "Short event title"
-            },
+        },
         "description": {
-            "type": "string", 
+            "type": "string",
             "description": "Detailed event description"
-            },
+        },
         "domain": {
             "type": "string",
             "description": f"Event domain - one of: {', '.join(enum_to_list(Domain))}",
             "enum": enum_to_list(Domain)
         },
         "occurred_date": {
-            "type": "string", 
-            "description": "When event occurred (ISO 8601 WITH timezone, e.g. 2025-11-27T14:30:00Z or 2025-11-27T14:30:00+00:00; MUST include 'Z' or an explicit offset)", 
-            "nullable": True},
+            "type": "string",
+            "description": "When event occurred (ISO 8601 WITH timezone, e.g. 2025-11-27T14:30:00Z or 2025-11-27T14:30:00+00:00; MUST include 'Z' or an explicit offset)",
+            "nullable": True
+        },
         "event_type": {
             "type": "string",
             "description": f"Event type - one of: {', '.join(enum_to_list(EventType))}",
             "enum": enum_to_list(EventType),
             "nullable": True
         },
-        "source_article_ids": 
-            {
-                "type": "string", 
-                "description": "Comma-separated article IDs", 
-            },
+        "source_article_ids": {
+            "type": "string",
+            "description": "Comma-separated article IDs"
+        },
     }
     output_type = "string"  # JSON string
     

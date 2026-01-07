@@ -8,6 +8,7 @@ from typing import Optional
 from smolagents import Tool
 from src.domain.models import CausalHypothesis, CausalRelationType, Event
 from src.core.collectors import ResultCollector
+from src.utils.enums import enum_to_list
 
 
 class CausalReasonerTool(Tool):
@@ -74,7 +75,8 @@ class CausalReasonerTool(Tool):
         },
         "relation_type": {
             "type": "string",
-            "description": f"Type of relations: {', '.join([t.value for t in CausalRelationType])}"
+            "description": f"Type of relations: {', '.join(enum_to_list(CausalRelationType))}",
+            "enum": enum_to_list(CausalRelationType)
         },
         "strength": {
             "type": "number",

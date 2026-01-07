@@ -13,6 +13,7 @@ from src.domain.models.event import CausalRelationType
 from src.core.database import GenericDatabase
 from src.utils.logging import logger
 from src.utils.id_generator import generate_forecast_hypothesis_id
+from src.utils.enums import enum_to_list
 
 
 class ForecastCausalReasonerTool(Tool):
@@ -56,7 +57,8 @@ class ForecastCausalReasonerTool(Tool):
         },
         "relation_type": {
             "type": "string",
-            "description": "Type of causation: causes, enables, prevents, correlates_with, or conditional"
+            "description": f"Type of causation - one of: {', '.join(enum_to_list(CausalRelationType))}",
+            "enum": enum_to_list(CausalRelationType)
         },
         "strength": {
             "type": "number",

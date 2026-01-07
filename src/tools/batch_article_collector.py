@@ -27,11 +27,11 @@ class BatchArticleCollectorTool(ArticleCollectorTool):
     """
 
     name = "batch_article_collector"
-    description = """Fetch and store multiple articles by URLs in one call.
+    description = f"""Fetch and store multiple articles by URLs in one call.
 
     Args:
         articles_json (str): JSON array of objects with fields:
-            url, title, source, domain(optional; one of: {domains}), published_date(optional, ISO 8601 WITH timezone), author(optional)
+            url, title, source, domain (optional; one of: {', '.join(enum_to_list(Domain))}), published_date (optional, ISO 8601 WITH timezone), author (optional)
 
     Returns:
         JSON summary with counts and IDs of stored articles
@@ -40,7 +40,7 @@ class BatchArticleCollectorTool(ArticleCollectorTool):
     inputs = {
         "articles_json": {
             "type": "string",
-            "description": "JSON array of article metadata (url,title,source,domain(optional; one of: {domains}),published_date(optional, ISO 8601 WITH timezone),author(optional))"
+            "description": f"JSON array of article metadata. Each object should have: url (str), title (str), source (str), domain (optional; one of: {', '.join(enum_to_list(Domain))}), published_date (optional, ISO 8601 WITH timezone), author (optional)"
         }
     }
     output_type = "string"
@@ -64,20 +64,9 @@ class BatchArticleCollectorTool(ArticleCollectorTool):
         """
         super().__init__(db=db, db_path=db_path, collector=collector, question_id=question_id)
         self.default_domain = default_domain
-        # Precompute domain list for descriptions
-        self._domain_list = ", ".join(enum_to_list(Domain))
 
     def forward(self, articles_json: str) -> str:
         """Process multiple articles from a JSON array."""
-        # Fill dynamic domain enum into descriptions once (runtime strings for agent clarity)
-        # Note: smolagents tools typically read 'inputs' and 'description' at init time.
-        # We replace placeholders if present.
-        if "{domains}" in self.description:
-            self.description = self.description.format(domains=self._domain_list)
-        # Update inputs description similarly
-        if "articles_json" in self.inputs and "{domains}" in self.inputs["articles_json"]["description"]:
-            self.inputs["articles_json"]["description"] = self.inputs["articles_json"]["description"].format(domains=self._domain_list)
-
         try:
             items: List[Dict[str, Any]] = json.loads(articles_json)
         except Exception as e:
