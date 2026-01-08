@@ -383,7 +383,7 @@ class WebSearchTool(Tool):
                     published_date=published_date.isoformat(),
                     domain=self.domain, author=None
                 )
-                collected.append(title[:50] + "..." if len(title) > 50 else title)
+                collected.append(title[:30] + "..." if len(title) > 30 else title)
 
             except Exception as e:
                 logger.warning(f"Auto-collect skipped {url}: {type(e).__name__}: {e}")
@@ -391,10 +391,13 @@ class WebSearchTool(Tool):
 
         # Build concise summary
         total_skipped = sum(skipped.values())
-        summary = f"\n---\n**Auto-collected {len(collected)} article(s)**"
+        summary = f"\n---\n**Auto-collected {len(collected)} article(s):**"
+        if collected:
+            summary += "\n" + "\n".join([f"- {t}" for t in collected])
+
         if total_skipped > 0:
             details = [f"{v} {k.replace('_', ' ')}" for k, v in skipped.items() if v > 0]
-            summary += f" (skipped {total_skipped}: {', '.join(details)})"
+            summary += f"\n\n(Skipped {total_skipped}: {', '.join(details)}. **Please manually collect relevant articles if they were skipped.**)"
 
         return summary
 
