@@ -2,6 +2,8 @@ import React, { useState, useCallback } from 'react'
 import CollectionConfigPanel from './CollectionConfigPanel'
 import QuestionPreviewList from './QuestionPreviewList'
 import ManualQuestionForm from './ManualQuestionForm'
+import { JobSidebar, JobDetails } from './JobManager'
+import { usePipelineJobs } from '../hooks/usePipelineJobs'
 import './QuestionCollectionPage.css'
 
 /**
@@ -26,6 +28,17 @@ function QuestionCollectionPage({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
+
+  // Job management
+  const {
+    jobs,
+    loadingJobs,
+    loadJobs,
+    selectedJobId,
+    jobDetails,
+    loadingDetails,
+    selectJob
+  } = usePipelineJobs('collection'); // Filter for collection jobs (future-proofing)
 
   // Log when preview questions change (for debugging)
   React.useEffect(() => {
@@ -240,18 +253,42 @@ function QuestionCollectionPage({
                   onFetch={handleFetchPreview}
                   loading={loading}
                 />
+
+                {/* Job History */}
+                <div style={{ marginTop: '16px' }}>
+                  <JobSidebar
+                    jobs={jobs}
+                    selectedJobId={selectedJobId}
+                    onJobClick={(job) => selectJob(job.job_id)}
+                    loading={loadingJobs}
+                    onRefresh={loadJobs}
+                    title="Recent Collection Jobs"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Right panel: Preview and selection */}
+            {/* Right panel: Preview and selection or Job Details */}
             <div className="page-main">
               <div className="scroll-container">
-                <QuestionPreviewList
-                  questions={filteredPreviewQuestions}
-                  onSaveSelected={handleSaveSelected}
-                  loading={loading}
-                  source={sourceTab}
-                />
+                {selectedJobId && jobDetails ? (
+                  <JobDetails
+                    job={jobDetails}
+                    onClose={() => selectJob(null)}
+                  />
+                ) : loadingDetails ? (
+                  <div className="loading-details">
+                    <div className="loading-spinner"></div>
+                    <div>Loading job details...</div>
+                  </div>
+                ) : (
+                  <QuestionPreviewList
+                    questions={filteredPreviewQuestions}
+                    onSaveSelected={handleSaveSelected}
+                    loading={loading}
+                    source={sourceTab}
+                  />
+                )}
               </div>
             </div>
           </>

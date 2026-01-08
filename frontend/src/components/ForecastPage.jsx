@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { fetchQuestions, fetchQuestionPriceHistory, fetchQuestionEvents } from '../api/graphApi';
 import TimeSeriesChart from './TimeSeriesChart';
 import ForecastGraph from './ForecastGraph';
+import { JobSidebar, JobDetails } from './JobManager';
+import { usePipelineJobs } from '../hooks/usePipelineJobs';
 import './ForecastPage.css';
 
 const ForecastPage = ({
@@ -31,12 +33,17 @@ const ForecastPage = ({
     min_context_items: 3
   });
 
-  // Job management state
-  const [jobs, setJobs] = useState([]);
-  const [loadingJobs, setLoadingJobs] = useState(false);
-  const [activeJobId, setActiveJobId] = useState(null); const [selectedJobId, setSelectedJobId] = useState(null)
-  const [jobDetails, setJobDetails] = useState(null)
-  const [loadingJobDetails, setLoadingJobDetails] = useState(false)
+  // Job management via shared hook
+  const {
+    jobs,
+    loadingJobs,
+    loadJobs,
+    selectedJobId,
+    jobDetails,
+    loadingDetails,
+    selectJob
+  } = usePipelineJobs('forecast');
+
   // Results state
   const [forecastResults, setForecastResults] = useState(null);
   const [loadingResults, setLoadingResults] = useState(false);
@@ -45,11 +52,6 @@ const ForecastPage = ({
 
   useEffect(() => {
     loadQuestions();
-    fetchRecentJobs();
-
-    // Refresh jobs every 5 seconds
-    const interval = setInterval(fetchRecentJobs, 5000);
-    return () => clearInterval(interval);
   }, []);
 
   const loadQuestions = async () => {
@@ -61,19 +63,6 @@ const ForecastPage = ({
     }
   };
 
-  const fetchRecentJobs = async () => {
-    setLoadingJobs(true);
-    try {
-      const response = await fetch('http://localhost:8018/api/pipelines/jobs?limit=20');
-      const data = await response.json();
-      const forecastJobs = data.filter(job => job.pipeline_type === 'forecast');
-      setJobs(forecastJobs);
-    } catch (error) {
-      console.error('Error fetching jobs:', error);
-    } finally {
-      setLoadingJobs(false);
-    }
-  };
 
 
   const handleQuestionClick = async (question) => {
@@ -147,8 +136,9 @@ const ForecastPage = ({
       });
 
       const data = await response.json();
-      setActiveJobId(data.job_id);
-      await fetchRecentJobs();
+      // Refresh jobs and select the new one
+      await loadJobs();
+      selectJob(data.job_id);
     } catch (error) {
       console.error('Error starting forecast:', error);
     }
@@ -166,40 +156,7 @@ const ForecastPage = ({
       setLoadingResults(false);
     }
   };
-  const handleJobClick = async (job) => {
-    setSelectedJobId(job.job_id)
-    setLoadingJobDetails(true)
-    try {
-      const response = await fetch(`http://localhost:8018/api/pipelines/jobs/${job.job_id}`)
-      const data = await response.json()
-      setJobDetails(data)
-    } catch (error) {
-      console.error('Failed to load job details:', error)
-      setJobDetails(null)
-    } finally {
-      setLoadingJobDetails(false)
-    }
-  };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'running': return '#2196f3'
-      case 'completed': return '#4caf50'
-      case 'failed': return '#f44336'
-      case 'cancelled': return '#ff9800'
-      default: return '#9e9e9e'
-    }
-  };
-
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'running': return '⏳'
-      case 'completed': return '✅'
-      case 'failed': return '❌'
-      case 'cancelled': return '⚠️'
-      default: return '⏸️'
-    }
-  };
   const fetchForecastGraph = async (forecastId) => {
     try {
       const response = await fetch(`http://localhost:8018/api/forecasts/${forecastId}/graph`);
@@ -368,56 +325,14 @@ const ForecastPage = ({
             </div>
 
             {/* Jobs Section */}
-            <div className="jobs-section">
-              <h3>Recent Forecast Jobs</h3>
-
-              {loadingJobs ? (
-                <div className="loading">Loading jobs...</div>
-              ) : jobs.length === 0 ? (
-                <div className="no-jobs">No forecast jobs yet</div>
-              ) : (
-                <div className="jobs-list">
-                  {jobs.map(job => (
-                    <div
-                      key={job.job_id}
-                      className={`job-item ${job.status} ${selectedJobId === job.job_id ? 'selected' : ''}`}
-                      onClick={() => handleJobClick(job)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <div className="job-header">
-                        <span className="job-status">{job.status}</span>
-                        <span className="job-date">
-                          {new Date(job.created_at).toLocaleString()}
-                        </span>
-                      </div>
-
-                      {job.status === 'running' && (
-                        <div className="job-progress">
-                          <div className="progress-bar">
-                            <div
-                              className="progress-fill"
-                              style={{ width: `${(job.progress || 0) * 100}%` }}
-                            />
-                          </div>
-                          <span className="progress-text">
-                            {job.processed_count || 0} / {job.total_count || 0}
-                          </span>
-                        </div>
-                      )}
-
-                      {job.results && (
-                        <div className="job-results">
-                          <span>✓ {job.results.processed}</span>
-                          {job.results.failed > 0 && <span>✗ {job.results.failed}</span>}
-                          {job.results.skipped > 0 && <span>⊘ {job.results.skipped}</span>}
-                          <span>⏱ {job.results.duration_seconds?.toFixed(1)}s</span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <JobSidebar
+              jobs={jobs}
+              selectedJobId={selectedJobId}
+              onJobClick={(job) => selectJob(job.job_id)}
+              loading={loadingJobs}
+              onRefresh={loadJobs}
+              title="Recent Forecast Jobs"
+            />
 
             {/* Forecast Results Display */}
             {forecastResults && (
@@ -471,141 +386,11 @@ const ForecastPage = ({
         <div className="page-main">
           <div className="scroll-container">
             {selectedJobId && jobDetails ? (
-              <div className="job-details-section">
-                <div className="section-header">
-                  <h3>Job Details: {selectedJobId}</h3>
-                  <button
-                    className="close-btn"
-                    onClick={() => { setSelectedJobId(null); setJobDetails(null); }}
-                  >
-                    ✕ Close
-                  </button>
-                </div>
-
-                <div className="job-details-content">
-                  <div className="job-detail-card">
-                    <h4>Status</h4>
-                    <div className="job-detail-row">
-                      <span className="label">Status:</span>
-                      <span className="value" style={{ color: getStatusColor(jobDetails.status) }}>
-                        {getStatusIcon(jobDetails.status)} {jobDetails.status}
-                      </span>
-                    </div>
-                    <div className="job-detail-row">
-                      <span className="label">Pipeline Type:</span>
-                      <span className="value">{jobDetails.pipeline_type}</span>
-                    </div>
-                    <div className="job-detail-row">
-                      <span className="label">Progress:</span>
-                      <span className="value">{(jobDetails.progress * 100).toFixed(0)}%</span>
-                    </div>
-                    <div className="job-detail-row">
-                      <span className="label">Created:</span>
-                      <span className="value">{new Date(jobDetails.created_at).toLocaleString()}</span>
-                    </div>
-                    <div className="job-detail-row">
-                      <span className="label">Updated:</span>
-                      <span className="value">{new Date(jobDetails.updated_at).toLocaleString()}</span>
-                    </div>
-                    {jobDetails.message && (
-                      <div className="job-detail-row">
-                        <span className="label">Message:</span>
-                        <span className="value">{jobDetails.message}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {jobDetails.results && Object.keys(jobDetails.results).length > 0 && (
-                    <div className="job-detail-card">
-                      <h4>Results</h4>
-
-                      <div className="results-summary">
-                        {jobDetails.results.processed !== undefined && (
-                          <div className="result-stat-large success">
-                            <div className="stat-value">{jobDetails.results.processed}</div>
-                            <div className="stat-label">Processed</div>
-                          </div>
-                        )}
-                        {jobDetails.results.failed !== undefined && jobDetails.results.failed > 0 && (
-                          <div className="result-stat-large failed">
-                            <div className="stat-value">{jobDetails.results.failed}</div>
-                            <div className="stat-label">Failed</div>
-                          </div>
-                        )}
-                        {jobDetails.results.skipped !== undefined && jobDetails.results.skipped > 0 && (
-                          <div className="result-stat-large skipped">
-                            <div className="stat-value">{jobDetails.results.skipped}</div>
-                            <div className="stat-label">Skipped</div>
-                          </div>
-                        )}
-                        {jobDetails.results.duration_seconds && (
-                          <div className="result-stat-large duration">
-                            <div className="stat-value">{jobDetails.results.duration_seconds.toFixed(1)}s</div>
-                            <div className="stat-label">Duration</div>
-                          </div>
-                        )}
-                      </div>
-
-                      {jobDetails.results.processed_details && jobDetails.results.processed_details.length > 0 && (
-                        <div className="result-details-section">
-                          <h5>✓ Processed Questions ({jobDetails.results.processed_details.length})</h5>
-                          <div className="result-items">
-                            {jobDetails.results.processed_details.map((item, idx) => (
-                              <div key={idx} className="result-item success">
-                                <code>{typeof item === 'string' ? item : item.id}</code>
-                                {item.forecast_id && (
-                                  <button
-                                    onClick={() => fetchForecastGraph(item.forecast_id)}
-                                    className="view-graph-btn-small"
-                                  >
-                                    View Graph
-                                  </button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {jobDetails.results.failed_details && jobDetails.results.failed_details.length > 0 && (
-                        <div className="result-details-section">
-                          <h5>✗ Failed Questions ({jobDetails.results.failed_details.length})</h5>
-                          <div className="result-items">
-                            {jobDetails.results.failed_details.map((item, idx) => (
-                              <div key={idx} className="result-item failed">
-                                <code>{item.id}</code>
-                                {item.error && <div className="error-message">{item.error}</div>}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {jobDetails.results.skipped_details && jobDetails.results.skipped_details.length > 0 && (
-                        <div className="result-details-section">
-                          <h5>⊘ Skipped Questions ({jobDetails.results.skipped_details.length})</h5>
-                          <div className="result-items">
-                            {jobDetails.results.skipped_details.map((item, idx) => (
-                              <div key={idx} className="result-item skipped">
-                                <code>{typeof item === 'string' ? item : item.id}</code>
-                                {item.reason && <div className="skip-reason">{item.reason}</div>}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {forecastGraphData && (
-                    <div className="job-detail-card">
-                      <h4>Causal Reasoning Graph</h4>
-                      <ForecastGraph graphData={forecastGraphData} />
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : loadingJobDetails ? (
+              <JobDetails
+                job={jobDetails}
+                onClose={() => selectJob(null)}
+              />
+            ) : loadingDetails ? (
               <div className="loading-details">
                 <div className="loading-spinner"></div>
                 <div>Loading job details...</div>
@@ -742,11 +527,12 @@ const ForecastPage = ({
                   </div>
                 )}
               </>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+            )
+            }
+          </div >
+        </div >
+      </div >
+    </div >
   );
 };
 
