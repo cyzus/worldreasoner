@@ -23,6 +23,7 @@ from src.utils.logging import logger
 class PipelineType(Enum):
     """Available pipeline types."""
     COLLECTION = "collection"
+    NEWS_COLLECTION = "news_collection"
     EVIDENCE = "evidence"
     ADAPTIVE_EVIDENCE = "adaptive_evidence"
     FORECAST = "forecast"
@@ -113,6 +114,10 @@ class PipelineRunner:
         if pipeline_type == PipelineType.COLLECTION:
             logger.info(f"Starting {pipeline_type.value} pipeline")
             result = await self._run_collection(on_progress, **kwargs)
+        elif pipeline_type == PipelineType.NEWS_COLLECTION:
+            logger.info(f"Starting {pipeline_type.value} pipeline")
+            # Pass the entire kwargs dict as the configuration
+            result = await self._run_news_collection(on_progress, collection_config=kwargs)
         else:
             logger.info(f"Starting {pipeline_type.value} pipeline for {len(question_ids)} questions")
             
@@ -138,6 +143,64 @@ class PipelineRunner:
         )
         
         return result
+
+    def _load_article_sources(
+        self, 
+        sources_config: str = "config/sources.yaml",
+        domains: Optional[List[str]] = None
+    ):
+        """Helper to load and filter article sources."""
+        from src.pipelines.stages import ArticleSource
+        import yaml
+        
+        with open(sources_config, 'r') as f:
+            sources_data = yaml.safe_load(f)
+
+        article_sources = [ArticleSource(**s) for s in sources_data.get('sources', [])]
+        
+        if domains:
+            article_sources = [s for s in article_sources if s.domain in domains]
+            
+        return article_sources
+
+    def _create_news_runner(
+        self,
+        article_sources: List[Any],
+        domains: List[str],
+        question_types: Optional[List[str]] = None,
+        max_articles_per_source: int = 3,
+        days_back: int = 7,
+    ):
+        """Helper to create configured NewsBasedRunner."""
+        from datetime import timedelta
+        from src.pipelines.question.sources.news import NewsBasedRunner
+        from src.pipelines.stages import ArticleCollectionConfig, EventIdentificationConfig
+        from src.config.pipeline import QuestionPipelineConfig
+        from datetime import datetime, timezone
+        
+        article_config = ArticleCollectionConfig(
+            sources=article_sources,
+            start_date=datetime.now(timezone.utc) - timedelta(days=days_back),
+            end_date=datetime.now(timezone.utc),
+            domains=domains,
+            max_articles_per_source=max_articles_per_source
+        )
+
+        event_config = EventIdentificationConfig(
+            max_events_per_article=5
+        )
+
+        question_config = QuestionPipelineConfig(
+            question_types=question_types or [],
+            require_ground_truth=True 
+        )
+
+        return NewsBasedRunner(
+            article_config=article_config,
+            event_config=event_config,
+            question_config=question_config,
+            db_path=self.db_path,
+        )
 
     async def _run_collection(
         self,
@@ -207,34 +270,19 @@ class PipelineRunner:
 
             # News-based source
             if enable_news:
-                with open(sources_config, 'r') as f:
-                    sources_data = yaml.safe_load(f)
-
-                article_sources = [ArticleSource(**s) for s in sources_data.get('sources', [])]
                 domains = [cat for cat in goal.category_distribution.keys() if cat != "other"]
-
-                article_config = ArticleCollectionConfig(
-                    sources=article_sources,
-                    start_date=datetime.now(timezone.utc) - timedelta(days=abs(goal.quality.min_resolution_days)),
-                    end_date=datetime.now(timezone.utc),
+                article_sources = self._load_article_sources(sources_config, domains)
+                
+                # Use slightly different config for goal-based collection (full days back from goal)
+                sources["news"] = self._create_news_runner(
+                    article_sources=article_sources,
                     domains=domains,
-                )
-
-                event_config = EventIdentificationConfig()
-
-                question_config = QuestionPipelineConfig(
-                    max_questions=goal.total_questions,
-                    domains=list(goal.category_distribution.keys()),
                     question_types=list(goal.type_distribution.keys()),
-                    require_ground_truth=goal.require_ground_truth,
+                    days_back=abs(goal.quality.min_resolution_days),
+                    max_articles_per_source=10 # Higher limit for goal-based
                 )
-
-                sources["news"] = NewsBasedRunner(
-                    article_config=article_config,
-                    event_config=event_config,
-                    question_config=question_config,
-                    db_path=self.db_path,
-                )
+                # Override require_ground_truth for goal-based to match goal
+                sources["news"].question_config.require_ground_truth = goal.require_ground_truth
 
             if not sources:
                 results.failed.append({"error": "No sources enabled"})
@@ -312,6 +360,96 @@ class PipelineRunner:
 
         except Exception as e:
             logger.error(f"Collection pipeline failed: {e}")
+            results.failed.append({"error": str(e)})
+
+        return results
+
+    async def _run_news_collection(
+        self,
+        on_progress: Optional[Callable],
+        collection_config: Dict[str, Any],
+        **kwargs
+    ) -> PipelineResult:
+        """Run ad-hoc news collection pipeline."""
+        from src.pipelines.question.sources.news import NewsBasedRunner
+        from src.pipelines.stages import ArticleCollectionConfig, EventIdentificationConfig, ArticleSource
+        from src.config.pipeline import QuestionPipelineConfig
+        from src.utils.search_indexing import auto_index_articles
+        import yaml
+        from pathlib import Path
+        from datetime import datetime, timedelta, timezone
+
+        results = PipelineResult([], [], [], 0.0)
+
+        try:
+            # 1. Setup Configuration
+            if on_progress:
+                on_progress(PipelineProgress(
+                    current=1, total=4, question_id=None,
+                    stage="setup", message="Configuring news collection"
+                ))
+            
+            # Load and filter sources
+            requested_domains = collection_config.get('domains')
+            article_sources = self._load_article_sources(domains=requested_domains)
+            
+            if not article_sources:
+                 raise ValueError("No article sources available for requested domains")
+
+            # Initialize Runner using helper
+            runner = self._create_news_runner(
+                article_sources=article_sources,
+                domains=requested_domains or [],
+                question_types=collection_config.get('question_types'),
+                max_articles_per_source=collection_config.get('max_articles_per_source', 3),
+                days_back=7
+            )
+
+            # 3. Run Collection
+            if on_progress:
+                on_progress(PipelineProgress(
+                    current=2, total=4, question_id=None,
+                    stage="collection", message="Collecting articles and generating questions"
+                ))
+
+            # Helper to bridge runner progress if we wanted to map internal steps, 
+            # but for now we just wait for the monolithic collect()
+            
+            collection_result = await runner.collect(
+                count=collection_config.get('count', 5),
+                type_filter=collection_config.get('question_types'),
+                category_filter=requested_domains,
+            )
+
+            if on_progress:
+                on_progress(PipelineProgress(
+                    current=3, total=4, question_id=None,
+                    stage="collection", message=f"Generated {len(collection_result.questions)} questions"
+                ))
+
+            # 4. Processing Results
+            for q in collection_result.questions:
+                results.processed.append({
+                    "id": q.id,
+                    "text": q.question_text,
+                    "type": str(q.question_type),
+                    "domain": str(q.domain),
+                    "source": q.source
+                })
+            
+            if collection_result.error_message:
+                results.failed.append({"error": collection_result.error_message})
+
+            # 5. Indexing
+            if on_progress:
+                on_progress(PipelineProgress(
+                    current=4, total=4, question_id=None,
+                    stage="indexing", message="Indexing collected articles"
+                ))
+            await auto_index_articles(db_path=self.db_path)
+
+        except Exception as e:
+            logger.error(f"News collection failed: {e}")
             results.failed.append({"error": str(e)})
 
         return results

@@ -24,6 +24,8 @@ class PipelineType(str, Enum):
     """Available pipeline types."""
     EVIDENCE = "evidence"
     ADAPTIVE_EVIDENCE = "adaptive_evidence"
+    COLLECTION = "collection"
+    NEWS_COLLECTION = "news_collection"
     FORECAST = "forecast"
     EVALUATION = "evaluation"
     BENCHMARK = "benchmark"

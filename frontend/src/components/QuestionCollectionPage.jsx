@@ -33,12 +33,12 @@ function QuestionCollectionPage({
   const {
     jobs,
     loadingJobs,
-    loadJobs,
     selectedJobId,
     jobDetails,
     loadingDetails,
-    selectJob
-  } = usePipelineJobs('collection'); // Filter for collection jobs (future-proofing)
+    selectJob,
+    loadJobs
+  } = usePipelineJobs(null); // Remove filter to see all jobs including news collection
 
   // Log when preview questions change (for debugging)
   React.useEffect(() => {
@@ -72,50 +72,66 @@ function QuestionCollectionPage({
     setPreviewSource(null) // Clear preview source
 
     try {
-      const requestBody = {
-        source: sourceTab,
-        ...config,
-      }
+      // Branch logic: For News (slow), start a background job. For Polymarket (fast), use preview.
+      if (sourceTab === 'news') {
+        const response = await fetch('http://localhost:8018/api/pipelines/jobs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question_ids: [], // Not needed for collection
+            pipeline_type: 'news_collection',
+            config: config
+          })
+        });
 
-      console.log('[QuestionCollectionPage] Request body:', JSON.stringify(requestBody, null, 2))
+        if (!response.ok) throw new Error('Failed to start news collection job');
 
-      const response = await fetch('http://localhost:8018/api/questions/preview', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      })
+        const data = await response.json();
+        setSuccess(`Started News Collection Job: ${data.job_id}`);
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to fetch questions')
-      }
+        // Refresh jobs and select
+        await loadJobs();
+        selectJob(data.job_id);
 
-      const data = await response.json()
-
-      console.log('[QuestionCollectionPage] Response data:', {
-        success: data.success,
-        total: data.total,
-        source: data.source,
-        questionCount: data.questions?.length,
-        firstQuestion: data.questions?.[0]?.question_text
-      })
-
-      if (data.success) {
-        setPreviewQuestions(data.questions)
-        setPreviewSource(data.source) // Store which source these questions came from
-        setSuccess(`Fetched ${data.total} questions from ${data.source}`)
       } else {
-        setError(data.errors.join('; ') || 'Failed to fetch questions')
+        // Existing Preview Logic for Polymarket
+        const requestBody = {
+          source: sourceTab,
+          ...config,
+        }
+
+        console.log('[QuestionCollectionPage] Request body:', JSON.stringify(requestBody, null, 2))
+
+        const response = await fetch('http://localhost:8018/api/questions/preview', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.detail || 'Failed to fetch questions')
+        }
+
+        const data = await response.json()
+
+        if (data.success) {
+          setPreviewQuestions(data.questions)
+          setPreviewSource(data.source) // Store which source these questions came from
+          setSuccess(`Fetched ${data.total} questions from ${data.source}`)
+        } else {
+          setError(data.errors.join('; ') || 'Failed to fetch questions')
+        }
       }
     } catch (err) {
       setError(`Error: ${err.message}`)
-      console.error('Preview fetch error:', err)
+      console.error('Preview/Job fetch error:', err)
     } finally {
       setLoading(false)
     }
-  }, [sourceTab, setPreviewQuestions, setPreviewSource])
+  }, [sourceTab, setPreviewQuestions, setPreviewSource, loadJobs, selectJob])
 
   /**
    * Handle manual question creation
