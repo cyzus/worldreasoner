@@ -48,17 +48,17 @@ class BatchQuestionGeneratorTool(QuestionGeneratorTool):
     Example:
         [
           {{
-            "question_text": "Will Bitcoin exceed $100K by end of 2025?",
-            "question_type": "boolean",
+            "question_text": "Will Bitcoin exceed $100K by end of 202X?",
+            "question_type": "binary",
             "domain": "finance",
             "difficulty": 3,
-            "resolution_date": "2025-12-31T23:59:59Z",
-            "resolution_criteria": "Based on CoinMarketCap closing price on Dec 31, 2025",
+            "resolution_date": "202X-12-31T23:59:59Z",
+            "resolution_criteria": "Based on CoinMarketCap closing price on Dec 31, 202X",
             "ground_truth": "YES",
-            "resolution_reasoning": "Bitcoin closed at $105,432 on Dec 31, 2025 per CoinMarketCap",
-            "context": "Bitcoin has been volatile in 2025...",
-            "related_event_ids": "evt_finance_20251201_001",
-            "estimated_start_time": "2025-01-01T00:00:00Z"
+            "resolution_reasoning": "Bitcoin closed at $105,432 on Dec 31, 202X per CoinMarketCap",
+            "context": "Bitcoin has been volatile in 202X...",
+            "related_event_ids": "evt_finance_202X1201_001",
+            "estimated_start_time": "202X-01-01T00:00:00Z"
           }}
         ]
 
