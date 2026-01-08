@@ -89,6 +89,52 @@ class EvidencePipeline(Pipeline):
 
         logger.info("Adaptive multi-agent evidence pipeline initialized")
 
+    def _create_stage_result(
+        self,
+        status: PipelineStageStatus,
+        items_processed: int,
+        items_output: int,
+        outputs: List[Any],
+        error_message: Optional[str] = None,
+    ) -> PipelineStageResult:
+        """Create a PipelineStageResult with consistent fields.
+        
+        Args:
+            status: Status of the stage
+            items_processed: Number of items processed
+            items_output: Number of items output
+            outputs: List of output items
+            error_message: Optional error message for failed stages
+            
+        Returns:
+            PipelineStageResult
+        """
+        now = datetime.now(timezone.utc)
+        return PipelineStageResult(
+            stage_name="AgentBasedEvidence",
+            status=status,
+            items_processed=items_processed,
+            items_output=items_output,
+            outputs=outputs,
+            started_at=now,
+            completed_at=now,
+            error_message=error_message,
+        )
+
+    def _format_question_error(self, question_id: str, error: Any) -> str:
+        """Format error message for a failed question.
+        
+        Args:
+            question_id: ID of the question that failed
+            error: Error or failure reason
+            
+        Returns:
+            Formatted error message
+        """
+        if isinstance(error, Exception):
+            return f"Question {question_id} processing failed: {error}"
+        return f"Question {question_id}: {error}"
+
     async def run(
         self,
         resolved_questions: Optional[List[Question]] = None,
@@ -141,11 +187,21 @@ class EvidencePipeline(Pipeline):
             # Collect results and hypotheses
             successful_count = 0
             failed_count = 0
+            failure_reasons = []
+            
             for i, result in enumerate(question_results):
+                question_id = self.resolved_questions[i].id
+                
                 if isinstance(result, Exception):
-                    logger.error(
-                        f"Question {self.resolved_questions[i].id} processing failed: {result}"
-                    )
+                    error_msg = self._format_question_error(question_id, result)
+                    logger.error(error_msg)
+                    failure_reasons.append(error_msg)
+                    failed_count += 1
+                elif result.get("status") == "failed":
+                    failure_reason = result.get("failure_reason", "Unknown error")
+                    error_msg = self._format_question_error(question_id, failure_reason)
+                    logger.error(error_msg)
+                    failure_reasons.append(error_msg)
                     failed_count += 1
                 else:
                     self.evidence_articles.extend(result.get("evidence_articles", []))
@@ -158,22 +214,26 @@ class EvidencePipeline(Pipeline):
 
             if not self.causal_hypotheses:
                 logger.error("No causal hypotheses generated - pipeline failed")
+                error_message = "; ".join(failure_reasons) if failure_reasons else "No causal hypotheses generated"
+                failed_result = self._create_stage_result(
+                    status=PipelineStageStatus.FAILED,
+                    items_processed=len(self.resolved_questions),
+                    items_output=0,
+                    outputs=[],
+                    error_message=error_message,
+                )
+                self._results.append(failed_result)
                 return self._results
 
             logger.info(f"Total: {len(self.evidence_articles)} evidence articles, "
                        f"{len(self.causal_hypotheses)} causal hypotheses")
 
             # Add a success result for the pipeline runner to detect
-            from datetime import datetime, timezone
-            now = datetime.now(timezone.utc)
-            success_result = PipelineStageResult(
-                stage_name="AgentBasedEvidence",
+            success_result = self._create_stage_result(
                 status=PipelineStageStatus.COMPLETED,
                 items_processed=len(self.resolved_questions),
                 items_output=len(self.causal_hypotheses),
                 outputs=self.causal_hypotheses,
-                started_at=now,  # Required field
-                completed_at=now,  # Optional but good to include
             )
             self._results.append(success_result)
 
