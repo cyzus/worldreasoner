@@ -19,6 +19,7 @@ const QuestionList = memo(function QuestionList({
   const [domainFilter, setDomainFilter] = useState('all')
   const [difficultyFilter, setDifficultyFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
+  const [articleCountFilter, setArticleCountFilter] = useState('all')
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [editingQuestion, setEditingQuestion] = useState(null)
   const [deletingQuestionId, setDeletingQuestionId] = useState(null)
@@ -58,19 +59,35 @@ const QuestionList = memo(function QuestionList({
         return false
       }
 
+      // Article count filter
+      const articleCount = q.article_count || 0
+      if (articleCountFilter === '0' && articleCount !== 0) {
+        return false
+      }
+      if (articleCountFilter === '1-5' && (articleCount < 1 || articleCount > 5)) {
+        return false
+      }
+      if (articleCountFilter === '6-10' && (articleCount < 6 || articleCount > 10)) {
+        return false
+      }
+      if (articleCountFilter === '11+' && articleCount < 11) {
+        return false
+      }
+
       return true
     })
-  }, [questions, debouncedSearchTerm, domainFilter, difficultyFilter, sourceFilter])
+  }, [questions, debouncedSearchTerm, domainFilter, difficultyFilter, sourceFilter, articleCountFilter])
 
   const handleClearFilters = () => {
     setSearchTerm('')
     setDomainFilter('all')
     setDifficultyFilter('all')
     setSourceFilter('all')
+    setArticleCountFilter('all')
   }
 
   // Show "Clear" button immediately when user types (before debounce delay)
-  const hasActiveFilters = searchTerm || domainFilter !== 'all' || difficultyFilter !== 'all' || sourceFilter !== 'all'
+  const hasActiveFilters = searchTerm || domainFilter !== 'all' || difficultyFilter !== 'all' || sourceFilter !== 'all' || articleCountFilter !== 'all'
 
   // Multi-select handlers
   const toggleSelection = (id, event) => {
@@ -235,6 +252,18 @@ const QuestionList = memo(function QuestionList({
             ))}
           </select>
 
+          <select
+            className="filter-select"
+            value={articleCountFilter}
+            onChange={(e) => setArticleCountFilter(e.target.value)}
+          >
+            <option value="all">All Article Counts</option>
+            <option value="0">0 articles (No evidence)</option>
+            <option value="1-5">1-5 articles</option>
+            <option value="6-10">6-10 articles</option>
+            <option value="11+">11+ articles</option>
+          </select>
+
           {hasActiveFilters && (
             <button className="clear-filters-btn" onClick={handleClearFilters}>
               Clear
@@ -274,6 +303,11 @@ const QuestionList = memo(function QuestionList({
                     <span className={`badge difficulty difficulty-${q.difficulty}`}>
                       Lvl {q.difficulty}
                     </span>
+                    {q.article_count !== undefined && (
+                      <span className="badge article-count" title={`${q.article_count} articles collected`}>
+                        📄 {q.article_count}
+                      </span>
+                    )}
                   </div>
                   <div className="question-item-actions">
                     <button

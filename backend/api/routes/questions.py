@@ -47,6 +47,7 @@ class QuestionListItem(BaseModel):
     resolution_date: Optional[str] = None
     estimated_start_time: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+    article_count: int = 0
 
 
 class PolymarketSearchRequest(BaseModel):
@@ -489,7 +490,15 @@ async def get_questions(
 
         questions = db.get_many(Question, filters=filters if filters else None)
 
-        # Convert to simplified response model
+        # Get all articles and count by question
+        all_articles = db.get_many(Article)
+        article_counts = {}
+        for article in all_articles:
+            qid = article.collected_for_question_id
+            if qid:
+                article_counts[qid] = article_counts.get(qid, 0) + 1
+
+        # Convert to simplified response model with article counts
         result = [
             QuestionListItem(
                 id=q.id,
@@ -504,6 +513,7 @@ async def get_questions(
                 resolution_date=q.resolution_date.isoformat() if q.resolution_date else None,
                 estimated_start_time=q.estimated_start_time.isoformat() if q.estimated_start_time else None,
                 metadata=q.metadata,
+                article_count=article_counts.get(q.id, 0),
             )
             for q in questions
         ]
