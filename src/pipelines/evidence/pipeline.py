@@ -164,12 +164,16 @@ class EvidencePipeline(Pipeline):
                        f"{len(self.causal_hypotheses)} causal hypotheses")
 
             # Add a success result for the pipeline runner to detect
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
             success_result = PipelineStageResult(
                 stage_name="AgentBasedEvidence",
                 status=PipelineStageStatus.COMPLETED,
                 items_processed=len(self.resolved_questions),
                 items_output=len(self.causal_hypotheses),
                 outputs=self.causal_hypotheses,
+                started_at=now,  # Required field
+                completed_at=now,  # Optional but good to include
             )
             self._results.append(success_result)
 
