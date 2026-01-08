@@ -187,7 +187,7 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             error_msg = (
                 f"REJECTED: Ground truth mode requires resolution_date <= TODAY ({current_time.date()}).\n"
                 f"You provided: {res_date.date()} (FUTURE DATE)\n"
-                f"This question is about a PAST event - the resolution date must be when the outcome became known (in the past).\n"
+                f"This question is about a RESOLVED event - the resolution date must be when the outcome became known (in the past).\n"
                 f"Please regenerate with resolution_date on or before {current_time.date()}."
             )
             return json.dumps({"error": error_msg, "status": "rejected"})

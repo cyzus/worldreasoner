@@ -36,10 +36,11 @@ function QuestionPreviewList({ questions, onSaveSelected, loading, source }) {
     // Search filter
     if (searchText) {
       const search = searchText.toLowerCase()
-      filtered = filtered.filter(q =>
-        q.question_text.toLowerCase().includes(search) ||
-        q.id.toLowerCase().includes(search)
-      )
+      filtered = filtered.filter(q => {
+        const text = q.question_text ? String(q.question_text).toLowerCase() : ''
+        const id = q.id ? String(q.id).toLowerCase() : ''
+        return text.includes(search) || id.includes(search)
+      })
     }
 
     // Domain filter

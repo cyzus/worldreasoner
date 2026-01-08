@@ -200,7 +200,7 @@ class Question(BaseModel):
         It is NOT persisted to the database - it should be set fresh for each evaluation run.
 
         This should be set during evaluation to ensure fair testing:
-        - For past events: Set to before the event occurred (to test forecasting ability)
+        - For resolved events: Set to before the event occurred (to test forecasting ability)
         - For future events: Set to the evaluation time (what info is available now)
 
         Args:

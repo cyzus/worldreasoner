@@ -22,7 +22,7 @@ QUALITY:
 - Skip niche topics requiring insider knowledge
 - Ask "Will X happen?" not "Which company will..." (don't assume outcomes)
 - MCQ options from actual event participants only
-- Use future tense in question wording
+- Use FUTURE tense in question wording (these are forecast questions)
 
 ESTIMATED START TIME:
 - estimated_start_time: When sufficient context exists for informed forecasting
@@ -41,18 +41,17 @@ Example: {tool_name}(questions_json='[{{"question_text": "Will Bitcoin exceed $1
 
 
 QUESTION_GENERATION_TEMPLATE_GROUND_TRUTH = \
-"""Generate {max_questions} forecast questions from PAST events.{domain_filter}
+"""Generate {max_questions} forecast questions from already RESOLVED events.{domain_filter}
 
 {events_text}
 
 RULES:
 - Today: {current_date} → resolution_date ≤ {current_date}
-- Only use events marked "(PAST EVENT)"
 - ground_truth = past outcome only (YES/NO/value, never future dates)
 - Alternate boolean answers: YES, NO, YES, NO (avoid bias)
 - Types: boolean, mcq, quantity, timeframe (distribute evenly)
 - Use round numbers ($100K, 1M users) not oddly specific values
-- Natural deadlines ("by end of Q4 2024" not "by Oct 27")""" + SHARED_RULES_DESC
+- Natural deadlines ("by end of Q4 202X" or "by end of Oct 202X" not "by Oct 27")""" + SHARED_RULES_DESC
 
 
 QUESTION_GENERATION_TEMPLATE_FUTURE = \
@@ -62,13 +61,12 @@ QUESTION_GENERATION_TEMPLATE_FUTURE = \
 
 RULES:
 - Today: {current_date} → resolution_date > {current_date}
-- Skip events marked "(PAST EVENT)"
 - NO ground_truth (outcomes unknown)
 - Resolution dates: 1-12 months in future
 - Balance boolean predictions: ~50% likely YES, ~50% likely NO
 - Types: boolean, mcq, quantity, timeframe (distribute evenly)
 - Use round numbers ($100K, 1M users) not oddly specific values
-- Natural deadlines ("by end of Q1 2026" not "by Mar 15")""" + SHARED_RULES_DESC
+- Natural deadlines ("by end of Q1 202X" not "by Mar 15")""" + SHARED_RULES_DESC
 
 
 class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
@@ -114,7 +112,7 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
         Args:
             item: Event to format
             idx: Index of the event (1-based)
-            current_date: Current datetime for past event detection
+            current_date: Current datetime for resolved event detection
             content_preview_length: Length of content preview (default: 200)
             **context: Additional context (not used)
 
@@ -125,7 +123,7 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
 
         # Determine if event is in the past (for ground truth)
         is_past_event = event_date and event_date < current_date if event_date else False
-        status_note = " (PAST EVENT - questions should include ground_truth)" if is_past_event else ""
+        status_note = " (RESOLVED EVENT - questions should include ground_truth)" if is_past_event else ""
 
         # Truncate description
         description = self.format_content_preview(
@@ -171,7 +169,7 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
             domains: Optional list of domains to focus on
             content_preview_length: Length of content preview (default: 200)
             tool_name: Name of the tool to call (default: question_generator)
-            require_ground_truth: If True, only generate questions about past events with known outcomes.
+            require_ground_truth: If True, only generate questions about resolved events with known outcomes.
                                  If False, only generate questions about future predictions.
             type_hints: Priority question types needed (e.g., ["boolean", "mcq"])
             category_hints: Priority categories needed (e.g., ["finance", "tech"])

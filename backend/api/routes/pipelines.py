@@ -268,18 +268,19 @@ async def run_pipeline_job(
         )
 
         # Determine job status based on results
-        if len(result.failed) == len(question_ids):
-            # All questions failed
+        # Determine job status based on results
+        if len(result.failed) > 0 and len(result.processed) == 0:
+            # All attempts failed (or no results generated despite errors)
             job.status = JobStatus.FAILED
-            job.message = "All questions failed to process"
+            job.message = "All items failed to process"
         elif len(result.failed) > 0:
-            # Some failures
+            # Some failures but some success
             job.status = JobStatus.COMPLETED
             job.message = f"Completed with {len(result.failed)} failures"
         else:
-            # All succeeded
+            # All succeeded (or at least no recorded failures)
             job.status = JobStatus.COMPLETED
-            job.message = f"Successfully processed {len(result.processed)} questions"
+            job.message = f"Successfully processed {len(result.processed)} items"
 
         job.progress = 1.0
         job.results = {

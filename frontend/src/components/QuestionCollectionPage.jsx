@@ -59,6 +59,61 @@ function QuestionCollectionPage({
     return []
   }, [previewQuestions, previewSource, sourceTab])
 
+  // EFFECT: Watch for News Collection Job completion
+  React.useEffect(() => {
+    if (
+      jobDetails &&
+      jobDetails.status === 'completed' &&
+      jobDetails.pipeline_type === 'news_collection' &&
+      sourceTab === 'news'
+    ) {
+      // If we have results, populate the preview list
+      const results = jobDetails.results || {};
+      const questions = results.processed_details || [];
+
+      if (questions.length > 0) {
+        console.log(`[QuestionCollectionPage] Job ${jobDetails.job_id} completed with ${questions.length} questions. Updating preview.`);
+
+        // Map the processed items to match the expected format if needed
+        // The backend returns {id, text, type, domain, source} which is good for preview
+        const mappedQuestions = questions.map(q => ({
+          id: q.id, // Important: Use ID from job result
+          question_text: q.text || q.question_text,
+          question_type: q.type,
+          domain: q.domain,
+          source: q.source,
+          // Extended fields
+          resolution_date: q.resolution_date,
+          resolution_criteria: q.resolution_criteria,
+          ground_truth: q.ground_truth,
+          resolution_reasoning: q.resolution_reasoning,
+          difficulty: q.difficulty || 1,
+          related_event_ids: q.related_event_ids,
+          estimated_start_time: q.estimated_start_time,
+          metadata: q.metadata || {}
+        }));
+
+        // Deduplicate against existing previewQuestions
+        // Check if map is valid, otherwise default to empty array (safety)
+        const currentQuestions = Array.isArray(previewQuestions) ? previewQuestions : [];
+        const existingIds = new Set(currentQuestions.map(p => p.id));
+        const newUnique = mappedQuestions.filter(q => !existingIds.has(q.id));
+
+        // Only update if we have new unique questions to avoid infinite loops
+        if (newUnique.length > 0) {
+          console.log(`[QuestionCollectionPage] Adding ${newUnique.length} new unique questions to preview.`);
+          setPreviewQuestions([...currentQuestions, ...newUnique]);
+          setPreviewSource('news');
+
+          // UX Improvement: Auto-close the job panel and show success message
+          // This reveals the preview list immediately
+          selectJob(null);
+          setSuccess(`✓ Job completed! Added ${newUnique.length} new questions to preview list.`);
+        }
+      }
+    }
+  }, [jobDetails, sourceTab, setPreviewQuestions, setPreviewSource, previewQuestions, selectJob]);
+
   /**
    * Handle fetching preview questions from the API
    */
@@ -179,7 +234,8 @@ function QuestionCollectionPage({
 
         // Remove saved questions from preview
         const savedIds = new Set(selectedQuestions.map(q => q.id))
-        setPreviewQuestions(prev => prev.filter(q => !savedIds.has(q.id)))
+        const currentQuestions = Array.isArray(previewQuestions) ? previewQuestions : [];
+        setPreviewQuestions(currentQuestions.filter(q => !savedIds.has(q.id)))
 
         // Notify parent if callback provided
         if (onQuestionsAdded) {

@@ -432,9 +432,17 @@ class PipelineRunner:
                 results.processed.append({
                     "id": q.id,
                     "text": q.question_text,
-                    "type": str(q.question_type),
-                    "domain": str(q.domain),
-                    "source": q.source
+                    "type": q.question_type.value if hasattr(q.question_type, "value") else str(q.question_type).lower().split(".")[-1],
+                    "domain": q.domain.value if hasattr(q.domain, "value") else str(q.domain).lower().split(".")[-1],
+                    "source": q.source,
+                    "resolution_date": q.resolution_date.isoformat() if q.resolution_date else None,
+                    "resolution_criteria": q.resolution_criteria,
+                    "ground_truth": q.ground_truth,
+                    "resolution_reasoning": q.resolution_reasoning,
+                    "difficulty": q.difficulty,
+                    "related_event_ids": q.related_event_ids,
+                    "estimated_start_time": q.estimated_start_time.isoformat() if q.estimated_start_time else None,
+                    "metadata": q.metadata
                 })
             
             if collection_result.error_message:
