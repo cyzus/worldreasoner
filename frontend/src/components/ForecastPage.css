@@ -170,6 +170,11 @@
   color: #e65100;
 }
 
+.badge.forecast-badge {
+  background: #e0f2f1;
+  color: #00796b;
+}
+
 /* Database Selector - matches light theme */
 .forecast-sidebar .database-selector {
   background: white;

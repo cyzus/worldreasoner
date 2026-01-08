@@ -13,6 +13,8 @@ const ForecastPage = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDomain, setFilterDomain] = useState('all');
   const [filterSource, setFilterSource] = useState('all');
+  const [filterForecastStatus, setFilterForecastStatus] = useState('all');
+  const [filterForecastMode, setFilterForecastMode] = useState('all');
 
   // Price history state
   const [priceHistoryData, setPriceHistoryData] = useState(null);
@@ -219,7 +221,36 @@ const ForecastPage = ({
     const matchesSearch = q.question_text.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDomain = filterDomain === 'all' || q.domain === filterDomain;
     const matchesSource = filterSource === 'all' || q.source === filterSource;
-    return matchesSearch && matchesDomain && matchesSource;
+
+    // Integrated Forecast Filter Logic
+    const hasForecasts = q.forecast_count > 0;
+    let matchesForecast = true;
+
+    if (filterForecastStatus === 'not_forecasted') {
+      if (filterForecastMode !== 'all') {
+        // INTERPRETATION: "Not Forecasted" + "Mode X" => "Missing Mode X"
+        // Show questions that do NOT have a forecast in this mode
+        // (Includes questions with 0 forecasts, and questions with other modes but not this one)
+        matchesForecast = !hasForecasts || !q.forecast_modes || !q.forecast_modes.includes(filterForecastMode);
+      } else {
+        // Strict "Not Forecasted" => Count is 0
+        matchesForecast = !hasForecasts;
+      }
+    } else {
+      // Logic for 'all' or 'forecasted' status
+
+      // 1. Check Status constraint
+      if (filterForecastStatus === 'forecasted' && !hasForecasts) {
+        matchesForecast = false;
+      }
+
+      // 2. Check Mode constraint (Positive)
+      if (matchesForecast && filterForecastMode !== 'all') {
+        matchesForecast = hasForecasts && q.forecast_modes && q.forecast_modes.includes(filterForecastMode);
+      }
+    }
+
+    return matchesSearch && matchesDomain && matchesSource && matchesForecast;
   });
 
   const domains = [...new Set(questions.map(q => q.domain))].filter(Boolean);
@@ -620,6 +651,27 @@ const ForecastPage = ({
                         <option key={source} value={source}>{source}</option>
                       ))}
                     </select>
+
+                    <select
+                      value={filterForecastStatus}
+                      onChange={(e) => setFilterForecastStatus(e.target.value)}
+                      className="filter-select"
+                    >
+                      <option value="all">All Forecast Status</option>
+                      <option value="forecasted">Forecasted</option>
+                      <option value="not_forecasted">Not Forecasted</option>
+                    </select>
+
+                    <select
+                      value={filterForecastMode}
+                      onChange={(e) => setFilterForecastMode(e.target.value)}
+                      className="filter-select"
+                    >
+                      <option value="all">All Forecast Modes</option>
+                      <option value="knowledge_only">Knowledge Only</option>
+                      <option value="container">Container</option>
+                      <option value="real_time">Real-Time</option>
+                    </select>
                   </div>
 
                   <div className="questions-list">
@@ -644,6 +696,11 @@ const ForecastPage = ({
                             {question.domain && <span className="badge domain">{question.domain}</span>}
                             {question.difficulty && (
                               <span className="badge difficulty">Diff: {question.difficulty}</span>
+                            )}
+                            {question.forecast_count > 0 && (
+                              <span className="badge forecast-badge" title={`Forecasted ${question.forecast_count} times in modes: ${question.forecast_modes?.join(', ')}`}>
+                                🎯 {question.forecast_count}
+                              </span>
                             )}
                           </div>
                         </div>

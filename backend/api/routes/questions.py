@@ -48,6 +48,8 @@ class QuestionListItem(BaseModel):
     estimated_start_time: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     article_count: int = 0
+    forecast_count: int = 0
+    forecast_modes: List[str] = Field(default_factory=list)
 
 
 class PolymarketSearchRequest(BaseModel):
@@ -498,7 +500,26 @@ async def get_questions(
             if qid:
                 article_counts[qid] = article_counts.get(qid, 0) + 1
 
-        # Convert to simplified response model with article counts
+        # Get all forecasts and aggregate by question
+        from src.domain.models.forecast import Forecast
+        all_forecasts = db.get_many(Forecast)
+        forecast_stats = {}  # qid -> {'count': int, 'modes': set}
+        
+        for f in all_forecasts:
+            if not f.question_id:
+                continue
+            
+            if f.question_id not in forecast_stats:
+                forecast_stats[f.question_id] = {'count': 0, 'modes': set()}
+            
+            stats = forecast_stats[f.question_id]
+            stats['count'] += 1
+            if f.mode:
+                # Handle enum or string mode
+                mode_val = f.mode.value if hasattr(f.mode, 'value') else str(f.mode)
+                stats['modes'].add(mode_val)
+
+        # Convert to simplified response model with article counts and forecast stats
         result = [
             QuestionListItem(
                 id=q.id,
@@ -514,6 +535,8 @@ async def get_questions(
                 estimated_start_time=q.estimated_start_time.isoformat() if q.estimated_start_time else None,
                 metadata=q.metadata,
                 article_count=article_counts.get(q.id, 0),
+                forecast_count=forecast_stats.get(q.id, {}).get('count', 0),
+                forecast_modes=list(forecast_stats.get(q.id, {}).get('modes', [])),
             )
             for q in questions
         ]
