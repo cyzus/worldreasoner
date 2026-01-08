@@ -61,7 +61,7 @@ class WebSearchTool(Tool):
         collector=None,
         question_id: Optional[str] = None,
         auto_collect_enabled: bool = False,
-        max_auto_collect: int = 5,
+        max_auto_collect: int = 10,
         domain: str = "general",
     ):
         """Initialize WebSearchTool with optional auto-collect.
