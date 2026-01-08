@@ -436,17 +436,18 @@ class PipelineRunner:
         **kwargs
     ) -> PipelineResult:
         """Run adaptive multi-agent evidence pipeline."""
-        from src.pipelines.evidence.adaptive_pipeline import AdaptiveEvidencePipeline
+        from src.pipelines.evidence.pipeline import EvidencePipeline
 
         evidence_config = EvidencePipelineConfig()
         database_config = DatabaseConfig(db_path=self.db_path)
 
-        pipeline = AdaptiveEvidencePipeline(
+        pipeline = EvidencePipeline(
             evidence_config=evidence_config,
             database_config=database_config,
             enable_persistence=True,
-            agent_max_steps=agent_max_steps,
-            min_graph_depth=min_graph_depth,
+            min_quality_score=kwargs.get("min_quality_score"),
+            agent_max_steps=kwargs.get("agent_max_steps", 30),
+            min_graph_depth=kwargs.get("min_graph_depth", 3),
         )
 
         results = PipelineResult([], [], [], 0.0)

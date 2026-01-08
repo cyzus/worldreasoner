@@ -78,7 +78,7 @@ class WebSearchTool(Tool):
         if self.db and question_id:
             from src.domain.models.question import Question
             self.question_id = question_id
-            self.question = self.db.get(Question, ids=question_id)
+            self.question = self.db.get(Question, question_id)
             self.auto_collect_enabled = self.question is not None
             self.question_resolution_date = self.question.resolution_date if self.question else None
             

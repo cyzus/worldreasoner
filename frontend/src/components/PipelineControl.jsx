@@ -176,18 +176,9 @@ const PipelineControl = ({ selectedQuestions, onJobComplete }) => {
             className="action-btn evidence"
             onClick={() => startPipeline('evidence')}
             disabled={!selectedQuestions.length}
-            title="Run evidence pipeline to build causal graphs"
+            title="Run evidence pipeline with agent-based causal analysis (deep graphs, 3+ levels)"
           >
-            📊 Run Evidence Pipeline
-          </button>
-
-          <button
-            className="action-btn adaptive"
-            onClick={() => startPipeline('adaptive_evidence')}
-            disabled={!selectedQuestions.length}
-            title="Run adaptive multi-agent evidence pipeline"
-          >
-            🔬 Run Adaptive Evidence
+            🔬 Run Evidence Pipeline
           </button>
 
           <button

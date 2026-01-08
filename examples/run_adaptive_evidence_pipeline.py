@@ -38,7 +38,7 @@ Note:
 
 import argparse
 import asyncio
-from src.pipelines.evidence.adaptive_pipeline import AdaptiveEvidencePipeline
+from src.pipelines.evidence.pipeline import EvidencePipeline
 from src.config.pipeline import EvidencePipelineConfig
 from src.config import DatabaseConfig, get_config
 from src.utils.logging import logger
@@ -85,8 +85,6 @@ def parse_args():
                        help='Minimum quality score to process a question (0.0-1.0)')
 
     # Agent-specific settings
-    parser.add_argument('--disable-agents', action='store_true',
-                       help='Disable agent mode, use rigid stage-based pipeline')
     parser.add_argument('--agent-max-steps', type=int, default=30,
                        help='Maximum steps for manager agent (default: 30)')
     parser.add_argument('--min-graph-depth', type=int, default=3,
@@ -156,14 +154,9 @@ async def run_pipeline(args):
         batch_size=app_config.database.batch_size,
     )
 
-    # Log configuration
+    #Log configuration
     logger.info("=" * 80)
-    if not args.disable_agents:
-        logger.info("Adaptive Evidence Pipeline - Multi-Agent Causal Analysis")
-        logger.info("Mode: ADAPTIVE AGENTS (self-evaluating, iterative)")
-    else:
-        logger.info("Adaptive Evidence Pipeline - Rigid Stage-Based Processing")
-        logger.info("Mode: FALLBACK (no agents)")
+    logger.info("Evidence Pipeline - Multi-Agent Causal Analysis")
     logger.info("=" * 80)
     logger.info(f"\nDatabase: {db_config.db_path}")
     if question_id:
@@ -175,11 +168,10 @@ async def run_pipeline(args):
     logger.info(f"Max questions: {evidence_config.max_questions or 'unlimited'}")
     logger.info(f"Skip already processed: {evidence_config.skip_already_processed}")
 
-    if not args.disable_agents:
-        logger.info(f"Agent Settings:")
-        logger.info(f"  Max steps: {args.agent_max_steps}")
-        logger.info(f"  Min graph depth: {args.min_graph_depth} levels")
-        logger.info(f"  Features: Self-evaluation, iteration, adaptive fallback")
+    logger.info(f"Agent Settings:")
+    logger.info(f"  Max steps: {args.agent_max_steps}")
+    logger.info(f"  Min graph depth: {args.min_graph_depth} levels")
+    logger.info(f"  Features: Self-evaluation, iteration, adaptive behavior")
 
     if domains:
         logger.info(f"Domain filter: {', '.join(domains)}")
@@ -193,12 +185,11 @@ async def run_pipeline(args):
         return  # Error already logged by helper
 
     # Create pipeline
-    pipeline = AdaptiveEvidencePipeline(
+    pipeline = EvidencePipeline(
         evidence_config=evidence_config,
         database_config=db_config,
         enable_persistence=True,
         min_quality_score=args.min_quality_score,
-        use_agents=not args.disable_agents,
         agent_max_steps=args.agent_max_steps,
         min_graph_depth=args.min_graph_depth,
     )
@@ -263,12 +254,11 @@ async def run_pipeline(args):
                     logger.info(f"     Evidence: {len(hyp.evidence_article_ids)} articles")
                     logger.info(f"     Discovered by: {len(hyp.discovered_by_question_ids)} question(s)")
 
-        # Show graph depth metrics 
-        if not args.disable_agents:
-            logger.info("=" * 80)
-            logger.info("GRAPH DEPTH ANALYSIS")
-            logger.info("=" * 80)
-            await show_graph_metrics(args.db, pipeline.resolved_questions)
+        # Show graph depth metrics
+        logger.info("=" * 80)
+        logger.info("GRAPH DEPTH ANALYSIS")
+        logger.info("=" * 80)
+        await show_graph_metrics(args.db, pipeline.resolved_questions)
 
         # Auto-index articles for search if not skipped
         if not args.skip_indexing:

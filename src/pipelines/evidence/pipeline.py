@@ -1,48 +1,40 @@
-"""Evidence generation pipeline for WorldReasoner.
+"""Evidence Pipeline using HindsightAgent multi-agent system.
 
-This pipeline builds causal explanations with hindsight:
-0. Identify target events for all questions (batch processing)
-1. Collect evidence articles AFTER outcomes are known (per question)
-2. Identify causal relationships using hindsight (per question)
-3. Build validated causal graphs
+This pipeline uses managed agents (evidence_collector, causal_analyzer) that can
+self-evaluate and iterate to build deep causal graphs.
 
-Uses async processing with per-question analysis to preserve context and enable parallelism.
+Features:
+- Deeper causal graphs: 3+ levels vs 1 level shallow graphs  
+- Self-evaluation: Agents assess their own work and iterate
+- Adaptive behavior: Handles failures gracefully
+- Built-in quality metrics: Article quality, graph quality,depth analysis
 """
 
 import asyncio
-from typing import List, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
 
 from ..base import Pipeline, PipelineStageResult, PipelineStageStatus
-from ..stages import (
-    HindsightEvidenceCollectionStage,
-    EvidenceCollectionConfig,
-    TargetEventIdentificationStage,
-    TargetEventIdentificationConfig,
-    CausalReasoningStage,
-    CausalReasoningConfig,
-    CausalGraphBuildingStage,
-    CausalGraphConfig,
-)
+from src.pipelines.prompts import HindsightCausalAnalysisPrompts
 from src.config.pipeline import EvidencePipelineConfig
 from src.config import DatabaseConfig
 from src.domain.models import Question, Article, CausalHypothesis, Event
 from src.core.database import GenericDatabase
+from src.agents.hindsight_agent import HindsightAgent
 from src.utils.logging import logger
 from src.utils.usage_tracking import UsageTracker
 
 
 class EvidencePipeline(Pipeline):
-    """Pipeline for building causal explanations with hindsight.
-
-    Flow: Resolved Questions → Target Events (batch) → Evidence Articles → Causal Hypotheses → Graph
-
+    """Evidence pipeline using adaptive multi-agent system.
+    
+    Flow: Resolved Questions → Agent-based Causal Analysis → Deep Causal Graphs
+    
     This pipeline:
-    - Identifies target events for all questions upfront (batch processing)
-    - Collects evidence articles AFTER outcomes are known
-    - Uses hindsight to identify true causal factors
-    - Saves causal hypotheses to the graph database
-    - Creates ground truth explanations for evaluation
+    - Uses HindsightAgent with managed sub-agents (evidence_collector, causal_analyzer)
+    - Agents self-evaluate and iterate to improve graph depth (3+ levels)
+    - Automatically collects evidence AFTER outcomes are known (hindsight)
+    - Creates ground truth explanations with quality metrics
     """
 
     def __init__(
@@ -52,15 +44,19 @@ class EvidencePipeline(Pipeline):
         enable_persistence: bool = True,
         max_concurrent_questions: int = 1,
         min_quality_score: Optional[float] = None,
+        agent_max_steps: int = 30,
+        min_graph_depth: int = 3,
     ):
-        """Initialize the evidence pipeline.
+        """Initialize evidence pipeline with agent-based processing.
 
         Args:
             evidence_config: Configuration for evidence pipeline
             database_config: Database connection configuration
-            enable_persistence: Whether to save to database
-            max_concurrent_questions: Max number of questions to process in parallel
-            min_quality_score: If set, only process questions with a quality score >= this value
+            enable_persistence: Whether to persist results to database
+            max_concurrent_questions: Maximum concurrent question processing
+            min_quality_score: If set, only process questions with quality score >= this value
+            agent_max_steps: Maximum steps for manager agent (default: 30)
+            min_graph_depth: Minimum causal chain depth required (default: 3)
         """
         super().__init__(name="EvidencePipeline")
 
@@ -69,62 +65,11 @@ class EvidencePipeline(Pipeline):
         self.enable_persistence = enable_persistence
         self.max_concurrent_questions = max_concurrent_questions
         self.min_quality_score = min_quality_score
+        self.agent_max_steps = agent_max_steps
+        self.min_graph_depth = min_graph_depth
 
         # Semaphore to limit concurrent question processing
         self.semaphore = asyncio.Semaphore(max_concurrent_questions)
-
-        db_path = database_config.db_path
-
-        # Stage 1: Hindsight Evidence Collection
-        evidence_collection_config = EvidenceCollectionConfig(
-            evidence_window_days=evidence_config.evidence_window_days,
-            min_evidence_articles=evidence_config.min_evidence_articles,
-            include_expert_analysis=evidence_config.include_expert_analysis,
-            min_resolution_age_days=evidence_config.min_resolution_age_days,
-        )
-        self.evidence_stage = HindsightEvidenceCollectionStage(
-            evidence_collection_config,
-            db_path=db_path
-
-        )       
-
-        # Stage 1.5: Target Event Identification (for questions without target events)
-        target_event_config = TargetEventIdentificationConfig(
-            similarity_threshold=0.75,
-            create_if_not_found=True,
-        )
-        self.target_event_stage = TargetEventIdentificationStage(
-            target_event_config,
-            db_path=db_path
-        )
-
-        # Stage 2: Causal Reasoning
-        causal_reasoning_config = CausalReasoningConfig(
-            min_confidence=evidence_config.causal_confidence_threshold,
-            min_strength=evidence_config.causal_strength_threshold,
-            require_evidence=evidence_config.require_evidence,
-            max_causal_depth=evidence_config.max_causal_depth,
-        )
-        self.reasoning_stage = CausalReasoningStage(
-            causal_reasoning_config,
-            db_path=db_path
-        )
-
-        # Stage 3: Causal Graph Building
-        graph_config = CausalGraphConfig(
-            validate_temporal_ordering=evidence_config.validate_temporal_ordering,
-            max_links_per_event=evidence_config.max_links_per_event,
-        )
-        self.graph_stage = CausalGraphBuildingStage(
-            graph_config,
-            db_path=db_path
-        )
-
-        # Add stages
-        self.add_stage(self.evidence_stage)
-        self.add_stage(self.target_event_stage)
-        self.add_stage(self.reasoning_stage)
-        self.add_stage(self.graph_stage)
 
         # Storage for pipeline outputs
         self.resolved_questions: List[Question] = []
@@ -139,12 +84,17 @@ class EvidencePipeline(Pipeline):
         # Pipeline-level usage tracking
         self.usage_tracker = UsageTracker()
 
+        # Initialize prompt generator
+        self.prompts = HindsightCausalAnalysisPrompts()
+
+        logger.info("Adaptive multi-agent evidence pipeline initialized")
+
     async def run(
         self,
         resolved_questions: Optional[List[Question]] = None,
         min_quality_score: Optional[float] = None,
     ) -> List[PipelineStageResult]:
-        """Run the evidence pipeline with per-question async processing.
+        """Run the evidence pipeline with agent-based async processing.
 
         Args:
             resolved_questions: Optional list of resolved questions.
@@ -159,7 +109,7 @@ class EvidencePipeline(Pipeline):
         # Allow overriding the quality score threshold at runtime
         if min_quality_score is not None:
             self.min_quality_score = min_quality_score
-            
+
         try:
             # Get resolved questions
             if resolved_questions is None:
@@ -173,33 +123,10 @@ class EvidencePipeline(Pipeline):
 
             logger.info(
                 f"Processing {len(self.resolved_questions)} questions "
-                f"with max {self.max_concurrent_questions} in parallel"
+                f"with max {self.max_concurrent_questions} concurrent agents"
             )
 
-            # Stage 0: Batch identify target events for questions that don't have them
-            # This happens BEFORE evidence collection so all questions have target events
-            questions_needing_events = [q for q in self.resolved_questions if not q.target_event_id]
-            if questions_needing_events:
-                logger.info(f"Identifying target events for {len(questions_needing_events)} questions (batch processing)...")
-                # Pass empty article lists since we haven't collected evidence yet
-                question_article_pairs = [(q, []) for q in questions_needing_events]
-                target_event_result = await self.target_event_stage.execute(question_article_pairs)
-
-                # Update questions in the main list with the returned questions
-                if target_event_result.outputs:
-                    updated_questions_map = {q.id: q for q in target_event_result.outputs}
-                    for i, question in enumerate(self.resolved_questions):
-                        if question.id in updated_questions_map:
-                            self.resolved_questions[i] = updated_questions_map[question.id]
-
-                    self._results.append(target_event_result)
-                    identified_count = sum(1 for q in target_event_result.outputs if q.target_event_id)
-                    logger.info(f"Target events identified: {identified_count}/{len(questions_needing_events)}")
-                else:
-                    logger.warning("Target event identification returned no results")
-
-            # Process each question through the pipeline (stages 1-2)
-            # Stage 3 (graph building) happens after collecting all hypotheses
+            # Process each question with agent-based pipeline
             question_tasks = [
                 self._process_single_question(question)
                 for question in self.resolved_questions
@@ -223,8 +150,6 @@ class EvidencePipeline(Pipeline):
                 else:
                     self.evidence_articles.extend(result.get("evidence_articles", []))
                     self.causal_hypotheses.extend(result.get("causal_hypotheses", []))
-                    # Collect stage results (stages 1 and 2)
-                    self._results.extend(result.get("stage_results", []))
                     successful_count += 1
 
             logger.info(
@@ -233,133 +158,215 @@ class EvidencePipeline(Pipeline):
 
             if not self.causal_hypotheses:
                 logger.error("No causal hypotheses generated - pipeline failed")
-                # Mark the overall pipeline as failed
-                if self._results:
-                    self._results[-1].status = PipelineStageStatus.FAILED
-                    self._results[-1].error_message = "No causal hypotheses generated from any question"
                 return self._results
 
             logger.info(f"Total: {len(self.evidence_articles)} evidence articles, "
                        f"{len(self.causal_hypotheses)} causal hypotheses")
 
-            # Stage 3: Build Causal Graph (after all question processing)
-            # Note: Hypotheses are already saved by graph building stage
-            logger.info("Stage 3: Building causal graph...")
-            graph_result = await self.graph_stage.execute(self.causal_hypotheses)
+            # Add a success result for the pipeline runner to detect
+            success_result = PipelineStageResult(
+                stage_name="AgentBasedEvidence",
+                status=PipelineStageStatus.COMPLETED,
+                items_processed=len(self.resolved_questions),
+                items_output=len(self.causal_hypotheses),
+                outputs=self.causal_hypotheses,
+            )
+            self._results.append(success_result)
 
-            # Mark as failed if no results
-            saved_hypotheses = graph_result.outputs
-            if not saved_hypotheses:
-                graph_result.status = PipelineStageStatus.FAILED
-                graph_result.error_message = "No causal hypotheses saved to graph"
-                logger.error("Stage 3: No causal hypotheses saved to graph - pipeline failed")
-                self._results.append(graph_result)
-                return self._results
-
-            self._results.append(graph_result)
-            logger.info(f"Saved {len(saved_hypotheses)} causal hypotheses to graph")
-
-            # Aggregate usage from all stages
-            self._aggregate_stage_usage()
-
-            # Log pipeline-level summary
-            logger.info("Evidence pipeline summary:")
-            logger.info(f"Questions processed: {len(self.resolved_questions)}")
-            logger.info(f"Evidence articles collected: {len(self.evidence_articles)}")
-            logger.info(f"Causal hypotheses generated: {len(self.causal_hypotheses)}")
-            self.usage_tracker.log_summary(context="EvidencePipeline TOTAL")
             logger.info("Evidence pipeline completed successfully!")
 
         except Exception as e:
-            if self._results:
-                self._results[-1].error_message = str(e)
             logger.error(f"Evidence Pipeline failed: {e}")
             raise
 
         return self._results
 
     async def _process_single_question(self, question: Question) -> dict:
-        """Process a single question through stages 1 and 2.
+        """Process a single question using HindsightAgent multi-agent system.
 
-        This method:
-        1. Collects evidence for THIS question only
-        2. Performs causal reasoning with that evidence
-        3. Persists results immediately
-        4. Returns evidence and hypotheses for aggregation
+        Creates a new agent per question with provenance context, ensuring
+        all articles, events, and hypotheses are properly linked to the question.
 
         Args:
-            question: The question to process
+            question: Question to process
 
         Returns:
-            Dictionary with 'evidence_articles', 'causal_hypotheses', and stage results
-
-        Raises:
-            Exception: Propagates errors for asyncio.gather to handle
+            Dictionary with 'evidence_articles', 'causal_hypotheses', and quality metrics
         """
         async with self.semaphore:
-            logger.info(f"Processing question: {question.id}")
-            evidence_articles = []
-            causal_hypotheses = []
-            stage_results = []
+            logger.info(f"[AGENT MODE] Processing question: {question.id}")
+
+            # Create agent WITH question context for provenance tracking
+            # This ensures all tools know which question they're serving
+            hindsight_agent = HindsightAgent(
+                db_path=self.database_config.db_path,
+                max_steps=self.agent_max_steps,
+                question_id=question.id,  # Provenance context
+                target_event_id=question.target_event_id,  # Target for causal graph
+            )
+            logger.debug(f"[{question.id}] Created context-aware HindsightAgent")
+
+            # Construct agent prompt using prompt generator
+            prompt = self.prompts.get_agent_prompt(
+                question=question,
+                min_graph_depth=self.min_graph_depth,
+                evidence_window_days=self.evidence_config.evidence_window_days,
+                min_evidence_articles=self.evidence_config.min_evidence_articles,
+                confidence_threshold=self.evidence_config.causal_confidence_threshold,
+            )
 
             try:
-                # Stage 1: Collect evidence for this question only
-                logger.debug(f"[{question.id}] Collecting evidence...")
-                evidence_result = await self.evidence_stage.execute([question])
-                evidence_articles = evidence_result.outputs
+                # Run agent in thread pool to avoid blocking
+                # Agent execution is automatically saved to logs/agent_runs/{agent_name}_{question_id}_{timestamp}.json
+                logger.debug(f"[{question.id}] Starting HindsightAgent...")
+                result = await asyncio.to_thread(hindsight_agent.run, prompt, run_id=question.id)
+                logger.info(f"[{question.id}] Agent completed successfully")
 
-                # Mark as failed if no results
-                if not evidence_articles:
-                    evidence_result.status = PipelineStageStatus.FAILED
-                    evidence_result.error_message = "No evidence articles collected"
-                    logger.warning(f"[{question.id}] No evidence articles collected - terminating processing")
+                # Extract results from database (agent persisted everything)
+                db = GenericDatabase(self.database_config.db_path)
 
-                stage_results.append(evidence_result)
+                # Get articles and hypotheses for this question
+                all_articles = db.get_many(Article)
+                all_hypotheses = db.get_many(CausalHypothesis)
 
-                if not evidence_articles:
+                # Filter hypotheses for this question
+                question_hypotheses = [
+                    h for h in all_hypotheses
+                    if question.id in h.discovered_by_question_ids
+                ]
+
+                # Get articles referenced by these hypotheses
+                evidence_article_ids = set()
+                for hyp in question_hypotheses:
+                    evidence_article_ids.update(hyp.evidence_article_ids)
+
+                evidence_articles = [a for a in all_articles if a.id in evidence_article_ids]
+
+                logger.info(
+                    f"[{question.id}] Agent results: "
+                    f"{len(evidence_articles)} articles, "
+                    f"{len(question_hypotheses)} hypotheses"
+                )
+
+                # Evaluate article quality based on collected evidence articles
+                from src.utils.article_analysis import (
+                    analyze_timeline,
+                    analyze_sources,
+                    identify_gaps,
+                    calculate_quality
+                )
+
+                article_quality_score = 0.0
+                article_coverage = None
+
+                if evidence_articles:
+                    # Use comprehensive quality calculation with timeline analysis
+                    from src.utils.date_utils import ensure_timezone_aware
+
+                    # Pass coverage_start for expected coverage window calculation
+                    coverage_start = ensure_timezone_aware(question.estimated_start_time) if question.estimated_start_time else None
+                    timeline_data = analyze_timeline(evidence_articles, question.resolution_date, coverage_start=coverage_start)
+                    source_data = analyze_sources(evidence_articles)
+                    gaps = identify_gaps(timeline_data)
+
+                    quality_metrics = calculate_quality(
+                        evidence_articles, timeline_data, source_data, gaps, coverage_start=coverage_start
+                    )
+
+                    article_quality_score = quality_metrics["score"]
+
+                    # Structure result for compatibility with existing code
+                    article_coverage = {
+                        "quality": quality_metrics,
+                        "article_count": len(evidence_articles),
+                        "sources": {"unique_sources": source_data["unique_sources"]},
+                        "coverage_end_date": question.resolution_date,
+                        "timeline": timeline_data,
+                        "gaps": gaps
+                    }
+
+                    logger.info(
+                        f"[{question.id}] Article quality: {article_quality_score:.2f} "
+                        f"({article_coverage['article_count']} articles, "
+                        f"{article_coverage['sources']['unique_sources']} sources, "
+                        f"{len(gaps)} time gaps)"
+                    )
+                else:
+                    logger.warning(f"[{question.id}] No evidence articles collected - article quality: 0.0")
+
+                # Evaluate graph quality using shared utilities
+                from src.utils.graph_analysis import calculate_graph_quality
+
+                graph_quality_score = 0.0
+                max_depth = 0
+
+                if question_hypotheses:
+                    # Calculate graph quality using shared utility
+                    quality_metrics = calculate_graph_quality(
+                        hypotheses=question_hypotheses,
+                        target_event_id=question.target_event_id,
+                        min_depth_for_full_score=self.min_graph_depth
+                    )
+
+                    graph_quality_score = quality_metrics['quality_score']
+                    max_depth = quality_metrics['max_depth']
+
+                    logger.info(
+                        f"[{question.id}] Graph quality: {graph_quality_score:.2f} "
+                        f"(depth: {max_depth}, events: {quality_metrics['event_count']}, "
+                        f"hypotheses: {quality_metrics['hypothesis_count']})"
+                    )
+                else:
+                    logger.warning(f"[{question.id}] No causal hypotheses generated - graph quality: 0.0")
+
+                # Check if pipeline should be marked as failed based on quality
+                status_message = None
+                if article_quality_score == 0.0:
+                    status_message = "Failed: Article quality is zero (no/insufficient articles)"
+                    logger.error(f"[{question.id}] {status_message}")
+                elif graph_quality_score == 0.0:
+                    status_message = "Failed: Graph quality is zero (no/insufficient causal hypotheses)"
+                    logger.error(f"[{question.id}] {status_message}")
+                elif max_depth < self.min_graph_depth:
+                    status_message = f"Failed: Graph depth ({max_depth}) below minimum ({self.min_graph_depth})"
+                    logger.error(f"[{question.id}] {status_message}")
+
+                # If failed, return empty results to signal failure
+                if status_message:
                     return {
                         "evidence_articles": [],
                         "causal_hypotheses": [],
-                        "stage_results": stage_results
+                        "stage_results": [],
+                        "agent_output": result,
+                        "status": "failed",
+                        "failure_reason": status_message,
+                        "article_quality": article_quality_score,
+                        "graph_quality": graph_quality_score,
+                        "graph_depth": max_depth
                     }
 
-                logger.info(f"[{question.id}] Collected {len(evidence_articles)} evidence articles")
-
-                # Stage 2: Causal reasoning with collected evidence
-                # Note: Target event identification now happens in batch before evidence collection
-                logger.debug(f"[{question.id}] Performing causal reasoning...")
-                question_evidence_pair = (question, evidence_articles)
-                reasoning_result = await self.reasoning_stage.execute([question_evidence_pair])
-                causal_hypotheses = reasoning_result.outputs
-
-                # Mark as failed if no results
-                if not causal_hypotheses:
-                    reasoning_result.status = PipelineStageStatus.FAILED
-                    reasoning_result.error_message = "No causal hypotheses generated"
-                    logger.warning(f"[{question.id}] No causal hypotheses generated - terminating processing")
-
-                stage_results.append(reasoning_result)
-
-                if not causal_hypotheses:
-                    return {
-                        "evidence_articles": evidence_articles,
-                        "causal_hypotheses": [],
-                        "stage_results": stage_results
-                    }
-
-                logger.info(f"[{question.id}] Generated {len(causal_hypotheses)} causal hypotheses")
-
-                logger.info(f"[{question.id}] Processing complete")
-
+                # Success
                 return {
                     "evidence_articles": evidence_articles,
-                    "causal_hypotheses": causal_hypotheses,
-                    "stage_results": stage_results
+                    "causal_hypotheses": question_hypotheses,
+                    "stage_results": [],  # Agent mode doesn't have stages
+                    "agent_output": result,
+                    "status": "success",
+                    "article_quality": article_quality_score,
+                    "graph_quality": graph_quality_score,
+                    "graph_depth": max_depth
                 }
 
             except Exception as e:
-                logger.error(f"[{question.id}] Error during processing: {e}")
-                raise
+                logger.error(f"[{question.id}] Agent processing failed: {e}")
+                # Return empty result on failure
+                return {
+                    "evidence_articles": [],
+                    "causal_hypotheses": [],
+                    "stage_results": [],
+                    "status": "failed",
+                    "failure_reason": str(e)
+                }
 
     def _load_resolved_questions(self) -> List[Question]:
         """Load resolved questions from database that haven't been processed yet.
@@ -522,31 +529,22 @@ class EvidencePipeline(Pipeline):
 
         return deleted
 
-    def get_summary(self) -> dict:
-        """Get a summary of pipeline results.
+    def get_summary(self) -> Dict[str, Any]:
+        """Get pipeline execution summary with agent-specific info.
 
         Returns:
-            Dictionary with pipeline statistics
+            Dictionary with summary statistics
         """
         return {
             "resolved_questions": len(self.resolved_questions),
             "evidence_articles": len(self.evidence_articles),
             "causal_hypotheses": len(self.causal_hypotheses),
-            "stages_completed": len([r for r in self._results if r.status == PipelineStageStatus.COMPLETED]),
-            "stages_failed": len([r for r in self._results if r.status == PipelineStageStatus.FAILED]),
             # DB-level stats captured during question loading
             "db_total_questions": self.db_total_questions,
             "db_resolved_questions": self.db_resolved_questions,
             "db_unprocessed_questions": self.db_unprocessed_questions,
+            # Agent-specific info
+            "processing_mode": "adaptive_agents",
+            "agent_max_steps": self.agent_max_steps,
+            "min_graph_depth": self.min_graph_depth,
         }
-
-    def _aggregate_stage_usage(self) -> None:
-        """Aggregate token usage from all pipeline stages."""
-        # Collect usage from each stage that tracks it
-        if hasattr(self.evidence_stage, 'usage_tracker'):
-            for metrics in self.evidence_stage.usage_tracker.usage_records:
-                self.usage_tracker.add_usage(metrics)
-
-        if hasattr(self.reasoning_stage, 'usage_tracker'):
-            for metrics in self.reasoning_stage.usage_tracker.usage_records:
-                self.usage_tracker.add_usage(metrics)
