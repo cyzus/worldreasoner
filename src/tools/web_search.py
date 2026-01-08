@@ -71,13 +71,18 @@ class WebSearchTool(Tool):
             question_id, question_resolution_date: Required if auto_collect_enabled=True
             db, db_path, collector, domain, max_auto_collect: Passed to ArticleCollectorTool if enabled
         """
+        # Initialize attributes that may be used later
+        self.auto_collect_enabled = False
+        self.question_id = question_id
+        self.question = None
+        self.question_resolution_date = None
+        
         self.db = None
         if db_path:
             from src.core.database import GenericDatabase
             self.db = GenericDatabase(db_path)
         if self.db and question_id:
             from src.domain.models.question import Question
-            self.question_id = question_id
             self.question = self.db.get(Question, question_id)
             self.auto_collect_enabled = self.question is not None
             self.question_resolution_date = self.question.resolution_date if self.question else None
@@ -336,6 +341,11 @@ class WebSearchTool(Tool):
         Returns:
             Brief summary of collection activity
         """
+        # Safety check: ensure resolution date is set
+        if not self.question_resolution_date:
+            logger.warning("Auto-collect skipped: question_resolution_date is not set")
+            return "\n---\n**Auto-collected 0 article(s)** (auto-collect disabled: no resolution date)"
+        
         from src.utils.date_utils import parse_flexible_datetime
 
         collected = []
@@ -354,7 +364,13 @@ class WebSearchTool(Tool):
 
             try:
                 published_date = parse_flexible_datetime(published_date_str)
-                if published_date >= self.question_resolution_date:
+                
+                # Normalize both datetimes for comparison (handle timezone-aware vs naive)
+                # Convert both to naive UTC to avoid TypeError
+                pub_dt = published_date.replace(tzinfo=None) if published_date.tzinfo else published_date
+                res_dt = self.question_resolution_date.replace(tzinfo=None) if self.question_resolution_date.tzinfo else self.question_resolution_date
+                
+                if pub_dt >= res_dt:
                     skipped["after_resolution"] += 1
                     continue
 
@@ -370,7 +386,7 @@ class WebSearchTool(Tool):
                 collected.append(title[:50] + "..." if len(title) > 50 else title)
 
             except Exception as e:
-                logger.debug(f"Skipped {url}: {e}")
+                logger.warning(f"Auto-collect skipped {url}: {type(e).__name__}: {e}")
                 skipped["error"] += 1
 
         # Build concise summary
