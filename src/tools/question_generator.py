@@ -27,11 +27,7 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
     """
     
     name = "question_generator"
-    description = """Stores a generated forecast question as a structured Question object.
-
-    Use this tool AFTER you've created a forecast question based on events.
-    Call this tool once for EACH question you generate (not all at once).
-    """
+    description = """Stores a generated forecast question as a structured Question object. Output will be the generation status."""
     
     # Auto-generate inputs from Enum classes (single source of truth)
     inputs = {
