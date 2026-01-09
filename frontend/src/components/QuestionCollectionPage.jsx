@@ -234,8 +234,10 @@ function QuestionCollectionPage({
 
         // Remove saved questions from preview
         const savedIds = new Set(selectedQuestions.map(q => q.id))
-        const currentQuestions = Array.isArray(previewQuestions) ? previewQuestions : [];
-        setPreviewQuestions(currentQuestions.filter(q => !savedIds.has(q.id)))
+        setPreviewQuestions(prevQuestions => {
+          const current = Array.isArray(prevQuestions) ? prevQuestions : [];
+          return current.filter(q => !savedIds.has(q.id));
+        })
 
         // Notify parent if callback provided
         if (onQuestionsAdded) {
