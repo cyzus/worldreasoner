@@ -18,20 +18,22 @@ function QuestionPreviewList({ questions, onSaveSelected, loading, source }) {
   const [typeFilter, setTypeFilter] = useState('all')
   const [sortBy, setSortBy] = useState('difficulty')
 
-  // Extract unique domains and types from questions
+  // Extract unique domains and types from questions (with safety check)
   const availableDomains = useMemo(() => {
+    if (!Array.isArray(questions)) return ['all'];
     const domains = new Set(questions.map(q => q.domain))
     return ['all', ...Array.from(domains).sort()]
   }, [questions])
 
   const availableTypes = useMemo(() => {
+    if (!Array.isArray(questions)) return ['all'];
     const types = new Set(questions.map(q => q.question_type))
     return ['all', ...Array.from(types).sort()]
   }, [questions])
 
   // Filter and sort questions
   const filteredQuestions = useMemo(() => {
-    let filtered = questions
+    let filtered = Array.isArray(questions) ? questions : [];
 
     // Search filter
     if (searchText) {
@@ -100,7 +102,8 @@ function QuestionPreviewList({ questions, onSaveSelected, loading, source }) {
 
   const selectedCount = selectedIds.size
 
-  if (questions.length === 0 && !loading) {
+  const safeQuestions = Array.isArray(questions) ? questions : [];
+  if (safeQuestions.length === 0 && !loading) {
     return (
       <div className="preview-list-empty">
         <div className="empty-state">
@@ -116,7 +119,7 @@ function QuestionPreviewList({ questions, onSaveSelected, loading, source }) {
     <div className="preview-list">
       <div className="preview-header">
         <h3>
-          📋 Preview ({filteredQuestions.length} of {questions.length})
+          📋 Preview ({filteredQuestions.length} of {safeQuestions.length})
         </h3>
         {selectedCount > 0 && (
           <button
@@ -129,7 +132,7 @@ function QuestionPreviewList({ questions, onSaveSelected, loading, source }) {
         )}
       </div>
 
-      {questions.length > 0 && (
+      {safeQuestions.length > 0 && (
         <>
           {/* Filters and controls */}
           <div className="preview-controls">

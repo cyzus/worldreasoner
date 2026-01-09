@@ -252,6 +252,9 @@ async def run_pipeline_job(
         def on_progress(progress):
             job.current_question = progress.question_id
             job.processed_count = progress.current
+            # Update total_count if provided in progress (crucial for collection jobs where initial count is 0)
+            if progress.total > 0:
+                job.total_count = progress.total
             job.progress = progress.current / progress.total if progress.total > 0 else 0.0
             job.message = progress.message
             job.updated_at = datetime.utcnow().isoformat()

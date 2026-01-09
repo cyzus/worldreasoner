@@ -56,6 +56,7 @@ export const usePipelineJobs = (pipelineType = null, refreshInterval = 5000) => 
         if (!jobId) {
             setSelectedJobId(null);
             setJobDetails(null);
+            setLoadingDetails(false); // Ensure loading state is reset
             return;
         }
 

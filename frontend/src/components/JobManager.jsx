@@ -103,7 +103,7 @@ export const JobSidebar = ({
                                         />
                                     </div>
                                     <div className="job-progress-text">
-                                        {job.processed_count || 0} / {job.total_count || 0} items
+                                        {job.processed_count || 0} / {job.total_count || '?'} items
                                     </div>
                                 </div>
                             )}
@@ -190,7 +190,7 @@ export const JobDetails = ({ job, onClose }) => {
                         </div>
                         <div className="stat-box duration">
                             <span className="value">
-                                {job.results.duration_seconds ? job.results.duration_seconds.toFixed(1) : '-'}s
+                                {typeof job.results.duration_seconds === 'number' ? job.results.duration_seconds.toFixed(1) : '0.0'}s
                             </span>
                             <span className="label">Duration</span>
                         </div>

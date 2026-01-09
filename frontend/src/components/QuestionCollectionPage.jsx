@@ -297,17 +297,7 @@ function QuestionCollectionPage({
         </button>
       </div>
 
-      {/* Status messages */}
-      {error && (
-        <div className="message error-message" style={{ margin: '0 20px 12px 20px' }}>
-          ⚠️ {error}
-        </div>
-      )}
-      {success && (
-        <div className="message success-message" style={{ margin: '0 20px 12px 20px' }}>
-          {success}
-        </div>
-      )}
+      {/* Status messages removed as requested */}
 
       {/* Manual tab shows form, other tabs show collection interface */}
       <div className="page-content">
