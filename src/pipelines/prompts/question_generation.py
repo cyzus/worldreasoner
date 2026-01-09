@@ -22,51 +22,85 @@ QUALITY:
 - Skip niche topics requiring insider knowledge
 - Ask "Will X happen?" not "Which company will..." (don't assume outcomes)
 - MCQ options from actual event participants only
-- Use FUTURE tense in question wording (these are forecast questions)
+- Use FUTURE tense when formating all the questions
 
 ESTIMATED START TIME:
-- estimated_start_time: When sufficient context exists for informed forecasting
+- When people might have started forecasting this event in the past
   * For event-based questions: when event was first announced/became public
   * For trend questions: when baseline data became available
   * For policy questions: when policy was first proposed/discussed
   * MUST be BEFORE resolution_date (use ISO format with timezone)
-  * Be conservative - better to start later with context than earlier without
-  * If uncertain, omit this field
 
-Required fields: question_text, question_type, domain, difficulty, resolution_date, resolution_criteria, ground_truth, resolution_reasoning, related_event_ids
-Optional fields: estimated_start_time
-
-Example: {tool_name}(questions_json='[{{"question_text": "Will Bitcoin exceed $100K by Dec 31, 2025?", "question_type": "boolean", "domain": "finance", "difficulty": 3, "resolution_date": "2025-12-31T23:59:59Z", "resolution_criteria": "CoinMarketCap closing price", "ground_truth": "YES", "resolution_reasoning": "BTC closed at $105K on Dec 31 per CoinMarketCap", "related_event_ids": "evt_fin_20251201_001", "estimated_start_time": "2025-01-01T00:00:00Z"}}]')
+Think about how an expert would come up with good forecast questions.
 """
 
+ARTICLE_TEMPLATE = \
+"""
+Article {idx} (Source: {source}):
+- Title: {title}
+- Date: {published_date}
+- Content: {content}
+"""
 
-QUESTION_GENERATION_TEMPLATE_GROUND_TRUTH = \
-"""Generate {max_questions} forecast questions from already RESOLVED events.{domain_filter}
-
-{events_text}
-
-RULES:
+RULES_GROUND_TRUTH = \
+"""RULES:
 - Today: {current_date} → resolution_date ≤ {current_date}
 - ground_truth = past outcome only (YES/NO/value, never future dates)
-- Alternate boolean answers: YES, NO, YES, NO (avoid bias)
-- Types: boolean, mcq, quantity, timeframe (distribute evenly)
+- Alternate binary answers: YES, NO, YES, NO (avoid bias)
 - Use round numbers ($100K, 1M users) not oddly specific values
-- Natural deadlines ("by end of Q4 202X" or "by end of Oct 202X" not "by Oct 27")""" + SHARED_RULES_DESC
+- Format questions as if they are in the future (even though all the events are already resolved)
+- Natural deadlines ("by end of Q4 202X" or "by end of Oct 202X" not "by Oct 27")"""
 
-
-QUESTION_GENERATION_TEMPLATE_FUTURE = \
-"""Generate {max_questions} forecast questions about FUTURE events.{domain_filter}
-
-{events_text}
-
-RULES:
+RULES_FUTURE = \
+"""RULES:
 - Today: {current_date} → resolution_date > {current_date}
 - NO ground_truth (outcomes unknown)
 - Resolution dates: 1-12 months in future
-- Balance boolean predictions: ~50% likely YES, ~50% likely NO
-- Types: boolean, mcq, quantity, timeframe (distribute evenly)
+- Balance binary predictions: ~50% likely YES, ~50% likely NO
 - Use round numbers ($100K, 1M users) not oddly specific values
-- Natural deadlines ("by end of Q1 202X" not "by Mar 15")""" + SHARED_RULES_DESC
+- Natural deadlines ("by end of Q1 202X" not "by Mar 15")"""
+
+
+QUESTION_GENERATION_TEMPLATE_GROUND_TRUTH = \
+"""
+You are creating questions to assess the AI forecast capabilities.
+Create {max_questions} forecast questions from already RESOLVED events (still in future tense).{domain_filter}
+
+{events_text}
+
+""" + RULES_GROUND_TRUTH + SHARED_RULES_DESC
+
+
+QUESTION_GENERATION_TEMPLATE_FUTURE = \
+"""
+You are creating questions to assess the AI forecast capabilities.
+Create {max_questions} forecast questions about FUTURE events.{domain_filter}
+
+{events_text}
+
+""" + RULES_FUTURE + SHARED_RULES_DESC
+
+
+ARTICLE_HEADER = \
+"""Analyze these {num_articles} news articles and generate {max_questions} forecast questions.{domain_filter}
+
+TRUSTED SOURCES:
+{sources_text}
+
+{articles_text}
+
+INSTRUCTIONS:
+- Identify the key events/claims in these articles.
+- Use web search and web fetch if you think the articles are not enough.
+- Create questions that forecast the outcomes of these events.
+- If multiple articles discuss the same event, consolidate them into a single question.
+"""
+
+ARTICLE_QUESTION_GENERATION_TEMPLATE_GROUND_TRUTH = \
+ARTICLE_HEADER + RULES_GROUND_TRUTH + SHARED_RULES_DESC
+
+ARTICLE_QUESTION_GENERATION_TEMPLATE_FUTURE = \
+ARTICLE_HEADER + RULES_FUTURE + SHARED_RULES_DESC
 
 
 class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
@@ -95,6 +129,28 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
         required_vars=["num_events", "events_text", "max_questions", "current_date", "max_resolution_date"],
         optional_vars={
             "domain_filter": "",
+            "tool_name": "batch_question_generator"
+        }
+    )
+
+    # Template for ARTICLE-based generation (GROUND TRUTH)
+    GENERATION_TEMPLATE_ARTICLE_GROUND_TRUTH = PromptTemplate(
+        template=ARTICLE_QUESTION_GENERATION_TEMPLATE_GROUND_TRUTH,
+        required_vars=["num_articles", "articles_text", "max_questions", "current_date"],
+        optional_vars={
+            "domain_filter": "",
+            "sources_text": "None",
+            "tool_name": "batch_question_generator"
+        }
+    )
+
+    # Template for ARTICLE-based generation (FUTURE)
+    GENERATION_TEMPLATE_ARTICLE_FUTURE = PromptTemplate(
+        template=ARTICLE_QUESTION_GENERATION_TEMPLATE_FUTURE,
+        required_vars=["num_articles", "articles_text", "max_questions", "current_date"],
+        optional_vars={
+            "domain_filter": "",
+            "sources_text": "None",
             "tool_name": "batch_question_generator"
         }
     )
@@ -241,6 +297,94 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
             )
 
         # Add priority guidance if provided
+        if priority_guidance:
+            instruction_body = instruction_body + priority_guidance
+
+        return self.build_instruction(current_date, instruction_body)
+
+    def get_article_instruction(
+        self,
+        current_date: datetime,
+        articles: List,  # List[Article] but typed loosely to avoid generic issues
+        max_questions: int,
+        domains: Optional[List[str]] = None,
+        sources: Optional[List[str]] = None,  # NEW
+        tool_name: str = "batch_question_generator",
+        require_ground_truth: bool = True,
+        type_hints: Optional[List[str]] = None,
+        category_hints: Optional[List[str]] = None,
+    ) -> str:
+        """Generate instruction for question generation from ARTICLES.
+
+        Args:
+            current_date: Current datetime
+            articles: List of articles
+            max_questions: Maximum number of questions to generate
+            domains: Optional list of domains to focus on
+            tool_name: Name of the tool to call
+            require_ground_truth: Whether to prefer ground truth questions
+            type_hints: Priority question types needed
+            category_hints: Priority categories needed
+
+        Returns:
+            Formatted instruction string
+        """
+        date_str = self.format_datetime(current_date)
+
+        # Format articles
+        articles_text_parts = []
+        for idx, article in enumerate(articles, 1):
+            # Truncate content to avoid token limits
+            content = article.content
+            if len(content) > 500:
+                content = content[:500] + "..."
+            
+            # Format published date
+            pub_date = article.published_date.strftime('%Y-%m-%d') if article.published_date else "Unknown"
+
+            articles_text_parts.append(
+                ARTICLE_TEMPLATE.format(
+                    idx=idx,
+                    source=article.source,
+                    title=article.title,
+                    published_date=pub_date,
+                    content=content
+                )
+            )
+        
+        articles_text = "\n".join(articles_text_parts)
+
+        # Build domain filter
+        domain_filter = ""
+        if domains:
+            domain_filter = f" Focus on domains: {self.format_list(domains)}."
+
+        # Build sources text
+        sources_text = "No specific trusted sources provided."
+        if sources:
+             sources_text = self.format_list(sources)
+
+        if require_ground_truth:
+            template = self.GENERATION_TEMPLATE_ARTICLE_GROUND_TRUTH
+        else:
+            template = self.GENERATION_TEMPLATE_ARTICLE_FUTURE
+
+        # Build instruction
+        instruction_body = template.format(
+            num_articles=len(articles),
+            articles_text=articles_text,
+            sources_text=sources_text,  # NEW parameters
+            max_questions=max_questions,
+            current_date=date_str,
+            domain_filter=domain_filter,
+            tool_name=tool_name
+        )
+
+        # Add priority guidance
+        priority_guidance = self.build_priority_guidance(
+            type_hints=type_hints,
+            category_hints=category_hints
+        )
         if priority_guidance:
             instruction_body = instruction_body + priority_guidance
 

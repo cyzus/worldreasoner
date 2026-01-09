@@ -74,14 +74,13 @@ class BatchQuestionGeneratorTool(QuestionGeneratorTool):
     }
     output_type = "string"
 
-    def __init__(self, require_ground_truth: bool, collector=None, existing_question_ids: Optional[set] = None, db_path: str = None):
+    def __init__(self, require_ground_truth: bool, collector=None, existing_question_ids: Optional[set] = None):
         """Initialize the batch question generator.
 
         Args:
             require_ground_truth: If True, require ground_truth for all questions
             collector: Optional ResultCollector[Question] for storing results
             existing_question_ids: Set of existing question IDs to skip
-            db_path: Optional path to database for persistence
         """
         super().__init__(require_ground_truth=require_ground_truth, collector=collector, existing_question_ids=existing_question_ids)
         self.question_counter = 0

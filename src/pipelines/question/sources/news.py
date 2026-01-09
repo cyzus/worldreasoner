@@ -12,9 +12,8 @@ from src.config.collection_goal import QualityRequirements
 from src.pipelines.stages import (
     ArticleCollectionStage,
     ArticleCollectionConfig,
-    EventIdentificationStage,
-    EventIdentificationConfig,
-    QuestionGenerationStage,
+    NewsQuestionGenerationStage,
+    EventIdentificationConfig,  # Config kept for compatibility
 )
 from src.config.pipeline import QuestionPipelineConfig
 from src.utils.logging import logger
@@ -23,10 +22,9 @@ from src.utils.logging import logger
 class NewsBasedRunner(QuestionSourceRunner):
     """Question source that uses the news-based pipeline.
 
-    This wraps the existing three-stage pipeline:
+    This wraps the simplified two-stage pipeline:
     1. ArticleCollectionStage - Collect articles from RSS/web
-    2. EventIdentificationStage - Extract events from articles
-    3. QuestionGenerationStage - Generate questions from events
+    2. NewsQuestionGenerationStage - Generate questions directly from articles
     """
 
     def __init__(
@@ -53,8 +51,13 @@ class NewsBasedRunner(QuestionSourceRunner):
 
         # Initialize pipeline stages
         self.article_stage = ArticleCollectionStage(article_config, db_path=db_path)
-        self.event_stage = EventIdentificationStage(event_config, db_path=db_path)
-        self.question_stage = QuestionGenerationStage(question_config, db_path=db_path)
+        # Event stage removed, but config kept.
+        # Use NewsQuestionGenerationStage for direct Article -> Question generation
+        self.question_stage = NewsQuestionGenerationStage(
+            question_config,
+            article_config=article_config,
+            db_path=db_path
+        )
     
     async def collect(
         self,
@@ -149,43 +152,14 @@ class NewsBasedRunner(QuestionSourceRunner):
                     else:
                         logger.warning(f"No articles match categories {filter_keys}, keeping all {len(articles)} articles")
 
-            # Stage 2: Identify events with intelligent hints
-            logger.info("Stage 2: Identifying events from articles...")
-            
-            # Pass category hints to guide event identification toward needed categories
-            # Create new stage instance with hints for this specific run
-            event_stage_with_hints = EventIdentificationStage(
-                self.event_config,
-                db_path=self.db_path,
-                category_hints=category_filter  # Tell agent which domains/categories we need
-            )
-            
-            event_result = await event_stage_with_hints.execute_batched(
-                articles,
-                batch_size=self.question_config.article_batch_size
-            )
-
-            if not event_result.outputs:
-                logger.warning("No events identified from articles")
-                return CollectionResult(
-                    source_name=self.source_name,
-                    questions=[],
-                    requested_count=count,
-                    actual_count=0,
-                    success=False,
-                    error_message="No events identified from articles",
-                )
-
-            events = event_result.outputs
-            logger.info(f"Identified {len(events)} events")
-
-            # Stage 3: Generate questions with intelligent hints
-            logger.info("Stage 3: Generating questions from events...")
+            # Stage 2: Generate questions directly from articles
+            logger.info("Stage 2: Generating questions from articles...")
 
             # Pass type/category hints to guide generation intelligently
             # Create new stage instance with hints for this specific run
-            question_stage_with_hints = QuestionGenerationStage(
+            question_stage_with_hints = NewsQuestionGenerationStage(
                 self.question_config,
+                article_config=self.article_config,
                 db_path=self.db_path,
                 type_hints=type_filter,  # Tell agent which types we need
                 category_hints=category_filter,  # Tell agent which categories we need
@@ -193,20 +167,21 @@ class NewsBasedRunner(QuestionSourceRunner):
                 target_count=count  # Tell stage exactly how many questions we need
             )
             
+            # Use article_batch_size for processing articles
             question_result = await question_stage_with_hints.execute_batched(
-                events,
-                batch_size=self.question_config.event_batch_size
+                articles,
+                batch_size=self.question_config.article_batch_size or 10
             )
 
             if not question_result.outputs:
-                logger.warning("No questions generated from events")
+                logger.warning("No questions generated from articles")
                 return CollectionResult(
                     source_name=self.source_name,
                     questions=[],
                     requested_count=count,
                     actual_count=0,
                     success=False,
-                    error_message="No questions generated from events",
+                    error_message="No questions generated from articles",
                 )
 
             questions = question_result.outputs
@@ -243,7 +218,6 @@ class NewsBasedRunner(QuestionSourceRunner):
                 success=True,
                 metadata={
                     "articles_collected": len(articles),
-                    "events_identified": len(events),
                     "questions_generated": len(questions),
                     "questions_after_filter": len(filtered_questions),
                 },

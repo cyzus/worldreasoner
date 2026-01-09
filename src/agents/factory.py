@@ -30,6 +30,7 @@ class AgentFactory:
     @staticmethod
     def create_web_agent(
         tools: Optional[List[Tool]] = None,
+        is_code: bool = False,
         config: Optional[Config] = None,
         max_steps: int = 15
     ) -> WebAgent:
@@ -54,7 +55,7 @@ class AgentFactory:
             >>> result = agent.run("Search for AI news articles")
         """
         app_config = config or get_config()
-        return WebAgent(config=app_config, tools=tools, max_steps=max_steps)
+        return WebAgent(config=app_config, tools=tools, max_steps=max_steps, is_code=is_code)
     
     @staticmethod
     def create_base_agent(

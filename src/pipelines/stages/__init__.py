@@ -11,6 +11,7 @@ from .event_identification import (
     EventIdentificationStage,
 )
 from .question_generation import QuestionGenerationStage
+from .news_question_generation import NewsQuestionGenerationStage
 
 # Evidence Pipeline Stages
 from .evidence_collection import (
@@ -42,6 +43,7 @@ __all__ = [
     "EventIdentificationConfig",
     "EventIdentificationStage",
     "QuestionGenerationStage",
+    "NewsQuestionGenerationStage",
     # Evidence Pipeline Stages
     "HindsightEvidenceCollectionStage",
     "EvidenceCollectionConfig",
