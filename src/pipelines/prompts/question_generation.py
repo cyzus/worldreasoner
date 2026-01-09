@@ -25,11 +25,13 @@ QUALITY:
 - Use FUTURE tense when formating all the questions
 
 ESTIMATED START TIME:
-- When people might have started forecasting this event in the past
-  * For event-based questions: when event was first announced/became public
-  * For trend questions: when baseline data became available
-  * For policy questions: when policy was first proposed/discussed
-  * MUST be BEFORE resolution_date (use ISO format with timezone)
+- When forecasting this question would have become viable with meaningful information
+  * Set far enough before resolution_date (1 week to 1+ year depending on scope) to allow evidence gathering and forecast updates
+  * But not so early that relevant context didn't yet exist
+  * For event-based questions: when event was first announced/became public knowledge
+  * For trend questions: when baseline data became available for analysis
+  * For policy questions: when policy was first proposed/publicly discussed
+  * MUST be BEFORE resolution_date (use ISO 8601 format with timezone)
 
 Think about how an expert would come up with good forecast questions.
 """

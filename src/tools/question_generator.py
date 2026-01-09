@@ -98,7 +98,7 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
         },
         "estimated_start_time": {
             "type": "string",
-            "description": "When question becomes valid for forecasting (ISO 8601 WITH timezone). Should be BEFORE resolution_date and when sufficient context is available.",
+            "description": "ISO 8601 datetime with timezone indicating when the question becomes forecastable with meaningful information. Should be set far enough before resolution_date (e.g., 1 week to several months, or even 1+ year for long-term questions) to allow sufficient time for evidence gathering and forecast updates, but not so early that relevant context doesn't yet exist.",
             "nullable": True
         },
     }
