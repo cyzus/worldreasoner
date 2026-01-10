@@ -70,6 +70,10 @@ class Question(BaseModel):
         default_factory=list,
         description="Other relevant events (for multi-event or exploratory questions)"
     )
+    related_article_ids: List[str] = Field(
+        default_factory=list,
+        description="Article IDs that this question was generated from"
+    )
     
     # Question-specific metadata
     context: Optional[str] = Field(

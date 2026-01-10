@@ -174,7 +174,7 @@ class PipelineRunner:
         """Helper to create configured NewsBasedRunner."""
         from datetime import timedelta
         from src.pipelines.question.sources.news import NewsBasedRunner
-        from src.pipelines.stages import ArticleCollectionConfig, EventIdentificationConfig
+        from src.pipelines.stages import ArticleCollectionConfig
         from src.config.pipeline import QuestionPipelineConfig
         from datetime import datetime, timezone
         
@@ -186,10 +186,6 @@ class PipelineRunner:
             max_articles_per_source=max_articles_per_source
         )
 
-        event_config = EventIdentificationConfig(
-            max_events_per_article=5
-        )
-
         question_config = QuestionPipelineConfig(
             question_types=question_types or [],
             require_ground_truth=True 
@@ -197,7 +193,6 @@ class PipelineRunner:
 
         return NewsBasedRunner(
             article_config=article_config,
-            event_config=event_config,
             question_config=question_config,
             db_path=self.db_path,
         )
@@ -222,7 +217,7 @@ class PipelineRunner:
         )
         from src.pipelines.question.sources.markets import PolymarketRunner
         from src.pipelines.question.sources.news import NewsBasedRunner
-        from src.pipelines.stages import ArticleCollectionConfig, EventIdentificationConfig, ArticleSource
+        from src.pipelines.stages import ArticleCollectionConfig, ArticleSource
         from src.config.pipeline import QuestionPipelineConfig
         from src.utils.search_indexing import auto_index_articles
         import yaml
@@ -372,7 +367,7 @@ class PipelineRunner:
     ) -> PipelineResult:
         """Run ad-hoc news collection pipeline."""
         from src.pipelines.question.sources.news import NewsBasedRunner
-        from src.pipelines.stages import ArticleCollectionConfig, EventIdentificationConfig, ArticleSource
+        from src.pipelines.stages import ArticleCollectionConfig, ArticleSource
         from src.config.pipeline import QuestionPipelineConfig
         from src.utils.search_indexing import auto_index_articles
         import yaml

@@ -13,7 +13,6 @@ from src.pipelines.stages import (
     ArticleCollectionStage,
     ArticleCollectionConfig,
     NewsQuestionGenerationStage,
-    EventIdentificationConfig,  # Config kept for compatibility
 )
 from src.config.pipeline import QuestionPipelineConfig
 from src.utils.logging import logger
@@ -30,7 +29,6 @@ class NewsBasedRunner(QuestionSourceRunner):
     def __init__(
         self,
         article_config: ArticleCollectionConfig,
-        event_config: EventIdentificationConfig,
         question_config: QuestionPipelineConfig,
         db_path: str,
     ):
@@ -38,20 +36,18 @@ class NewsBasedRunner(QuestionSourceRunner):
 
         Args:
             article_config: Configuration for article collection
-            event_config: Configuration for event identification
             question_config: Configuration for question generation
             db_path: Path to database
         """
         super().__init__(source_name="news")
 
         self.article_config = article_config
-        self.event_config = event_config
         self.question_config = question_config
         self.db_path = db_path
 
         # Initialize pipeline stages
         self.article_stage = ArticleCollectionStage(article_config, db_path=db_path)
-        # Event stage removed, but config kept.
+        # Event stage removed.
         # Use NewsQuestionGenerationStage for direct Article -> Question generation
         self.question_stage = NewsQuestionGenerationStage(
             question_config,

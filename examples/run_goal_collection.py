@@ -24,7 +24,7 @@ from src.pipelines.question.orchestrator import (
 )
 from src.pipelines.question.sources.markets import PolymarketRunner
 from src.pipelines.question.sources.news import NewsBasedRunner
-from src.pipelines.stages import ArticleCollectionConfig, EventIdentificationConfig, ArticleSource
+from src.pipelines.stages import ArticleCollectionConfig, ArticleSource
 from src.config.pipeline import QuestionPipelineConfig
 from src.config import get_config
 from src.utils.logging import logger
@@ -110,7 +110,7 @@ async def run_goal_collection(
             domains=domains,
         )
 
-        event_config = EventIdentificationConfig()
+
 
         # Derive question config from collection goal for consistency
         question_config = QuestionPipelineConfig(
@@ -122,7 +122,6 @@ async def run_goal_collection(
 
         sources["news"] = NewsBasedRunner(
             article_config=article_config,
-            event_config=event_config,
             question_config=question_config,
             db_path=db_path,
         )

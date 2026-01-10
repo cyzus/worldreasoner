@@ -62,6 +62,11 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             "description": "Comma-separated event IDs",
             "nullable": True
         },
+        "related_article_ids": {
+            "type": "string",
+            "description": "Comma-separated article IDs that this question was generated from",
+            "nullable": True
+        },
         "ground_truth": {
             "type": "string",
             "description": "Answer if already resolved",
@@ -121,6 +126,7 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
         resolution_date: str,
         resolution_criteria: str,
         related_event_ids: str = None,
+        related_article_ids: str = None,
         ground_truth: str = None,
         resolution_reasoning: str = None,
         context: str = None,
@@ -299,6 +305,7 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             ground_truth=normalized_ground_truth,  # Use normalized value
             target_event_id=event_ids[0] if event_ids else None,
             related_event_ids=event_ids,
+            related_article_ids=[aid.strip() for aid in related_article_ids.split(',')] if related_article_ids else [],
             context=context,  # Optional background information
             resolution_criteria=resolution_criteria,  # How to verify/resolve
             resolution_reasoning=resolution_reasoning,  # Why ground_truth is what it is (if resolved)

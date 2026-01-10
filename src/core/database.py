@@ -278,6 +278,33 @@ class GenericDatabase(Generic[T]):
             
             conn.commit()
 
+    def ensure_column(self, model: Type[T], column_name: str, sql_type: str = "TEXT"):
+        """Add a column to an existing table if it doesn't exist.
+        
+        This is useful for database migrations when adding new fields to models.
+        
+        Args:
+            model: Pydantic model class
+            column_name: Name of the column to add
+            sql_type: SQL type for the column (default: TEXT for JSON fields)
+        """
+        if not _registry.is_registered(model):
+            raise ValueError(f"Model {model.__name__} not registered. Use @register_model decorator.")
+        
+        table_name = _registry.get_table_name(model)
+        
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # Check if column exists
+            cursor.execute(f"PRAGMA table_info({table_name})")
+            columns = [row[1] for row in cursor.fetchall()]
+            
+            if column_name not in columns:
+                cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {sql_type}")
+                conn.commit()
+                return True
+            return False
+
     def initialize_all_tables(self) -> int:
         """Create tables for all registered models.
 

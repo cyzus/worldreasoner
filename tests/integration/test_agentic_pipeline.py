@@ -45,9 +45,7 @@ async def test_agentic_pipeline():
         domains=["technology", "environment"]
     )
 
-    # Configure event identification
-    from src.pipelines.stages import EventIdentificationConfig
-    event_config = EventIdentificationConfig()
+
 
     # Configure question generation
     question_config = QuestionPipelineConfig(
@@ -64,7 +62,6 @@ async def test_agentic_pipeline():
     print("\n2. Creating NewsBasedRunner...")
     runner = NewsBasedRunner(
         article_config=article_config,
-        event_config=event_config,
         question_config=question_config,
         db_path=config.database.db_path
     )

@@ -67,10 +67,10 @@ sources:
     scraper_type: "rss"
     domain: "general"
 
-  - name: "Associated Press"
-    url: "https://apnews.com/apf-topnews"
-    scraper_type: "web"
-    domain: "general"
+  # - name: "Associated Press"
+  #   url: "https://apnews.com/apf-topnews"
+  #   scraper_type: "web"
+  #   domain: "general"
 
   # Additional science (web scraping fallback)
   # - name: "Science Magazine"

@@ -270,7 +270,7 @@ async def preview_questions(request: QuestionPreviewRequest):
 
         elif request.source == "news":
             # Initialize runner with required configurations
-            from src.pipelines.stages import ArticleCollectionConfig, EventIdentificationConfig, ArticleSource
+            from src.pipelines.stages import ArticleCollectionConfig, ArticleSource
             from src.config.pipeline import QuestionPipelineConfig
             from datetime import datetime, timedelta, timezone
             import yaml
@@ -310,9 +310,7 @@ async def preview_questions(request: QuestionPreviewRequest):
                 max_articles_per_source=10,  # Limit for preview
             )
 
-            event_config = EventIdentificationConfig(
-                max_events_per_article=5,
-            )
+
 
             question_config = QuestionPipelineConfig()
 
@@ -322,7 +320,6 @@ async def preview_questions(request: QuestionPreviewRequest):
             # Initialize runner
             runner = NewsBasedRunner(
                 article_config=article_config,
-                event_config=event_config,
                 question_config=question_config,
                 db_path=db_path,
             )
