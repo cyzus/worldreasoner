@@ -18,7 +18,7 @@ Event {idx} (ID: {event_id}){status_note}:
 SHARED_RULES_DESC = \
 """
 QUALITY:
-- Broad appeal (elections, major companies, crypto, policy, sports)
+- Broad appeal s.t. people are interested to answer (elections, major companies, crypto, policy, sports)
 - Skip niche topics requiring insider knowledge
 - Ask "Will X happen?" not "Which company will..." (don't assume outcomes)
 - MCQ options from actual event participants only
@@ -26,14 +26,20 @@ QUALITY:
 
 ESTIMATED START TIME:
 - When forecasting this question would have become viable with meaningful information
-  * Set far enough before resolution_date (1 week to 1+ year depending on scope) to allow evidence gathering and forecast updates
+  * Set far enough before resolution_date (1 week to 1+ year depending on scope)
   * But not so early that relevant context didn't yet exist
   * For event-based questions: when event was first announced/became public knowledge
   * For trend questions: when baseline data became available for analysis
   * For policy questions: when policy was first proposed/publicly discussed
   * MUST be BEFORE resolution_date (use ISO 8601 format with timezone)
 
-Think about how an expert would come up with good forecast questions.
+RESOLUTION DATE:
+- When the event has already been resolved
+
+A good answering window for a forecast question will be between ESTIMATED START TIME and RESOLUTION DATE. 
+- If the date goes beyond the resolution date, the answer will be retrieved.
+- If the date goes before the estimated start time, some conditional events or contexts might not be available.
+
 """
 
 ARTICLE_TEMPLATE = \
@@ -46,18 +52,19 @@ Article {idx} (Source: {source}):
 
 RULES_GROUND_TRUTH = \
 """RULES:
-- Today: {current_date} → resolution_date ≤ {current_date}
+- Today: {current_date} → MAKE SURE that: {current_date} >= resolution_date >= estimated_start_time
 - ground_truth = past outcome only (YES/NO/value, never future dates)
+- resolution_date: when the event has already been resolved
 - Alternate binary answers: YES, NO, YES, NO (avoid bias)
 - Use round numbers ($100K, 1M users) not oddly specific values
-- Format questions as if they are in the future (even though all the events are already resolved)
+- Format questions using the future tense as if they are in the future (even though all the events are already resolved)
 - Natural deadlines ("by end of Q4 202X" or "by end of Oct 202X" not "by Oct 27")"""
 
 RULES_FUTURE = \
 """RULES:
-- Today: {current_date} → resolution_date > {current_date}
+- Today: {current_date} → MAKE SURE that: resolution_date > {current_date} >= estimated_start_time
 - NO ground_truth (outcomes unknown)
-- Resolution dates: 1-12 months in future
+- resolution_date: 1 week to 1+ year in future
 - Balance binary predictions: ~50% likely YES, ~50% likely NO
 - Use round numbers ($100K, 1M users) not oddly specific values
 - Natural deadlines ("by end of Q1 202X" not "by Mar 15")"""
@@ -66,7 +73,8 @@ RULES_FUTURE = \
 QUESTION_GENERATION_TEMPLATE_GROUND_TRUTH = \
 """
 You are creating questions to assess the AI forecast capabilities.
-Create {max_questions} forecast questions from already RESOLVED events (still in future tense).{domain_filter}
+AI will answer the questions in a control environment as if it was the day before the resolution_date.
+Create {max_questions} forecast questions from already RESOLVED events.{domain_filter}
 
 {events_text}
 
@@ -76,6 +84,7 @@ Create {max_questions} forecast questions from already RESOLVED events (still in
 QUESTION_GENERATION_TEMPLATE_FUTURE = \
 """
 You are creating questions to assess the AI forecast capabilities.
+AI will answer the questions in an open environment.
 Create {max_questions} forecast questions about FUTURE events.{domain_filter}
 
 {events_text}
