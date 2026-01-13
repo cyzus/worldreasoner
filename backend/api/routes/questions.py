@@ -577,6 +577,7 @@ async def get_question(
             quality_score=question.quality_score,
             resolution_date=question.resolution_date.isoformat() if question.resolution_date else None,
             metadata=question.metadata,
+            estimated_start_time=question.estimated_start_time.isoformat() if question.estimated_start_time else None,
         )
 
     except HTTPException:

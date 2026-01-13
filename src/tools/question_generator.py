@@ -181,7 +181,30 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             except Exception as e:
                 from src.utils.logging import logger
                 logger.debug(f"Failed to parse estimated_start_time: {e}")
+                # For ground truth mode, strict validation requires valid date
+                if self.require_ground_truth:
+                    est_start_time = None
+                else:
+                    # Default to now if parsing fails for future questions
+                    est_start_time = datetime.now(timezone.utc)
+        else:
+            # If not provided
+            if self.require_ground_truth:
                 est_start_time = None
+            else:
+                # Default to now for future questions
+                est_start_time = datetime.now(timezone.utc)
+        
+        # CRITICAL VALIDATION: estimated_start_time is REQUIRED for ground truth
+        if self.require_ground_truth and not est_start_time:
+            error_msg = (
+                f"REJECTED: estimated_start_time is MISSING or INVALID.\n"
+                f"For ground truth questions (past events), you MUST provide the estimated_start_time "
+                f"(when the question would have become viable to forecast).\n"
+                f"This is essential for calculating the question's time horizon.\n"
+                f"Please regenerate with a valid estimated_start_time (ISO 8601)."
+            )
+            return json.dumps({"error": error_msg, "status": "rejected"})
 
         # CRITICAL VALIDATION: Ground truth questions must have past/present resolution dates
         current_time = datetime.now(timezone.utc)
