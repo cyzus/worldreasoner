@@ -176,8 +176,8 @@ function EventGraphsPage({
             )}
 
             {nestedTab === 'statistics' && (
-              <div style={{ padding: '12px' }}>
-                <QuestionStatistics questions={questions} />
+              <div style={{ padding: '12px', color: '#868e96', fontStyle: 'italic', textAlign: 'center', marginTop: '50px' }}>
+                <p>Statistics Dashboard is now full-screen 👉</p>
               </div>
             )}
 
@@ -196,301 +196,309 @@ function EventGraphsPage({
           </div>
         </div>
 
-        <div className="page-main" style={{ padding: '0 16px 16px 16px' }}>
-          {/* Forecast controls - show when question is selected */}
-          {selectedQuestionId && (
-            <div style={{
-              display: 'flex',
-              gap: '16px',
-              padding: '12px 16px',
-              backgroundColor: '#f8f9fa',
-              borderRadius: '8px',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              flexShrink: 0,
-              marginBottom: '16px',
-              border: '1px solid #dee2e6'
-            }}>
-              {/* Loading state */}
-              {loadingForecasts && (
-                <span style={{ fontSize: '14px', color: '#495057' }}>
-                  Loading forecasts...
-                </span>
-              )}
-
-              {/* Error state */}
-              {!loadingForecasts && forecastsError && (
-                <span style={{ fontSize: '14px', color: '#dc3545' }}>
-                  Error loading forecasts: {forecastsError}
-                </span>
-              )}
-
-              {/* No forecasts */}
-              {!loadingForecasts && !forecastsError && forecasts.length === 0 && (
-                <span style={{ fontSize: '14px', color: '#6c757d', fontStyle: 'italic' }}>
-                  No forecasts available for this question. Run a forecast to see causal reasoning graphs.
-                </span>
-              )}
-
-              {/* Forecast controls - show when forecasts available */}
-              {!loadingForecasts && forecasts.length > 0 && (
-                <>
-                  {/* Forecast selector */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <label style={{ fontSize: '14px', fontWeight: '500', color: '#495057' }}>
-                      Forecast:
-                    </label>
-                    <select
-                      value={selectedForecastId || ''}
-                      onChange={(e) => setSelectedForecastId(e.target.value)}
-                      style={{
-                        padding: '6px 12px',
-                        borderRadius: '4px',
-                        border: '1px solid #ced4da',
-                        fontSize: '14px'
-                      }}
-                    >
-                      {forecasts.map(forecast => (
-                        <option key={forecast.id} value={forecast.id}>
-                          {new Date(forecast.created_at).toLocaleString()} - {forecast.mode}
-                          {forecast.probability !== null && ` (${(forecast.probability * 100).toFixed(1)}%)`}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Graph view selector */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <label style={{ fontSize: '14px', fontWeight: '500', color: '#495057' }}>
-                      View:
-                    </label>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      <button
-                        onClick={() => setGraphView('evidence')}
-                        style={{
-                          padding: '6px 12px',
-                          backgroundColor: graphView === 'evidence' ? '#4CAF50' : '#fff',
-                          color: graphView === 'evidence' ? '#fff' : '#495057',
-                          border: `1px solid ${graphView === 'evidence' ? '#4CAF50' : '#ced4da'}`,
-                          borderRadius: '4px',
-                          fontSize: '13px',
-                          cursor: 'pointer',
-                          fontWeight: graphView === 'evidence' ? '500' : 'normal'
-                        }}
-                      >
-                        Evidence Graph
-                      </button>
-                      <button
-                        onClick={() => setGraphView('forecast')}
-                        disabled={!forecastGraphData}
-                        style={{
-                          padding: '6px 12px',
-                          backgroundColor: graphView === 'forecast' ? '#4CAF50' : '#fff',
-                          color: graphView === 'forecast' ? '#fff' : '#495057',
-                          border: `1px solid ${graphView === 'forecast' ? '#4CAF50' : '#ced4da'}`,
-                          borderRadius: '4px',
-                          fontSize: '13px',
-                          cursor: forecastGraphData ? 'pointer' : 'not-allowed',
-                          fontWeight: graphView === 'forecast' ? '500' : 'normal',
-                          opacity: forecastGraphData ? 1 : 0.5
-                        }}
-                      >
-                        Forecast Reasoning
-                      </button>
-                      <button
-                        onClick={() => setGraphView('both')}
-                        disabled={!forecastGraphData}
-                        style={{
-                          padding: '6px 12px',
-                          backgroundColor: graphView === 'both' ? '#4CAF50' : '#fff',
-                          color: graphView === 'both' ? '#fff' : '#495057',
-                          border: `1px solid ${graphView === 'both' ? '#4CAF50' : '#ced4da'}`,
-                          borderRadius: '4px',
-                          fontSize: '13px',
-                          cursor: forecastGraphData ? 'pointer' : 'not-allowed',
-                          fontWeight: graphView === 'both' ? '500' : 'normal',
-                          opacity: forecastGraphData ? 1 : 0.5
-                        }}
-                      >
-                        Both Side-by-Side
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Status indicator */}
-                  {loadingForecastGraph && (
-                    <span style={{ fontSize: '13px', color: '#6c757d' }}>
-                      Loading forecast graph...
+        <div className="page-main" style={{ padding: '0 16px 16px 16px', overflowY: nestedTab === 'statistics' ? 'auto' : 'hidden' }}>
+          {nestedTab === 'statistics' ? (
+            <QuestionStatistics questions={questions} />
+          ) : (
+            <>
+              {/* Forecast controls - show when question is selected */}
+              {selectedQuestionId && (
+                <div style={{
+                  display: 'flex',
+                  gap: '16px',
+                  padding: '12px 16px',
+                  backgroundColor: '#f8f9fa',
+                  borderRadius: '8px',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  flexShrink: 0,
+                  marginBottom: '16px',
+                  border: '1px solid #dee2e6'
+                }}>
+                  {/* Loading state */}
+                  {loadingForecasts && (
+                    <span style={{ fontSize: '14px', color: '#495057' }}>
+                      Loading forecasts...
                     </span>
                   )}
-                  {!loadingForecastGraph && !forecastGraphData && selectedForecastId && (
-                    <span style={{ fontSize: '13px', color: '#6c757d', fontStyle: 'italic' }}>
-                      No causal reasoning graph available for this forecast
+
+                  {/* Error state */}
+                  {!loadingForecasts && forecastsError && (
+                    <span style={{ fontSize: '14px', color: '#dc3545' }}>
+                      Error loading forecasts: {forecastsError}
                     </span>
                   )}
-                </>
+
+                  {/* No forecasts */}
+                  {!loadingForecasts && !forecastsError && forecasts.length === 0 && (
+                    <span style={{ fontSize: '14px', color: '#6c757d', fontStyle: 'italic' }}>
+                      No forecasts available for this question. Run a forecast to see causal reasoning graphs.
+                    </span>
+                  )}
+
+                  {/* Forecast controls - show when forecasts available */}
+                  {!loadingForecasts && forecasts.length > 0 && (
+                    <>
+                      {/* Forecast selector */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <label style={{ fontSize: '14px', fontWeight: '500', color: '#495057' }}>
+                          Forecast:
+                        </label>
+                        <select
+                          value={selectedForecastId || ''}
+                          onChange={(e) => setSelectedForecastId(e.target.value)}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: '4px',
+                            border: '1px solid #ced4da',
+                            fontSize: '14px'
+                          }}
+                        >
+                          {forecasts.map(forecast => (
+                            <option key={forecast.id} value={forecast.id}>
+                              {new Date(forecast.created_at).toLocaleString()} - {forecast.mode}
+                              {forecast.probability !== null && ` (${(forecast.probability * 100).toFixed(1)}%)`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Graph view selector */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <label style={{ fontSize: '14px', fontWeight: '500', color: '#495057' }}>
+                          View:
+                        </label>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button
+                            onClick={() => setGraphView('evidence')}
+                            style={{
+                              padding: '6px 12px',
+                              backgroundColor: graphView === 'evidence' ? '#4CAF50' : '#fff',
+                              color: graphView === 'evidence' ? '#fff' : '#495057',
+                              border: `1px solid ${graphView === 'evidence' ? '#4CAF50' : '#ced4da'}`,
+                              borderRadius: '4px',
+                              fontSize: '13px',
+                              cursor: 'pointer',
+                              fontWeight: graphView === 'evidence' ? '500' : 'normal'
+                            }}
+                          >
+                            Evidence Graph
+                          </button>
+                          <button
+                            onClick={() => setGraphView('forecast')}
+                            disabled={!forecastGraphData}
+                            style={{
+                              padding: '6px 12px',
+                              backgroundColor: graphView === 'forecast' ? '#4CAF50' : '#fff',
+                              color: graphView === 'forecast' ? '#fff' : '#495057',
+                              border: `1px solid ${graphView === 'forecast' ? '#4CAF50' : '#ced4da'}`,
+                              borderRadius: '4px',
+                              fontSize: '13px',
+                              cursor: forecastGraphData ? 'pointer' : 'not-allowed',
+                              fontWeight: graphView === 'forecast' ? '500' : 'normal',
+                              opacity: forecastGraphData ? 1 : 0.5
+                            }}
+                          >
+                            Forecast Reasoning
+                          </button>
+                          <button
+                            onClick={() => setGraphView('both')}
+                            disabled={!forecastGraphData}
+                            style={{
+                              padding: '6px 12px',
+                              backgroundColor: graphView === 'both' ? '#4CAF50' : '#fff',
+                              color: graphView === 'both' ? '#fff' : '#495057',
+                              border: `1px solid ${graphView === 'both' ? '#4CAF50' : '#ced4da'}`,
+                              borderRadius: '4px',
+                              fontSize: '13px',
+                              cursor: forecastGraphData ? 'pointer' : 'not-allowed',
+                              fontWeight: graphView === 'both' ? '500' : 'normal',
+                              opacity: forecastGraphData ? 1 : 0.5
+                            }}
+                          >
+                            Both Side-by-Side
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Status indicator */}
+                      {loadingForecastGraph && (
+                        <span style={{ fontSize: '13px', color: '#6c757d' }}>
+                          Loading forecast graph...
+                        </span>
+                      )}
+                      {!loadingForecastGraph && !forecastGraphData && selectedForecastId && (
+                        <span style={{ fontSize: '13px', color: '#6c757d', fontStyle: 'italic' }}>
+                          No causal reasoning graph available for this forecast
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
               )}
-            </div>
-          )}
 
-          {/* Causal Path Progress */}
-          {selectedQuestionId && (
-            <div style={{ flexShrink: 0 }}>
-              <CausalPathProgress questionId={selectedQuestionId} />
-            </div>
-          )}
+              {/* Causal Path Progress */}
+              {selectedQuestionId && (
+                <div style={{ flexShrink: 0 }}>
+                  <CausalPathProgress questionId={selectedQuestionId} />
+                </div>
+              )}
 
-          {/* Article Coverage Analysis */}
-          {selectedQuestionId && (
-            <div style={{ flexShrink: 0 }}>
-              <ArticleCoverage questionId={selectedQuestionId} />
-            </div>
-          )}
+              {/* Article Coverage Analysis */}
+              {selectedQuestionId && (
+                <div style={{ flexShrink: 0 }}>
+                  <ArticleCoverage questionId={selectedQuestionId} />
+                </div>
+              )}
 
-          {/* Graph display area */}
-          <div style={{
-            flex: 1,
-            display: 'flex',
-            gap: '16px',
-            flexDirection: graphView === 'both' ? 'row' : 'column',
-            overflow: graphView === 'both' ? 'auto' : 'hidden',
-            minHeight: 0,
-            marginBottom: '16px'
-          }}>
-            {/* Evidence collection graph */}
-            {(graphView === 'evidence' || graphView === 'both') && (
-              <div className="graph-container" style={{
+              {/* Graph display area */}
+              <div style={{
                 flex: 1,
-                minWidth: graphView === 'both' ? '400px' : 'auto',
-                minHeight: 0,
-                overflow: 'hidden',
                 display: 'flex',
-                flexDirection: 'column'
-              }}>
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid #eee', background: '#fff' }}>
-                  <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
-                    Evidence Collection Graph
-                  </h4>
-                </div>
-                <div className="graph-main" style={{ flex: 1, position: 'relative' }}>
-                  {loading && <div className="loading">Loading graph...</div>}
-                  {error && <div className="error">{error}</div>}
-                  {!loading && !error && (
-                    <GraphVisualization
-                      key={`evidence-${graphView}-${selectedQuestionId || 'none'}`}
-                      graphData={graphData}
-                      onNodeClick={onNodeClick}
-                      selectedNode={selectedNode}
-                      forceSettings={forceSettings}
-                      timeFilter={timeFilter}
-                      targetEventId={selectedQuestionId ? questions.find(q => q.id === selectedQuestionId)?.target_event_id : null}
-                    />
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Forecast reasoning graph */}
-            {(graphView === 'forecast' || graphView === 'both') && (
-              <div className="graph-container" style={{
-                flex: 1,
-                minWidth: graphView === 'both' ? '400px' : 'auto',
+                gap: '16px',
+                flexDirection: graphView === 'both' ? 'row' : 'column',
+                overflow: graphView === 'both' ? 'auto' : 'hidden',
                 minHeight: 0,
-                overflow: 'hidden',
-                display: 'flex',
-                flexDirection: 'column'
+                marginBottom: '16px'
               }}>
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid #eee', background: '#fff' }}>
-                  <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
-                    Forecast Reasoning Graph
-                  </h4>
-                </div>
-                <div className="graph-main" style={{ flex: 1, position: 'relative' }}>
-                  {loadingForecastGraph && (
-                    <div className="loading">Loading forecast graph...</div>
-                  )}
-                  {!loadingForecastGraph && forecastGraphData && (
-                    <ForecastGraph
-                      key={`forecast-${graphView}-${selectedQuestionId || 'none'}`}
-                      graphData={forecastGraphData}
-                      targetEventId={selectedQuestionId ? questions.find(q => q.id === selectedQuestionId)?.target_event_id : null}
-                      onNodeClick={onNodeClick}
-                      selectedNode={selectedNode}
-                    />
-                  )}
-                  {!loadingForecastGraph && !forecastGraphData && (
-                    <div style={{
-                      padding: '40px',
-                      textAlign: 'center',
-                      color: '#6c757d',
-                      backgroundColor: '#f8f9fa',
-                      height: '100%',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'center'
-                    }}>
-                      <p>No causal reasoning graph available.</p>
-                      <p style={{ fontSize: '13px', color: '#adb5bd', marginTop: '8px' }}>
-                        Run a forecast with "Causal Reasoning" enabled.
-                      </p>
+                {/* Evidence collection graph */}
+                {(graphView === 'evidence' || graphView === 'both') && (
+                  <div className="graph-container" style={{
+                    flex: 1,
+                    minWidth: graphView === 'both' ? '400px' : 'auto',
+                    minHeight: 0,
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}>
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid #eee', background: '#fff' }}>
+                      <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
+                        Evidence Collection Graph
+                      </h4>
                     </div>
-                  )}
-                </div>
+                    <div className="graph-main" style={{ flex: 1, position: 'relative' }}>
+                      {loading && <div className="loading">Loading graph...</div>}
+                      {error && <div className="error">{error}</div>}
+                      {!loading && !error && (
+                        <GraphVisualization
+                          key={`evidence-${graphView}-${selectedQuestionId || 'none'}`}
+                          graphData={graphData}
+                          onNodeClick={onNodeClick}
+                          selectedNode={selectedNode}
+                          forceSettings={forceSettings}
+                          timeFilter={timeFilter}
+                          targetEventId={selectedQuestionId ? questions.find(q => q.id === selectedQuestionId)?.target_event_id : null}
+                        />
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Forecast reasoning graph */}
+                {(graphView === 'forecast' || graphView === 'both') && (
+                  <div className="graph-container" style={{
+                    flex: 1,
+                    minWidth: graphView === 'both' ? '400px' : 'auto',
+                    minHeight: 0,
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}>
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid #eee', background: '#fff' }}>
+                      <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
+                        Forecast Reasoning Graph
+                      </h4>
+                    </div>
+                    <div className="graph-main" style={{ flex: 1, position: 'relative' }}>
+                      {loadingForecastGraph && (
+                        <div className="loading">Loading forecast graph...</div>
+                      )}
+                      {!loadingForecastGraph && forecastGraphData && (
+                        <ForecastGraph
+                          key={`forecast-${graphView}-${selectedQuestionId || 'none'}`}
+                          graphData={forecastGraphData}
+                          targetEventId={selectedQuestionId ? questions.find(q => q.id === selectedQuestionId)?.target_event_id : null}
+                          onNodeClick={onNodeClick}
+                          selectedNode={selectedNode}
+                        />
+                      )}
+                      {!loadingForecastGraph && !forecastGraphData && (
+                        <div style={{
+                          padding: '40px',
+                          textAlign: 'center',
+                          color: '#6c757d',
+                          backgroundColor: '#f8f9fa',
+                          height: '100%',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'center'
+                        }}>
+                          <p>No causal reasoning graph available.</p>
+                          <p style={{ fontSize: '13px', color: '#adb5bd', marginTop: '8px' }}>
+                            Run a forecast with "Causal Reasoning" enabled.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          <div style={{ flexShrink: 0 }}>
-            <Timeline
-              graphData={fullGraphData}
-              onEventClick={onNodeClick}
-              onTimeRangeChange={onTimeRangeChange}
-              selectedNode={selectedNode}
-              selectedQuestionId={selectedQuestionId}
-              questionRelatedEvents={questionRelatedEvents}
-            />
-          </div>
-
-          {/* Price history chart for Polymarket questions - Simplified UI */}
-          {selectedQuestionId && questions.find(q => q.id === selectedQuestionId)?.source === 'polymarket' && (
-            <div style={{ flexShrink: 0, marginTop: '16px' }}>
-              {!loadingPriceHistory && priceHistoryData && priceHistoryData.price_history && Object.keys(priceHistoryData.price_history).length > 0 && (
-                <TimeSeriesChart
-                  priceHistory={priceHistoryData.price_history}
-                  events={questionRelatedEvents}
-                  targetEventId={questions.find(q => q.id === selectedQuestionId)?.target_event_id}
-                  outcomes={priceHistoryData.outcomes || ['Yes', 'No']}
-                  activeInterval={priceHistoryInterval}
-                  onIntervalChange={setPriceHistoryInterval}
+              <div style={{ flexShrink: 0 }}>
+                <Timeline
+                  graphData={fullGraphData}
+                  onEventClick={onNodeClick}
+                  onTimeRangeChange={onTimeRangeChange}
+                  selectedNode={selectedNode}
+                  selectedQuestionId={selectedQuestionId}
+                  questionRelatedEvents={questionRelatedEvents}
                 />
-              )}
+              </div>
 
-              {/* Loading state - only show if no data yet */}
-              {loadingPriceHistory && (!priceHistoryData || !priceHistoryData.price_history) && (
-                <div className="price-history-loading">
-                  ⏳ Loading market price history...
+              {/* Price history chart for Polymarket questions - Simplified UI */}
+              {selectedQuestionId && questions.find(q => q.id === selectedQuestionId)?.source === 'polymarket' && (
+                <div style={{ flexShrink: 0, marginTop: '16px' }}>
+                  {!loadingPriceHistory && priceHistoryData && priceHistoryData.price_history && Object.keys(priceHistoryData.price_history).length > 0 && (
+                    <TimeSeriesChart
+                      priceHistory={priceHistoryData.price_history}
+                      events={questionRelatedEvents}
+                      targetEventId={questions.find(q => q.id === selectedQuestionId)?.target_event_id}
+                      outcomes={priceHistoryData.outcomes || ['Yes', 'No']}
+                      activeInterval={priceHistoryInterval}
+                      onIntervalChange={setPriceHistoryInterval}
+                    />
+                  )}
+
+                  {/* Loading state - only show if no data yet */}
+                  {loadingPriceHistory && (!priceHistoryData || !priceHistoryData.price_history) && (
+                    <div className="price-history-loading">
+                      ⏳ Loading market price history...
+                    </div>
+                  )}
+
+                  {/* Error/no data state */}
+                  {!loadingPriceHistory && (!priceHistoryData || !priceHistoryData.price_history || Object.keys(priceHistoryData.price_history).length === 0) && (
+                    <div className="price-history-empty">
+                      ℹ️ No price data available for this Question
+                    </div>
+                  )}
                 </div>
               )}
-
-              {/* Error/no data state */}
-              {!loadingPriceHistory && (!priceHistoryData || !priceHistoryData.price_history || Object.keys(priceHistoryData.price_history).length === 0) && (
-                <div className="price-history-empty">
-                  ℹ️ No price data available for this Question
-                </div>
-              )}
-            </div>
+            </>
           )}
 
         </div>
 
-        {selectedNode && (
-          <EventDetails
-            node={selectedNode}
-            onClose={() => onNodeClick(null)}
-            onShowNeighborhood={onShowNeighborhood}
-          />
-        )}
+
       </div>
+
+      {selectedNode && (
+        <EventDetails
+          node={selectedNode}
+          onClose={() => onNodeClick(null)}
+          onShowNeighborhood={onShowNeighborhood}
+        />
+      )}
     </div>
   )
 }

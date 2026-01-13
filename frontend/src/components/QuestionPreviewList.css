@@ -265,6 +265,31 @@
   color: #333;
 }
 
+/* Reasoning block */
+.question-reasoning {
+  font-size: 13px;
+  color: #555;
+  background-color: #f9f9f9;
+  padding: 8px;
+  border-left: 3px solid #ddd;
+  margin-top: 4px;
+  border-radius: 0 4px 4px 0;
+  font-style: italic;
+}
+
+.question-reasoning strong {
+  color: #333;
+  font-style: normal;
+}
+
+.ground-truth-value {
+  font-weight: 600;
+  color: #2e7d32;
+  background-color: #e8f5e9;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
 .question-link {
   margin-top: 4px;
 }

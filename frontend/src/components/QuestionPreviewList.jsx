@@ -254,9 +254,17 @@ function QuestionPreviewList({ questions, onSaveSelected, loading, source }) {
                   {question.ground_truth !== null && question.ground_truth !== undefined && (
                     <div className="question-ground-truth">
                       <strong>Ground Truth:</strong>{' '}
-                      {typeof question.ground_truth === 'boolean'
-                        ? question.ground_truth ? 'True' : 'False'
-                        : question.ground_truth}
+                      <span className="ground-truth-value">
+                        {typeof question.ground_truth === 'boolean'
+                          ? question.ground_truth ? 'TRUE' : 'FALSE'
+                          : question.ground_truth}
+                      </span>
+                    </div>
+                  )}
+
+                  {question.resolution_reasoning && (
+                    <div className="question-reasoning">
+                      <strong>Resolution Reasoning:</strong> {question.resolution_reasoning}
                     </div>
                   )}
 
