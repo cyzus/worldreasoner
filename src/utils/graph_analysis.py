@@ -4,7 +4,7 @@ This module provides utilities for analyzing causal graph quality,
 including depth calculation, quality metrics, and graph structure analysis.
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from collections import defaultdict
 
 from src.domain.models import CausalHypothesis
@@ -180,3 +180,33 @@ def analyze_graph_structure(
         "with_evidence": with_evidence,
         "status": "analyzed"
     }
+
+
+def infer_target_event_id(hypotheses: List[CausalHypothesis]) -> Optional[str]:
+    """Infer the target event ID (sink node) from a list of hypotheses.
+    
+    The target event in a causal graph is the effect (sink), and roots are causes.
+    So we look for events that are targets in hypotheses but never sources.
+    
+    Args:
+        hypotheses: List of causal hypotheses
+        
+    Returns:
+        Inferred target event ID, or None if ambiguous/circular/empty
+    """
+    if not hypotheses:
+        return None
+        
+    all_targets = set(h.target_event_id for h in hypotheses)
+    all_sources = set(h.source_event_id for h in hypotheses)
+    
+    # Candidates are targets that are never sources
+    candidates = list(all_targets - all_sources)
+    
+    if candidates:
+        # Pick the first candidate (usually there should only be one sink)
+        return candidates[0]
+        
+    # If no sink found (e.g. cycles), we might want to return None or fallback
+    # For now, return None and let caller decide fallback strategy
+    return None

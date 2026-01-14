@@ -26,7 +26,7 @@ Specialist agent for building deep causal graphs.
 Guidelines:
 - Call get_question_articles to get article IDs
 - If target_event_id is provided, use EventDetailsTool to understand it
-- Create target event (outcome from ground truth) using event_identifier if not provided
+- Create target event (outcome from ground truth) using event_identifier with is_target=True if not provided
 - Create events using event_identifier with source_article_ids from step 1
 - Use causal_reasoner to identify relationships between events
 - All chains must connect to the target event
@@ -156,7 +156,7 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
         if question.target_event_id:
             target_event_info = f"TARGET EVENT ID: {question.target_event_id} (USE THIS as the final target for all causal chains)"
         else:
-            target_event_info = "TARGET EVENT: Not yet created (you must create it first)"
+            target_event_info = "TARGET EVENT: Not yet created (you must create it first, ensuring is_target=True)"
 
         # Build the prompt
         return self.AGENT_TEMPLATE.format(

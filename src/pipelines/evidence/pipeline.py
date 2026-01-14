@@ -365,10 +365,38 @@ class EvidencePipeline(Pipeline):
                 max_depth = 0
 
                 if question_hypotheses:
+                    # Determine target event ID (use existing or infer from graph)
+                    target_event_id = question.target_event_id
+                    
+                    if not target_event_id:
+                        # Use shared utility to infer target from graph
+                        from src.utils.graph_analysis import infer_target_event_id
+                        
+                        inferred_id = infer_target_event_id(question_hypotheses)
+                        
+                        if inferred_id:
+                            target_event_id = inferred_id
+                            logger.info(f"[{question.id}] Inferred target event from graph: {target_event_id}")
+                            
+                            # Update the question in DB with the inferred target event
+                            try:
+                                question.target_event_id = target_event_id
+                                db.save(Question, question)
+                                logger.debug(f"[{question.id}] Updated question with inferred target event")
+                            except Exception as e:
+                                logger.warning(f"[{question.id}] Failed to persist inferred target event: {e}")
+                        else:
+                            # Fallback if no specific sink (e.g. cycles)
+                            # Pick arbitrary target to allow graph analysis to proceed
+                            all_targets = set(h.target_event_id for h in question_hypotheses)
+                            if all_targets:
+                                target_event_id = list(all_targets)[0]
+                                logger.warning(f"[{question.id}] Circular graph detected? Using arbitrary target: {target_event_id}")
+
                     # Calculate graph quality using shared utility
                     quality_metrics = calculate_graph_quality(
                         hypotheses=question_hypotheses,
-                        target_event_id=question.target_event_id,
+                        target_event_id=target_event_id,
                         min_depth_for_full_score=self.min_graph_depth
                     )
 

@@ -89,6 +89,11 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
             "type": "string",
             "description": "Comma-separated article IDs"
         },
+        "is_target": {
+            "type": "boolean",
+            "description": "Set to True if this event is the TARGET event (the outcome/ground truth) for the question. Logic will fail if a target already exists.",
+            "nullable": True
+        }
     }
     output_type = "string"  # JSON string
     
@@ -138,6 +143,7 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
         source_article_ids: str,
         occurred_date: str = None,
         event_type: str = None,
+        is_target: bool = False,
     ) -> str:
         """Store event data and return as structured JSON.
 
@@ -148,6 +154,7 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
             occurred_date: Optional occurrence date (ISO format)
             event_type: Type of event (string, will be converted to enum)
             source_article_ids: Comma-separated article IDs
+            is_target: If True, attempts to set this event as the question's target
 
         Returns:
             JSON string of Event object (new or existing match)
@@ -227,28 +234,65 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
             event_date=event_date,
         )
 
+        event = None
+        is_new = False
+        updated_articles = False
+
         if existing_event:
+            event = existing_event
             # Update existing event with new article links if provided
-            updated = self._update_existing_event(existing_event, article_ids)
-
-            return self._format_response(
-                event=existing_event,
-                is_new=False,
-                updated_articles=updated,
-                time_window_validation=time_window_validation,
+            updated_articles = self._update_existing_event(existing_event, article_ids)
+        else:
+            # Create new event
+            event = self._create_new_event(
+                title=title,
+                description=description,
+                domain_enum=domain_enum,
+                event_type_enum=event_type_enum,
+                event_date=event_date,
+                article_ids=article_ids,
             )
+            is_new = True
 
-        # Create new event
-        event = self._create_new_event(
-            title=title,
-            description=description,
-            domain_enum=domain_enum,
-            event_type_enum=event_type_enum,
-            event_date=event_date,
-            article_ids=article_ids,
+        # Handle target event assignment logic
+        target_info = {}
+        if is_target:
+            if not self.question_id or not self.db:
+                return json.dumps({
+                    "error": "config_error",
+                    "message": "Cannot set is_target=True without question_id and db_path configured."
+                })
+            
+            from src.domain.models import Question
+            question = self.db.get(Question, self.question_id)
+            
+            if not question:
+                 return json.dumps({"error": "question_not_found", "message": f"Question {self.question_id} not found"})
+
+            if question.target_event_id and question.target_event_id != event.id:
+                 # Target already exists and is different - return ERROR as requested
+                 return json.dumps({
+                     "error": "target_already_exists",
+                     "message": f"Question already has a target event ({question.target_event_id}). Cannot assign new target {event.id}.",
+                     "existing_target_id": question.target_event_id,
+                     "proposed_target_id": event.id
+                 }, indent=2)
+            
+            if not question.target_event_id:
+                 question.target_event_id = event.id
+                 self.db.save(Question, question)
+                 logger.info(f"Assigned event {event.id} as target for question {question.id}")
+                 target_info = {"is_target": True, "action": "assigned_as_target"}
+            else:
+                 target_info = {"is_target": True, "action": "already_target (no change)"}
+
+        return self._format_response(
+            event=event,
+            is_new=is_new,
+            updated_articles=updated_articles,
+            time_window_validation=time_window_validation,
+            target_info=target_info
         )
-
-        return self._format_response(event=event, is_new=True, time_window_validation=time_window_validation)
 
     def _find_existing_event(
         self,
@@ -392,6 +436,7 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
         is_new: bool,
         updated_articles: bool = False,
         time_window_validation: dict = None,
+        target_info: dict = None,
     ) -> str:
         """Format event response as JSON.
 
@@ -400,6 +445,7 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
             is_new: Whether this is a newly created event
             updated_articles: Whether existing event was updated with new articles
             time_window_validation: Optional validation warnings about event date
+            target_info: Optional target assignment info
 
         Returns:
             JSON string summary
@@ -426,6 +472,9 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
             summary["warnings"] = time_window_validation["warnings"]
             summary["recommendation"] = time_window_validation["recommendation"]
             summary["suggestion"] = "Consider identifying events that occurred within the valid time window for better causal analysis."
+            
+        if target_info:
+            summary["target_info"] = target_info
 
         return json.dumps(summary, indent=2, default=str)
 

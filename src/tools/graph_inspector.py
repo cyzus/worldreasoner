@@ -94,9 +94,14 @@ class GraphInspectorTool(Tool):
         question = self.db.get(Question, self.question_id)
 
         # Build graph structure and statistics using shared utility
-        from src.utils.graph_analysis import analyze_graph_structure
+        from src.utils.graph_analysis import analyze_graph_structure, infer_target_event_id
 
         target_event_id = question.target_event_id if question else None
+        
+        # If no target event defined, try to infer it from graph to provide better visualization
+        if not target_event_id and question_hypotheses:
+            target_event_id = infer_target_event_id(question_hypotheses)
+
         graph_stats = analyze_graph_structure(question_hypotheses, target_event_id)
         graph_stats['question_id'] = self.question_id  # Add question_id for context
         
