@@ -368,6 +368,52 @@ class ForecastEvaluator:
                 )
             }
 
+        # By forecast mode
+        by_mode = {}
+        for result in results:
+            # We need to fetch the forecast to get the mode
+            # This is slightly inefficient but necessary unless we add mode to EvaluationResult
+            try:
+                forecast = self.db.get(Forecast, result.forecast_id)
+                if not forecast:
+                    continue
+                    
+                mode = forecast.mode.value if hasattr(forecast.mode, 'value') else str(forecast.mode)
+                
+                if mode not in by_mode:
+                    by_mode[mode] = {
+                        'count': 0,
+                        'correct': 0,
+                        'brier_scores': [],
+                        'log_scores': []
+                    }
+
+                by_mode[mode]['count'] += 1
+                if result.is_correct:
+                    by_mode[mode]['correct'] += 1
+                if result.brier_score is not None:
+                    by_mode[mode]['brier_scores'].append(result.brier_score)
+                if result.log_score is not None:
+                    by_mode[mode]['log_scores'].append(result.log_score)
+            except Exception:
+                continue
+
+        # Calculate averages by mode
+        mode_summary = {}
+        for mode, stats in by_mode.items():
+            mode_summary[mode] = {
+                'count': stats['count'],
+                'accuracy': stats['correct'] / stats['count'] if stats['count'] > 0 else 0.0,
+                'avg_brier_score': (
+                    sum(stats['brier_scores']) / len(stats['brier_scores'])
+                    if stats['brier_scores'] else None
+                ),
+                'avg_log_score': (
+                    sum(stats['log_scores']) / len(stats['log_scores'])
+                    if stats['log_scores'] else None
+                )
+            }
+
         # Calibration metrics (for boolean questions)
         boolean_results = [r for r in results if r.question_type == 'boolean']
         calibration = None
@@ -386,6 +432,7 @@ class ForecastEvaluator:
             'avg_brier_score': avg_brier,
             'avg_log_score': avg_log,
             'by_question_type': type_summary,
+            'by_mode': mode_summary,
             'calibration': calibration,
             'model_info': model_info,
             'evaluation_timestamp': datetime.now(timezone.utc).isoformat()

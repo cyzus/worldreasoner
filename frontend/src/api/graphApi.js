@@ -187,3 +187,20 @@ export async function cleanupOrphanedEmbeddings() {
   const response = await axios.post(`${API_BASE_URL}/search/cleanup`)
   return response.data
 }
+/**
+ * Fetch forecast evaluation report
+ */
+export async function fetchEvaluationReport() {
+  const response = await axios.get(`${API_BASE_URL}/evaluation/report`)
+  return response.data
+}
+
+/**
+ * Trigger batch evaluation
+ */
+export async function runEvaluation(updateForecasts = true) {
+  const response = await axios.post(`${API_BASE_URL}/evaluation/run`, {
+    update_forecasts: updateForecasts
+  })
+  return response.data
+}
