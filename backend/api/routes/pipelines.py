@@ -16,19 +16,12 @@ from backend.api.routes.database import get_current_db_path
 
 router = APIRouter()
 
+# Import unified pipeline types
+from src.pipelines.types import PipelineType
+
 # ============================================================================
 # Models
 # ============================================================================
-
-class PipelineType(str, Enum):
-    """Available pipeline types."""
-    EVIDENCE = "evidence"
-    ADAPTIVE_EVIDENCE = "adaptive_evidence"
-    COLLECTION = "collection"
-    NEWS_COLLECTION = "news_collection"
-    FORECAST = "forecast"
-    EVALUATION = "evaluation"
-    BENCHMARK = "benchmark"
 
 class JobStatus(str, Enum):
     """Pipeline job status."""
@@ -207,10 +200,10 @@ async def clear_questions_evidence(request: ClearEvidenceRequest):
 
     This removes causal hypotheses and optionally cascades to orphaned events.
     """
-    from src.cli.core.question_manager import QuestionManager
+    from src.domain.question_service import QuestionService
 
     db = GenericDatabase(get_current_db_path())
-    manager = QuestionManager(db)
+    service = QuestionService(db)
 
     results = {
         "cleared": [],
@@ -219,7 +212,7 @@ async def clear_questions_evidence(request: ClearEvidenceRequest):
 
     for qid in request.question_ids:
         try:
-            manager.clear_evidence_simple(qid, cascade=request.cascade)
+            service.clear_evidence(qid, cascade=request.cascade)
             results["cleared"].append(qid)
         except Exception as e:
             results["failed"].append({"id": qid, "error": str(e)})
@@ -243,10 +236,10 @@ async def run_pipeline_job(
     job.updated_at = datetime.utcnow().isoformat()
 
     try:
-        from src.cli.core.pipeline_runner import PipelineRunner
-        from src.cli.core.pipeline_runner import PipelineType as RunnerPipelineType
+        from src.pipelines.executor import PipelineExecutor
+        from src.config import get_config
 
-        runner = PipelineRunner(db_path=get_current_db_path())
+        executor = PipelineExecutor(get_config(), db_path=get_current_db_path())
 
         # Progress callback
         def on_progress(progress):
@@ -259,12 +252,9 @@ async def run_pipeline_job(
             job.message = progress.message
             job.updated_at = datetime.utcnow().isoformat()
 
-        # Map pipeline type
-        runner_type = RunnerPipelineType(pipeline_type.value)
-
-        # Run pipeline
-        result = await runner.run(
-            runner_type,
+        # Execute pipeline
+        result = await executor.execute(
+            pipeline_type,
             question_ids,
             on_progress=on_progress,
             **config,

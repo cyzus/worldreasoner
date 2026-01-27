@@ -599,7 +599,7 @@ class EvidencePipeline(Pipeline):
     def _clear_evidence_for_question(self, question_id: str, db: GenericDatabase) -> dict:
         """Clear evidence pipeline data for a question before reprocessing.
 
-        This uses the QuestionManager to avoid code duplication.
+        Uses QuestionService to avoid circular dependency with CLI layer.
 
         Args:
             question_id: Question ID to clear evidence for
@@ -608,10 +608,10 @@ class EvidencePipeline(Pipeline):
         Returns:
             Summary of deleted items with counts
         """
-        from src.cli.core.question_manager import QuestionManager
+        from src.domain.question_service import QuestionService
 
-        manager = QuestionManager(db)
-        deleted = manager.clear_evidence_simple(question_id)
+        service = QuestionService(db)
+        deleted = service.clear_evidence(question_id, cascade=True)
 
         logger.debug(
             f"Cleared evidence for {question_id}: "
