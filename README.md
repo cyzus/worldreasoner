@@ -49,7 +49,7 @@ Provides temporal-aware tools to agents (e.g., in Claude Desktop).
 # Run server (stdio mode)
 uv run python -m src.mcp_forecasting_server
 ```
-See [docs/MCP_SERVER.md](docs/MCP_SERVER.md) for full documentation and Claude Desktop setup.
+See [docs/mcp-server.md](docs/mcp-server.md) for full documentation and Claude Desktop setup.
 
 **3. Visualization Dashboard**
 ```bash

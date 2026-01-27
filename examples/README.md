@@ -177,7 +177,7 @@ python examples/visualize_benchmarks.py --show
 - Full vs Knowledge-Only mode comparison
 - Performance timeline
 
-See [BENCHMARKING.md](../docs/BENCHMARKING.md) for complete documentation.
+See [benchmarking.md](../docs/benchmarking.md) for complete documentation.
 
 ### Available Embedding Models
 
