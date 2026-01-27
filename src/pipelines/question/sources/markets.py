@@ -342,32 +342,9 @@ class PolymarketRunner(QuestionSourceRunner):
             logger.info(f"Search returned {len(events)} events")
             market_questions = []
             for event in events:
-                # Each event contains markets
-                markets = event.get("markets", [])
-
-                for market in markets:
-                    # Parse dates
-                    end_date_str = market.get("endDate")
-                    if not end_date_str:
-                        continue
-
-                    try:
-                        end_date = parse_iso_datetime(end_date_str)
-                    except Exception:
-                        continue
-
-                    closed_time = self.parser.parse_close_time(market)
-                    should_skip, skip_reason = self.parser.should_skip_market(
-                        market, end_date, closed_time, search_quality
-                    )
-
-                    if should_skip:
-                        continue
-
-                    # Parse market
-                    mq = self._parse_single_market(market, end_date, closed_time)
-                    if mq:
-                        market_questions.append(mq)
+                # Use shared event parsing logic (handles aggregation)
+                mqs = self._parse_event_structure(event, search_quality)
+                market_questions.extend(mqs)
 
             logger.info(f"Parsed {len(market_questions)} markets from search results")
 
@@ -576,114 +553,143 @@ class PolymarketRunner(QuestionSourceRunner):
         limit: int = 1000,
         quality_requirements: Optional[QualityRequirements] = None
     ) -> List[MarketQuestion]:
-        """Fetch markets from Polymarket API.
+        """Fetch markets (grouped by event) from Polymarket API.
 
         Args:
-            limit: Maximum markets to fetch
-            quality_requirements: Quality constraints (used for date filtering)
+            limit: Maximum events to fetch
+            quality_requirements: Quality constraints
 
         Returns:
             List of MarketQuestion objects
         """
-        markets = []
+        questions = []
 
         try:
-            # Fetch market list from API using client
-            market_list = await self.client.fetch_markets(
+            # Use fetch_events to get grouped structure
+            # Adjust limit because events contain multiple markets
+            # Fetching 1000 events might yield 1000+ markets
+            events_list = await self.client.fetch_events(
                 limit=limit,
-                require_ground_truth=self.require_ground_truth,
-                quality_requirements=quality_requirements
+                closed=self.require_ground_truth,
+                # quality_requirements not passed to fetch_events yet, client handles closed/active
             )
 
-            if not market_list:
+            if not events_list:
                 return []
 
-            parsed_count = 0
-            skipped_not_closed = 0  # For ground truth mode: markets not yet closed/resolved
-            skipped_closed = 0  # For prediction mode: markets already closed
-            skipped_past = 0  # Markets with dates outside target range
-            skipped_future_close = 0  # Markets with closedTime in the future
-            skipped_no_close_time = 0  # Markets without closedTime/umaEndDate
-            skipped_volume = 0
-            skipped_scalar = 0  # Scalar markets (price predictions)
-            failed_parse = 0
+            logger.info(f"Fetched {len(events_list)} events from Polymarket")
 
-            for market in market_list:
-                # Parse end date (needed for all markets)
-                end_date_str = market.get("endDate")
-                if not end_date_str:
-                    failed_parse += 1
-                    continue
+            for event in events_list:
+                # Parse event structure
+                mqs = self._parse_event_structure(event, quality_requirements)
+                questions.extend(mqs)
 
-                try:
-                    end_date = parse_iso_datetime(end_date_str)
-                except Exception as e:
-                    failed_parse += 1
-                    logger.debug(f"Failed to parse endDate: {e}")
-                    continue
-
-                # Parse actual resolution date (try multiple fields for robustness)
-                closed_time = self.parser.parse_close_time(market)
-
-                # Filter based on mode (ground truth vs prediction)
-                should_skip, skip_reason = self.parser.should_skip_market(market, end_date, closed_time, quality_requirements)
-                if should_skip:
-                    # Update skip counters based on reason
-                    if skip_reason == "not_closed":
-                        skipped_not_closed += 1
-                    elif skip_reason == "no_close_time":
-                        skipped_no_close_time += 1
-                        logger.debug(f"Market closed but no resolution time: {market.get('question', 'unknown')[:50]}")
-                    elif skip_reason == "future_close":
-                        skipped_future_close += 1
-                    elif skip_reason == "too_old":
-                        skipped_past += 1
-                    elif skip_reason == "already_closed":
-                        skipped_closed += 1
-                    elif skip_reason == "wrong_date":
-                        skipped_past += 1
-                    continue
-
-                # Get volume (Gamma API provides volumeNum)
-                volume = market.get("volumeNum", 0.0) or 0.0
-
-                # Apply volume filter (relaxed - many markets don't have volume data)
-                # Only filter if we have volume data AND it's below threshold
-                if volume > 0 and volume < self.min_volume_usd:
-                    skipped_volume += 1
-                    continue
-
-                # Parse market into MarketQuestion
-                mq = self._parse_single_market(market, end_date, closed_time)
-                if mq is None:
-                    # Check if it was a scalar market (already logged in helper)
-                    if market.get("marketType") == "scalar":
-                        skipped_scalar += 1
-                    else:
-                        failed_parse += 1
-                    continue
-
-                markets.append(mq)
-                parsed_count += 1
-
-            if self.require_ground_truth:
-                logger.info(
-                    f"Polymarket parsing: {parsed_count} markets parsed, "
-                    f"{skipped_not_closed} not closed/resolved, {skipped_no_close_time} no resolution time, "
-                    f"{skipped_past} too old, {skipped_future_close} future closedTime, "
-                    f"{skipped_volume} low volume, {skipped_scalar} scalar markets, {failed_parse} failed"
-                )
-            else:
-                logger.info(
-                    f"Polymarket parsing: {parsed_count} markets parsed, "
-                    f"{skipped_closed} already closed, {skipped_past} wrong date, "
-                    f"{skipped_volume} low volume, {skipped_scalar} scalar markets, {failed_parse} failed"
-                )
+            logger.info(f"Parsed {len(questions)} questions from {len(events_list)} events")
 
         except Exception as e:
-            logger.error(f"Error fetching Polymarket markets: {e}")
+            logger.error(f"Error fetching Polymarket events: {e}")
 
-        return markets
+        return questions
+
+    def _parse_event_structure(self, event: Dict[str, Any], quality_requirements: Optional[QualityRequirements]) -> List[MarketQuestion]:
+        """Parse an event dictionary into a list of MarketQuestions (aggregating if possible)."""
+        markets = event.get("markets", [])
+        if not markets:
+            return []
+
+        # Aggregation Logic
+        if len(markets) > 1:
+            # Aggregate into MCQ
+            question_text = event.get("title", markets[0].get("question"))
+            options = []
+            option_map = {}
+            valid_markets = []
+
+            for m in markets:
+                end_date_str = m.get("endDate")
+                if not end_date_str: continue
+                try:
+                    end_date = parse_iso_datetime(end_date_str)
+                except: continue
+                
+                closed_time = self.parser.parse_close_time(m)
+                should_skip, _ = self.parser.should_skip_market(m, end_date, closed_time, quality_requirements)
+                if should_skip: continue
+                
+                # Use groupItemTitle if available, else question text
+                label = m.get("groupItemTitle", m.get("question"))
+                options.append(label)
+                option_map[label] = m
+                valid_markets.append(m)
+
+            if not valid_markets:
+                return []
+            
+            # Use primary market for metadata
+            primary = valid_markets[0]
+            
+            # Ground Truth Logic for MCQ
+            ground_truth = None
+            resolution_reasoning = None
+            
+            for label, m in option_map.items():
+                outcomes = self.parser.parse_outcomes(m) 
+                gt, reason = self.parser.extract_ground_truth(m, outcomes)
+                if gt == "Yes":
+                    ground_truth = label
+                    resolution_reasoning = reason
+                    break
+            
+            # Total volume
+            total_volume = sum(m.get("volumeNum", 0) or 0 for m in valid_markets)
+            total_liquidity = sum(m.get("liquidityNum", 0) or 0 for m in valid_markets)
+
+            # Metadata
+            
+            mq = MarketQuestion(
+                market_id=f"event_{event.get('id')}",
+                market_source="polymarket",
+                question_text=question_text,
+                question_type="mcq",
+                resolution_criteria=primary.get("description", f"See event {event.get('slug')}"),
+                close_time=parse_iso_datetime(primary.get("endDate")),
+                resolution_time=self.parser.parse_close_time(primary),
+                current_probability=None, 
+                volume_usd=total_volume,
+                liquidity_usd=total_liquidity,
+                category=event.get("category"), # Or primary.get("category")
+                options=options,
+                metadata={
+                    "market_slug": event.get("slug"),
+                    "event_id": event.get("id"),
+                    "is_aggregated": True,
+                    "sub_markets": [m.get("id") for m in valid_markets],
+                    "ground_truth": ground_truth,
+                    "resolution_reasoning": resolution_reasoning,
+                    "tags": event.get("tags", []),
+                    "active": primary.get("active"),
+                    "closed": primary.get("closed"),
+                }
+            )
+            return [mq]
+
+        elif len(markets) == 1:
+            # Single market
+            m = markets[0]
+            end_date_str = m.get("endDate")
+            if not end_date_str: return []
+            try:
+                end_date = parse_iso_datetime(end_date_str)
+            except: return []
+            closed_time = self.parser.parse_close_time(m)
+            should_skip, _ = self.parser.should_skip_market(m, end_date, closed_time, quality_requirements)
+            if should_skip: return []
+            
+            mq = self._parse_single_market(m, end_date, closed_time)
+            return [mq] if mq else []
+            
+        return []
+
 
     def _map_to_question(self, mq: MarketQuestion) -> Question:
         """Map MarketQuestion to WorldReasoner Question model.

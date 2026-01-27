@@ -781,14 +781,14 @@ class PipelineExecutor:
         Returns:
             Dict with cleared/failed lists
         """
-        from src.cli.core.question_manager import QuestionManager
+        from src.domain.question_service import QuestionService
 
-        manager = QuestionManager(self.db)
+        service = QuestionService(self.db)
         results = {"cleared": [], "failed": []}
 
         for qid in question_ids:
             try:
-                manager.clear_evidence(qid, cascade=cascade, dry_run=False)
+                service.clear_evidence(qid, cascade=cascade)
                 results["cleared"].append(qid)
             except Exception as e:
                 logger.error(f"Failed to clear evidence for {qid}: {e}")

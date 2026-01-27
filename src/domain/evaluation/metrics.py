@@ -16,16 +16,22 @@ def calculate_accuracy(prediction: Any, ground_truth: Any, question_type: Questi
 
     Args:
         prediction: The predicted value
-        ground_truth: The actual outcome
+        ground_truth: The actual outcome (can be a list of correct outcomes)
         question_type: Type of question
 
     Returns:
         1.0 if correct, 0.0 if incorrect
     """
     if question_type == QuestionType.BINARY:
+        # Support list of truth for binary? Unlikely but possible if ambiguously resolved
+        if isinstance(ground_truth, list):
+            return 1.0 if prediction in ground_truth else 0.0
         return 1.0 if prediction == ground_truth else 0.0
 
     elif question_type == QuestionType.MCQ:
+        # Check if ground_truth is a list of acceptable answers
+        if isinstance(ground_truth, list):
+            return 1.0 if prediction in ground_truth else 0.0
         return 1.0 if prediction == ground_truth else 0.0
 
     elif question_type == QuestionType.QUANTITY:

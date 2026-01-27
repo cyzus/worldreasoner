@@ -209,6 +209,42 @@ class PolymarketClient:
     
 
 
+    async def fetch_events(
+        self,
+        limit: int = 100,
+        closed: bool = False,
+        tag_slugs: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Fetch events (grouped markets) from Polymarket API.
+
+        This endpoint (/events) returns markets grouped by event, allowing
+        detection of multi-market questions (e.g. categorical).
+        """
+        url = f"{self.API_BASE}/events"
+        params = {
+            "limit": limit,
+            "closed": str(closed).lower(),
+            "order": "volume24hr",
+            "ascending": "false"
+        }
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                    if response.status != 200:
+                        logger.error(f"Polymarket Events API returned {response.status}")
+                        return []
+
+                    payload = await response.json()
+                    if isinstance(payload, list):
+                        return payload
+                    elif isinstance(payload, dict):
+                        return payload.get("events", []) or payload.get("data", []) or []
+                    return []
+        except Exception as e:
+            logger.error(f"Failed to fetch events: {e}")
+            return []
+
     async def call_api(self, url: str, params: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
   
         async with aiohttp.ClientSession() as session:
