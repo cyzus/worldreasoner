@@ -223,6 +223,33 @@ function QuestionPreviewList({ questions, onSaveSelected, loading, source }) {
                 <div className="question-content">
                   <div className="question-text">{question.question_text}</div>
 
+                  {/* Display options for MCQ */}
+                  {question.metadata?.options && question.metadata.options.length > 0 && (
+                    <div className="question-options-preview" style={{ 
+                      marginTop: '8px', 
+                      display: 'flex', 
+                      flexWrap: 'wrap', 
+                      gap: '4px',
+                      fontSize: '0.85rem'
+                    }}>
+                      <span style={{ fontWeight: 500, color: '#666', marginRight: '4px' }}>Options:</span>
+                      {question.metadata.options.slice(0, 5).map((opt, idx) => (
+                        <span key={idx} style={{ 
+                          backgroundColor: '#f0f4f8', 
+                          border: '1px solid #dce4eb',
+                          borderRadius: '4px',
+                          padding: '2px 6px',
+                          color: '#334155'
+                        }}>
+                          {opt}
+                        </span>
+                      ))}
+                      {question.metadata.options.length > 5 && (
+                        <span style={{ color: '#666' }}>+{question.metadata.options.length - 5} more</span>
+                      )}
+                    </div>
+                  )}
+
                   <div className="question-meta">
                     <span className="meta-badge type-badge">
                       {question.question_type}

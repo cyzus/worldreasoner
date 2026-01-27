@@ -361,3 +361,46 @@
 .btn-danger:hover {
   background-color: #c82333;
 }
+
+
+/* Options display */
+.question-item-options {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: #666;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.options-label {
+  font-weight: 500;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: #888;
+}
+
+.options-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.option-badge {
+  background-color: #f0f4f8;
+  border: 1px solid #dce4eb;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.8rem;
+  color: #334155;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.option-badge.more {
+  background-color: #e2e8f0;
+  color: #64748b;
+  font-weight: 500;
+}

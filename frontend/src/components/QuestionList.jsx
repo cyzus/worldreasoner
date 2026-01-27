@@ -327,6 +327,24 @@ const QuestionList = memo(function QuestionList({
                   </div>
                 </div>
                 <div className="question-item-text">{q.question_text}</div>
+                
+                {/* Display options for MCQ */}
+                {q.metadata?.options && q.metadata.options.length > 0 && (
+                  <div className="question-item-options">
+                    <span className="options-label">Options:</span>
+                    <div className="options-list">
+                      {q.metadata.options.slice(0, 5).map((opt, idx) => (
+                        <span key={idx} className="option-badge">
+                          {opt}
+                        </span>
+                      ))}
+                      {q.metadata.options.length > 5 && (
+                        <span className="option-badge more">+{q.metadata.options.length - 5}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="question-item-meta">
                   <div className="meta-item">
                     <span className="meta-label">Type:</span>
