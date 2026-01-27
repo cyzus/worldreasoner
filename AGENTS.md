@@ -70,6 +70,84 @@ from src.utils.graph_analysis import analyze_graph_depth
 depth = analyze_graph_depth(event_id, hypotheses)
 ```
 
+## Service Layer Architecture
+
+The codebase follows a layered architecture with clear separation of concerns:
+
+### Domain Services (`src/domain/`)
+
+Pure business logic with no CLI or presentation dependencies.
+
+**QuestionService** (`src/domain/question_service.py`)
+- Domain operations for questions (evidence checking, cascade analysis, deletion)
+- Used by both CLI and pipelines to avoid circular dependencies
+- Example:
+```python
+from src.domain.question_service import QuestionService
+
+service = QuestionService(db)
+has_evidence = service.has_evidence(question_id)
+service.clear_evidence(question_id, cascade=True)
+```
+
+### Pipeline Services (`src/pipelines/`)
+
+Orchestration logic for running pipelines with progress tracking.
+
+**PipelineExecutor** (`src/pipelines/executor.py`)
+- Executes all pipeline types (evidence, forecast, collection, etc.)
+- Progress tracking via callbacks
+- Used directly by backend API
+- Example:
+```python
+from src.pipelines.executor import PipelineExecutor
+from src.pipelines.types import PipelineType
+
+executor = PipelineExecutor(config, db_path)
+result = await executor.execute(
+    PipelineType.EVIDENCE,
+    question_ids=["q1", "q2"],
+    on_progress=lambda p: print(f"{p.current}/{p.total}")
+)
+```
+
+**PipelineFactory** (`src/pipelines/factory.py`)
+- Centralized pipeline creation with consistent configuration
+- Example:
+```python
+from src.pipelines.factory import PipelineFactory
+
+pipeline = PipelineFactory.create_evidence_pipeline(
+    config, db_path, adaptive=True, agent_max_steps=50
+)
+```
+
+**Unified Types** (`src/pipelines/types.py`)
+- Single source of truth for `PipelineType`, `PipelineProgress`, `PipelineResult`
+- Shared across CLI, backend API, and pipelines (no duplicate enums)
+
+### CLI Layer (`src/cli/core/`)
+
+Thin wrappers that delegate to services.
+
+**PipelineRunner** (`src/cli/core/pipeline_runner.py`)
+- CLI wrapper for PipelineExecutor
+- Maintains backward compatibility with existing commands
+- 87% smaller after service extraction (819→106 lines)
+
+**QuestionManager** (`src/cli/core/question_manager.py`)
+- CLI wrapper for QuestionService
+- Adds presentation-specific methods (`list_questions`, `show_question`, `get_stats`)
+- Delegates domain logic to QuestionService
+
+### Benefits
+
+1. **No Circular Dependencies**: Pipelines use `QuestionService`, not CLI classes
+2. **Reusability**: Backend API uses `PipelineExecutor` and `QuestionService` directly
+3. **Testability**: Services are pure functions testable in isolation
+4. **Maintainability**: Each service has a single, focused responsibility
+5. **Flat Hierarchy**: Max 2 levels deep (domain/ and pipelines/)
+
 ## Scripts and Examples
 
 ### Scripts Directory (`scripts/`)
@@ -119,7 +197,11 @@ python examples/run_realtime_forecast.py --question-id q123
 4. **Event/Article separation**: Events are causal nodes (graph), articles are documentation (info)
 5. **Token optimization**: Tools minimize token usage by processing internally
 6. **Generic type safety**: `PipelineStage[TInput, TOutput]` ensures compile-time correctness
-7. **Service extraction over monoliths**: QuestionCollectionOrchestrator refactored from 660→366 lines by extracting focused services (`SourceCoordinator`, `GapAnalyzer`, `GapFiller`, `QuotaManager`) while maintaining flat hierarchy (max 2 levels)
+7. **Service extraction over monoliths**: Systematic pattern of extracting domain logic and orchestration into focused services:
+   - QuestionCollectionOrchestrator: 660→366 lines via `SourceCoordinator`, `GapAnalyzer`, `GapFiller`, `QuotaManager`
+   - PipelineRunner: 819→106 lines (87% reduction) via `PipelineExecutor`, `QuestionService`
+   - Maintains flat hierarchy (max 2 levels: domain/ and pipelines/)
+   - Breaks circular dependencies (pipelines no longer import from CLI layer)
 
 ## Testing Strategy
 
