@@ -166,10 +166,15 @@ class GraphInspectorTool(DatabaseAwareTool):
             graph[hyp.target_event_id].append(hyp.source_event_id)
             hypothesis_map[(hyp.source_event_id, hyp.target_event_id)] = hyp
         
+        # Find disconnected subgraphs (components not connected to target)
+        disconnected = self._find_disconnected_subgraphs(
+            event_ids, graph, target_event_id
+        )
+        
         # Generate visualization
         output = self._format_graph_visualization(
             question, events, graph, hypothesis_map, graph_stats, orphan_events,
-            temporal_data, temporal_quality, temporal_gaps
+            temporal_data, temporal_quality, temporal_gaps, disconnected
         )
 
         return output
@@ -206,7 +211,8 @@ RECOMMENDATION:
         orphan_events: Dict[str, Event],
         temporal_data: Optional[Dict] = None,
         temporal_quality: Optional[Dict] = None,
-        temporal_gaps: Optional[List[Dict]] = None
+        temporal_gaps: Optional[List[Dict]] = None,
+        disconnected: Optional[List[Set[str]]] = None
     ) -> str:
         """Format the graph as a visual text representation.
 
@@ -217,6 +223,7 @@ RECOMMENDATION:
             hypothesis_map: (source, target) -> hypothesis mapping
             stats: Graph statistics
             orphan_events: Orphan event ID to Event object mapping
+            disconnected: List of disconnected subgraph event ID sets
 
         Returns:
             Formatted multi-section text
@@ -331,6 +338,31 @@ RECOMMENDATION:
             sections.append("  → Consider creating relational hypotheses linking these events")
             sections.append("  → Use causal_reasoner tool to establish relationships")
             sections.append("  → These events may provide missing context or root causes")
+            sections.append("")
+        
+        # Disconnected subgraphs section
+        if disconnected:
+            sections.extend(format_section_header("⚠ DISCONNECTED SUBGRAPHS"))
+            sections.append(f"Found {len(disconnected)} subgraph(s) not connected to the target outcome:")
+            sections.append("")
+            for i, component in enumerate(disconnected, 1):
+                sections.append(f"  Subgraph {i} ({len(component)} events):")
+                for event_id in list(component)[:5]:  # Show max 5 events per subgraph
+                    event = events.get(event_id)
+                    desc = self._truncate(event.description if event else event_id, 50)
+                    sections.append(f"    🔸 {desc}")
+                if len(component) > 5:
+                    sections.append(f"    ... and {len(component) - 5} more")
+                sections.append("")
+            sections.append("WHY THIS HAPPENS:")
+            sections.append("  → These events form causal chains but aren't linked to the target")
+            sections.append("  → Missing hypothesis connecting this subgraph to the main graph")
+            sections.append("  → May be exploratory chains that need to be integrated")
+            sections.append("")
+            sections.append("RECOMMENDATION:")
+            sections.append("  → Find the event in each subgraph that should link to the target")
+            sections.append("  → Use causal_reasoner to create the connecting hypothesis")
+            sections.append("")
         
         # Causal chains section
         sections.extend(format_section_header("RELATIONAL CHAINS (Root → Target)"))
@@ -428,4 +460,62 @@ RECOMMENDATION:
     def _truncate(self, text: str, max_len: int) -> str:
         """Truncate text to max length with ellipsis."""
         return GraphVisualizer.truncate(text, max_len)
+
+    def _find_disconnected_subgraphs(
+        self,
+        event_ids: Set[str],
+        graph: Dict[str, List[str]],
+        target_event_id: Optional[str]
+    ) -> List[Set[str]]:
+        """Find subgraphs not connected to the target event.
+
+        Uses simple BFS to find connected components, treating the graph
+        as undirected (edges go both ways for connectivity purposes).
+
+        Returns:
+            List of event ID sets for each disconnected subgraph
+        """
+        if not target_event_id or not event_ids:
+            return []
+
+        # Build undirected adjacency for connectivity check
+        undirected = defaultdict(set)
+        for target, sources in graph.items():
+            for source in sources:
+                undirected[target].add(source)
+                undirected[source].add(target)
+
+        # BFS from target to find all connected events
+        connected = set()
+        queue = [target_event_id]
+        while queue:
+            node = queue.pop(0)
+            if node in connected:
+                continue
+            connected.add(node)
+            queue.extend(undirected.get(node, []))
+
+        # Find disconnected events
+        disconnected_ids = event_ids - connected
+        if not disconnected_ids:
+            return []
+
+        # Group disconnected events into their own components
+        components = []
+        remaining = set(disconnected_ids)
+        while remaining:
+            # BFS from one disconnected node
+            start = next(iter(remaining))
+            component = set()
+            queue = [start]
+            while queue:
+                node = queue.pop(0)
+                if node in component or node not in remaining:
+                    continue
+                component.add(node)
+                queue.extend(n for n in undirected.get(node, []) if n in remaining)
+            components.append(component)
+            remaining -= component
+
+        return components
 
