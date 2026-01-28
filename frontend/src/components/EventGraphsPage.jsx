@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import ControlPanel from './ControlPanel'
 import QuestionList from './QuestionList'
 import GraphVisualization from './GraphVisualization'
@@ -6,10 +6,10 @@ import EventDetails from './EventDetails'
 import Timeline from './Timeline'
 import TimeSeriesChart from './TimeSeriesChart'
 import ForecastGraph from './ForecastGraph'
-import LinkDistanceIcon from './ForceControls' // Make sure this import is correct or remove if not used
 import QuestionStatistics from './QuestionStatistics'
 import ArticleCoverage from './ArticleCoverage'
 import CausalPathProgress from './CausalPathProgress'
+import { useForecasts } from '../hooks/useForecasts'
 import './EventGraphsPage.css'
 
 /**
@@ -41,8 +41,6 @@ function EventGraphsPage({
 }) {
   const [nestedTab, setNestedTab] = useState('questions') // 'questions', 'statistics', 'controls'
 
-
-
   // Graph force settings (moved from GraphVisualization)
   const [forceSettings, setForceSettings] = useState({
     linkDistance: 40,        // Shorter distance = tighter layout (was 70)
@@ -51,90 +49,18 @@ function EventGraphsPage({
     centerStrength: 0.05     // Very gentle center force (like in examples)
   })
 
-  // Forecast graph state
-  const [forecasts, setForecasts] = useState([])
-  const [selectedForecastId, setSelectedForecastId] = useState(null)
-  const [forecastGraphData, setForecastGraphData] = useState(null)
-  const [loadingForecastGraph, setLoadingForecastGraph] = useState(false)
-  const [loadingForecasts, setLoadingForecasts] = useState(false)
-  const [forecastsError, setForecastsError] = useState(null)
-  const [graphView, setGraphView] = useState('evidence') // 'evidence', 'forecast', 'both'
-
-  // Fetch forecasts for the selected question
-  useEffect(() => {
-    if (!selectedQuestionId) {
-      setForecasts([])
-      setSelectedForecastId(null)
-      setForecastGraphData(null)
-      setGraphView('evidence')
-      setForecastsError(null)
-      return
-    }
-
-    // Fetch forecasts for this question
-    setLoadingForecasts(true)
-    setForecastsError(null)
-
-    fetch(`http://localhost:8018/api/questions/${selectedQuestionId}/forecasts`)
-      .then(res => {
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`)
-        }
-        return res.json()
-      })
-      .then(data => {
-        setForecasts(data.forecasts || [])
-        // Auto-select first forecast if available
-        if (data.forecasts && data.forecasts.length > 0) {
-          setSelectedForecastId(data.forecasts[0].id)
-        } else {
-          setSelectedForecastId(null)
-          setForecastGraphData(null)
-        }
-      })
-      .catch(err => {
-        console.error('Error fetching forecasts:', err)
-        setForecastsError(err.message)
-        setForecasts([])
-      })
-      .finally(() => {
-        setLoadingForecasts(false)
-      })
-  }, [selectedQuestionId])
-
-  // Fetch forecast graph data when forecast is selected
-  useEffect(() => {
-    if (!selectedForecastId) {
-      setForecastGraphData(null)
-      return
-    }
-
-    setLoadingForecastGraph(true)
-    fetch(`http://localhost:8018/api/forecasts/${selectedForecastId}/graph`)
-      .then(res => {
-        if (!res.ok) {
-          if (res.status === 404) {
-            // No graph data available for this forecast
-            setForecastGraphData(null)
-            return null
-          }
-          throw new Error(`HTTP ${res.status}`)
-        }
-        return res.json()
-      })
-      .then(data => {
-        if (data) {
-          setForecastGraphData(data)
-        }
-      })
-      .catch(err => {
-        console.error('Error fetching forecast graph:', err)
-        setForecastGraphData(null)
-      })
-      .finally(() => {
-        setLoadingForecastGraph(false)
-      })
-  }, [selectedForecastId])
+  // Use custom hook for forecasts
+  const {
+    forecasts,
+    selectedForecastId,
+    setSelectedForecastId,
+    forecastGraphData,
+    loadingForecastGraph,
+    loadingForecasts,
+    forecastsError,
+    graphView,
+    setGraphView
+  } = useForecasts(selectedQuestionId)
 
   return (
     <div className="event-graphs-page page-container">
@@ -488,8 +414,6 @@ function EventGraphsPage({
           )}
 
         </div>
-
-
       </div>
 
       {selectedNode && (

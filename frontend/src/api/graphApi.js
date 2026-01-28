@@ -204,3 +204,43 @@ export async function runEvaluation(updateForecasts = true) {
   })
   return response.data
 }
+
+/**
+ * Fetch forecasts for a question
+ */
+export async function fetchForecasts(questionId) {
+  const response = await axios.get(`${API_BASE_URL}/questions/${questionId}/forecasts`)
+  return response.data
+}
+
+/**
+ * Fetch forecast reasoning graph
+ */
+export async function fetchForecastGraph(forecastId) {
+  const response = await axios.get(`${API_BASE_URL}/forecasts/${forecastId}/graph`)
+  return response.data
+}
+
+/**
+ * Fetch preview questions
+ */
+export async function fetchPreviewQuestions(config) {
+  const response = await axios.post(`${API_BASE_URL}/questions/preview`, config)
+  return response.data
+}
+
+/**
+ * Save batch of questions
+ */
+export async function saveQuestionsBatch(data) {
+  const response = await axios.post(`${API_BASE_URL}/questions/batch-save`, data)
+  return response.data
+}
+
+/**
+ * Start a news collection job
+ */
+export async function startNewsCollectionJob(payload) {
+  const response = await axios.post(`${API_BASE_URL}/pipelines/jobs`, payload)
+  return response.data
+}
