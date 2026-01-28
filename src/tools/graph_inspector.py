@@ -40,13 +40,13 @@ class GraphInspectorTool(DatabaseAwareTool):
     """
 
     name = "graph_inspector"
-    description = """Visualize and analyze the causal graph structure for a question.
+    description = """Visualize and analyze the relational graph structure for a question.
 
-    Use this tool to see a visual representation of your causal explanation:
-    - Text-based tree showing causal chains (Root → Intermediate → Target)
+    Use this tool to see a visual representation of your relational explanation:
+    - Text-based tree showing relational chains (Root → Intermediate → Target)
     - Event details with descriptions
     - Temporal coverage analysis (event timeline distribution)
-    - Causal chain depths and paths
+    - Relational chain depths and paths
     - Evidence support for each hypothesis
     - Quality metrics and recommendations
 
@@ -57,7 +57,7 @@ class GraphInspectorTool(DatabaseAwareTool):
     4. Link them with causal_reasoner: Root → Intermediate → Target
 
     Returns:
-        str: Multi-section text with visual graph, temporal coverage, causal chains, and statistics
+        str: Multi-section text with visual graph, temporal coverage, relational chains, and statistics
     """
     inputs = {}
     output_type = "string"
@@ -181,14 +181,14 @@ class GraphInspectorTool(DatabaseAwareTool):
 
     def _format_empty_graph(self) -> str:
         """Format output for empty graph."""
-        header = format_inspector_header("CAUSAL GRAPH INSPECTOR")
+        header = format_inspector_header("RELATIONAL GRAPH INSPECTOR")
         return f"""{header}
 Question ID: {self.question_id}
 
 STATUS: Empty Graph
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-No causal relationships have been created yet.
+No relational relationships have been created yet.
 
 RECOMMENDATION:
 → Start by creating a target event (the outcome you're explaining)
@@ -224,7 +224,7 @@ RECOMMENDATION:
         sections = []
 
         # Header
-        sections.append(format_inspector_header("CAUSAL GRAPH INSPECTOR"))
+        sections.append(format_inspector_header("RELATIONAL GRAPH INSPECTOR"))
 
         # Question info
         if question:
@@ -233,7 +233,7 @@ RECOMMENDATION:
             sections.append("")
 
         # Visual graph section
-        sections.extend(format_section_header("CAUSAL GRAPH STRUCTURE"))
+        sections.extend(format_section_header("RELATIONAL GRAPH STRUCTURE"))
         
         target_event_id = question.target_event_id if question else None
         if target_event_id and target_event_id in events:
@@ -244,7 +244,7 @@ RECOMMENDATION:
             sections.extend(tree_lines)
         else:
             # Show all disconnected components
-            sections.append("⚠ No target event specified. Showing all causal links:")
+            sections.append("⚠ No target event specified. Showing all relational links:")
             sections.append("")
             for target_id, source_ids in graph.items():
                 target_event = events.get(target_id)
@@ -315,7 +315,7 @@ RECOMMENDATION:
         if orphan_events:
             sections.extend(format_section_header("⚠ ORPHAN EVENTS (Related but Disconnected)"))
             sections.append(f"Found {len(orphan_events)} event(s) related to this question but")
-            sections.append("not connected via causal hypotheses:")
+            sections.append("not connected via relational hypotheses:")
             sections.append("")
             for event_id, event in orphan_events.items():
                 if event:
@@ -328,12 +328,12 @@ RECOMMENDATION:
                     sections.append(f"  🔴 {event_id} (event not found in database)")
                 sections.append("")
             sections.append("RECOMMENDATION:")
-            sections.append("  → Consider creating causal hypotheses linking these events")
+            sections.append("  → Consider creating relational hypotheses linking these events")
             sections.append("  → Use causal_reasoner tool to establish relationships")
             sections.append("  → These events may provide missing context or root causes")
         
         # Causal chains section
-        sections.extend(format_section_header("CAUSAL CHAINS (Root → Target)"))
+        sections.extend(format_section_header("RELATIONAL CHAINS (Root → Target)"))
         
         if target_event_id:
             chains = self._find_all_causal_chains(target_event_id, events, graph, hypothesis_map)
@@ -357,7 +357,7 @@ RECOMMENDATION:
                             sections.append(f"  {indent}   └─ conf: {hyp.confidence:.1f}, strength: {hyp.strength:.1f} {evidence_str}")
                     sections.append("")
             else:
-                sections.append("  No complete causal chains found.")
+                sections.append("  No complete relational chains found.")
                 sections.append("")
         
         # Statistics section
@@ -422,7 +422,7 @@ RECOMMENDATION:
         graph: Dict[str, List[str]],
         hypothesis_map: Dict[tuple, CausalHypothesis]
     ) -> List[List[tuple]]:
-        """Find all causal chains from root causes to target."""
+        """Find all relational chains from root causes to target."""
         return GraphVisualizer.find_all_causal_chains(target_id, events, graph, hypothesis_map)
 
     def _truncate(self, text: str, max_len: int) -> str:
