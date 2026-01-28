@@ -95,94 +95,43 @@ class PolymarketRunner(QuestionSourceRunner):
         limit: int,
         quality_requirements: Optional[QualityRequirements] = None
     ) -> List[MarketQuestion]:
-        """Fetch markets by category using tag-based API filtering.
-
-        Uses Polymarket's tag_id parameter to fetch markets for specific domains.
-
-        Args:
-            category_filter: Categories to fetch (domain names or dict with counts)
-            limit: Total markets to fetch (distributed across categories)
-            quality_requirements: Quality constraints
-
-        Returns:
-            List of MarketQuestion objects with pre-assigned domains
-        """
+        """Fetch and parse events by category, with client-side filtering and aggregation."""
         if not category_filter:
-            # No filter - fetch general markets
             return await self._fetch_markets(limit=limit, quality_requirements=quality_requirements)
 
-        # Parse requested domains and determine per-category limits
-        # Use high multiplier to account for deduplication during gap filling
+        # Determine which domains are being requested.
         if isinstance(category_filter, dict):
-            requested_domains = [Domain(cat) if isinstance(cat, str) else cat
-                                for cat in category_filter.keys()]
-            # Use the full limit per category (already multiplied by 20x in collect method)
-            # This ensures we fetch enough to have unique questions after deduplication
-            category_limits = {domain: limit for domain in requested_domains}
+            requested_domains = [Domain(cat) for cat in category_filter.keys()]
         else:
-            requested_domains = [Domain(cat) if isinstance(cat, str) else cat
-                                for cat in category_filter]
-            # Distribute the limit evenly across categories
-            per_domain = max(1, limit // len(requested_domains))
-            category_limits = {domain: per_domain for domain in requested_domains}
+            requested_domains = [Domain(cat) for cat in category_filter]
 
-        all_markets = []
+        # Fetch a broad pool of events to filter through. The `/events` endpoint
+        # is less granular, so we fetch more and then apply filters.
+        # The limit is adjusted to ensure enough data is available after filtering.
+        fetch_limit = limit * 5
+        all_events = await self.client.fetch_events(
+            limit=fetch_limit,
+            closed=self.require_ground_truth
+        )
 
-        for domain in requested_domains:
-            # Get tag slug for this domain
-            tag_slugs = self.DOMAIN_TO_TAG_SLUGS.get(domain)
-            if not tag_slugs:
-                logger.debug(f"No tag slug mapping for {domain.value}, skipping")
-                continue
+        all_market_questions = []
+        domain_tags = {domain: self.DOMAIN_TO_TAG_SLUGS.get(domain, []) for domain in requested_domains}
 
-            per_category_limit = category_limits.get(domain, limit)
-            logger.info(f"Fetching up to {per_category_limit} {domain.value} markets using tag '{tag_slugs}'")
+        # Perform client-side filtering to find events matching the requested domains.
+        for event in all_events:
+            event_tags = {tag.get('slug') for tag in event.get('tags', [])}
+            for domain, tags in domain_tags.items():
+                if any(tag in event_tags for tag in tags):
+                    # If an event matches, parse it using the aggregation-aware helper.
+                    parsed_questions = self._parse_event_structure(event, quality_requirements)
+                    for mq in parsed_questions:
+                        # Assign the matched domain, as this is known from the filter.
+                        mq.metadata["known_domain"] = domain.value
+                        all_market_questions.append(mq)
+                    break # Avoid parsing the same event for multiple domains.
 
-            # Fetch markets for this tag
-            market_list = await self.client.fetch_markets(
-                limit=per_category_limit,
-                require_ground_truth=self.require_ground_truth,
-                quality_requirements=quality_requirements,
-                tag_slugs=tag_slugs  # Use tag_slugs which will be converted to tag_id
-            )
-
-            # Parse markets up to the per-category limit
-            parsed_for_category = 0
-            for market in market_list:
-                # Stop if we've collected enough for this category
-                if parsed_for_category >= per_category_limit:
-                    break
-
-                # Parse dates
-                end_date_str = market.get("endDate")
-                if not end_date_str:
-                    continue
-
-                try:
-                    end_date = parse_iso_datetime(end_date_str)
-                except Exception:
-                    continue
-
-                closed_time = self.parser.parse_close_time(market)
-                should_skip, _ = self.parser.should_skip_market(
-                    market, end_date, closed_time, quality_requirements
-                )
-
-                if should_skip:
-                    continue
-
-                # Parse market
-                mq = self._parse_single_market(market, end_date, closed_time)
-                if mq:
-                    # Assign domain from tag (no LLM needed!)
-                    mq.metadata["known_domain"] = domain.value
-                    all_markets.append(mq)
-                    parsed_for_category += 1
-
-            logger.info(f"Parsed {parsed_for_category} {domain.value} markets")
-
-        return all_markets
-
+        logger.info(f"Parsed {len(all_market_questions)} questions after filtering {len(all_events)} events by domain.")
+        return all_market_questions
     def _parse_single_market(self, market: Dict[str, Any], end_date: datetime, closed_time: Optional[datetime]) -> Optional[MarketQuestion]:
         """Parse a single market into MarketQuestion.
 
