@@ -1,15 +1,9 @@
 import React, { useState, useMemo } from 'react'
+import QuestionCard from './QuestionCard'
 import './QuestionPreviewList.css'
 
 /**
  * QuestionPreviewList - Display and select questions for saving
- *
- * Features:
- * - Multi-select with checkboxes
- * - Select all / clear all
- * - Filter by search text, domain, type
- * - Sort by difficulty, date
- * - Batch save selected
  */
 function QuestionPreviewList({ questions, onSaveSelected, loading, source }) {
   const [selectedIds, setSelectedIds] = useState(new Set())
@@ -207,107 +201,28 @@ function QuestionPreviewList({ questions, onSaveSelected, loading, source }) {
           {/* Question list */}
           <div className="preview-list-content">
             {filteredQuestions.map(question => (
-              <div
+              <QuestionCard
                 key={question.id}
-                className={`question-preview-item ${selectedIds.has(question.id) ? 'selected' : ''}`}
-              >
-                <div className="question-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(question.id)}
-                    onChange={() => handleToggleSelect(question.id)}
-                    disabled={loading}
-                  />
-                </div>
-
-                <div className="question-content">
-                  <div className="question-text">{question.question_text}</div>
-
-                  {/* Display options for MCQ */}
-                  {question.metadata?.options && question.metadata.options.length > 0 && (
-                    <div className="question-options-preview" style={{ 
-                      marginTop: '8px', 
-                      display: 'flex', 
-                      flexWrap: 'wrap', 
-                      gap: '4px',
-                      fontSize: '0.85rem'
-                    }}>
-                      <span style={{ fontWeight: 500, color: '#666', marginRight: '4px' }}>Options:</span>
-                      {question.metadata.options.slice(0, 5).map((opt, idx) => (
-                        <span key={idx} style={{ 
-                          backgroundColor: '#f0f4f8', 
-                          border: '1px solid #dce4eb',
-                          borderRadius: '4px',
-                          padding: '2px 6px',
-                          color: '#334155'
-                        }}>
-                          {opt}
-                        </span>
-                      ))}
-                      {question.metadata.options.length > 5 && (
-                        <span style={{ color: '#666' }}>+{question.metadata.options.length - 5} more</span>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="question-meta">
-                    <span className="meta-badge type-badge">
-                      {question.question_type}
-                    </span>
-                    <span className="meta-badge domain-badge">
-                      {question.domain}
-                    </span>
-                    <span className="meta-badge difficulty-badge">
-                      Difficulty: {question.difficulty}/5
-                    </span>
-                    {question.quality_score && (
-                      <span className="meta-badge quality-badge">
-                        Quality: {(question.quality_score * 100).toFixed(0)}%
-                      </span>
-                    )}
-                    {question.resolution_date && (
-                      <span className="meta-badge date-badge">
-                        Resolves: {new Date(question.resolution_date).toLocaleDateString()}
-                      </span>
-                    )}
-                  </div>
-
-                  {question.resolution_criteria && (
-                    <div className="question-criteria">
-                      <strong>Resolution Criteria:</strong> {question.resolution_criteria}
-                    </div>
-                  )}
-
-                  {question.ground_truth !== null && question.ground_truth !== undefined && (
-                    <div className="question-ground-truth">
-                      <strong>Ground Truth:</strong>{' '}
-                      <span className="ground-truth-value">
-                        {typeof question.ground_truth === 'boolean'
-                          ? question.ground_truth ? 'TRUE' : 'FALSE'
-                          : question.ground_truth}
-                      </span>
-                    </div>
-                  )}
-
-                  {question.resolution_reasoning && (
-                    <div className="question-reasoning">
-                      <strong>Resolution Reasoning:</strong> {question.resolution_reasoning}
-                    </div>
-                  )}
-
-                  {source === 'polymarket' && question.metadata?.market_slug && (
-                    <div className="question-link">
-                      <a
-                        href={`https://polymarket.com/event/${question.metadata.market_slug}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        View on Polymarket →
-                      </a>
-                    </div>
-                  )}
-                </div>
-              </div>
+                question={question}
+                isSelected={selectedIds.has(question.id)}
+                isMultiSelected={selectedIds.has(question.id)}
+                onToggleSelect={() => handleToggleSelect(question.id)}
+                showCheckbox={true}
+                showSelectionStyle={true}
+                actions={
+                  source === 'polymarket' && question.metadata?.market_slug && (
+                    <a
+                      href={`https://polymarket.com/event/${question.metadata.market_slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="link-badge"
+                    >
+                      View Link ↗
+                    </a>
+                  )
+                }
+              />
             ))}
           </div>
         </>

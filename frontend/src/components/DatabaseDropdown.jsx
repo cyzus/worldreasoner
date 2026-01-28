@@ -1,32 +1,19 @@
-import React, { useState, useEffect } from 'react'
-import { fetchDatabaseList, switchDatabase } from '../api/graphApi'
+import React, { useState } from 'react'
+import { useDatabase } from '../hooks/useDatabase'
 import './DatabaseDropdown.css'
 
 /**
  * DatabaseDropdown - Compact dropdown selector for the header
  */
 const DatabaseDropdown = ({ onDatabaseChange }) => {
-  const [databases, setDatabases] = useState([])
-  const [currentDatabase, setCurrentDatabase] = useState('')
-  const [loading, setLoading] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
 
-  useEffect(() => {
-    loadDatabases()
-  }, [])
-
-  const loadDatabases = async () => {
-    try {
-      setLoading(true)
-      const data = await fetchDatabaseList()
-      setDatabases(data.databases)
-      setCurrentDatabase(data.current_database)
-    } catch (err) {
-      console.error('Error loading databases:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const {
+    databases,
+    currentDatabase,
+    loading,
+    switchDatabase
+  } = useDatabase(onDatabaseChange)
 
   const handleDatabaseSwitch = async (dbPath) => {
     if (dbPath === currentDatabase) {
@@ -34,26 +21,9 @@ const DatabaseDropdown = ({ onDatabaseChange }) => {
       return
     }
 
-    try {
-      setLoading(true)
-      const response = await switchDatabase(dbPath)
-
-      if (response.success) {
-        setCurrentDatabase(response.db_path)
-
-        // Notify parent component to reload data
-        if (onDatabaseChange) {
-          onDatabaseChange(response.db_path)
-        }
-
-        // Reload database list to update status
-        await loadDatabases()
-        setIsOpen(false)
-      }
-    } catch (err) {
-      console.error('Error switching database:', err)
-    } finally {
-      setLoading(false)
+    const result = await switchDatabase(dbPath)
+    if (result.success) {
+      setIsOpen(false)
     }
   }
 

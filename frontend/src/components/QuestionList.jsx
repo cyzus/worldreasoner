@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo, memo } from 'react'
+import React, { useState, useMemo, memo } from 'react'
 import QuestionEditModal from './QuestionEditModal'
-import QuestionStatistics from './QuestionStatistics'
+import QuestionCard from './QuestionCard'
 import { useDebounce } from '../hooks/useDebounce'
 import './QuestionList.css'
 
@@ -149,8 +149,6 @@ const QuestionList = memo(function QuestionList({
     if (event) {
       event.stopPropagation()
     }
-
-    // Show confirmation
     setDeletingQuestionId(questionId)
   }
 
@@ -281,96 +279,33 @@ const QuestionList = memo(function QuestionList({
           </div>
         ) : (
           filteredQuestions.map(q => (
-            <div
+            <QuestionCard
               key={q.id}
-              className={`question-list-item ${selectedQuestionId === q.id ? 'selected' : ''
-                } ${selectedIds.has(q.id) ? 'multi-selected' : ''}`}
-              onClick={(e) => toggleSelection(q.id, e)}
-            >
-              {multiSelectMode && (
-                <input
-                  type="checkbox"
-                  checked={selectedIds.has(q.id)}
-                  onChange={(e) => toggleSelection(q.id, e)}
-                  onClick={(e) => e.stopPropagation()}
-                  className="question-checkbox"
-                />
-              )}
-              <div className="question-item-content">
-                <div className="question-item-header">
-                  <div className="question-item-badges">
-                    <span className="badge domain">{q.domain}</span>
-                    <span className={`badge difficulty difficulty-${q.difficulty}`}>
-                      Lvl {q.difficulty}
-                    </span>
-                    {q.article_count !== undefined && (
-                      <span className="badge article-count" title={`${q.article_count} articles collected`}>
-                        📄 {q.article_count}
-                      </span>
-                    )}
-                  </div>
-                  <div className="question-item-actions">
-                    <button
-                      className="action-btn edit-btn"
-                      onClick={(e) => handleEdit(q, e)}
-                      title="Edit question"
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      className="action-btn delete-btn"
-                      onClick={(e) => handleDelete(q.id, e)}
-                      title="Delete question"
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                </div>
-                <div className="question-item-text">{q.question_text}</div>
-                
-                {/* Display options for MCQ */}
-                {q.metadata?.options && q.metadata.options.length > 0 && (
-                  <div className="question-item-options">
-                    <span className="options-label">Options:</span>
-                    <div className="options-list">
-                      {q.metadata.options.slice(0, 5).map((opt, idx) => (
-                        <span key={idx} className="option-badge">
-                          {opt}
-                        </span>
-                      ))}
-                      {q.metadata.options.length > 5 && (
-                        <span className="option-badge more">+{q.metadata.options.length - 5}</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <div className="question-item-meta">
-                  <div className="meta-item">
-                    <span className="meta-label">Type:</span>
-                    <span>{q.question_type}</span>
-                  </div>
-                  {q.source && (
-                    <div className="meta-item">
-                      <span className="meta-label">Source:</span>
-                      <span>{q.source}</span>
-                    </div>
-                  )}
-                  {q.target_event_id && (
-                    <div className="meta-item">
-                      <span className="meta-label">📍</span>
-                      <span>Has target event</span>
-                    </div>
-                  )}
-                  {q.related_event_ids && q.related_event_ids.length > 0 && (
-                    <div className="meta-item">
-                      <span className="meta-label">🔗</span>
-                      <span>{q.related_event_ids.length} related</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+              question={q}
+              isSelected={selectedQuestionId === q.id}
+              isMultiSelected={selectedIds.has(q.id)}
+              showCheckbox={multiSelectMode}
+              onToggleSelect={(e) => toggleSelection(q.id, e)}
+              onClick={() => !multiSelectMode && onQuestionSelect(q.id)}
+              actions={
+                <>
+                  <button
+                    className="action-btn edit-btn"
+                    onClick={(e) => handleEdit(q, e)}
+                    title="Edit question"
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    className="action-btn delete-btn"
+                    onClick={(e) => handleDelete(q.id, e)}
+                    title="Delete question"
+                  >
+                    🗑️
+                  </button>
+                </>
+              }
+            />
           ))
         )}
       </div>

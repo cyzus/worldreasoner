@@ -1,60 +1,25 @@
-import React, { useState, useEffect } from 'react'
-import { fetchDatabaseList, switchDatabase } from '../api/graphApi'
+import React, { useState } from 'react'
+import { useDatabase } from '../hooks/useDatabase'
 import './DatabaseSelector.css'
 
 const DatabaseSelector = ({ onDatabaseChange }) => {
-  const [databases, setDatabases] = useState([])
-  const [currentDatabase, setCurrentDatabase] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
   const [message, setMessage] = useState(null)
 
-  useEffect(() => {
-    loadDatabases()
-  }, [])
-
-  const loadDatabases = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      const data = await fetchDatabaseList()
-      setDatabases(data.databases)
-      setCurrentDatabase(data.current_database)
-    } catch (err) {
-      setError('Failed to load database list: ' + err.message)
-      console.error('Error loading databases:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const {
+    databases,
+    currentDatabase,
+    loading,
+    error,
+    loadDatabases,
+    switchDatabase
+  } = useDatabase(onDatabaseChange)
 
   const handleDatabaseSwitch = async (dbPath) => {
-    try {
-      setLoading(true)
-      setError(null)
-      setMessage(null)
+    setMessage(null)
+    const result = await switchDatabase(dbPath)
 
-      const response = await switchDatabase(dbPath)
-
-      if (response.success) {
-        setCurrentDatabase(response.db_path)
-        setMessage(response.message)
-
-        // Notify parent component to reload data
-        if (onDatabaseChange) {
-          onDatabaseChange(response.db_path)
-        }
-
-        // Reload database list to update status
-        await loadDatabases()
-      } else {
-        setError(response.message)
-      }
-    } catch (err) {
-      setError('Failed to switch database: ' + err.message)
-      console.error('Error switching database:', err)
-    } finally {
-      setLoading(false)
+    if (result.success) {
+      setMessage(result.message)
     }
   }
 
@@ -83,7 +48,7 @@ const DatabaseSelector = ({ onDatabaseChange }) => {
       {error && <div className="error-message">{error}</div>}
       {message && <div className="success-message">{message}</div>}
 
-      {loading ? (
+      {loading && databases.length === 0 ? (
         <div className="loading-state">Loading...</div>
       ) : (
         <div className="database-list">
