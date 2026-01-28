@@ -122,7 +122,7 @@ function EventGraphsPage({
           </div>
         </div>
 
-        <div className="page-main" style={{ padding: '0 16px 16px 16px', overflowY: nestedTab === 'statistics' ? 'auto' : 'hidden' }}>
+        <div className="page-main" style={{ padding: '0 16px 16px 16px', overflowY: 'auto' }}>
           {nestedTab === 'statistics' ? (
             <QuestionStatistics questions={questions} />
           ) : (
@@ -279,12 +279,12 @@ function EventGraphsPage({
 
               {/* Graph display area */}
               <div style={{
-                flex: 1,
+                flex: '0 0 auto',
                 display: 'flex',
                 gap: '16px',
                 flexDirection: graphView === 'both' ? 'row' : 'column',
-                overflow: graphView === 'both' ? 'auto' : 'hidden',
-                minHeight: 0,
+                minHeight: '500px',
+                height: '60vh',
                 marginBottom: '16px'
               }}>
                 {/* Evidence collection graph */}
