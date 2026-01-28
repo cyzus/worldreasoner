@@ -1,12 +1,12 @@
 """Tool for retrieving articles from the database."""
 
-import json
 from typing import Optional, List
 from src.tools.database_mixin import DatabaseAwareTool
+from src.tools.base import ToolResponseMixin
 from src.domain.models import Article
 
 
-class ArticleRetrievalTool(DatabaseAwareTool):
+class ArticleRetrievalTool(DatabaseAwareTool, ToolResponseMixin):
     """Tool that retrieves full article content by article ID.
 
     Use this when you need the complete article text for an article
@@ -78,4 +78,4 @@ class ArticleRetrievalTool(DatabaseAwareTool):
             "event_ids": article.event_ids
         }
 
-        return json.dumps(response, indent=2)
+        return self.json_response(response)

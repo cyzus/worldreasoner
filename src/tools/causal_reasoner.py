@@ -9,9 +9,10 @@ from smolagents import Tool
 from src.domain.models import CausalHypothesis, CausalRelationType, Event
 from src.core.collectors import ResultCollector
 from src.utils.enums import enum_to_list
+from src.tools.base import ToolResponseMixin
 
 
-class CausalReasonerTool(Tool):
+class CausalReasonerTool(Tool, ToolResponseMixin):
     """Tool for LLM to propose causal explanations with hindsight.
 
     This tool allows the agent to:
@@ -170,13 +171,12 @@ class CausalReasonerTool(Tool):
 
         # Validate chronology - source must occur before target
         if not self._validate_chronology(source_event_id, target_event_id):
-            error_msg = {
-                "status": "error",
-                "message": "Chronology validation failed: source event must occur before target event - also make sure you provide occurred_date for both events",
-                "source_event_id": source_event_id,
-                "target_event_id": target_event_id,
-            }
-            return json.dumps(error_msg, indent=2)
+            return self.error_response(
+                "Chronology validation failed: source event must occur before target event - also make sure you provide occurred_date for both events",
+                status="error",
+                source_event_id=source_event_id,
+                target_event_id=target_event_id
+            )
 
         # Generate unique hypothesis ID
         hypothesis_id = self._generate_hypothesis_id(question_id)
@@ -222,7 +222,7 @@ class CausalReasonerTool(Tool):
             "evidence_count": len(evidence_ids),
         }
 
-        return json.dumps(confirmation, indent=2)
+        return self.json_response(confirmation)
 
     def _generate_hypothesis_id(self, question_id: str) -> str:
         """Generate unique hypothesis ID.

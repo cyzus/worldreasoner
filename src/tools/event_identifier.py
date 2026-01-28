@@ -11,14 +11,14 @@ from src.utils.id_generator import generate_event_id
 from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
 from src.utils.logging import logger
 from src.utils.similarity import SimilarityMatcher
-from src.tools.base import CollectorAwareTool
+from src.tools.base import CollectorAwareTool, ToolResponseMixin
 
 
 # Default similarity threshold for event deduplication
 DEFAULT_SIMILARITY_THRESHOLD = 0.65
 
 
-class EventIdentifierTool(CollectorAwareTool[Event]):
+class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
     """Stores and structures identified events from article analysis.
     
     This tool helps the agent:
@@ -188,24 +188,24 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
                                 )
 
                 if missing_ids:
-                    return json.dumps({
-                        "error": "missing_article_ids",
-                        "message": "The following article IDs do not exist in database",
-                        "missing_ids": missing_ids
-                    }, indent=2)
+                    return self.error_response(
+                        "The following article IDs do not exist in database",
+                        error="missing_article_ids",
+                        missing_ids=missing_ids
+                    )
 
                 if invalid_date_articles:
-                    return json.dumps({
-                        "error": "invalid_article_dates",
-                        "message": "The following articles have dates prior to the event occurring date, meaning they cannot be the source of this event",
-                        "invalid_articles": invalid_date_articles
-                    }, indent=2)
+                    return self.error_response(
+                        "The following articles have dates prior to the event occurring date, meaning they cannot be the source of this event",
+                        error="invalid_article_dates",
+                        invalid_articles=invalid_date_articles
+                    )
 
         else:
-            return json.dumps({
-                "error": "empty_source_article_ids",
-                "message": "source_article_ids cannot be empty"
-            }, indent=2)
+            return self.error_response(
+                "source_article_ids cannot be empty",
+                error="empty_source_article_ids"
+            )
         # Validate and convert domain
         domain_enum = parse_domain(domain)
 
@@ -260,25 +260,28 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
         target_info = {}
         if is_target:
             if not self.question_id or not self.db:
-                return json.dumps({
-                    "error": "config_error",
-                    "message": "Cannot set is_target=True without question_id and db_path configured."
-                })
+                return self.error_response(
+                    "Cannot set is_target=True without question_id and db_path configured.",
+                    error="config_error"
+                )
             
             from src.domain.models import Question
             question = self.db.get(Question, self.question_id)
             
             if not question:
-                 return json.dumps({"error": "question_not_found", "message": f"Question {self.question_id} not found"})
+                 return self.error_response(
+                     f"Question {self.question_id} not found",
+                     error="question_not_found"
+                 )
 
             if question.target_event_id and question.target_event_id != event.id:
                  # Target already exists and is different - return ERROR as requested
-                 return json.dumps({
-                     "error": "target_already_exists",
-                     "message": f"Question already has a target event ({question.target_event_id}). Cannot assign new target {event.id}.",
-                     "existing_target_id": question.target_event_id,
-                     "proposed_target_id": event.id
-                 }, indent=2)
+                 return self.error_response(
+                     f"Question already has a target event ({question.target_event_id}). Cannot assign new target {event.id}.",
+                     error="target_already_exists",
+                     existing_target_id=question.target_event_id,
+                     proposed_target_id=event.id
+                 )
             
             if not question.target_event_id:
                  question.target_event_id = event.id

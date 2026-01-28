@@ -2,13 +2,14 @@
 
 from typing import List, Optional, TYPE_CHECKING
 from src.tools.database_mixin import DatabaseAwareTool
+from src.tools.base import ToolResponseMixin
 from src.domain.models import Event, Article
 
 if TYPE_CHECKING:
     from src.core.database import GenericDatabase
 
 
-class EventDetailsTool(DatabaseAwareTool):
+class EventDetailsTool(DatabaseAwareTool, ToolResponseMixin):
     """Tool that provides full event details including linked article content.
 
     The agent can use this tool to get more context about events before
@@ -62,8 +63,6 @@ class EventDetailsTool(DatabaseAwareTool):
         Returns:
             JSON string with event details and article content
         """
-        import json
-
         # Fetch event from database
         event = self.db.get(Event, event_id)
         if not event:
@@ -86,7 +85,7 @@ class EventDetailsTool(DatabaseAwareTool):
 
         # Build response
         response = self._build_response(event, linked_articles)
-        return json.dumps(response, indent=2)
+        return self.json_response(response)
     
     def _build_response(self, event: Event, linked_articles: List[dict]) -> dict:
         """Build standardized response structure.
