@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
 import ControlPanel from './ControlPanel'
 import QuestionList from './QuestionList'
-import GraphVisualization from './GraphVisualization'
+import CanvasTimelineGraph from './CanvasTimelineGraph'
 import EventDetails from './EventDetails'
-import Timeline from './Timeline'
+
 import TimeSeriesChart from './TimeSeriesChart'
 import ForecastGraph from './ForecastGraph'
 import QuestionStatistics from './QuestionStatistics'
@@ -41,12 +41,12 @@ function EventGraphsPage({
 }) {
   const [nestedTab, setNestedTab] = useState('questions') // 'questions', 'statistics', 'controls'
 
-  // Graph force settings (moved from GraphVisualization)
+  // Graph force settings (MOVED TO LEGACY - kept for compatibility if needed elsewhere but not used here)
   const [forceSettings, setForceSettings] = useState({
-    linkDistance: 40,        // Shorter distance = tighter layout (was 70)
-    linkStrength: 1,         // Normal spring strength
-    chargeStrength: -200,    // Less repulsion = closer nodes (was -200)
-    centerStrength: 0.05     // Very gentle center force (like in examples)
+    linkDistance: 40,
+    linkStrength: 1,
+    chargeStrength: -200,
+    centerStrength: 0.05
   })
 
   // Use custom hook for forecasts
@@ -299,21 +299,20 @@ function EventGraphsPage({
                   }}>
                     <div style={{ padding: '12px 16px', borderBottom: '1px solid #eee', background: '#fff' }}>
                       <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
-                        Evidence Collection Graph
+                        Evidence Timeline
                       </h4>
                     </div>
                     <div className="graph-main" style={{ flex: 1, position: 'relative' }}>
                       {loading && <div className="loading">Loading graph...</div>}
                       {error && <div className="error">{error}</div>}
                       {!loading && !error && (
-                        <GraphVisualization
+                        <CanvasTimelineGraph
                           key={`evidence-${graphView}-${selectedQuestionId || 'none'}`}
                           graphData={graphData}
                           onNodeClick={onNodeClick}
                           selectedNode={selectedNode}
-                          forceSettings={forceSettings}
-                          timeFilter={timeFilter}
                           targetEventId={selectedQuestionId ? questions.find(q => q.id === selectedQuestionId)?.target_event_id : null}
+                          timeFilter={timeFilter}
                         />
                       )}
                     </div>
@@ -332,7 +331,7 @@ function EventGraphsPage({
                   }}>
                     <div style={{ padding: '12px 16px', borderBottom: '1px solid #eee', background: '#fff' }}>
                       <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
-                        Forecast Reasoning Graph
+                        Forecast Reasoning Timeline
                       </h4>
                     </div>
                     <div className="graph-main" style={{ flex: 1, position: 'relative' }}>
@@ -370,16 +369,7 @@ function EventGraphsPage({
                 )}
               </div>
 
-              <div style={{ flexShrink: 0 }}>
-                <Timeline
-                  graphData={fullGraphData}
-                  onEventClick={onNodeClick}
-                  onTimeRangeChange={onTimeRangeChange}
-                  selectedNode={selectedNode}
-                  selectedQuestionId={selectedQuestionId}
-                  questionRelatedEvents={questionRelatedEvents}
-                />
-              </div>
+
 
               {/* Price history chart for Polymarket questions - Simplified UI */}
               {selectedQuestionId && questions.find(q => q.id === selectedQuestionId)?.source === 'polymarket' && (
