@@ -4,7 +4,7 @@ Extracts and normalizes data from Polymarket API responses.
 Follows flat hierarchy pattern (no subdirectories).
 """
 
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Union
 from datetime import datetime, timezone, timedelta
 import json
 
@@ -86,7 +86,7 @@ class MarketParser:
         self,
         market: Dict[str, Any],
         outcomes: List[str]
-    ) -> Tuple[Optional[str], Optional[str]]:
+    ) -> Tuple[Optional[Union[str, List[str]]], Optional[str]]:
         """Extract ground truth and resolution reasoning from resolved market.
         
         Args:
@@ -94,7 +94,8 @@ class MarketParser:
             outcomes: List of possible outcomes
             
         Returns:
-            Tuple of (ground_truth, resolution_reasoning)
+            Tuple of (ground_truth, resolution_reasoning). 
+            ground_truth can be a string (single winner) or list of strings (multiple winners).
         """
         ground_truth = None
         resolution_reasoning = None
@@ -107,18 +108,24 @@ class MarketParser:
             if outcome_prices_str:
                 outcome_prices = json.loads(outcome_prices_str)
                 
-                # Find the winning outcome (price = "1" means it won)
+                # Find winning outcomes (price = "1")
+                winners = []
                 for idx, price in enumerate(outcome_prices):
                     if price == "1" and idx < len(outcomes):
-                        ground_truth = outcomes[idx]
-                        break
+                        winners.append(outcomes[idx])
+                
+                if len(winners) == 1:
+                    ground_truth = winners[0]
+                elif len(winners) > 1:
+                    ground_truth = winners
                 
                 # Add resolution reasoning
                 if ground_truth:
                     resolved_by = market.get("resolvedBy", "")
                     auto_resolved = market.get("automaticallyResolved", False)
                     resolution_method = "automatically" if auto_resolved else "manually"
-                    resolution_reasoning = f"Market resolved {resolution_method} to '{ground_truth}'"
+                    gt_display = f"'{ground_truth}'" if isinstance(ground_truth, str) else f"{ground_truth}"
+                    resolution_reasoning = f"Market resolved {resolution_method} to {gt_display}"
         except Exception as e:
             logger.debug(f"Failed to parse ground truth for market {market.get('question', 'unknown')}: {e}")
         

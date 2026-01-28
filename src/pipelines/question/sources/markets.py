@@ -555,6 +555,7 @@ class PolymarketRunner(QuestionSourceRunner):
             valid_markets = []
 
             for m in markets:
+                # Basic validation logic
                 end_date_str = m.get("endDate")
                 if not end_date_str: continue
                 try:
@@ -564,9 +565,26 @@ class PolymarketRunner(QuestionSourceRunner):
                 closed_time = self.parser.parse_close_time(m)
                 should_skip, _ = self.parser.should_skip_market(m, end_date, closed_time, quality_requirements)
                 if should_skip: continue
+
+                # Volume/Liquidity Check (filter placeholders)
+                volume = m.get("volumeNum", 0.0) or 0.0
+                liquidity = m.get("liquidityNum", 0.0) or 0.0
+                
+                # Check for "template" markets (no activity)
+                if volume <= 0 and liquidity <= 0:
+                    continue
+                    
+                # Apply configured minimum volume filter
+                if volume < self.min_volume_usd:
+                    continue
                 
                 # Use groupItemTitle if available, else question text
                 label = m.get("groupItemTitle", m.get("question"))
+                
+                # Deduplicate options (sometimes multiple markets map to same label?)
+                if label in option_map:
+                    continue
+                    
                 options.append(label)
                 option_map[label] = m
                 valid_markets.append(m)
