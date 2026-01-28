@@ -3,12 +3,12 @@
 import json
 from typing import Optional
 
-from smolagents import Tool
+from src.tools.database_mixin import DatabaseAwareTool
 from src.domain.models import Article
 from src.utils.logging import logger
 
 
-class QuestionArticlesTool(Tool):
+class QuestionArticlesTool(DatabaseAwareTool):
     """Retrieves all articles collected for the current question.
 
     This tool requires no input arguments - it uses the question_id
@@ -42,13 +42,8 @@ class QuestionArticlesTool(Tool):
             db_path: Path to the database
             question_id: Question ID to get articles for (injected at init)
         """
-        super().__init__()
+        super().__init__(db_path=db_path, ensure_tables=[Article])
         self.question_id = question_id
-        self.db = None
-
-        if db_path:
-            from src.core.database import GenericDatabase
-            self.db = GenericDatabase(db_path)
 
     def forward(self) -> str:
         """Get all articles collected for this question.

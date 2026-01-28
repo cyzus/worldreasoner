@@ -117,17 +117,19 @@ class EventIdentifierTool(CollectorAwareTool[Event]):
             question_id: Question ID for provenance tracking (sets extracted_for_question_id)
         """
         super().__init__(collector)
-        self.db = None
+
+        # Initialize database using DatabaseAwareTool pattern
+        from src.core.database import GenericDatabase
+        self.db = GenericDatabase(db_path) if db_path else None
+
         self.similarity_threshold = similarity_threshold
         self.deduplicate = deduplicate
         self.time_window_days = time_window_days
         self.question_id = question_id  # Provenance context
         self._matcher: Optional[SimilarityMatcher] = None
 
-        if db_path:
-            from src.core.database import GenericDatabase
-            self.db = GenericDatabase(db_path)
-            # Initialize similarity matcher for event deduplication
+        # Initialize similarity matcher if database available
+        if self.db:
             self._matcher = SimilarityMatcher(
                 db=self.db,
                 model_class=Event,

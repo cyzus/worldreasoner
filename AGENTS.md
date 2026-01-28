@@ -52,6 +52,51 @@ Tools are "token-optimized" - they perform heavy lifting internally and return c
 -   **GraphInspectorTool**: Analyzes the structure of the event graph.
 -   **ArticleInspectorTool**: Analyzes temporal coverage of articles for a given topic.
 
+### Tool Base Classes (`src/tools/`)
+
+WorldReasoner provides reusable base classes to eliminate code duplication across tools:
+
+**DatabaseAwareTool** (`src/tools/database_mixin.py`)
+- Base class for tools that need database access
+- Standardizes database initialization (db instance, db_path, or default)
+- Provides `not_found_response()` helper for consistent error handling
+- Optional table creation via `ensure_tables` parameter
+- Used by: ArticleRetrievalTool, EventDetailsTool, GraphInspectorTool, and 6+ others
+
+**Example:**
+```python
+from src.tools.database_mixin import DatabaseAwareTool
+from src.domain.models import Article
+
+class MyTool(DatabaseAwareTool):
+    name = "my_tool"
+    description = "My custom tool"
+    inputs = {"item_id": {"type": "string", "description": "ID to look up"}}
+    output_type = "string"
+
+    def __init__(self, db=None, db_path=None):
+        # Initialize with database access
+        super().__init__(db=db, db_path=db_path, ensure_tables=[Article])
+
+    def forward(self, item_id: str) -> str:
+        article = self.db.get(Article, item_id)
+        if not article:
+            # Use helper for consistent error responses
+            return self.not_found_response("Article", item_id, Article)
+        return json.dumps({"title": article.title})
+```
+
+**CollectorAwareTool** (`src/tools/base.py`)
+- Base class for tools that collect/store results
+- Provides unified `store_result()` interface
+- Used by: EventIdentifierTool, CausalReasonerTool
+
+**ToolResponseMixin** (`src/tools/base.py`)
+- Mixin for standardized JSON responses
+- Methods: `json_response()`, `error_response()`, `success_response()`
+- Handles datetime/enum serialization automatically
+- Available for incremental adoption across tools
+
 ### Data Retrieval
 -   **ArticleCollector**: Fetches and stores articles (supports temporal filtering).
 -   **WebSearch**: search via DuckDuckGo or SearXNG.

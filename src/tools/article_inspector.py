@@ -3,9 +3,8 @@
 from typing import Optional, List, Dict
 from datetime import datetime
 
-from smolagents import Tool
+from src.tools.database_mixin import DatabaseAwareTool
 from src.domain.models import Article, Question
-from src.core.database import GenericDatabase
 from src.utils.article_analysis import (
     filter_articles_by_time_window,
     analyze_timeline,
@@ -26,7 +25,7 @@ from src.utils.formatting_utils import (
 )
 
 
-class ArticleInspectorTool(Tool):
+class ArticleInspectorTool(DatabaseAwareTool):
     """Inspect collected articles to identify timeline gaps and coverage issues.
 
     This tool helps the agent:
@@ -34,7 +33,7 @@ class ArticleInspectorTool(Tool):
     2. Identify time gaps that need more articles
     3. Check domain/source diversity
     4. Evaluate overall evidence coverage quality
-    
+
     Use this tool after initial collection to determine if you need to:
     - Search for articles in specific time periods
     - Diversify sources
@@ -64,8 +63,7 @@ class ArticleInspectorTool(Tool):
             db_path: Path to database
             question_id: Question ID for filtering articles
         """
-        super().__init__()
-        self.db = GenericDatabase(db_path)
+        super().__init__(db_path=db_path, ensure_tables=[Article, Question])
         self.question_id = question_id
 
     def forward(self) -> str:

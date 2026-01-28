@@ -2,11 +2,11 @@
 
 import json
 from typing import Optional, List
-from smolagents import Tool
+from src.tools.database_mixin import DatabaseAwareTool
 from src.domain.models import Article
 
 
-class ArticleRetrievalTool(Tool):
+class ArticleRetrievalTool(DatabaseAwareTool):
     """Tool that retrieves full article content by article ID.
 
     Use this when you need the complete article text for an article
@@ -33,7 +33,7 @@ class ArticleRetrievalTool(Tool):
         }
     }
     output_type = "string"
-    
+
     def __init__(self, db=None, db_path: str = None):
         """Initialize the article retrieval tool.
 
@@ -44,20 +44,7 @@ class ArticleRetrievalTool(Tool):
         Note:
             If neither db nor db_path is provided, will use default database path
         """
-        super().__init__()
-
-        # Database setup (always use database)
-        if db:
-            self.db = db
-        elif db_path:
-            from src.core.database import GenericDatabase
-            self.db = GenericDatabase(db_path)
-            # Ensure schema is initialized
-            self.db.create_table(Article)
-        else:
-            # Use default database path
-            from src.core.database import GenericDatabase
-            self.db = GenericDatabase("worldreasoner.db")
+        super().__init__(db=db, db_path=db_path, ensure_tables=[Article])
     
     def forward(self, article_id: str) -> str:
         """Retrieve article by ID.
@@ -74,14 +61,7 @@ class ArticleRetrievalTool(Tool):
         article = self.db.get(Article, article_id)
 
         if not article:
-            # Get available articles for helpful error message
-            all_articles = self.db.get_many(Article)
-            available_ids = [a.id for a in all_articles[:10]]
-
-            return json.dumps({
-                "error": f"Article '{article_id}' not found in database",
-                "available_articles": available_ids
-            })
+            return self.not_found_response("Article", article_id, Article)
 
         # Return full article content
         response = {

@@ -1,14 +1,14 @@
 """Tool for retrieving full event details and linked article content."""
 
 from typing import List, Optional, TYPE_CHECKING
-from smolagents import Tool
+from src.tools.database_mixin import DatabaseAwareTool
 from src.domain.models import Event, Article
 
 if TYPE_CHECKING:
     from src.core.database import GenericDatabase
 
 
-class EventDetailsTool(Tool):
+class EventDetailsTool(DatabaseAwareTool):
     """Tool that provides full event details including linked article content.
 
     The agent can use this tool to get more context about events before
@@ -16,23 +16,23 @@ class EventDetailsTool(Tool):
 
     Always uses database backend for simplicity.
     """
-    
+
     name = "event_details"
     description = """Get full details about a specific event including linked article content.
-    
+
     Use this tool when you need more information about an event to generate
     high-quality, insightful forecast questions. This gives you access to:
     - Full event description (not truncated)
     - Complete article content from source articles
     - All event metadata and entities
-    
+
     Args:
         event_id: The ID of the event to get details for
-    
+
     Returns:
         Dictionary with full event details and article content
     """
-    
+
     inputs = {
         "event_id": {
             "type": "string",
@@ -40,7 +40,7 @@ class EventDetailsTool(Tool):
         }
     }
     output_type = "string"
-    
+
     def __init__(self, db: Optional["GenericDatabase"] = None, db_path: Optional[str] = None):
         """Initialize tool with database.
 
@@ -51,22 +51,7 @@ class EventDetailsTool(Tool):
         Note:
             If neither db nor db_path is provided, will use default database path
         """
-        super().__init__()
-
-        # Database mode (always)
-        if db:
-            self.db = db
-        elif db_path:
-            # Lazy import to avoid circular dependency
-            from src.core.database import GenericDatabase
-            self.db = GenericDatabase(db_path)
-            # Ensure schema is initialized
-            self.db.create_table(Event)
-            self.db.create_table(Article)
-        else:
-            # Use default database path
-            from src.core.database import GenericDatabase
-            self.db = GenericDatabase("worldreasoner.db")
+        super().__init__(db=db, db_path=db_path, ensure_tables=[Event, Article])
     
     def forward(self, event_id: str) -> str:
         """Get full details for an event.
@@ -82,12 +67,7 @@ class EventDetailsTool(Tool):
         # Fetch event from database
         event = self.db.get(Event, event_id)
         if not event:
-            # Get available events for helpful error message
-            all_events = self.db.get_many(Event)
-            return json.dumps({
-                "error": f"Event '{event_id}' not found in database",
-                "available_events": [e.id for e in all_events[:10]]  # First 10
-            })
+            return self.not_found_response("Event", event_id, Event)
 
         # Fetch linked articles from database
         linked_articles = []

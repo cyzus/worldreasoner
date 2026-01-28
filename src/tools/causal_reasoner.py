@@ -117,12 +117,12 @@ class CausalReasonerTool(Tool):
         self._counter = 0  # For generating hypothesis IDs
         self.default_question_id = question_id  # Default context if agent forgets
 
-        # Database for persistence
-        self.db = None
-        if db_path:
-            from src.core.database import GenericDatabase
-            self.db = GenericDatabase(db_path)
-            # Ensure schema is initialized
+        # Initialize database using DatabaseAwareTool pattern
+        from src.core.database import GenericDatabase
+        self.db = GenericDatabase(db_path) if db_path else None
+
+        # Ensure schema is initialized
+        if self.db:
             self.db.create_table(CausalHypothesis)
 
     def forward(

@@ -4,9 +4,8 @@ import json
 from typing import Optional, Dict, List, Set
 from collections import defaultdict
 
-from smolagents import Tool
+from src.tools.database_mixin import DatabaseAwareTool
 from src.domain.models import CausalHypothesis, Event
-from src.core.database import GenericDatabase
 from src.utils.graph_visualization import GraphVisualizer
 from src.utils.event_analysis import (
     filter_events_by_time_window,
@@ -27,7 +26,7 @@ from src.utils.formatting_utils import (
 )
 
 
-class GraphInspectorTool(Tool):
+class GraphInspectorTool(DatabaseAwareTool):
     """Inspect causal graph structure to evaluate depth and quality.
 
     This tool helps the agent:
@@ -67,10 +66,10 @@ class GraphInspectorTool(Tool):
         """Initialize the graph inspector.
 
         Args:
+            question_id: Question ID for filtering graph elements
             db_path: Path to database
         """
-        super().__init__()
-        self.db = GenericDatabase(db_path)
+        super().__init__(db_path=db_path, ensure_tables=[CausalHypothesis, Event])
         self.question_id = question_id
 
     def forward(self) -> str:

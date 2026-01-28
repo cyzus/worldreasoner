@@ -88,7 +88,11 @@ class ForecastCausalReasonerTool(Tool):
             session_id: Session ID for tracking this forecast session
         """
         super().__init__()
+
+        # Initialize database using simplified pattern
+        from src.core.database import GenericDatabase
         self.forecast_db = GenericDatabase(forecast_db_path)
+
         self.session_id = session_id
 
     def forward(self, source_event_id: str, target_event_id: str, relation_type: str,

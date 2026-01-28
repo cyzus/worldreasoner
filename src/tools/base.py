@@ -1,4 +1,29 @@
-"""Base classes for pipeline tools."""
+"""Base classes for pipeline tools.
+
+This module provides reusable base classes for tools:
+
+1. **CollectorAwareTool** - For tools that collect/store results
+   - Use when tool generates items that need to be collected (Events, Articles, etc.)
+   - Provides unified store_result() interface
+   - Example: EventIdentifierTool, CausalReasonerTool
+
+2. **ToolResponseMixin** - For standardized JSON responses
+   - Use json_response() instead of manual json.dumps()
+   - Use error_response() for consistent error formatting
+   - Use success_response() for success cases
+   - Example: Any tool returning JSON to LLM
+
+3. **DatabaseAwareTool** - For tools that need database access (in database_mixin.py)
+   - Standardizes database initialization (db, db_path, default)
+   - Provides not_found_response() helper
+   - Use when tool reads/writes to database
+   - Example: ArticleRetrievalTool, EventDetailsTool, GraphInspectorTool
+
+Tools can inherit from multiple base classes as needed:
+- CollectorAwareTool + manual DB init: EventIdentifierTool
+- DatabaseAwareTool only: ArticleRetrievalTool
+- ToolResponseMixin: Can be added to any tool
+"""
 import json
 from typing import Any, Generic, TypeVar, Optional, List, Dict
 from smolagents import Tool

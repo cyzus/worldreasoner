@@ -4,13 +4,12 @@ This tool allows the forecasting agent to inspect the causal graph
 it has built during its reasoning process.
 """
 
-from smolagents import Tool
+from src.tools.database_mixin import DatabaseAwareTool
 import json
 from typing import Optional, Dict, List, Set
 from collections import defaultdict
 
 from src.domain.models.forecast_graph import ForecastEvent, ForecastHypothesis
-from src.core.database import GenericDatabase
 from src.utils.logging import logger
 from src.utils.graph_visualization import GraphVisualizer
 from src.utils.formatting_utils import (
@@ -19,7 +18,7 @@ from src.utils.formatting_utils import (
 )
 
 
-class ForecastGraphInspectorTool(Tool):
+class ForecastGraphInspectorTool(DatabaseAwareTool):
     """Inspect causal graph built during forecasting.
 
     This tool helps you understand the quality and structure of the
@@ -58,8 +57,9 @@ class ForecastGraphInspectorTool(Tool):
             forecast_db_path: Path to forecast database
             session_id: Session ID for tracking this forecast session
         """
-        super().__init__()
-        self.forecast_db = GenericDatabase(forecast_db_path)
+        super().__init__(db_path=forecast_db_path, ensure_tables=[ForecastEvent, ForecastHypothesis])
+        # Use self.db as forecast_db for consistency
+        self.forecast_db = self.db
         self.session_id = session_id
 
     def forward(self) -> str:

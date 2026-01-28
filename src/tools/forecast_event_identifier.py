@@ -86,6 +86,10 @@ class ForecastEventIdentifierTool(Tool):
             session_id: Session ID for tracking this forecast session
         """
         super().__init__()
+
+        # Initialize databases using simplified pattern
+        from src.core.database import GenericDatabase
+
         # Question DB for reading existing events
         self.question_db = GenericDatabase(question_db_path)
 
