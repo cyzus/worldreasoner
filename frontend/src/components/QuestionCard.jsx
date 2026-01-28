@@ -54,7 +54,7 @@ const QuestionCard = memo(({
                                 📄 {q.article_count}
                             </span>
                         )}
-                        {q.quality_score !== undefined && (
+                        {q.quality_score > 0 && (
                             <span className="badge" style={{ backgroundColor: '#e9ecef', color: '#495057' }}>
                                 Q: {(q.quality_score * 100).toFixed(0)}%
                             </span>
