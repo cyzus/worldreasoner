@@ -1,5 +1,6 @@
 """Base classes for pipeline tools."""
-from typing import Any, Generic, TypeVar, Optional, List
+import json
+from typing import Any, Generic, TypeVar, Optional, List, Dict
 from smolagents import Tool
 from src.core.collectors import ResultCollector
 from src.utils.logging import logger
@@ -65,3 +66,67 @@ class CollectorAwareTool(Tool, Generic[T]):
         if self.collector is not None:
             return self.collector.get_all()
         return self._fallback_items.copy()
+
+
+class ToolResponseMixin:
+    """Mixin for standardized tool responses.
+
+    Provides consistent JSON formatting across all tools.
+    """
+
+    @staticmethod
+    def json_response(data: Any, pretty: bool = True) -> str:
+        """Format data as JSON string for LLM consumption.
+
+        Args:
+            data: Data to serialize (dict, list, or serializable object)
+            pretty: Whether to use indentation (default: True)
+
+        Returns:
+            JSON string with datetime/enum handling
+        """
+        if pretty:
+            return json.dumps(data, indent=2, default=str)
+        return json.dumps(data, default=str)
+
+    @staticmethod
+    def error_response(message: str, details: Optional[Dict[str, Any]] = None, **kwargs) -> str:
+        """Format error response for LLM.
+
+        Args:
+            message: Error message
+            details: Optional additional error details
+            **kwargs: Additional context fields (status, missing_ids, etc.)
+
+        Returns:
+            JSON error string
+
+        Examples:
+            >>> error_response("Article not found", details={"article_id": "a123"})
+            >>> error_response("Validation failed", status="rejected", missing_ids=["a1", "a2"])
+        """
+        error_obj = {"error": message}
+
+        if details:
+            error_obj.update(details)
+
+        if kwargs:
+            error_obj.update(kwargs)
+
+        return json.dumps(error_obj, indent=2, default=str)
+
+    @staticmethod
+    def success_response(data: Dict[str, Any], **kwargs) -> str:
+        """Format success response for LLM.
+
+        Args:
+            data: Response data
+            **kwargs: Additional fields to merge
+
+        Returns:
+            JSON success string
+        """
+        response = dict(data)
+        if kwargs:
+            response.update(kwargs)
+        return json.dumps(response, indent=2, default=str)

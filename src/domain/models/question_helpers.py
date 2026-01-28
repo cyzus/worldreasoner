@@ -6,6 +6,7 @@ from .question import Question
 from .event import Event
 from .article import Article
 from src.utils.logging import logger
+from src.utils.database_helpers import ensure_database
 
 
 def calculate_forecast_context_window(
@@ -63,10 +64,7 @@ def calculate_forecast_context_window(
 
     # 1. Get related events (these must have occurred before forecasting)
     if events is None and db is not None and question.related_event_ids:
-        from src.core.database import GenericDatabase
-        if not isinstance(db, GenericDatabase):
-            from src.core.database import GenericDatabase
-            db = GenericDatabase(db) if isinstance(db, str) else db
+        db = ensure_database(db)
 
         for event_id in question.related_event_ids:
             event = db.get(Event, event_id)
@@ -80,10 +78,7 @@ def calculate_forecast_context_window(
     # 2. Get context articles (for evidence-based questions)
     # Articles tagged with this question ID provide necessary background
     if articles is None and db is not None:
-        from src.core.database import GenericDatabase
-        if not isinstance(db, GenericDatabase):
-            from src.core.database import GenericDatabase
-            db = GenericDatabase(db) if isinstance(db, str) else db
+        db = ensure_database(db)
 
         # Find articles that reference this question
         all_articles = db.get_many(Article)
@@ -281,10 +276,7 @@ def prepare_forecast_context(
     article_count = 0
 
     if db is not None:
-        from src.core.database import GenericDatabase
-        if not isinstance(db, GenericDatabase):
-            from src.core.database import GenericDatabase
-            db = GenericDatabase(db) if isinstance(db, str) else db
+        db = ensure_database(db)
 
         # Count events available at simulated_date
         if question.related_event_ids:

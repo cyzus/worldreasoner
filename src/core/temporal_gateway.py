@@ -9,6 +9,7 @@ from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from dataclasses import dataclass
 
 from ..utils.logging import logger
+from .temporal_filter_service import TemporalFilterService
 
 if TYPE_CHECKING:
     from ..domain.models import Article, Event, Question, Forecast
@@ -67,6 +68,8 @@ class TemporalGateway:
     def filter_articles(self, articles: List["Article"]) -> List["Article"]:
         """Filter articles to only those published before cutoff.
 
+        Delegates to TemporalFilterService for filtering logic.
+
         Args:
             articles: List of articles to filter
 
@@ -76,15 +79,15 @@ class TemporalGateway:
         if not articles:
             return []
 
-        filtered = []
-        filtered_count = 0
+        # Delegate to TemporalFilterService
+        filtered = TemporalFilterService.filter_by_cutoff(
+            articles,
+            self.cutoff_date,
+            date_field="published_date"
+        )
 
-        for article in articles:
-            if self.is_article_accessible(article):
-                filtered.append(article)
-            else:
-                filtered_count += 1
-
+        # Log filtered count for debugging
+        filtered_count = len(articles) - len(filtered)
         if filtered_count > 0:
             logger.debug(
                 f"Filtered {filtered_count} articles published after {self.cutoff_date.isoformat()}"
@@ -94,6 +97,8 @@ class TemporalGateway:
 
     def filter_events(self, events: List["Event"]) -> List["Event"]:
         """Filter events to only those that occurred before cutoff.
+
+        Delegates to TemporalFilterService for filtering logic.
 
         Args:
             events: List of events to filter
@@ -107,20 +112,18 @@ class TemporalGateway:
         if not events:
             return []
 
-        filtered = []
-        filtered_count = 0
-        none_date_count = 0
+        # Count events without dates (for logging)
+        none_date_count = sum(1 for e in events if e.occurred_date is None)
 
-        for event in events:
-            if event.occurred_date is None:
-                none_date_count += 1
-                continue
+        # Delegate to TemporalFilterService
+        filtered = TemporalFilterService.filter_by_cutoff(
+            events,
+            self.cutoff_date,
+            date_field="occurred_date"
+        )
 
-            if self.is_event_accessible(event):
-                filtered.append(event)
-            else:
-                filtered_count += 1
-
+        # Log filtered counts
+        filtered_count = len(events) - len(filtered) - none_date_count
         if filtered_count > 0 or none_date_count > 0:
             logger.debug(
                 f"Filtered {filtered_count} future events and {none_date_count} "
@@ -133,6 +136,8 @@ class TemporalGateway:
     def is_article_accessible(self, article: "Article") -> bool:
         """Check if a single article is accessible.
 
+        Uses TemporalFilterService for consistency.
+
         Args:
             article: Article to check
 
@@ -143,17 +148,19 @@ class TemporalGateway:
             logger.warning(f"Article {article.id} has None published_date - rejecting")
             return False
 
-        # Handle naive datetimes by treating them as UTC
-        published_date = article.published_date
-        if published_date.tzinfo is None:
-            logger.debug(f"Article {article.id} has naive datetime - treating as UTC")
-            from datetime import timezone
-            published_date = published_date.replace(tzinfo=timezone.utc)
+        # Use TemporalFilterService for single-item check
+        result = TemporalFilterService.filter_by_cutoff(
+            [article],
+            self.cutoff_date,
+            date_field="published_date"
+        )
 
-        return published_date < self.cutoff_date
+        return len(result) > 0
 
     def is_event_accessible(self, event: "Event") -> bool:
         """Check if a single event is accessible.
+
+        Uses TemporalFilterService for consistency.
 
         Args:
             event: Event to check
@@ -166,14 +173,14 @@ class TemporalGateway:
             # Conservative: reject events without occurred_date
             return False
 
-        # Handle naive datetimes by treating them as UTC
-        occurred_date = event.occurred_date
-        if occurred_date.tzinfo is None:
-            logger.debug(f"Event {event.id} has naive datetime - treating as UTC")
-            from datetime import timezone
-            occurred_date = occurred_date.replace(tzinfo=timezone.utc)
+        # Use TemporalFilterService for single-item check
+        result = TemporalFilterService.filter_by_cutoff(
+            [event],
+            self.cutoff_date,
+            date_field="occurred_date"
+        )
 
-        return occurred_date < self.cutoff_date
+        return len(result) > 0
 
     def validate_forecast(
         self,

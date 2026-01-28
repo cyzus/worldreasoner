@@ -19,9 +19,8 @@ def filter_events_by_time_window(
 ) -> List[Event]:
     """Filter events to valid time window for a question.
 
-    Events are considered valid if:
-    - Occurred after estimated_start_time (if provided)
-    - Occurred before resolution_date (strictly before) - excludes post-resolution events
+    DEPRECATED: Use TemporalFilterService.filter_by_window instead.
+    This function is maintained for backward compatibility.
 
     Args:
         events: List of events to filter
@@ -31,28 +30,26 @@ def filter_events_by_time_window(
     Returns:
         List of events within the valid time window
     """
-    window_end = ensure_timezone_aware(resolution_date)
-    window_start = ensure_timezone_aware(estimated_start_time) if estimated_start_time else None
+    import warnings
+    warnings.warn(
+        "filter_events_by_time_window is deprecated. Use TemporalFilterService.filter_by_window",
+        DeprecationWarning,
+        stacklevel=2
+    )
 
-    filtered_events = []
-    for event in events:
-        if not event.occurred_date:
-            continue
+    # Delegate to new service
+    from src.core.temporal_filter_service import TemporalFilterService
 
-        # Normalize event date for comparison
-        event_date = ensure_timezone_aware(event.occurred_date)
-
-        # Must be before resolution (strictly before)
-        if event_date >= window_end:
-            continue
-
-        # Must be after window start (if defined)
-        if window_start and event_date < window_start:
-            continue
-
-        filtered_events.append(event)
-
-    return filtered_events
+    window_start, window_end = TemporalFilterService.get_evidence_window(
+        resolution_date,
+        estimated_start_time
+    )
+    return TemporalFilterService.filter_by_window(
+        events,
+        window_start,
+        window_end,
+        date_field="occurred_date"
+    )
 
 
 def analyze_event_timeline(

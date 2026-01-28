@@ -61,13 +61,26 @@ Tools are "token-optimized" - they perform heavy lifting internally and return c
 -   **Provenance**: Most tools accept `question_id` to tag generated data.
 -   **Result Collectors**: Tools often write full data to a `ResultCollector` and return only IDs/summaries to the agent.
 
-# Article analysis
-from src.utils.article_analysis import analyze_article_timeline
-gaps = analyze_article_timeline(articles, start_date, end_date)
+**Example usage:**
+```python
+# Temporal filtering (recommended - uses new service layer)
+from src.core.temporal_filter_service import TemporalFilterService
 
-# Graph analysis
-from src.utils.graph_analysis import analyze_graph_depth
-depth = analyze_graph_depth(event_id, hypotheses)
+window_start, window_end = TemporalFilterService.get_evidence_window(
+    resolution_date, estimated_start_time
+)
+filtered = TemporalFilterService.filter_by_window(articles, window_start, window_end)
+
+# Article timeline analysis
+from src.utils.article_analysis import analyze_timeline, identify_gaps
+
+timeline = analyze_timeline(articles, resolution_date, coverage_start)
+gaps = identify_gaps(timeline, min_gap_days=7)
+
+# Graph structure analysis
+from src.utils.graph_analysis import analyze_graph_structure
+
+graph_stats = analyze_graph_structure(hypotheses)
 ```
 
 ## Service Layer Architecture
@@ -77,6 +90,11 @@ The codebase follows a layered architecture with clear separation of concerns:
 ### Domain Services (`src/domain/`)
 
 Pure business logic with no CLI or presentation dependencies.
+
+**ServiceBase** (`src/domain/service_base.py`)
+- Base class for all domain services
+- Provides common utilities like `get_db()` for database path handling
+- Eliminates repeated patterns across services
 
 **QuestionService** (`src/domain/question_service.py`)
 - Domain operations for questions (evidence checking, cascade analysis, deletion)
@@ -88,6 +106,147 @@ from src.domain.question_service import QuestionService
 service = QuestionService(db)
 has_evidence = service.has_evidence(question_id)
 service.clear_evidence(question_id, cascade=True)
+```
+
+**ForecastContextService** (`src/domain/forecast_context_service.py`)
+- Manages forecasting context extraction and validation from MCP request headers
+- Parses X-Question-ID, X-Simulated-Date, X-Knowledge-Cutoff headers
+- Validates temporal consistency (knowledge cutoff < simulated date)
+- Caches Question objects
+- Example:
+```python
+from src.domain.forecast_context_service import ForecastContextService
+
+service = ForecastContextService(db)
+context = service.parse_context_from_headers(headers)
+service.validate_context(context)  # Raises if invalid
+question = service.get_question_for_context(context)
+```
+
+**ArticleOperationsService** (`src/domain/article_operations_service.py`)
+- Handles article search and retrieval with temporal filtering
+- Integrates with HybridSearch for semantic + keyword search
+- Validates temporal access (articles only accessible before simulated date)
+- Example:
+```python
+from src.domain.article_operations_service import ArticleOperationsService
+
+service = ArticleOperationsService(db, hybrid_search)
+articles = await service.search_articles(
+    query="climate change",
+    simulated_date=datetime(2024, 4, 1, tzinfo=timezone.utc),
+    max_results=10
+)
+article = service.fetch_article(article_id, simulated_date)
+```
+
+**ForecastSubmissionService** (`src/domain/forecast_submission_service.py`)
+- Validates and submits forecasts with graph linking
+- Validates predictions based on question type (binary, MCQ, quantity)
+- Creates Forecast records with metadata
+- Links ForecastEvent and ForecastHypothesis to forecast_id
+- Example:
+```python
+from src.domain.forecast_submission_service import ForecastSubmissionService
+
+service = ForecastSubmissionService(db)
+
+# Validate prediction
+valid, parsed, error = service.validate_prediction(question, "0.75")
+if not valid:
+    print(f"Invalid: {error}")
+
+# Create forecast
+forecast = service.create_forecast(
+    question_id="q123",
+    session_id="session123",
+    prediction=parsed,
+    confidence=0.8,
+    reasoning="Analysis shows...",
+    articles_accessed=["a1", "a2"],
+    simulated_date=datetime.now(timezone.utc)
+)
+
+# Link graph elements
+graph_counts = service.link_forecast_graph(forecast.id, session_id)
+print(f"Linked {graph_counts['events']} events, {graph_counts['hypotheses']} hypotheses")
+```
+
+### Core Services (`src/core/`)
+
+Low-level services for infrastructure concerns.
+
+**TemporalFilterService** (`src/core/temporal_filter_service.py`)
+- Unified temporal filtering for articles, events, and other timestamped entities
+- Eliminates duplication between article_analysis.py and event_analysis.py
+- Calculates evidence windows with fallback logic
+- Filters entities by time windows or cutoff dates
+- Example:
+```python
+from src.core.temporal_filter_service import TemporalFilterService
+
+# Calculate evidence window
+window_start, window_end = TemporalFilterService.get_evidence_window(
+    resolution_date=datetime(2024, 6, 1, tzinfo=timezone.utc),
+    estimated_start_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
+    fallback_window_days=365
+)
+
+# Filter articles by window
+filtered_articles = TemporalFilterService.filter_by_window(
+    articles, window_start, window_end, date_field="published_date"
+)
+
+# Filter events by cutoff
+accessible_events = TemporalFilterService.filter_by_cutoff(
+    events, cutoff_date, date_field="occurred_date"
+)
+```
+
+**TemporalGateway** (`src/core/temporal_gateway.py`)
+- Provides temporal access control for forecasting scenarios
+- Ensures forecasts only use information available before a specified cutoff date
+- **Architecture**: Delegates filtering logic to TemporalFilterService for consistency
+- Adds logging, database integration, and forecast validation on top of core filtering
+
+**Key methods**:
+- `filter_articles()` - Filters articles before cutoff (delegates to TemporalFilterService)
+- `filter_events()` - Filters events before cutoff (delegates to TemporalFilterService)
+- `is_article_accessible()` - Check single article accessibility
+- `is_event_accessible()` - Check single event accessibility
+- `validate_forecast()` - Complex validation with database integration
+
+**Usage**:
+```python
+from src.core.temporal_gateway import TemporalGateway
+from datetime import datetime, timezone
+
+gateway = TemporalGateway(cutoff_date=datetime(2024, 11, 4, tzinfo=timezone.utc))
+accessible_articles = gateway.filter_articles(all_articles)
+accessible_events = gateway.filter_events(all_events)
+
+# Check single item
+if gateway.is_article_accessible(article):
+    # Process article
+    pass
+```
+
+**Design**: Thin wrapper around TemporalFilterService with added:
+- Debug logging for filtered counts
+- Database integration (via GenericDatabase)
+- Forecast validation logic with temporal constraints
+
+### Utility Services (`src/utils/`)
+
+**Serialization** (`src/utils/serialization.py`)
+- Common serialization patterns for enums and domains
+- Eliminates repeated `value.value if hasattr(value, 'value') else value` pattern
+- Example:
+```python
+from src.utils.serialization import serialize_domain
+
+# Works with both Enum instances and strings
+domain_str = serialize_domain(question.domain)  # "politics"
 ```
 
 ### Pipeline Services (`src/pipelines/`)
