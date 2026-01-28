@@ -3,6 +3,7 @@ import { fetchQuestions, fetchQuestionPriceHistory, fetchQuestionEvents } from '
 import TimeSeriesChart from './TimeSeriesChart';
 import ForecastGraph from './ForecastGraph';
 import EvaluationDashboard from './EvaluationDashboard';
+import QuestionCard from './QuestionCard';
 import { JobSidebar, JobDetails } from './JobManager';
 import { usePipelineJobs } from '../hooks/usePipelineJobs';
 import './ForecastPage.css';
@@ -508,35 +509,16 @@ const ForecastPage = ({
 
                     <div className="questions-list">
                       {filteredQuestions.map(question => (
-                        <div
+                        <QuestionCard
                           key={question.id}
-                          className={`question-item ${selectedQuestion?.id === question.id ? 'active' : ''}`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedQuestions.includes(question.id)}
-                            onChange={() => toggleQuestionSelection(question.id)}
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                          <div
-                            className="question-content"
-                            onClick={() => handleQuestionClick(question)}
-                          >
-                            <div className="question-text">{question.question_text}</div>
-                            <div className="question-meta">
-                              <span className="badge source">{question.source}</span>
-                              {question.domain && <span className="badge domain">{question.domain}</span>}
-                              {question.difficulty && (
-                                <span className="badge difficulty">Diff: {question.difficulty}</span>
-                              )}
-                              {question.forecast_count > 0 && (
-                                <span className="badge forecast-badge" title={`Forecasted ${question.forecast_count} times in modes: ${question.forecast_modes?.join(', ')}`}>
-                                  🎯 {question.forecast_count}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
+                          question={question}
+                          isSelected={selectedQuestion?.id === question.id}
+                          isMultiSelected={selectedQuestions.includes(question.id)}
+                          onToggleSelect={() => toggleQuestionSelection(question.id)}
+                          onClick={() => handleQuestionClick(question)}
+                          showCheckbox={true}
+                          showSelectionStyle={true}
+                        />
                       ))}
                     </div>
                   </div>

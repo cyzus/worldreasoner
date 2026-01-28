@@ -59,6 +59,11 @@ const QuestionCard = memo(({
                                 Q: {(q.quality_score * 100).toFixed(0)}%
                             </span>
                         )}
+                        {q.forecast_count > 0 && (
+                            <span className="badge forecast-badge" title={`Forecasted ${q.forecast_count} times`}>
+                                🎯 {q.forecast_count}
+                            </span>
+                        )}
                     </div>
                     <div className="question-item-actions">
                         {actions}
