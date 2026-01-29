@@ -19,17 +19,11 @@ class QuestionArticlesTool(DatabaseAwareTool):
     """
 
     name = "get_question_articles"
-    description = """Get all articles collected for this question.
+    description = """Retrieves all articles associated with the current question.
 
-    NO INPUT REQUIRED - automatically uses the current question context.
-
-    Returns a list of articles with their IDs, titles, and content previews.
-    Use the returned article IDs when:
-    - Creating events with event_identifier (source_article_ids)
-    - Creating causal links with causal_reasoner (evidence_article_ids)
-
-    Returns:
-        JSON with list of articles: [{id, title, source, published_date, content_preview}, ...]
+    No input required. Returns a JSON object containing:
+    - articles: List of articles with id, title, source, published_date, content_preview, word_count.
+    - total_articles: Count of articles found.
     """
 
     inputs = {}
@@ -96,5 +90,4 @@ class QuestionArticlesTool(DatabaseAwareTool):
             "question_id": self.question_id,
             "total_articles": len(articles_data),
             "articles": articles_data,
-            "article_ids": [a["id"] for a in articles_data],  # Convenient list for tool calls
         }, indent=2)
