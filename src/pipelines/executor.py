@@ -447,14 +447,23 @@ class PipelineExecutor:
         self,
         question_ids: List[str],
         on_progress: Optional[Callable],
-        min_evidence_articles: int,
-        evidence_window_days: int,
+        min_evidence_articles: Optional[int] = None,
+        evidence_window_days: Optional[int] = None,
         force_reprocess: bool = False,
         skip_indexing: bool = False,
         **kwargs,
     ) -> PipelineResult:
         """Run basic evidence pipeline."""
         from src.pipelines.evidence import EvidencePipeline
+
+        # Load defaults from source of truth
+        default_config = EvidencePipelineConfig()
+
+        if min_evidence_articles is None:
+            min_evidence_articles = default_config.min_evidence_articles
+
+        if evidence_window_days is None:
+            evidence_window_days = default_config.evidence_window_days
 
         # Configure pipeline
         evidence_config = EvidencePipelineConfig(
