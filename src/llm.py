@@ -25,6 +25,11 @@ class LiteLLMClient:
         if response_format:
             kwargs["response_format"] = response_format
 
+        # Use implicit retries from litellm (default 0, we set to 3)
+        # See https://docs.litellm.ai/docs/completion/reliable_completions
+        if "num_retries" not in kwargs:
+            kwargs["num_retries"] = 3
+
         response = await litellm.acompletion(**kwargs, messages=messages)
         return response["choices"][0]["message"]["content"]
 
@@ -40,6 +45,11 @@ class LiteLLMClient:
         """
         # Use provided model or default to config model
         embedding_model = model or self.llm_config.get("embedding_model")
-
-        response = await litellm.aembedding(model=embedding_model, input=inputs)
+        
+        # Add num_retries=3 for robustness
+        response = await litellm.aembedding(
+            model=embedding_model, 
+            input=inputs,
+            num_retries=3
+        )
         return [item["embedding"] for item in response["data"]]
