@@ -68,7 +68,7 @@ PROCESS:
    - Record both positive and negative impacts (symmetric analysis)
    - Use graph_inspector to verify quality, depth, and outcome impacts
 
-3. EVALUATE & ITERATE:
+3. EVALUATE & ITERATE
 
 
 Begin the analysis!"""

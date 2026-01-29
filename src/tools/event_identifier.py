@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from src.domain.models import Article, Event, EventType, EventStatus, Domain
+from src.domain.models import Article, Event, EventType, EventStatus, Domain, OutcomeScenario
 from src.utils.enums import enum_to_list, parse_domain, parse_event_type
 from src.utils.id_generator import generate_event_id
 from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
@@ -89,12 +89,13 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
         },
         "is_outcome": {
             "type": "boolean",
-            "description": "Set to True if this event represents a possible outcome scenario for the question (e.g., 'Yes', 'No', or MCQ option)",
+            "description": "Set to True if this event represents a possible outcome scenario for the question",
             "nullable": True,
         },
         "outcome_scenario": {
             "type": "string",
-            "description": "Type of outcome scenario (only for is_outcome=True): positive_resolution | negative_resolution | mcq_option | counterfactual",
+            "description": f"Type of outcome scenario (only for is_outcome=True): {', '.join(enum_to_list(OutcomeScenario))}",
+            "enum": enum_to_list(OutcomeScenario),
             "nullable": True,
         },
         "outcome_option_index": {
@@ -458,8 +459,6 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
         source_article_id = article_ids[0] if article_ids else None
 
         # Parse outcome scenario if provided
-        from src.domain.models.event import OutcomeScenario
-
         outcome_scenario_enum = None
         if outcome_scenario:
             try:
