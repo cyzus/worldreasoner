@@ -44,6 +44,7 @@ class PipelineJobResponse(BaseModel):
     pipeline_type: PipelineType
     progress: float  # 0.0 to 1.0
     current_question: Optional[str] = None
+    question_ids: List[str] = []  # Added field
     processed_count: int = 0
     total_count: int = 0
     message: str = ""
@@ -76,6 +77,19 @@ async def create_pipeline_job(
     The job runs in the background. Use GET /jobs/{job_id} or
     WebSocket /jobs/{job_id}/ws to monitor progress.
     """
+    # Check for duplicate jobs
+    request_qids_set = set(request.question_ids)
+    for existing_job in jobs.values():
+        if existing_job.status in [JobStatus.PENDING, JobStatus.RUNNING]:
+            if existing_job.pipeline_type == request.pipeline_type:
+                # Check for same set of questions
+                if set(existing_job.question_ids) == request_qids_set:
+                    logger.warning(f"Duplicate job attempt blocked: {existing_job.job_id} already processing these questions")
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Similar job {existing_job.job_id} is already {existing_job.status.value}"
+                    )
+
     job_id = f"job_{uuid.uuid4().hex[:8]}"
     now = datetime.utcnow().isoformat()
 
@@ -84,6 +98,7 @@ async def create_pipeline_job(
         status=JobStatus.PENDING,
         pipeline_type=request.pipeline_type,
         progress=0.0,
+        question_ids=request.question_ids,  # Populate field
         total_count=len(request.question_ids),
         message="Job created, waiting to start",
         created_at=now,

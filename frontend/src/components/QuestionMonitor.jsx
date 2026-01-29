@@ -8,26 +8,71 @@ import {
 import { startPipeline } from '../api/monitorApi'
 import './QuestionMonitor.css'
 
-const QuestionMonitor = () => {
+const QuestionMonitor = ({ activeJobs = [] }) => {
     const { data: evidenceNeeds, loading: needsLoading, error: needsError, refetch: refetchNeeds } = useEvidenceNeeds()
     const { data: modelStats, loading: statsLoading } = useModelStats()
     const [selectedQuestion, setSelectedQuestion] = useState(null)
     const [activeTab, setActiveTab] = useState('needs')
-    const [collecting, setCollecting] = useState({})
     const [collectingAll, setCollectingAll] = useState(false)
 
+    // Compute which questions are currently being collected
+    const collectingQuestions = new Set()
+    activeJobs.forEach(job => {
+        if (job.status === 'running' || job.status === 'pending') {
+            if (job.question_ids) {
+                job.question_ids.forEach(id => collectingQuestions.add(id))
+            }
+        }
+    })
+
     // Auto-collect state
-    const [autoCollect, setAutoCollect] = useState(false)
+    const [autoCollect, setAutoCollect] = useState(() => {
+        const saved = localStorage.getItem('monitor_auto_collect')
+        return saved === 'true'
+    })
     const autoCollectRef = useRef(null)
+
+    // Persist auto-collect preference
+    useEffect(() => {
+        localStorage.setItem('monitor_auto_collect', autoCollect)
+    }, [autoCollect])
+
+    // Cleanup pending submissions once they appear in active jobs
+    useEffect(() => {
+        collectingQuestions.forEach(id => {
+            if (pendingSubmissionIds.current.has(id)) {
+                pendingSubmissionIds.current.delete(id)
+            }
+        })
+    }, [collectingQuestions])
+
+    // Track pending submissions to prevent race conditions with auto-collect
+    const pendingSubmissionIds = useRef(new Set())
 
     // Auto-collect logic
     useEffect(() => {
         if (autoCollect) {
             const checkAndCollect = async () => {
-                // Only collect if we have needs, aren't loading, and aren't already collecting
+                // Only collect if we have needs, aren't loading, and aren't already collecting active batch
                 if (!needsLoading && evidenceNeeds && evidenceNeeds.length > 0 && !collectingAll) {
-                    console.log(`[Auto-Collect] Triggering collection for ${evidenceNeeds.length} items`)
-                    await handleCollectAll(true) // Pass true to bypass confirm
+                    // Filter out questions that are already starting collection or pending submission
+                    const candidates = evidenceNeeds.filter(q =>
+                        !collectingQuestions.has(q.id) &&
+                        !pendingSubmissionIds.current.has(q.id)
+                    )
+
+                    if (candidates.length > 0) {
+                        console.log(`[Auto-Collect] Triggering collection for ${candidates.length} items`)
+                        // Add to pending immediately to prevent double-submit
+                        candidates.forEach(q => pendingSubmissionIds.current.add(q.id))
+
+                        try {
+                            await handleCollectAll(true, candidates)
+                        } catch (e) {
+                            // If failed, remove from pending so they can be retried
+                            candidates.forEach(q => pendingSubmissionIds.current.delete(q.id))
+                        }
+                    }
                 }
             }
 
@@ -46,7 +91,7 @@ const QuestionMonitor = () => {
         return () => {
             if (autoCollectRef.current) clearInterval(autoCollectRef.current)
         }
-    }, [autoCollect, needsLoading, evidenceNeeds, collectingAll])
+    }, [autoCollect, needsLoading, evidenceNeeds, collectingAll, activeJobs]) // added activeJobs dependency
 
     // Helper to safely format dates
     const formatDate = (dateString) => {
@@ -58,24 +103,22 @@ const QuestionMonitor = () => {
         }
     }
 
-    const handleCollect = async (questionId) => {
-        try {
-            setCollecting(prev => ({ ...prev, [questionId]: true }))
-            await startPipeline([questionId], 'adaptive_evidence')
-        } catch (err) {
-            console.error('Failed to start collection:', err)
-            alert(`Failed to start collection: ${err.message}`)
-        } finally {
-            setTimeout(() => {
-                setCollecting(prev => ({ ...prev, [questionId]: false }))
-            }, 2000)
-        }
-    }
-
-    const handleCollectAll = async (bypassConfirm = false) => {
+    const handleCollectAll = async (bypassConfirm = false, specificCandidates = null) => {
         if (!evidenceNeeds || evidenceNeeds.length === 0) return
 
-        const allIds = evidenceNeeds.map(q => q.id)
+        let candidates = specificCandidates || evidenceNeeds
+
+        // Filter out already collecting
+        if (!specificCandidates) {
+            candidates = candidates.filter(q => !collectingQuestions.has(q.id))
+        }
+
+        if (candidates.length === 0) {
+            if (!bypassConfirm) alert("All pending questions are already being collected.")
+            return
+        }
+
+        const allIds = candidates.map(q => q.id)
 
         if (!bypassConfirm) {
             const confirmMsg = `Start adaptive evidence collection for ${allIds.length} questions?`
@@ -179,42 +222,54 @@ const QuestionMonitor = () => {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {evidenceNeeds.map(q => (
-                                            <tr key={q.id}>
-                                                <td>
-                                                    <div className="question-text" title={q.question_text}>
-                                                        {q.question_text}
-                                                    </div>
-                                                    <div className="question-id">{q.id}</div>
-                                                </td>
-                                                <td>
-                                                    <span className="domain-badge">
-                                                        {q.domain}
-                                                    </span>
-                                                </td>
-                                                <td className="date-text">
-                                                    {formatDate(q.created_at)}
-                                                </td>
-                                                <td>
-                                                    <div style={{ display: 'flex', gap: '0.75rem' }}>
-                                                        <button
-                                                            className="action-btn"
-                                                            style={{ color: '#2563eb' }}
-                                                            onClick={() => handleCollect(q.id)}
-                                                            disabled={collecting[q.id] || autoCollect}
-                                                        >
-                                                            {collecting[q.id] ? 'Starting...' : 'Collect'}
-                                                        </button>
-                                                        <button
-                                                            className="action-btn"
-                                                            onClick={() => setSelectedQuestion(q.id)}
-                                                        >
-                                                            Check Readiness
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
+                                        {evidenceNeeds.map(q => {
+                                            const isCollecting = collectingQuestions.has(q.id)
+                                            return (
+                                                <tr key={q.id}>
+                                                    <td>
+                                                        <div className="question-text" title={q.question_text}>
+                                                            {q.question_text}
+                                                        </div>
+                                                        <div className="question-id">{q.id}</div>
+                                                    </td>
+                                                    <td>
+                                                        <span className="domain-badge">
+                                                            {q.domain}
+                                                        </span>
+                                                    </td>
+                                                    <td className="date-text">
+                                                        {formatDate(q.created_at)}
+                                                    </td>
+                                                    <td>
+                                                        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                                                            {isCollecting ? (
+                                                                <span style={{
+                                                                    color: '#d97706',
+                                                                    fontWeight: 500,
+                                                                    fontSize: '0.875rem',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '0.25rem'
+                                                                }}>
+                                                                    <span className="loading-spinner" style={{ width: '12px', height: '12px', borderWidth: '2px' }}></span>
+                                                                    Collecting...
+                                                                </span>
+                                                            ) : (
+                                                                <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>
+                                                                    Ready
+                                                                </span>
+                                                            )}
+                                                            <button
+                                                                className="action-btn"
+                                                                onClick={() => setSelectedQuestion(q.id)}
+                                                            >
+                                                                Check Readiness
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )
+                                        })}
                                     </tbody>
                                 </table>
                             </div>

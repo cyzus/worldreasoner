@@ -489,13 +489,19 @@ async def get_questions(
 
         questions = db.get_many(Question, filters=filters if filters else None)
 
-        # Get all articles and count by question
-        all_articles = db.get_many(Article)
-        article_counts = {}
-        for article in all_articles:
-            qid = article.collected_for_question_id
-            if qid:
-                article_counts[qid] = article_counts.get(qid, 0) + 1
+        # Get all hypotheses and count distinct evidence articles by question
+        all_hypotheses = db.get_many(CausalHypothesis)
+        evidence_map = {}  # qid -> set(article_ids)
+        
+        for h in all_hypotheses:
+            # A hypothesis can be discovered by multiple questions
+            for qid in h.discovered_by_question_ids:
+                if qid not in evidence_map:
+                    evidence_map[qid] = set()
+                evidence_map[qid].update(h.evidence_article_ids)
+        
+        # Convert sets to counts
+        article_counts = {qid: len(ids) for qid, ids in evidence_map.items()}
 
         # Get all forecasts and aggregate by question
         from src.domain.models.forecast import Forecast

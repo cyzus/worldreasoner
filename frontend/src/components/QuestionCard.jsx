@@ -14,7 +14,8 @@ const QuestionCard = memo(({
     onClick,
     actions,
     showCheckbox = false,
-    showSelectionStyle = true
+    showSelectionStyle = true,
+    isCollecting = false
 }) => {
     const q = question
 
@@ -45,6 +46,12 @@ const QuestionCard = memo(({
             <div className="question-item-content">
                 <div className="question-item-header">
                     <div className="question-item-badges">
+                        {isCollecting && (
+                            <span className="badge collecting-badge" style={{ backgroundColor: '#e3f2fd', color: '#0d47a1', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span className="spinner-small" style={{ width: '10px', height: '10px', border: '2px solid #0d47a1', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></span>
+                                Collecting...
+                            </span>
+                        )}
                         <span className="badge domain">{q.domain}</span>
                         <span className={`badge difficulty difficulty-${q.difficulty}`}>
                             Lvl {q.difficulty}
@@ -121,6 +128,14 @@ const QuestionCard = memo(({
                 </div>
 
                 {/* Extended details often used in Preview */}
+                {q.ground_truth !== undefined && q.ground_truth !== null && (
+                    <div style={{ marginTop: '8px', fontSize: '0.9rem', color: '#166534', backgroundColor: '#dcfce7', padding: '4px 8px', borderRadius: '4px', border: '1px solid #bbf7d0', display: 'inline-block' }}>
+                        <strong>✓ Ground Truth:</strong> <span style={{ fontWeight: 600, marginLeft: '4px' }}>
+                            {String(q.ground_truth)}
+                        </span>
+                    </div>
+                )}
+
                 {q.resolution_criteria && (
                     <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#666' }}>
                         <strong>Criteria:</strong> <span style={{ fontStyle: 'italic' }}>{q.resolution_criteria.substring(0, 100)}{q.resolution_criteria.length > 100 ? '...' : ''}</span>

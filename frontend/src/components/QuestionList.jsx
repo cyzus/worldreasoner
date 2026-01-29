@@ -12,7 +12,8 @@ const QuestionList = memo(function QuestionList({
   multiSelectMode = false,
   onQuestionsSelected = null,
   onQuestionUpdated = null,
-  onQuestionDeleted = null
+  onQuestionDeleted = null,
+  activeJobs = []
 }) {
   const [searchTerm, setSearchTerm] = useState('')
   const debouncedSearchTerm = useDebounce(searchTerm, 300)
@@ -23,6 +24,19 @@ const QuestionList = memo(function QuestionList({
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [editingQuestion, setEditingQuestion] = useState(null)
   const [deletingQuestionId, setDeletingQuestionId] = useState(null)
+
+  // Compute collecting IDs
+  const collectingIds = useMemo(() => {
+    const ids = new Set()
+    activeJobs.forEach(job => {
+      if (job.status === 'running' || job.status === 'pending') {
+        if (job.question_ids) {
+          job.question_ids.forEach(qid => ids.add(qid))
+        }
+      }
+    })
+    return ids
+  }, [activeJobs])
 
   // Extract unique values for filters
   const domains = useMemo(() => {
@@ -284,6 +298,7 @@ const QuestionList = memo(function QuestionList({
               question={q}
               isSelected={selectedQuestionId === q.id}
               isMultiSelected={selectedIds.has(q.id)}
+              isCollecting={collectingIds.has(q.id)}
               showCheckbox={multiSelectMode}
               onToggleSelect={(e) => toggleSelection(q.id, e)}
               onClick={() => !multiSelectMode && onQuestionSelect(q.id)}
