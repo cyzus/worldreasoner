@@ -171,7 +171,13 @@ class GenericDatabase(Generic[T]):
     @contextmanager
     def _get_connection(self):
         """Get database connection context manager."""
-        conn = sqlite3.connect(str(self.db_path))
+        # Increase timeout to 30s to handle concurrent batch writes
+        conn = sqlite3.connect(str(self.db_path), timeout=30.0)
+        
+        # Enable Write-Ahead Logging for better concurrency
+        # This significantly reduces "database is locked" errors
+        conn.execute("PRAGMA journal_mode=WAL")
+        
         conn.row_factory = sqlite3.Row
         try:
             yield conn
