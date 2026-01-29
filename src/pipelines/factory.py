@@ -3,7 +3,7 @@
 Centralizes pipeline creation to avoid duplicate configuration logic
 across CLI and backend API.
 """
-from typing import Optional
+
 
 from src.config import Config
 from src.config.database import DatabaseConfig
@@ -16,10 +16,7 @@ class PipelineFactory:
 
     @staticmethod
     def create_evidence_pipeline(
-        config: Config,
-        db_path: str,
-        adaptive: bool = False,
-        **kwargs
+        config: Config, db_path: str, adaptive: bool = False, **kwargs
     ):
         """Create configured evidence pipeline.
 
@@ -75,9 +72,10 @@ class PipelineFactory:
         """
         if pipeline_type in [PipelineType.EVIDENCE, PipelineType.ADAPTIVE_EVIDENCE]:
             return PipelineFactory.create_evidence_pipeline(
-                config, db_path,
+                config,
+                db_path,
                 adaptive=(pipeline_type == PipelineType.ADAPTIVE_EVIDENCE),
-                **kwargs
+                **kwargs,
             )
 
         # Other pipeline types (FORECAST, COLLECTION, etc.) don't use factory yet

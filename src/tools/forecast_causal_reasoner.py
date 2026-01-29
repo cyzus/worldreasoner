@@ -5,7 +5,6 @@ ForecastHypothesis instances in the forecast database.
 """
 
 import json
-from datetime import datetime, timezone
 
 from smolagents import Tool
 from src.domain.models.forecast_graph import ForecastHypothesis
@@ -47,40 +46,36 @@ class ForecastCausalReasonerTool(Tool):
     """
 
     inputs = {
-        "source_event_id": {
-            "type": "string",
-            "description": "Event ID of the cause"
-        },
-        "target_event_id": {
-            "type": "string",
-            "description": "Event ID of the effect"
-        },
+        "source_event_id": {"type": "string", "description": "Event ID of the cause"},
+        "target_event_id": {"type": "string", "description": "Event ID of the effect"},
         "relation_type": {
             "type": "string",
             "description": f"Type of causation - one of: {', '.join(enum_to_list(CausalRelationType))}",
-            "enum": enum_to_list(CausalRelationType)
+            "enum": enum_to_list(CausalRelationType),
         },
         "strength": {
             "type": "number",
-            "description": "Causal strength 0.0-1.0 (how strong the effect)"
+            "description": "Causal strength 0.0-1.0 (how strong the effect)",
         },
         "confidence": {
             "type": "number",
-            "description": "Confidence 0.0-1.0 (how sure you are)"
+            "description": "Confidence 0.0-1.0 (how sure you are)",
         },
         "reasoning": {
             "type": "string",
-            "description": "Detailed explanation of the causal mechanism"
+            "description": "Detailed explanation of the causal mechanism",
         },
         "evidence_article_ids": {
             "type": "string",
             "description": "Comma-separated article IDs supporting this claim",
-            "nullable": True
+            "nullable": True,
         },
     }
     output_type = "string"
 
-    def __init__(self, forecast_db_path: str = "worldreasoner.db", session_id: str = None):
+    def __init__(
+        self, forecast_db_path: str = "worldreasoner.db", session_id: str = None
+    ):
         """Initialize the forecast causal reasoner.
 
         Args:
@@ -90,14 +85,21 @@ class ForecastCausalReasonerTool(Tool):
         super().__init__()
 
         # Initialize database using simplified pattern
-        from src.core.database import GenericDatabase
+
         self.forecast_db = GenericDatabase(forecast_db_path)
 
         self.session_id = session_id
 
-    def forward(self, source_event_id: str, target_event_id: str, relation_type: str,
-                strength: float, confidence: float, reasoning: str,
-                evidence_article_ids: str = "") -> str:
+    def forward(
+        self,
+        source_event_id: str,
+        target_event_id: str,
+        relation_type: str,
+        strength: float,
+        confidence: float,
+        reasoning: str,
+        evidence_article_ids: str = "",
+    ) -> str:
         """Create causal link and save to forecast database.
 
         Args:
@@ -117,10 +119,12 @@ class ForecastCausalReasonerTool(Tool):
             try:
                 relation_enum = CausalRelationType(relation_type.lower())
             except ValueError:
-                return json.dumps({
-                    "error": f"Invalid relation_type: {relation_type}. "
-                    f"Use: causes, enables, prevents, correlates_with, conditional"
-                })
+                return json.dumps(
+                    {
+                        "error": f"Invalid relation_type: {relation_type}. "
+                        f"Use: causes, enables, prevents, correlates_with, conditional"
+                    }
+                )
 
             # Validate ranges
             if not (0.0 <= strength <= 1.0):
@@ -129,7 +133,9 @@ class ForecastCausalReasonerTool(Tool):
                 return json.dumps({"error": "confidence must be 0.0-1.0"})
 
             # Parse article IDs
-            article_ids = [aid.strip() for aid in evidence_article_ids.split(',') if aid.strip()]
+            article_ids = [
+                aid.strip() for aid in evidence_article_ids.split(",") if aid.strip()
+            ]
 
             # Create and save ForecastHypothesis
             hyp_id = generate_forecast_hypothesis_id()
@@ -143,19 +149,22 @@ class ForecastCausalReasonerTool(Tool):
                 strength=strength,
                 confidence=confidence,
                 reasoning=reasoning,
-                evidence_article_ids=article_ids
+                evidence_article_ids=article_ids,
             )
 
             self.forecast_db.save(ForecastHypothesis, hypothesis)
             logger.info(f"Saved forecast hypothesis: {hyp_id}")
 
-            return json.dumps({
-                "status": "created",
-                "hypothesis_id": hyp_id,
-                "relation": f"{source_event_id} {relation_enum.value} {target_event_id}",
-                "strength": strength,
-                "confidence": confidence
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "created",
+                    "hypothesis_id": hyp_id,
+                    "relation": f"{source_event_id} {relation_enum.value} {target_event_id}",
+                    "strength": strength,
+                    "confidence": confidence,
+                },
+                indent=2,
+            )
 
         except Exception as e:
             logger.error(f"Error creating forecast causal link: {e}")

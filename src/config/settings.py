@@ -35,7 +35,7 @@ class Config(BaseSettings):
         env_file=".env",
         env_prefix=ENV_PREFIX,
         env_nested_delimiter="__",
-        extra="ignore"  # Ignore extra fields in config files
+        extra="ignore",  # Ignore extra fields in config files
     )
 
     # Application settings

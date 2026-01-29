@@ -48,8 +48,8 @@ Tools are "token-optimized" - they perform heavy lifting internally and return c
 
 ### Analysis Tools
 -   **CausalReasonerTool**: Identifies causal links between events.
--   **EventIdentifierTool**: Extracts discrete events from text.
--   **GraphInspectorTool**: Analyzes the structure of the event graph.
+-   **EventIdentifierTool**: Extracts discrete events from text and records outcome impacts.
+-   **GraphInspectorTool**: Analyzes the structure of the event graph including outcome impacts.
 -   **ArticleInspectorTool**: Analyzes temporal coverage of articles for a given topic.
 
 ### Tool Base Classes (`src/tools/`)
@@ -96,6 +96,56 @@ class MyTool(DatabaseAwareTool):
 - Methods: `json_response()`, `error_response()`, `success_response()`
 - Handles datetime/enum serialization automatically
 - Available for incremental adoption across tools
+
+### Outcome Impact Tracking
+-   **OutcomeEventService** (`src/domain/outcome_event_service.py`): Service for creating and managing outcome events
+    - Auto-creates outcome events (Yes/No for binary, options for MCQ)
+    - Marks actual outcomes after resolution
+    - Creates counterfactual scenarios for "what if" analysis
+-   **EventIdentifierTool** (extended): Now supports creating outcome events and recording impacts
+    - `is_outcome` - Mark event as possible outcome
+    - `outcome_scenario` - Type (positive_resolution, negative_resolution, mcq_option, counterfactual)
+    - `outcome_impacts` - JSON array of impact assessments on outcomes
+-   **EventOutcomeImpact** model (`src/domain/models/event_outcome_impact.py`): Tracks event→outcome impacts
+    - Direction: POSITIVE (increases likelihood), NEGATIVE (decreases), NEUTRAL, MIXED
+    - Magnitude: 0.0-1.0 (strength of impact)
+    - Confidence: 0.0-1.0 (certainty of assessment)
+    - Reasoning: Detailed explanation of WHY and HOW
+
+**Key Insight**: Outcomes ARE Events (with `is_outcome=True`). No separate Outcome model needed.
+
+**Example usage:**
+```python
+# 1. Auto-create outcome events for a question
+from src.domain.outcome_event_service import OutcomeEventService
+
+service = OutcomeEventService(db)
+outcomes = service.auto_create_outcome_events(question)  # Creates Yes/No for binary
+
+# 2. Record impact when creating an event
+event_identifier(
+    title="Inflation reaches 7%",
+    description="High inflation pressures Fed to act",
+    domain="finance",
+    source_article_ids="art_123",
+    outcome_impacts='[{
+        "outcome_event_id": "evt_outcome_yes",
+        "direction": "positive",
+        "magnitude": 0.8,
+        "confidence": 0.85,
+        "reasoning": "High inflation creates strong pressure for rate hike"
+    }]'
+)
+
+# 3. View impacts in graph
+graph_inspector = GraphInspectorTool(question_id="q123")
+result = graph_inspector.forward()  # Now includes outcome impact section
+```
+
+**See also:**
+- Full docs: `OUTCOME_IMPACT_IMPLEMENTATION.md`
+- Quick start: `docs/outcome-impact-quick-start.md`
+- Migration: `migrations/add_outcome_tracking.py`
 
 ### Data Retrieval
 -   **ArticleCollector**: Fetches and stores articles (supports temporal filtering).
@@ -151,6 +201,19 @@ from src.domain.question_service import QuestionService
 service = QuestionService(db)
 has_evidence = service.has_evidence(question_id)
 service.clear_evidence(question_id, cascade=True)
+```
+
+**OutcomeEventService** (`src/domain/outcome_event_service.py`)
+- Manages outcome events (Events with is_outcome=True) for questions
+- Auto-creates standard outcomes based on question type
+- Marks actual outcomes after resolution
+- Example:
+```python
+from src.domain.outcome_event_service import OutcomeEventService
+
+service = OutcomeEventService(db)
+outcomes = service.auto_create_outcome_events(question)  # Binary: Yes/No
+service.mark_actual_outcome(event_id, is_actual=True)
 ```
 
 **ForecastContextService** (`src/domain/forecast_context_service.py`)

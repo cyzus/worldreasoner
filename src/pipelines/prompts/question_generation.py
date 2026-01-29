@@ -5,8 +5,7 @@ from typing import List, Optional
 from src.domain.models import Event
 from .base import ContextualPromptGenerator, PromptTemplate
 
-EVENT_TEMPLATE = \
-"""
+EVENT_TEMPLATE = """
 Event {idx} (ID: {event_id}){status_note}:
 - Title: {title}
 - Description: {description}
@@ -15,8 +14,7 @@ Event {idx} (ID: {event_id}){status_note}:
 - Confidence: {confidence}
 """
 
-SHARED_RULES_DESC = \
-"""
+SHARED_RULES_DESC = """
 QUALITY:
 - Broad appeal s.t. people are interested to answer (elections, major companies, crypto, policy, sports)
 - Skip niche topics requiring insider knowledge
@@ -42,16 +40,14 @@ A good answering window for a forecast question will be between ESTIMATED START 
 
 """
 
-ARTICLE_TEMPLATE = \
-"""
+ARTICLE_TEMPLATE = """
 Article {idx} (Source: {source}):
 - Title: {title}
 - Date: {published_date}
 - Content: {content}
 """
 
-RULES_GROUND_TRUTH = \
-"""RULES:
+RULES_GROUND_TRUTH = """RULES:
 - Today: {current_date} → MAKE SURE that: {current_date} >= resolution_date >= estimated_start_time
 - ground_truth = past outcome only (YES/NO/value, never future dates)
 - resolution_date: when the event has already been resolved
@@ -60,8 +56,7 @@ RULES_GROUND_TRUTH = \
 - Format questions using the future tense as if they are in the future (even though all the events are already resolved)
 - Natural deadlines ("by end of Q4 202X" or "by end of Oct 202X" not "by Oct 27")"""
 
-RULES_FUTURE = \
-"""RULES:
+RULES_FUTURE = """RULES:
 - Today: {current_date} → MAKE SURE that: resolution_date > {current_date} >= estimated_start_time
 - NO ground_truth (outcomes unknown)
 - resolution_date: 1 week to 1+ year in future
@@ -70,30 +65,35 @@ RULES_FUTURE = \
 - Natural deadlines ("by end of Q1 202X" not "by Mar 15")"""
 
 
-QUESTION_GENERATION_TEMPLATE_GROUND_TRUTH = \
-"""
+QUESTION_GENERATION_TEMPLATE_GROUND_TRUTH = (
+    """
 You are creating questions to assess the AI forecast capabilities.
 AI will answer the questions in a control environment as if it was the day before the resolution_date.
 Create {max_questions} forecast questions from already RESOLVED events.{domain_filter}
 
 {events_text}
 
-""" + RULES_GROUND_TRUTH + SHARED_RULES_DESC
-
-
-QUESTION_GENERATION_TEMPLATE_FUTURE = \
 """
+    + RULES_GROUND_TRUTH
+    + SHARED_RULES_DESC
+)
+
+
+QUESTION_GENERATION_TEMPLATE_FUTURE = (
+    """
 You are creating questions to assess the AI forecast capabilities.
 AI will answer the questions in an open environment.
 Create {max_questions} forecast questions about FUTURE events.{domain_filter}
 
 {events_text}
 
-""" + RULES_FUTURE + SHARED_RULES_DESC
+"""
+    + RULES_FUTURE
+    + SHARED_RULES_DESC
+)
 
 
-ARTICLE_HEADER = \
-"""Analyze these {num_articles} news articles and generate {max_questions} forecast questions.{domain_filter}
+ARTICLE_HEADER = """Analyze these {num_articles} news articles and generate {max_questions} forecast questions.{domain_filter}
 
 TRUSTED SOURCES:
 {sources_text}
@@ -107,72 +107,98 @@ INSTRUCTIONS:
 - If multiple articles discuss the same event, consolidate them into a single question.
 """
 
-ARTICLE_QUESTION_GENERATION_TEMPLATE_GROUND_TRUTH = \
-ARTICLE_HEADER + RULES_GROUND_TRUTH + SHARED_RULES_DESC
+ARTICLE_QUESTION_GENERATION_TEMPLATE_GROUND_TRUTH = (
+    ARTICLE_HEADER + RULES_GROUND_TRUTH + SHARED_RULES_DESC
+)
 
-ARTICLE_QUESTION_GENERATION_TEMPLATE_FUTURE = \
-ARTICLE_HEADER + RULES_FUTURE + SHARED_RULES_DESC
+ARTICLE_QUESTION_GENERATION_TEMPLATE_FUTURE = (
+    ARTICLE_HEADER + RULES_FUTURE + SHARED_RULES_DESC
+)
 
 
 class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
     """Prompts for the question generation stage."""
-    
+
     # Template for formatting individual events
     EVENT_TEMPLATE = PromptTemplate(
         template=EVENT_TEMPLATE,
-        required_vars=["idx", "event_id", "title", "description", "event_date", "domain", "confidence"],
-        optional_vars={"status_note": ""}
+        required_vars=[
+            "idx",
+            "event_id",
+            "title",
+            "description",
+            "event_date",
+            "domain",
+            "confidence",
+        ],
+        optional_vars={"status_note": ""},
     )
-    
+
     # Template for GROUND TRUTH mode (past events only)
     GENERATION_TEMPLATE_GROUND_TRUTH = PromptTemplate(
         template=QUESTION_GENERATION_TEMPLATE_GROUND_TRUTH,
-        required_vars=["num_events", "events_text", "max_questions", "current_date", "min_resolution_date"],
-        optional_vars={
-            "domain_filter": "",
-            "tool_name": "batch_question_generator"
-        }
+        required_vars=[
+            "num_events",
+            "events_text",
+            "max_questions",
+            "current_date",
+            "min_resolution_date",
+        ],
+        optional_vars={"domain_filter": "", "tool_name": "batch_question_generator"},
     )
 
     # Template for FUTURE events mode (predictions only)
     GENERATION_TEMPLATE_FUTURE = PromptTemplate(
         template=QUESTION_GENERATION_TEMPLATE_FUTURE,
-        required_vars=["num_events", "events_text", "max_questions", "current_date", "max_resolution_date"],
-        optional_vars={
-            "domain_filter": "",
-            "tool_name": "batch_question_generator"
-        }
+        required_vars=[
+            "num_events",
+            "events_text",
+            "max_questions",
+            "current_date",
+            "max_resolution_date",
+        ],
+        optional_vars={"domain_filter": "", "tool_name": "batch_question_generator"},
     )
 
     # Template for ARTICLE-based generation (GROUND TRUTH)
     GENERATION_TEMPLATE_ARTICLE_GROUND_TRUTH = PromptTemplate(
         template=ARTICLE_QUESTION_GENERATION_TEMPLATE_GROUND_TRUTH,
-        required_vars=["num_articles", "articles_text", "max_questions", "current_date"],
+        required_vars=[
+            "num_articles",
+            "articles_text",
+            "max_questions",
+            "current_date",
+        ],
         optional_vars={
             "domain_filter": "",
             "sources_text": "None",
-            "tool_name": "batch_question_generator"
-        }
+            "tool_name": "batch_question_generator",
+        },
     )
 
     # Template for ARTICLE-based generation (FUTURE)
     GENERATION_TEMPLATE_ARTICLE_FUTURE = PromptTemplate(
         template=ARTICLE_QUESTION_GENERATION_TEMPLATE_FUTURE,
-        required_vars=["num_articles", "articles_text", "max_questions", "current_date"],
+        required_vars=[
+            "num_articles",
+            "articles_text",
+            "max_questions",
+            "current_date",
+        ],
         optional_vars={
             "domain_filter": "",
             "sources_text": "None",
-            "tool_name": "batch_question_generator"
-        }
+            "tool_name": "batch_question_generator",
+        },
     )
-    
+
     def format_item(
         self,
         item: Event,
         idx: int,
         current_date: datetime,
         content_preview_length: int = 200,
-        **context
+        **context,
     ) -> str:
         """Format a single event for the prompt.
 
@@ -189,19 +215,26 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
         event_date = item.occurred_date or item.predicted_date
 
         # Determine if event is in the past (for ground truth)
-        is_past_event = event_date and event_date < current_date if event_date else False
-        status_note = " (RESOLVED EVENT - questions should include ground_truth)" if is_past_event else ""
+        is_past_event = (
+            event_date and event_date < current_date if event_date else False
+        )
+        status_note = (
+            " (RESOLVED EVENT - questions should include ground_truth)"
+            if is_past_event
+            else ""
+        )
 
         # Truncate description
         description = self.format_content_preview(
-            item.description,
-            max_length=content_preview_length
+            item.description, max_length=content_preview_length
         )
-        
+
         # Extract metadata with safe defaults
-        location = item.metadata.get('location', 'Unknown') if item.metadata else 'Unknown'
-        confidence = item.metadata.get('confidence', 0.8) if item.metadata else 0.8
-        
+        location = (
+            item.metadata.get("location", "Unknown") if item.metadata else "Unknown"
+        )
+        confidence = item.metadata.get("confidence", 0.8) if item.metadata else 0.8
+
         return self.EVENT_TEMPLATE.format(
             idx=idx,
             event_id=item.id,
@@ -211,9 +244,9 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
             event_date=event_date,
             domain=item.domain,
             location=location,
-            confidence=confidence
+            confidence=confidence,
         )
-    
+
     def get_instruction(
         self,
         current_date: datetime,
@@ -225,7 +258,7 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
         require_ground_truth: bool = True,
         type_hints: Optional[List[str]] = None,
         category_hints: Optional[List[str]] = None,
-        description_preview_length: int = None  # DEPRECATED: Use content_preview_length
+        description_preview_length: int = None,  # DEPRECATED: Use content_preview_length
     ) -> str:
         """Generate instruction for question generation.
 
@@ -247,10 +280,11 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
         # Handle deprecated parameter
         if description_preview_length is not None:
             import warnings
+
             warnings.warn(
                 "description_preview_length is deprecated, use content_preview_length instead",
                 DeprecationWarning,
-                stacklevel=2
+                stacklevel=2,
             )
             content_preview_length = description_preview_length
 
@@ -258,7 +292,7 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
         min_resolution_date, max_resolution_date = self.calculate_date_window(
             current_date=current_date,
             require_past_events=require_ground_truth,
-            events=events
+            events=events,
         )
 
         min_res_str = self.format_datetime(min_resolution_date)
@@ -269,7 +303,7 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
         events_text = self.format_items(
             events,
             current_date=current_date,
-            content_preview_length=content_preview_length
+            content_preview_length=content_preview_length,
         )
 
         # Build domain filter
@@ -279,8 +313,7 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
 
         # Build priority guidance from hints
         priority_guidance = self.build_priority_guidance(
-            type_hints=type_hints,
-            category_hints=category_hints
+            type_hints=type_hints, category_hints=category_hints
         )
 
         # Select appropriate template based on mode
@@ -293,7 +326,7 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
                 current_date=date_str,
                 min_resolution_date=min_res_str,
                 domain_filter=domain_filter,
-                tool_name=tool_name
+                tool_name=tool_name,
             )
         else:
             template = self.GENERATION_TEMPLATE_FUTURE
@@ -304,7 +337,7 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
                 current_date=date_str,
                 max_resolution_date=max_res_str,
                 domain_filter=domain_filter,
-                tool_name=tool_name
+                tool_name=tool_name,
             )
 
         # Add priority guidance if provided
@@ -349,9 +382,13 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
             content = article.content
             if len(content) > 500:
                 content = content[:500] + "..."
-            
+
             # Format published date
-            pub_date = article.published_date.strftime('%Y-%m-%d') if article.published_date else "Unknown"
+            pub_date = (
+                article.published_date.strftime("%Y-%m-%d")
+                if article.published_date
+                else "Unknown"
+            )
 
             articles_text_parts.append(
                 ARTICLE_TEMPLATE.format(
@@ -359,10 +396,10 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
                     source=article.source,
                     title=article.title,
                     published_date=pub_date,
-                    content=content
+                    content=content,
                 )
             )
-        
+
         articles_text = "\n".join(articles_text_parts)
 
         # Build domain filter
@@ -373,7 +410,7 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
         # Build sources text
         sources_text = "No specific trusted sources provided."
         if sources:
-             sources_text = self.format_list(sources)
+            sources_text = self.format_list(sources)
 
         if require_ground_truth:
             template = self.GENERATION_TEMPLATE_ARTICLE_GROUND_TRUTH
@@ -388,13 +425,12 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
             max_questions=max_questions,
             current_date=date_str,
             domain_filter=domain_filter,
-            tool_name=tool_name
+            tool_name=tool_name,
         )
 
         # Add priority guidance
         priority_guidance = self.build_priority_guidance(
-            type_hints=type_hints,
-            category_hints=category_hints
+            type_hints=type_hints, category_hints=category_hints
         )
         if priority_guidance:
             instruction_body = instruction_body + priority_guidance

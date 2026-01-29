@@ -9,7 +9,10 @@ from .event import CausalRelationType
 from ...core.database import register_model
 
 
-@register_model('causal_hypotheses', indexes=['source_event_id', 'target_event_id', 'confidence', 'strength'])
+@register_model(
+    "causal_hypotheses",
+    indexes=["source_event_id", "target_event_id", "confidence", "strength"],
+)
 class CausalHypothesis(BaseModel):
     """LLM-proposed causal relationship between events.
 
@@ -25,72 +28,55 @@ class CausalHypothesis(BaseModel):
     id: str = Field(..., description="Unique hypothesis identifier")
 
     # Causal relationship
-    source_event_id: str = Field(
-        ...,
-        description="Event ID of the cause"
-    )
+    source_event_id: str = Field(..., description="Event ID of the cause")
     target_event_id: str = Field(
-        ...,
-        description="Event ID of the effect (the outcome)"
+        ..., description="Event ID of the effect (the outcome)"
     )
     relation_type: CausalRelationType = Field(
-        default=CausalRelationType.CORRELATES,
-        description="Type of causal relationship"
+        default=CausalRelationType.CORRELATES, description="Type of causal relationship"
     )
 
     # Confidence and strength
     strength: float = Field(
-        ...,
-        ge=0.0,
-        le=1.0,
-        description="Strength of the causal effect (0-1)"
+        ..., ge=0.0, le=1.0, description="Strength of the causal effect (0-1)"
     )
     confidence: float = Field(
-        ...,
-        ge=0.0,
-        le=1.0,
-        description="Confidence in this causal link (0-1)"
+        ..., ge=0.0, le=1.0, description="Confidence in this causal link (0-1)"
     )
 
     # Temporal characteristics
     time_lag_hours: Optional[float] = Field(
-        None,
-        description="Typical time delay between cause and effect"
+        None, description="Typical time delay between cause and effect"
     )
 
     # Explanation and evidence
     reasoning: str = Field(
-        ...,
-        min_length=10,
-        description="LLM's explanation of the causal mechanism"
+        ..., min_length=10, description="LLM's explanation of the causal mechanism"
     )
     evidence_article_ids: List[str] = Field(
-        default_factory=list,
-        description="Articles that support this causal claim"
+        default_factory=list, description="Articles that support this causal claim"
     )
 
     # Discovery tracking (can be discovered multiple times)
     discovered_by_question_ids: List[str] = Field(
         default_factory=list,
-        description="Question IDs that led to discovering this relationship"
+        description="Question IDs that led to discovering this relationship",
     )
     identified_by: str = Field(
         default="evidence_pipeline",
-        description="Source of this hypothesis (pipeline, manual, etc.)"
+        description="Source of this hypothesis (pipeline, manual, etc.)",
     )
     first_identified_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        description="When this hypothesis was first discovered"
+        description="When this hypothesis was first discovered",
     )
     last_confirmed_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        description="When this hypothesis was most recently rediscovered"
+        description="When this hypothesis was most recently rediscovered",
     )
 
     def meets_thresholds(
-        self,
-        min_confidence: float = 0.6,
-        min_strength: float = 0.3
+        self, min_confidence: float = 0.6, min_strength: float = 0.3
     ) -> bool:
         """Check if hypothesis meets minimum quality thresholds.
 

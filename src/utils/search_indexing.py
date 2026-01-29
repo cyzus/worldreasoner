@@ -1,6 +1,5 @@
 """Utility functions for search indexing after pipeline runs."""
 
-import asyncio
 from typing import Optional
 
 from ..core.database import GenericDatabase
@@ -12,7 +11,7 @@ from ..utils.logging import logger
 async def auto_index_articles(
     db_path: str = "worldreasoner.db",
     embedding_model: Optional[str] = None,
-    skip_existing: bool = True
+    skip_existing: bool = True,
 ) -> dict:
     """Automatically index articles for hybrid search after pipeline runs.
 
@@ -40,12 +39,12 @@ async def auto_index_articles(
             "total_articles": 0,
             "already_indexed": 0,
             "newly_indexed": 0,
-            "status": "no_articles"
+            "status": "no_articles",
         }
 
     # Get current index stats
     stats = search.get_index_stats()
-    already_indexed = stats['embeddings_indexed']
+    already_indexed = stats["embeddings_indexed"]
 
     logger.info(f"Total articles in database: {len(all_articles)}")
     logger.info(f"Already indexed: {already_indexed}")
@@ -54,11 +53,14 @@ async def auto_index_articles(
         # Get list of already indexed article IDs
         with search._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT article_id FROM article_embeddings
                 WHERE model_name = ?
-            """, (search.embedding_model,))
-            indexed_ids = {row['article_id'] for row in cursor.fetchall()}
+            """,
+                (search.embedding_model,),
+            )
+            indexed_ids = {row["article_id"] for row in cursor.fetchall()}
 
         # Filter to only new articles
         articles_to_index = [a for a in all_articles if a.id not in indexed_ids]
@@ -69,7 +71,7 @@ async def auto_index_articles(
                 "total_articles": len(all_articles),
                 "already_indexed": already_indexed,
                 "newly_indexed": 0,
-                "status": "up_to_date"
+                "status": "up_to_date",
             }
 
         logger.info(f"New articles to index: {len(articles_to_index)}")
@@ -86,15 +88,17 @@ async def auto_index_articles(
         final_stats = search.get_index_stats()
 
         logger.info("Search indexing complete!")
-        logger.info(f"FTS5 indexed: {final_stats['fts_indexed']}, Embeddings indexed: {final_stats['embeddings_indexed']}")
+        logger.info(
+            f"FTS5 indexed: {final_stats['fts_indexed']}, Embeddings indexed: {final_stats['embeddings_indexed']}"
+        )
         logger.info(f"Embedding model: {search.embedding_model}")
 
         return {
             "total_articles": len(all_articles),
             "already_indexed": already_indexed,
             "newly_indexed": len(articles_to_index),
-            "final_indexed": final_stats['embeddings_indexed'],
-            "status": "success"
+            "final_indexed": final_stats["embeddings_indexed"],
+            "status": "success",
         }
 
     except Exception as e:
@@ -104,5 +108,5 @@ async def auto_index_articles(
             "already_indexed": already_indexed,
             "newly_indexed": 0,
             "status": "failed",
-            "error": str(e)
+            "error": str(e),
         }

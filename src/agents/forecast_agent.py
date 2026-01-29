@@ -8,17 +8,19 @@ from src.domain.models.question import Question
 
 
 class ForecastAgent(BaseAgent):
-    def __init__(self,
-                 question: Question,
-                 simulated_date: str,
-                 knowledge_cutoff: str,
-                 config: Config,
-                 db_path: str = None,
-                 mode: str = "container",
-                 enable_causal_tools: bool = False,
-                 tools: list = None,
-                 max_steps: int = 15,
-                 is_code: bool = True):
+    def __init__(
+        self,
+        question: Question,
+        simulated_date: str,
+        knowledge_cutoff: str,
+        config: Config,
+        db_path: str = None,
+        mode: str = "container",
+        enable_causal_tools: bool = False,
+        tools: list = None,
+        max_steps: int = 15,
+        is_code: bool = True,
+    ):
         """Initialize ForecastAgent.
 
         Args:
@@ -60,7 +62,7 @@ class ForecastAgent(BaseAgent):
             {
                 "url": f"http://{config.server.mcp_host}:{config.server.mcp_port}/mcp",
                 "transport": "streamable-http",
-                "headers": headers
+                "headers": headers,
             }
         ]
 
@@ -70,13 +72,13 @@ class ForecastAgent(BaseAgent):
 
         # Causal tool names (these create new events, valid for any mode)
         causal_tool_names = {
-            'identify_forecast_event',
-            'create_forecast_causal_link',
-            'inspect_forecast_graph'
+            "identify_forecast_event",
+            "create_forecast_causal_link",
+            "inspect_forecast_graph",
         }
 
         # Base tools always available
-        base_tool_names = {'get_question', 'submit_forecast'}
+        base_tool_names = {"get_question", "submit_forecast"}
 
         # Filter/add tools based on mode
         if mode == "knowledge_only":
@@ -89,6 +91,7 @@ class ForecastAgent(BaseAgent):
             # Real-time: base tools + optionally causal tools + web tools
             from src.tools.web_search import WebSearchTool
             from src.tools.web_fetch import WebFetchTool
+
             allowed = base_tool_names.copy()
             if enable_causal_tools:
                 allowed.update(causal_tool_names)
@@ -97,7 +100,9 @@ class ForecastAgent(BaseAgent):
         else:
             # Container mode: all MCP tools, filter causal if not enabled
             if not enable_causal_tools:
-                forecast_tools = [t for t in forecast_tools if t.name not in causal_tool_names]
+                forecast_tools = [
+                    t for t in forecast_tools if t.name not in causal_tool_names
+                ]
 
         # Increase max steps if causal tools enabled (they need more reasoning)
         if enable_causal_tools:
@@ -108,4 +113,6 @@ class ForecastAgent(BaseAgent):
             forecast_tools.extend(tools)
 
         # Initialize parent agent
-        super().__init__(config=config, tools=forecast_tools, max_steps=max_steps, is_code=is_code)
+        super().__init__(
+            config=config, tools=forecast_tools, max_steps=max_steps, is_code=is_code
+        )

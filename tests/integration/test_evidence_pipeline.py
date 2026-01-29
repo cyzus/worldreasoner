@@ -9,14 +9,14 @@ and configured correctly. Full end-to-end testing requires:
 For full testing, use manual runs with real data.
 """
 
-import os
 import sys
 
 # Set UTF-8 encoding for Windows console output
 if sys.platform == "win32":
     import codecs
-    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'ignore')
-    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'ignore')
+
+    sys.stdout = codecs.getwriter("utf-8")(sys.stdout.buffer, "ignore")
+    sys.stderr = codecs.getwriter("utf-8")(sys.stderr.buffer, "ignore")
 
 import pytest
 from datetime import datetime, timezone, timedelta
@@ -24,7 +24,14 @@ from datetime import datetime, timezone, timedelta
 from src.pipelines.evidence import EvidencePipeline
 from src.config.pipeline import EvidencePipelineConfig
 from src.config import DatabaseConfig
-from src.domain.models import Question, Article, Event, EventType, EventStatus, QuestionType
+from src.domain.models import (
+    Question,
+    Article,
+    Event,
+    EventType,
+    EventStatus,
+    QuestionType,
+)
 from src.core.database import GenericDatabase
 
 
@@ -54,7 +61,7 @@ async def test_evidence_pipeline_initialization(test_db_path):
     pipeline = EvidencePipeline(
         evidence_config=evidence_config,
         database_config=db_config,
-        enable_persistence=True
+        enable_persistence=True,
     )
 
     # Validate pipeline structure
@@ -102,7 +109,7 @@ async def test_evidence_pipeline_with_no_resolved_questions(test_db_path):
     pipeline = EvidencePipeline(
         evidence_config=evidence_config,
         database_config=db_config,
-        enable_persistence=False  # Disable for this test
+        enable_persistence=False,  # Disable for this test
     )
 
     print("\n1. Running pipeline with empty database...")
@@ -181,7 +188,7 @@ async def test_evidence_pipeline_with_mock_resolved_question(test_db_path):
     pipeline = EvidencePipeline(
         evidence_config=evidence_config,
         database_config=db_config,
-        enable_persistence=False  # Disable to avoid persisting incomplete data
+        enable_persistence=False,  # Disable to avoid persisting incomplete data
     )
 
     print("\n3. Loading resolved questions from database...")
@@ -205,7 +212,7 @@ async def test_evidence_pipeline_with_mock_resolved_question(test_db_path):
     print(f"   - Evidence articles: {summary['evidence_articles']}")
     print(f"   - Causal hypotheses: {summary['causal_hypotheses']}")
 
-    assert summary['resolved_questions'] == 1
+    assert summary["resolved_questions"] == 1
     print("   [OK] Summary generated correctly")
 
     print("\n[PASS] Mock Resolved Question Test")
@@ -240,7 +247,7 @@ def test_evidence_pipeline_stages_configuration(test_db_path):
     pipeline = EvidencePipeline(
         evidence_config=evidence_config,
         database_config=db_config,
-        enable_persistence=False
+        enable_persistence=False,
     )
 
     print("\n1. Checking Stage 1 configuration...")

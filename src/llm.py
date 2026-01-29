@@ -1,11 +1,12 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 import litellm
 from dotenv import load_dotenv
 from typing import Union
 
 load_dotenv()
 
-class LiteLLMClient():
+
+class LiteLLMClient:
     def __init__(self, llm_config: Union[dict, BaseModel]):
         # Convert BaseModel to dict if needed
         if isinstance(llm_config, BaseModel):
@@ -15,21 +16,18 @@ class LiteLLMClient():
 
     async def acomplete(self, messages: list[dict], response_format: dict = None):
         """Complete an LLM request.
-        
+
         Args:
             messages: List of message dicts with role and content
             response_format: Optional response format specification (e.g., {"type": "json_object"})
         """
         kwargs = {**self.llm_config}
         if response_format:
-            kwargs['response_format'] = response_format
-        
-        response = await litellm.acompletion(
-            **kwargs,
-            messages=messages
-        )
-        return response['choices'][0]['message']['content']
-    
+            kwargs["response_format"] = response_format
+
+        response = await litellm.acompletion(**kwargs, messages=messages)
+        return response["choices"][0]["message"]["content"]
+
     async def aembedding(self, inputs: list[str], model: str = None):
         """Generate embeddings for a list of texts.
 
@@ -41,10 +39,7 @@ class LiteLLMClient():
             List of embedding vectors (as lists of floats)
         """
         # Use provided model or default to config model
-        embedding_model = model or self.llm_config.get('embedding_model')
+        embedding_model = model or self.llm_config.get("embedding_model")
 
-        response = await litellm.aembedding(
-            model=embedding_model,
-            input=inputs
-        )
-        return [item['embedding'] for item in response['data']]
+        response = await litellm.aembedding(model=embedding_model, input=inputs)
+        return [item["embedding"] for item in response["data"]]

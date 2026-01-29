@@ -1,12 +1,10 @@
 """Prompts for hindsight causal analysis using multi-agent system."""
 
-from datetime import datetime, timedelta
 from src.domain.models import Question
 from .base import BasePromptGenerator, PromptTemplate
 
 
-EVIDENCE_AGENT_DESCRIPTION = \
-"""
+EVIDENCE_AGENT_DESCRIPTION = """
 Specialist agent for collecting evidence articles.
 
 Guidelines:
@@ -19,9 +17,8 @@ Guidelines:
 - Fill any gaps by collecting more articles from those periods
 """
 
-GRAPH_AGENT_DESCRIPTION = \
-"""
-Specialist agent for building deep causal graphs.
+GRAPH_AGENT_DESCRIPTION = """
+Specialist agent for building deep causal graphs and analyzing outcome impacts.
 
 Guidelines:
 - Call get_question_articles to get article IDs
@@ -31,11 +28,22 @@ Guidelines:
 - Use causal_reasoner to identify relationships between events
 - All chains must connect to the target event
 - Make sure the chronology of events makes sense (earlier events cause later events)
-- Use graph_inspector to check the quality and depth of the graph
+
+OUTCOME IMPACT ANALYSIS:
+- For each significant event, assess its impact on BOTH outcomes (Yes/No or all MCQ options)
+- Use event_identifier with outcome_impacts parameter to record impacts:
+  - direction: "positive" (increases likelihood) or "negative" (decreases likelihood)
+  - magnitude: 0.0-1.0 (0.5=moderate, 0.7+=strong, 1.0=decisive)
+  - confidence: 0.0-1.0 (your certainty in this assessment)
+  - reasoning: Explain WHY and HOW this event impacts the outcome
+- Consider: An event making one outcome more likely often makes the opposite less likely
+- Focus on events with magnitude >= 0.5 (significant impacts)
+
+FINAL VERIFICATION:
+- Use graph_inspector to check the quality, depth, and outcome impacts
 """
 
-MANAGER_AGENT_DESCRIPTION = \
-"""Your task: Build a DEEP causal explanation for this question with hindsight.
+MANAGER_AGENT_DESCRIPTION = """Your task: Build a DEEP causal explanation for this question with hindsight.
 
 NOTE: the question has already been resolved on {resolution_date} with known ground truth.
 
@@ -53,15 +61,18 @@ PROCESS:
    - Target: {min_evidence_articles}+ high-quality articles across different dates
    - Use article_inspector to verify coverage; if insufficient, broaden search
 
-2. BUILD DEEP EVENT GRAPH:
+2. BUILD DEEP EVENT GRAPH WITH OUTCOME IMPACTS:
    Call causal_analyzer to build deep event relationship graph:
    - Target: {min_evidence_articles}+ events, {min_graph_depth}+ depth levels
-   - Use graph_inspector to verify quality and depth
+   - For each significant event, analyze its impact on outcome likelihood
+   - Record both positive and negative impacts (symmetric analysis)
+   - Use graph_inspector to verify quality, depth, and outcome impacts
 
 3. EVALUATE & ITERATE:
 
 
 Begin the analysis!"""
+
 
 class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
     """Prompts for building deep causal graphs with HindsightAgent."""
@@ -80,7 +91,7 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
             "min_graph_depth",
             "min_evidence_articles",
             "confidence_threshold",
-        ]
+        ],
     )
 
     def format_item(self, item: Question, idx: int, **context) -> str:
@@ -112,11 +123,11 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
     def get_agent_prompt(
         self,
         question: Question,
-        min_graph_depth: int = 3,
-        evidence_window_days: int = 365,
-        min_evidence_articles: int = 5,
-        confidence_threshold: float = 0.6,
-        **kwargs
+        min_evidence_articles: int,
+        evidence_window_days: int,
+        min_graph_depth: int,
+        confidence_threshold: float,
+        **kwargs,
     ) -> str:
         """Generate prompt for HindsightAgent to build deep causal graph.
 
@@ -126,10 +137,10 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
 
         Args:
             question: Question to analyze
-            min_graph_depth: Minimum causal chain depth required (default: 3)
-            evidence_window_days: Days before resolution to collect evidence if no estimated_start_time (default: 365)
-            min_evidence_articles: Minimum evidence articles needed (default: 5)
-            confidence_threshold: Minimum confidence for causal links (default: 0.6)
+            min_graph_depth: Minimum causal chain depth required
+            evidence_window_days: Days before resolution to collect evidence if no estimated_start_time
+            min_evidence_articles: Minimum evidence articles needed
+            confidence_threshold: Minimum confidence for causal links
             **kwargs: Additional context (not used)
 
         Returns:
@@ -141,7 +152,7 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
         window_start, window_end = get_evidence_window(
             question.resolution_date,
             question.estimated_start_time,
-            fallback_window_days=evidence_window_days
+            fallback_window_days=evidence_window_days,
         )
 
         # Format dates for prompt

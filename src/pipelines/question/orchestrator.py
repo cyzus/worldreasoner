@@ -4,8 +4,7 @@ Coordinates multiple question sources to meet collection goals with
 distribution requirements.
 """
 
-import asyncio
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional
 from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 
@@ -14,7 +13,7 @@ from src.config.pipeline import QuestionQualityConfig
 from src.pipelines.question.sources.base import QuestionSourceRunner, CollectionResult
 from .progress import CollectionProgress
 from .source_coordinator import SourceCoordinator, SourceRequest
-from .gap_analyzer import GapAnalyzer, GapAnalysis
+from .gap_analyzer import GapAnalyzer
 from .gap_filler import GapFiller
 from ..stages.question_quality import QuestionQualityRankingStage
 from src.domain.models import Question
@@ -26,20 +25,17 @@ class OrchestratorConfig(BaseModel):
     """Configuration for the orchestrator."""
 
     max_iterations: int = Field(
-        default=10,
-        description="Maximum collection iterations before giving up"
+        default=10, description="Maximum collection iterations before giving up"
     )
     parallel_sources: bool = Field(
-        default=True,
-        description="Run sources in parallel when possible"
+        default=True, description="Run sources in parallel when possible"
     )
     save_intermediate_results: bool = Field(
-        default=True,
-        description="Save questions to DB as they're collected"
+        default=True, description="Save questions to DB as they're collected"
     )
     quality_ranking: QuestionQualityConfig = Field(
         default_factory=QuestionQualityConfig,
-        description="Configuration for the quality ranking stage"
+        description="Configuration for the quality ranking stage",
     )
 
 
@@ -110,8 +106,7 @@ class QuestionCollectionOrchestrator:
         # Initialize the quality ranking stage if enabled
         if self.config.quality_ranking.enabled:
             self.quality_stage = QuestionQualityRankingStage(
-                config=self.config.quality_ranking,
-                db_path=self.db_path
+                config=self.config.quality_ranking, db_path=self.db_path
             )
         else:
             self.quality_stage = None
@@ -152,7 +147,9 @@ class QuestionCollectionOrchestrator:
             # Main collection loop
             while iterations < self.config.max_iterations:
                 iterations += 1
-                logger.info(f"--- Iteration {iterations}/{self.config.max_iterations} ---")
+                logger.info(
+                    f"--- Iteration {iterations}/{self.config.max_iterations} ---"
+                )
 
                 # Check if goal met (excluding skip_evidence questions)
                 if self.progress.is_goal_met(self.goal, include_skipped=False):
@@ -179,7 +176,9 @@ class QuestionCollectionOrchestrator:
 
                 # Check progress
                 if self.progress.total == questions_before:
-                    logger.warning(f"No new questions in iteration {iterations}. Sources exhausted.")
+                    logger.warning(
+                        f"No new questions in iteration {iterations}. Sources exhausted."
+                    )
                     break
 
             # Final check (exclude skip_evidence questions)
@@ -238,36 +237,40 @@ class QuestionCollectionOrchestrator:
         """Score unscored questions and update skip_evidence flags."""
         if not self.quality_stage:
             return
-        
+
         all_questions = self.progress.get_questions()
         if not all_questions:
             return
-        
+
         unscored = [q for q in all_questions if q.quality_score is None]
         if not unscored:
             return
-        
+
         logger.info(f"Scoring {len(unscored)} new questions...")
         result = await self.quality_stage.execute(all_questions)
-        
+
         if result.status == "completed":
             self.progress.set_questions(result.outputs)
             skipped = sum(1 for q in result.outputs if q.skip_evidence)
-            logger.info(f"Quality: {len(result.outputs) - skipped} kept, {skipped} skipped")
+            logger.info(
+                f"Quality: {len(result.outputs) - skipped} kept, {skipped} skipped"
+            )
         else:
             logger.warning("Quality scoring failed")
 
     async def _collect_from_sources(self) -> None:
         """Collect from all sources based on quotas and needs."""
         # Use GapAnalyzer for consistent gap calculation (exclude skip_evidence)
-        analysis = self.gap_analyzer.analyze(self.progress, self.goal, include_skipped=False)
-        
+        analysis = self.gap_analyzer.analyze(
+            self.progress, self.goal, include_skipped=False
+        )
+
         requests = []
         for source_name, runner in self.sources.items():
             # Calculate quota: source minimum or fair share of remaining
             collected = self.progress.by_source.get(source_name, 0)
             source_min = self.goal.source_minimums.get(source_name, 0)
-            
+
             if collected < source_min:
                 needed = source_min - collected
             elif analysis.total_needed > 0:
@@ -281,7 +284,9 @@ class QuestionCollectionOrchestrator:
                     runner=runner,
                     count=needed,
                     type_filter=analysis.type_gaps_list or None,
-                    category_filter=analysis.category_gaps if analysis.category_gaps else None,
+                    category_filter=analysis.category_gaps
+                    if analysis.category_gaps
+                    else None,
                     quality_requirements=self.goal.quality,
                     existing_question_ids=self.existing_question_ids,
                 )
@@ -289,7 +294,7 @@ class QuestionCollectionOrchestrator:
 
         # Execute and process results
         results = await self.coordinator.collect_from_sources(requests)
-        
+
         for result in results:
             self.source_results[result.source_name].append(result)
             if result.success and result.questions:
@@ -303,19 +308,15 @@ class QuestionCollectionOrchestrator:
                         f"(consider increasing request count to account for duplicates)"
                     )
             # CollectionResult has errors field (optional)
-            if hasattr(result, 'errors') and result.errors:
+            if hasattr(result, "errors") and result.errors:
                 self.errors.extend(result.errors)
-
-
-
-
-
-
 
     async def _fill_gaps(self) -> None:
         """Targeted collection to fill distribution gaps."""
-        analysis = self.gap_analyzer.analyze(self.progress, self.goal, include_skipped=False)
-        
+        analysis = self.gap_analyzer.analyze(
+            self.progress, self.goal, include_skipped=False
+        )
+
         if not analysis.has_gaps:
             return
 
@@ -365,18 +366,24 @@ class QuestionCollectionOrchestrator:
             # Use get_many() to retrieve all questions
             existing = self.db.get_many(Question, ids=None, filters=None)
             self.existing_question_ids = {q.id for q in existing}
-            
+
             # CRITICAL: Add existing questions to progress tracker
             # This ensures the orchestrator knows about previous runs
             if existing:
                 logger.info(f"Loaded {len(existing)} existing questions from database")
                 self.progress.add_questions(existing)
-                logger.info(f"Progress tracker initialized with {self.progress.total} questions")
-                logger.debug(f"Sample existing IDs: {list(self.existing_question_ids)[:3]}")
+                logger.info(
+                    f"Progress tracker initialized with {self.progress.total} questions"
+                )
+                logger.debug(
+                    f"Sample existing IDs: {list(self.existing_question_ids)[:3]}"
+                )
             else:
                 logger.info("No existing questions found in database")
         except Exception as e:
-            logger.opt(exception=True).warning(f"Could not load existing questions: {e}")
+            logger.opt(exception=True).warning(
+                f"Could not load existing questions: {e}"
+            )
 
     def _filter_duplicates(self, questions: List[Question]) -> List[Question]:
         """Filter out questions that already exist in database.
@@ -401,7 +408,9 @@ class QuestionCollectionOrchestrator:
                 self.existing_question_ids.add(q.id)
 
         if len(questions) != len(filtered):
-            logger.info(f"Filtered out {len(questions) - len(filtered)} duplicate questions")
+            logger.info(
+                f"Filtered out {len(questions) - len(filtered)} duplicate questions"
+            )
 
         return filtered
 
@@ -412,7 +421,9 @@ class QuestionCollectionOrchestrator:
             Dict with missing types and categories
         """
         # Use GapAnalyzer for consistent gap analysis (exclude skip_evidence)
-        analysis = self.gap_analyzer.analyze(self.progress, self.goal, include_skipped=False)
+        analysis = self.gap_analyzer.analyze(
+            self.progress, self.goal, include_skipped=False
+        )
 
         missing = {
             "types": analysis.type_gaps,
@@ -427,7 +438,9 @@ class QuestionCollectionOrchestrator:
                 for qtype, count in missing["types"].items():
                     target = self.goal.type_distribution.get(qtype, 0)
                     collected = target - count
-                    logger.info(f"  {qtype:15} {collected:3}/{target:3} ({count} short)")
+                    logger.info(
+                        f"  {qtype:15} {collected:3}/{target:3} ({count} short)"
+                    )
 
             if missing["categories"]:
                 logger.info("Missing categories:")

@@ -14,7 +14,7 @@ def calculate_forecast_context_window(
     events: Optional[List[Event]] = None,
     articles: Optional[List[Article]] = None,
     db=None,
-    min_context_items: int = 3
+    min_context_items: int = 3,
 ) -> Tuple[datetime, datetime]:
     """Calculate the valid temporal window for making a forecast on this question.
 
@@ -83,9 +83,10 @@ def calculate_forecast_context_window(
         # Find articles that reference this question
         all_articles = db.get_many(Article)
         question_articles = [
-            a for a in all_articles
-            if 'related_question_ids' in a.metadata
-            and question.id in a.metadata['related_question_ids']
+            a
+            for a in all_articles
+            if "related_question_ids" in a.metadata
+            and question.id in a.metadata["related_question_ids"]
         ]
 
         for article in question_articles:
@@ -104,7 +105,9 @@ def calculate_forecast_context_window(
         # Use the Nth date (where N = min_context_items)
         # If we have fewer items than the threshold, use the latest one
         if len(sorted_dates) >= min_context_items:
-            window_start = sorted_dates[min_context_items - 1]  # 0-indexed, so 3rd item is index 2
+            window_start = sorted_dates[
+                min_context_items - 1
+            ]  # 0-indexed, so 3rd item is index 2
         else:
             # Fewer than minimum items - use latest available (fall back to conservative approach)
             window_start = sorted_dates[-1]
@@ -127,7 +130,7 @@ def validate_simulated_date(
     question: Question,
     simulated_date: datetime,
     window_start: datetime,
-    window_end: datetime
+    window_end: datetime,
 ) -> Tuple[bool, Optional[str]]:
     """Validate if a simulated date is within a forecast window.
 
@@ -173,7 +176,7 @@ def suggest_simulated_date(
     question: Question,
     window_start: datetime,
     window_end: datetime,
-    offset_days_before_resolution: int = 7
+    offset_days_before_resolution: int = 7,
 ) -> datetime:
     """Suggest an appropriate simulated date within a forecast window.
 
@@ -223,7 +226,7 @@ def prepare_forecast_context(
     question: Question,
     db=None,
     offset_days_before_resolution: int = 0,
-    min_context_items: int = 3
+    min_context_items: int = 3,
 ) -> dict:
     """Get all information needed to forecast a question (hides complexity).
 
@@ -266,7 +269,9 @@ def prepare_forecast_context(
     )
 
     # Validate the setup
-    valid, error = validate_simulated_date(question, simulated_date, window_start, window_end)
+    valid, error = validate_simulated_date(
+        question, simulated_date, window_start, window_end
+    )
     if not valid:
         raise ValueError(f"Invalid forecast setup: {error}")
 
@@ -292,9 +297,10 @@ def prepare_forecast_context(
         # Count articles available at simulated_date
         all_articles = db.get_many(Article)
         question_articles = [
-            a for a in all_articles
-            if 'related_question_ids' in a.metadata
-            and question.id in a.metadata['related_question_ids']
+            a
+            for a in all_articles
+            if "related_question_ids" in a.metadata
+            and question.id in a.metadata["related_question_ids"]
         ]
         for article in question_articles:
             if article.published_date:
@@ -313,11 +319,11 @@ def prepare_forecast_context(
     )
 
     return {
-        'window_start': window_start,
-        'window_end': window_end,
-        'simulated_date': simulated_date,
-        'days_available': (window_end - window_start).days,
-        'context_count': context_count,
-        'event_count': event_count,
-        'article_count': article_count
+        "window_start": window_start,
+        "window_end": window_end,
+        "simulated_date": simulated_date,
+        "days_available": (window_end - window_start).days,
+        "context_count": context_count,
+        "event_count": event_count,
+        "article_count": article_count,
     }

@@ -65,29 +65,40 @@ class MCPServerManager:
         # Stop existing server if running
         if self.is_running and auto_restart:
             old_pid = self.process.pid
-            logger.info(f"Stopping existing MCP server (PID: {old_pid}, current_db: {self._current_db})")
+            logger.info(
+                f"Stopping existing MCP server (PID: {old_pid}, current_db: {self._current_db})"
+            )
             self.stop_server()
             logger.info(f"Old MCP server (PID: {old_pid}) stopped")
 
             # Give the OS time to release the port
             import time
+
             time.sleep(1)
             logger.info("Waited 1s for port release")
 
         # EXTRA SAFETY: Kill any rogue MCP server processes on our port
         try:
             import psutil
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+
+            for proc in psutil.process_iter(["pid", "name", "cmdline"]):
                 try:
-                    cmdline = proc.info.get('cmdline') or []
+                    cmdline = proc.info.get("cmdline") or []
                     # Check if it's a Python process running mcp_forecasting_server
-                    if ('python' in proc.info['name'].lower() and
-                        any('mcp_forecasting_server' in str(arg) for arg in cmdline)):
-                        logger.warning(f"Found orphaned MCP server process (PID: {proc.info['pid']}), terminating...")
+                    if "python" in proc.info["name"].lower() and any(
+                        "mcp_forecasting_server" in str(arg) for arg in cmdline
+                    ):
+                        logger.warning(
+                            f"Found orphaned MCP server process (PID: {proc.info['pid']}), terminating..."
+                        )
                         proc.terminate()
                         proc.wait(timeout=3)
                         logger.info(f"Terminated orphaned process {proc.info['pid']}")
-                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                except (
+                    psutil.NoSuchProcess,
+                    psutil.AccessDenied,
+                    psutil.TimeoutExpired,
+                ):
                     pass
         except ImportError:
             logger.debug("psutil not available, skipping orphaned process cleanup")
@@ -107,17 +118,23 @@ class MCPServerManager:
                     python_exe,
                     "-m",
                     "src.mcp_forecasting_server",
-                    "--host", self.host,
-                    "--port", str(self.port),
-                    "--db", db_abs_path,
-                    "--log-level", "info"
+                    "--host",
+                    self.host,
+                    "--port",
+                    str(self.port),
+                    "--db",
+                    db_abs_path,
+                    "--log-level",
+                    "info",
                 ],
                 env={**os.environ, "WORLDREASONER_DB": db_abs_path},
                 # Don't capture output - let it go to console for debugging
                 # stdout=subprocess.PIPE,
                 # stderr=subprocess.PIPE,
                 # Ensure server runs in background
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                if sys.platform == "win32"
+                else 0,
             )
 
             self._current_db = db_abs_path
@@ -126,7 +143,9 @@ class MCPServerManager:
             # Wait for server to be ready (give it more time to initialize)
             self._wait_for_health(max_attempts=30, delay=0.5)
 
-            logger.info(f"MCP server is healthy and ready at http://{self.host}:{self.port}")
+            logger.info(
+                f"MCP server is healthy and ready at http://{self.host}:{self.port}"
+            )
 
         except Exception as e:
             logger.error(f"Failed to start MCP server: {e}")
@@ -169,7 +188,9 @@ class MCPServerManager:
                 self.process.wait(timeout=timeout)
                 logger.info("MCP server terminated gracefully")
             except subprocess.TimeoutExpired:
-                logger.warning(f"MCP server did not terminate within {timeout}s, forcing kill")
+                logger.warning(
+                    f"MCP server did not terminate within {timeout}s, forcing kill"
+                )
                 self.process.kill()
                 self.process.wait()
                 logger.info("MCP server killed")
@@ -197,7 +218,9 @@ class MCPServerManager:
             # Check if process is still alive
             if self.process.poll() is not None:
                 # Process has terminated
-                logger.error(f"MCP server process terminated unexpectedly (exit code: {self.process.returncode})")
+                logger.error(
+                    f"MCP server process terminated unexpectedly (exit code: {self.process.returncode})"
+                )
                 try:
                     stdout, stderr = self.process.communicate(timeout=1)
                     if stderr:
@@ -206,11 +229,15 @@ class MCPServerManager:
                         logger.info(f"MCP server stdout:\n{stdout}")
                 except Exception as e:
                     logger.warning(f"Could not get process output: {e}")
-                raise RuntimeError(f"MCP server process terminated with exit code {self.process.returncode}")
+                raise RuntimeError(
+                    f"MCP server process terminated with exit code {self.process.returncode}"
+                )
 
             # Use the check_health method to verify server is healthy
             if self.check_health(expected_db=self._current_db):
-                logger.info(f"Health check successful - database verified: {self._current_db}")
+                logger.info(
+                    f"Health check successful - database verified: {self._current_db}"
+                )
                 return
 
             logger.debug(f"Health check attempt {attempt}/{max_attempts} failed")
@@ -219,8 +246,12 @@ class MCPServerManager:
         # Health check failed - try to get process output for debugging
         logger.error(f"Health check failed after {max_attempts} attempts")
         if self.process and self.process.poll() is None:
-            logger.warning("MCP server process is still running but not responding to health checks")
-            logger.warning(f"Check if port {self.port} is accessible or if there's a firewall blocking it")
+            logger.warning(
+                "MCP server process is still running but not responding to health checks"
+            )
+            logger.warning(
+                f"Check if port {self.port} is accessible or if there's a firewall blocking it"
+            )
 
         raise RuntimeError(
             f"MCP server failed to become healthy after {max_attempts} attempts. "
@@ -249,12 +280,16 @@ class MCPServerManager:
 
                 # If expected_db is provided, verify the server is using it
                 if expected_db:
-                    reported_db = data.get('database', '')
+                    reported_db = data.get("database", "")
                     expected_abs = str(Path(expected_db).resolve())
-                    reported_abs = str(Path(reported_db).resolve()) if reported_db else ''
+                    reported_abs = (
+                        str(Path(reported_db).resolve()) if reported_db else ""
+                    )
 
                     if reported_abs != expected_abs:
-                        logger.debug(f"Health check: DB mismatch. Expected: {expected_abs}, Got: {reported_abs}")
+                        logger.debug(
+                            f"Health check: DB mismatch. Expected: {expected_abs}, Got: {reported_abs}"
+                        )
                         return False
 
                 return True
@@ -269,18 +304,13 @@ class MCPServerManager:
             Dictionary with server status information
         """
         if not self.is_running:
-            return {
-                "running": False,
-                "database": None,
-                "pid": None,
-                "url": None
-            }
+            return {"running": False, "database": None, "pid": None, "url": None}
 
         return {
             "running": True,
             "database": self._current_db,
             "pid": self.process.pid,
-            "url": f"http://{self.host}:{self.port}"
+            "url": f"http://{self.host}:{self.port}",
         }
 
     def get_logs(self, lines: int = 50) -> dict:
@@ -300,7 +330,7 @@ class MCPServerManager:
         return {
             "stdout": "Logs not available (process using PIPE)",
             "stderr": "Logs not available (process using PIPE)",
-            "note": "Check MCP server logs in console or enable file logging"
+            "note": "Check MCP server logs in console or enable file logging",
         }
 
 
@@ -313,6 +343,7 @@ mcp_manager = MCPServerManager(host=MCP_HOST, port=MCP_PORT)
 
 class DatabaseInfo(BaseModel):
     """Database file information."""
+
     path: str
     name: str
     size_bytes: int
@@ -322,17 +353,20 @@ class DatabaseInfo(BaseModel):
 
 class DatabaseListResponse(BaseModel):
     """Response for listing database files."""
+
     databases: List[DatabaseInfo]
     current_database: str
 
 
 class DatabaseSwitchRequest(BaseModel):
     """Request to switch database file."""
+
     db_path: str
 
 
 class DatabaseSwitchResponse(BaseModel):
     """Response for database switch operation."""
+
     success: bool
     message: str
     db_path: str
@@ -341,6 +375,7 @@ class DatabaseSwitchResponse(BaseModel):
 # Global state for current database path
 class DatabaseState:
     """Singleton to manage current database path."""
+
     _instance = None
     _current_db_path: str = "worldreasoner.db"
 
@@ -486,7 +521,9 @@ async def switch_database(request: DatabaseSwitchRequest):
         # NO LONGER RESTARTING MCP SERVER!
         # The MCP server now supports per-request database switching via X-Database-Path header
         # This makes database switching instant and much more stable
-        logger.info(f"Database switch complete (MCP server supports per-request DB via headers)")
+        logger.info(
+            "Database switch complete (MCP server supports per-request DB via headers)"
+        )
         message = f"Successfully switched to database: {db_path.name} (instant - no restart needed)"
 
         return DatabaseSwitchResponse(

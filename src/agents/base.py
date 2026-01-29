@@ -24,7 +24,7 @@ class BaseAgent:
         is_code: bool = False,
         save_runs: bool = True,
         runs_dir: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ):
         """Initialize the base agent.
 
@@ -45,7 +45,7 @@ class BaseAgent:
         # Initialize LLM model
         self.llm_model = LiteLLMModel(
             model_id=self.config.llm.model,
-            **self.config.llm.model_dump(exclude={"model", "embedding_model"})
+            **self.config.llm.model_dump(exclude={"model", "embedding_model"}),
         )
 
         # Create appropriate agent type
@@ -55,7 +55,7 @@ class BaseAgent:
             "tools": tools or [],
             "max_steps": max_steps,
             "stream_outputs": True,
-            **kwargs
+            **kwargs,
         }
 
         # Ensure agent has a name (use class name if not provided)
@@ -90,8 +90,7 @@ class BaseAgent:
 
         # Extract and store usage metrics
         self._last_usage = extract_usage_from_agent(
-            self.agent,
-            model_name=self.config.llm.model
+            self.agent, model_name=self.config.llm.model
         )
 
         # Save execution to independent file
@@ -109,10 +108,7 @@ class BaseAgent:
         return self._last_usage
 
     def _save_agent_run(
-        self,
-        prompt: str,
-        response: str,
-        run_id: Optional[str] = None
+        self, prompt: str, response: str, run_id: Optional[str] = None
     ) -> None:
         """Save agent execution to an independent JSON file.
 
@@ -140,7 +136,7 @@ class BaseAgent:
         Returns:
             Path object for the run file
         """
-        agent_name = self.agent.name or 'agent'
+        agent_name = self.agent.name or "agent"
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         if run_id:
@@ -151,10 +147,7 @@ class BaseAgent:
         return self.runs_dir / filename
 
     def _build_run_data(
-        self,
-        prompt: str,
-        response: str,
-        run_id: Optional[str] = None
+        self, prompt: str, response: str, run_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Build the complete run data dictionary.
 
@@ -167,7 +160,7 @@ class BaseAgent:
             Dictionary containing all run data
         """
         run_data = {
-            "agent_name": self.agent.name or 'agent',
+            "agent_name": self.agent.name or "agent",
             "run_id": run_id,
             "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
             "prompt": prompt,
@@ -217,10 +210,7 @@ class BaseAgent:
         Returns:
             Dictionary containing step data
         """
-        step_data = {
-            "step_number": step_num,
-            "type": type(step).__name__
-        }
+        step_data = {"step_number": step_num, "type": type(step).__name__}
 
         if isinstance(step, TaskStep):
             step_data["task"] = step.task
@@ -247,7 +237,7 @@ class BaseAgent:
         Args:
             run_data: Dictionary to add managed agents to (modified in place)
         """
-        managed_agents = getattr(self.agent, 'managed_agents', None)
+        managed_agents = getattr(self.agent, "managed_agents", None)
         if not managed_agents:
             return
 
@@ -273,7 +263,7 @@ class BaseAgent:
             "total_tokens": self._last_usage.total_tokens,
             "prompt_tokens": self._last_usage.prompt_tokens,
             "completion_tokens": self._last_usage.completion_tokens,
-            "estimated_cost_usd": self._last_usage.estimated_cost_usd
+            "estimated_cost_usd": self._last_usage.estimated_cost_usd,
         }
 
     def _serialize_tool_calls(self, tool_calls: Any) -> List[Dict[str, Any]]:
@@ -295,12 +285,12 @@ class BaseAgent:
             else:
                 # Extract attributes from ToolCall object
                 call_dict = {
-                    "name": getattr(call, 'name', None),
-                    "arguments": getattr(call, 'arguments', None),
+                    "name": getattr(call, "name", None),
+                    "arguments": getattr(call, "arguments", None),
                 }
-                if call_id := getattr(call, 'id', None):
+                if call_id := getattr(call, "id", None):
                     call_dict["id"] = call_id
-                if call_type := getattr(call, 'type', None):
+                if call_type := getattr(call, "type", None):
                     call_dict["type"] = call_type
                 serialized.append(call_dict)
 
@@ -313,5 +303,5 @@ class BaseAgent:
             filepath: Path to write the file to
             run_data: Data to write
         """
-        with open(filepath, 'w', encoding='utf-8') as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             json.dump(run_data, f, indent=2, ensure_ascii=False)

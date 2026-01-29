@@ -9,7 +9,6 @@ Usage:
 import sys
 import asyncio
 from pathlib import Path
-from datetime import datetime, timezone
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -21,10 +20,7 @@ from src.domain.models import Article
 from src.utils.logging import logger
 
 
-async def test_search(
-    db_path: str = "worldreasoner.db",
-    test_queries: list = None
-):
+async def test_search(db_path: str = "worldreasoner.db", test_queries: list = None):
     """Test hybrid search with various queries.
 
     Args:
@@ -37,7 +33,7 @@ async def test_search(
             "economic recession indicators",
             "artificial intelligence safety",
             "climate change policy",
-            "Ukraine conflict developments"
+            "Ukraine conflict developments",
         ]
 
     logger.info("=" * 60)
@@ -50,12 +46,12 @@ async def test_search(
 
     # Get index stats
     stats = search.get_index_stats()
-    logger.info(f"Index Status:")
+    logger.info("Index Status:")
     logger.info(f"  FTS5 indexed: {stats['fts_indexed']}")
     logger.info(f"  Embeddings indexed: {stats['embeddings_indexed']}")
     logger.info(f"  Models: {stats['models']}")
 
-    if stats['fts_indexed'] == 0:
+    if stats["fts_indexed"] == 0:
         logger.error("No articles indexed! Run: python scripts/build_search_index.py")
         return
 
@@ -68,27 +64,19 @@ async def test_search(
         # Test hybrid search
         logger.info("Hybrid Search (FTS5 + Embeddings):")
         hybrid_results = await search.search(
-            query=query,
-            max_results=5,
-            method="hybrid"
+            query=query, max_results=5, method="hybrid"
         )
         display_results(db, hybrid_results)
 
         # Test FTS only
         logger.info("\nKeyword Search (FTS5 only):")
-        fts_results = await search.search(
-            query=query,
-            max_results=5,
-            method="fts"
-        )
+        fts_results = await search.search(query=query, max_results=5, method="fts")
         display_results(db, fts_results)
 
         # Test semantic only
         logger.info("\nSemantic Search (Embeddings only):")
         semantic_results = await search.search(
-            query=query,
-            max_results=5,
-            method="semantic"
+            query=query, max_results=5, method="semantic"
         )
         display_results(db, semantic_results)
 
@@ -138,6 +126,7 @@ async def test_temporal_filtering():
     # Find a reasonable cutoff date (middle of dataset)
     # Ensure all dates are timezone-aware for comparison
     from datetime import timezone as tz
+
     dates = []
     for a in all_articles:
         if a.published_date:
@@ -164,10 +153,7 @@ async def test_temporal_filtering():
         # Search with cutoff
         logger.info(f"\nWith temporal filter (before {cutoff_date.date()}):")
         filtered_results = await search.search(
-            query=query,
-            max_results=10,
-            cutoff_date=cutoff_date,
-            method="hybrid"
+            query=query, max_results=10, cutoff_date=cutoff_date, method="hybrid"
         )
         logger.info(f"  Found {len(filtered_results)} results")
         display_results(db, filtered_results[:5])

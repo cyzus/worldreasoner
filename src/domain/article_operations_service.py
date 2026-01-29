@@ -40,7 +40,7 @@ class ArticleOperationsService:
         simulated_date: datetime,
         domain: Optional[str] = None,
         max_results: int = 10,
-        search_method: str = "fts"
+        search_method: str = "fts",
     ) -> List[Article]:
         """Search for articles with temporal filtering.
 
@@ -56,7 +56,9 @@ class ArticleOperationsService:
         Returns:
             List of articles before simulated_date, ranked by relevance
         """
-        logger.info(f"Hybrid search: query='{query}', simulated_date={simulated_date.isoformat()}")
+        logger.info(
+            f"Hybrid search: query='{query}', simulated_date={simulated_date.isoformat()}"
+        )
 
         # Perform search with temporal filtering
         # Returns article IDs ranked by hybrid score (FTS5 + embeddings)
@@ -65,7 +67,7 @@ class ArticleOperationsService:
             max_results=max_results,
             cutoff_date=simulated_date,
             method=search_method,
-            alpha=0.5  # Equal weight to keyword and semantic search
+            alpha=0.5,  # Equal weight to keyword and semantic search
         )
 
         logger.info(f"Found {len(article_ids)} results")
@@ -91,9 +93,7 @@ class ArticleOperationsService:
         return matches
 
     def fetch_article(
-        self,
-        article_id: str,
-        simulated_date: datetime
+        self, article_id: str, simulated_date: datetime
     ) -> Optional[Article]:
         """Fetch full article content with temporal validation.
 
@@ -110,7 +110,9 @@ class ArticleOperationsService:
         Raises:
             ValueError: If article was published after simulated_date
         """
-        logger.info(f"Fetching article {article_id} with simulated_date {simulated_date.isoformat()}")
+        logger.info(
+            f"Fetching article {article_id} with simulated_date {simulated_date.isoformat()}"
+        )
 
         # Get article from temporal database
         temporal_db = GenericDatabase(self.db.db_path, cutoff_date=simulated_date)
@@ -131,9 +133,7 @@ class ArticleOperationsService:
         return article
 
     def validate_temporal_access(
-        self,
-        article: Article,
-        simulated_date: datetime
+        self, article: Article, simulated_date: datetime
     ) -> bool:
         """Validate that an article is accessible at the simulated date.
 

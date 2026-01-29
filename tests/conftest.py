@@ -29,6 +29,7 @@ Option 4: Print the database path in your test:
         print(f"\\nDatabase location: {test_db_path}")
         # Run with: pytest -s to see output
 """
+
 import pytest
 from pathlib import Path
 from datetime import datetime, timezone
@@ -39,18 +40,18 @@ from src.domain.models.domain import Domain
 
 def create_test_question(**kwargs) -> Question:
     """Create a valid test question with all required fields.
-    
+
     Args:
         **kwargs: Override default values. Use 'source_name' which will
         be mapped to 'source' field internally.
-        
+
     Returns:
         Question: Valid question instance for testing
     """
     # Handle source_name -> source mapping
     if "source_name" in kwargs:
         kwargs["source"] = kwargs.pop("source_name")
-    
+
     defaults = {
         "id": "test_q_1",
         "question_text": "This is a test question with at least 20 characters?",
@@ -158,12 +159,12 @@ def test_db(tmp_path):
     db = GenericDatabase(str(db_path))
     # Initialize schema
     from src.domain.models import Article, Event, Question, CausalHypothesis
+
     db.create_table(Article)
     db.create_table(Event)
     db.create_table(Question)
     db.create_table(CausalHypothesis)
     return db
-
 
 
 @pytest.fixture(scope="session", autouse=True)

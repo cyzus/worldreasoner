@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from src.utils.logging import logger
 
 
-T = TypeVar('T', bound=BaseModel)
+T = TypeVar("T", bound=BaseModel)
 
 
 def calculate_text_similarity(text1: str, text2: str) -> float:
@@ -28,7 +28,7 @@ def calculate_text_similarity(text1: str, text2: str) -> float:
     # Normalize: lowercase, remove punctuation, split into words
     def normalize(text: str) -> set:
         text = text.lower()
-        text = re.sub(r'[^\w\s]', ' ', text)
+        text = re.sub(r"[^\w\s]", " ", text)
         return set(word for word in text.split() if len(word) > 2)
 
     words1 = normalize(text1)
@@ -229,7 +229,7 @@ class SimilarityMatcher:
         self,
         filters: Optional[dict] = None,
         additional_filter: Optional[Callable[[T], bool]] = None,
-        **target_values
+        **target_values,
     ) -> Optional[T]:
         """Find matching item in database.
 
@@ -256,11 +256,7 @@ class SimilarityMatcher:
                 continue
 
             # Calculate combined similarity
-            score = calculate_combined_similarity(
-                target_values,
-                item,
-                self.text_fields
-            )
+            score = calculate_combined_similarity(target_values, item, self.text_fields)
 
             if score > best_score and score >= self.similarity_threshold:
                 best_score = score
@@ -279,7 +275,7 @@ class SimilarityMatcher:
         max_results: int = 5,
         filters: Optional[dict] = None,
         additional_filter: Optional[Callable[[T], bool]] = None,
-        **target_values
+        **target_values,
     ) -> List[tuple[T, float]]:
         """Find all matching items above threshold.
 
@@ -303,11 +299,7 @@ class SimilarityMatcher:
             if additional_filter and not additional_filter(item):
                 continue
 
-            score = calculate_combined_similarity(
-                target_values,
-                item,
-                self.text_fields
-            )
+            score = calculate_combined_similarity(target_values, item, self.text_fields)
 
             if score >= self.similarity_threshold:
                 matches.append((item, score))

@@ -23,7 +23,7 @@ def serialize_enum(enum_value: Any) -> str:
         >>> serialize_enum('politics')
         'politics'
     """
-    if hasattr(enum_value, 'value'):
+    if hasattr(enum_value, "value"):
         return enum_value.value
     return str(enum_value) if enum_value is not None else None
 

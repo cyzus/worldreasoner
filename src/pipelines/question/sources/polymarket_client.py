@@ -41,15 +41,19 @@ class PolymarketClient:
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                async with session.get(
+                    url, timeout=aiohttp.ClientTimeout(total=10)
+                ) as response:
                     if response.status == 200:
                         data = await response.json()
-                        tag_id = data.get('id')
+                        tag_id = data.get("id")
                         self._tag_id_cache[slug] = tag_id
                         logger.debug(f"Tag '{slug}' -> ID '{tag_id}'")
                         return tag_id
                     else:
-                        logger.warning(f"Tag slug '{slug}' not found (status {response.status})")
+                        logger.warning(
+                            f"Tag slug '{slug}' not found (status {response.status})"
+                        )
                         self._tag_id_cache[slug] = None
                         return None
         except Exception as e:
@@ -110,9 +114,13 @@ class PolymarketClient:
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                async with session.get(
+                    url, params=params, timeout=aiohttp.ClientTimeout(total=30)
+                ) as response:
                     if response.status != 200:
-                        logger.error(f"Polymarket search API returned {response.status}")
+                        logger.error(
+                            f"Polymarket search API returned {response.status}"
+                        )
                         return {"events": [], "tags": [], "profiles": []}
 
                     data = await response.json()
@@ -166,17 +174,21 @@ class PolymarketClient:
                 if tag_id:
                     tag_ids.append(tag_id)
                 else:
-                    logger.warning(f"Could not resolve tag slug '{slug}', fetching without tag filter")
-        
+                    logger.warning(
+                        f"Could not resolve tag slug '{slug}', fetching without tag filter"
+                    )
+
         # For ground truth, query closed markets sorted by resolution time
         if require_ground_truth:
             lookback_days = self._get_lookback_days(quality_requirements)
-            
+
             # Query only closed markets, sorted by closedTime (most recent first)
             params["closed"] = "true"
             params["order"] = "volume,closedTime"
             params["ascending"] = "false"
-            logger.info(f"API filtering for closed markets sorted by closedTime (most recent first)")
+            logger.info(
+                "API filtering for closed markets sorted by closedTime (most recent first)"
+            )
         market_list = []
         if tag_slugs and tag_ids:
             params_list = [params.copy() for _ in tag_ids]
@@ -198,16 +210,18 @@ class PolymarketClient:
         if require_ground_truth:
             lookback_days = self._get_lookback_days(quality_requirements)
             min_date = datetime.now(timezone.utc) - timedelta(days=lookback_days)
-            logger.info(f"Client-side filter: {min_date.strftime('%Y-%m-%d')} <= closedTime <= now ({lookback_days} days)")
-        
+            logger.info(
+                f"Client-side filter: {min_date.strftime('%Y-%m-%d')} <= closedTime <= now ({lookback_days} days)"
+            )
+
         # Debug: Check sample market
         if market_list:
             sample = market_list[0]
-            logger.info(f"Sample: closed={sample.get('closed')}, endDate={sample.get('endDate')}, umaEndDate={sample.get('umaEndDate')}, closedTime={sample.get('closedTime')}, question={sample.get('question', 'N/A')[:60]}")
+            logger.info(
+                f"Sample: closed={sample.get('closed')}, endDate={sample.get('endDate')}, umaEndDate={sample.get('umaEndDate')}, closedTime={sample.get('closedTime')}, question={sample.get('question', 'N/A')[:60]}"
+            )
 
         return market_list
-    
-
 
     async def fetch_events(
         self,
@@ -225,52 +239,62 @@ class PolymarketClient:
             "limit": limit,
             "closed": str(closed).lower(),
             "order": "volume24hr",
-            "ascending": "false"
+            "ascending": "false",
         }
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                async with session.get(
+                    url, params=params, timeout=aiohttp.ClientTimeout(total=30)
+                ) as response:
                     if response.status != 200:
-                        logger.error(f"Polymarket Events API returned {response.status}")
+                        logger.error(
+                            f"Polymarket Events API returned {response.status}"
+                        )
                         return []
 
                     payload = await response.json()
                     if isinstance(payload, list):
                         return payload
                     elif isinstance(payload, dict):
-                        return payload.get("events", []) or payload.get("data", []) or []
+                        return (
+                            payload.get("events", []) or payload.get("data", []) or []
+                        )
                     return []
         except Exception as e:
             logger.error(f"Failed to fetch events: {e}")
             return []
 
-    async def call_api(self, url: str, params: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
-  
+    async def call_api(
+        self, url: str, params: Optional[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
+            async with session.get(
+                url, params=params, timeout=aiohttp.ClientTimeout(total=30)
+            ) as response:
                 if response.status != 200:
                     logger.error(f"Polymarket Gamma API returned {response.status}")
                     return []
-                
+
                 # Gamma API returns array directly
                 market_list = await response.json()
-                
+
                 if not isinstance(market_list, list):
                     logger.error(f"Unexpected response format: {type(market_list)}")
                     return []
-                
+
                 logger.info(f"Polymarket Gamma API returned {len(market_list)} markets")
-                
-                
+
                 return market_list
-    
-    def _get_lookback_days(self, quality_requirements: Optional[QualityRequirements]) -> int:
+
+    def _get_lookback_days(
+        self, quality_requirements: Optional[QualityRequirements]
+    ) -> int:
         """Get lookback days from quality requirements.
-        
+
         Args:
             quality_requirements: Quality constraints
-            
+
         Returns:
             Number of days to look back for market data
         """

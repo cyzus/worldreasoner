@@ -5,7 +5,7 @@ Provides REST API for querying forecast questions.
 
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Query, HTTPException, Depends, Body
+from fastapi import APIRouter, Query, HTTPException, Depends
 from pydantic import BaseModel, Field
 
 from src.core.database import GenericDatabase
@@ -16,12 +16,7 @@ from backend.api.routes.database import get_current_db_path
 from src.utils.logging import logger
 from src.utils.polymarket import get_price_history_for_market
 from src.utils.article_analysis import analyze_article_coverage
-from src.config.collection_goal import CollectionGoal, QualityRequirements
-from src.config.pipeline import QuestionQualityConfig
-from src.pipelines.question.orchestrator import (
-    QuestionCollectionOrchestrator,
-    OrchestratorConfig,
-)
+from src.config.collection_goal import QualityRequirements
 
 
 router = APIRouter()
@@ -35,6 +30,7 @@ def get_database() -> GenericDatabase:
 
 class QuestionListItem(BaseModel):
     """Simplified question model for list views."""
+
     id: str
     question_text: str
     question_type: str
@@ -54,18 +50,33 @@ class QuestionListItem(BaseModel):
 
 class PolymarketSearchRequest(BaseModel):
     """Request parameters for searching Polymarket."""
+
     query: str = Field(description="Search query term")
-    limit_per_type: int = Field(default=20, ge=1, le=100, description="Results limit per content type (1-100)")
-    events_tag: Optional[List[str]] = Field(default=None, description="Filter by event tags")
+    limit_per_type: int = Field(
+        default=20, ge=1, le=100, description="Results limit per content type (1-100)"
+    )
+    events_tag: Optional[List[str]] = Field(
+        default=None, description="Filter by event tags"
+    )
     page: int = Field(default=1, ge=1, description="Page number (1-based)")
-    type: Optional[str] = Field(default="events", description="Result type filter, e.g. 'events'")
-    events_status: Optional[str] = Field(default="resolved", description="Event status filter: 'active' or 'resolved'")
-    sort: Optional[str] = Field(default="closed_time", description="Sort key, e.g. 'closed_time'")
-    presets: Optional[List[str]] = Field(default_factory=lambda: ["EventsTitle", "Events"], description="Response presets")
+    type: Optional[str] = Field(
+        default="events", description="Result type filter, e.g. 'events'"
+    )
+    events_status: Optional[str] = Field(
+        default="resolved", description="Event status filter: 'active' or 'resolved'"
+    )
+    sort: Optional[str] = Field(
+        default="closed_time", description="Sort key, e.g. 'closed_time'"
+    )
+    presets: Optional[List[str]] = Field(
+        default_factory=lambda: ["EventsTitle", "Events"],
+        description="Response presets",
+    )
 
 
 class PolymarketSearchResponse(BaseModel):
     """Response from Polymarket search."""
+
     success: bool
     page: int = 1
     limit_per_type: int = 20
@@ -79,20 +90,42 @@ class PolymarketSearchResponse(BaseModel):
 
 class QuestionPreviewRequest(BaseModel):
     """Request parameters for previewing questions from sources."""
+
     source: str = Field(description="Source to collect from: 'polymarket' or 'news'")
-    count: int = Field(default=20, ge=1, le=100, description="Number of questions to fetch (1-100)")
+    count: int = Field(
+        default=20, ge=1, le=100, description="Number of questions to fetch (1-100)"
+    )
     domains: Optional[List[str]] = Field(default=None, description="Filter by domains")
-    question_types: Optional[List[str]] = Field(default=None, description="Filter by question types")
-    min_difficulty: Optional[int] = Field(default=None, ge=1, le=5, description="Minimum difficulty (1-5)")
-    max_difficulty: Optional[int] = Field(default=None, ge=1, le=5, description="Maximum difficulty (1-5)")
-    tags: Optional[List[str]] = Field(default=None, description="Polymarket tags (e.g., 'politics', 'crypto')")
-    include_resolved: Optional[bool] = Field(default=True, description="Include resolved markets (Polymarket only)")
-    search_query: Optional[str] = Field(default=None, description="Search query for Polymarket markets (Polymarket only)")
-    lookback_days: Optional[int] = Field(default=730, ge=1, le=3650, description="Max age of markets in days (default: 2 years)")
+    question_types: Optional[List[str]] = Field(
+        default=None, description="Filter by question types"
+    )
+    min_difficulty: Optional[int] = Field(
+        default=None, ge=1, le=5, description="Minimum difficulty (1-5)"
+    )
+    max_difficulty: Optional[int] = Field(
+        default=None, ge=1, le=5, description="Maximum difficulty (1-5)"
+    )
+    tags: Optional[List[str]] = Field(
+        default=None, description="Polymarket tags (e.g., 'politics', 'crypto')"
+    )
+    include_resolved: Optional[bool] = Field(
+        default=True, description="Include resolved markets (Polymarket only)"
+    )
+    search_query: Optional[str] = Field(
+        default=None,
+        description="Search query for Polymarket markets (Polymarket only)",
+    )
+    lookback_days: Optional[int] = Field(
+        default=730,
+        ge=1,
+        le=3650,
+        description="Max age of markets in days (default: 2 years)",
+    )
 
 
 class QuestionPreviewResponse(BaseModel):
     """Response containing previewed questions."""
+
     success: bool
     questions: List[Dict[str, Any]]
     total: int
@@ -102,6 +135,7 @@ class QuestionPreviewResponse(BaseModel):
 
 class BatchSaveRequest(BaseModel):
     """Request to save selected questions to database."""
+
     question_ids: List[str] = Field(description="IDs of questions to save")
     questions: List[Dict[str, Any]] = Field(description="Full question data to save")
 
@@ -155,6 +189,7 @@ async def search_polymarket(request: PolymarketSearchRequest):
     except Exception as e:
         logger.error(f"Failed to search Polymarket: {e}")
         import traceback
+
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -173,8 +208,12 @@ async def preview_questions(request: QuestionPreviewRequest):
         Preview response with questions and metadata
     """
     try:
-        logger.info(f"Previewing questions from {request.source} (count={request.count})")
-        logger.info(f"Request details: search_query={request.search_query!r}, include_resolved={request.include_resolved}")
+        logger.info(
+            f"Previewing questions from {request.source} (count={request.count})"
+        )
+        logger.info(
+            f"Request details: search_query={request.search_query!r}, include_resolved={request.include_resolved}"
+        )
 
         # Initialize the appropriate source runner
         from src.pipelines.question.sources.markets import PolymarketRunner
@@ -198,7 +237,9 @@ async def preview_questions(request: QuestionPreviewRequest):
             # require_ground_truth=True fetches resolved markets with ground truth
             # require_ground_truth=False fetches active prediction markets
             runner = PolymarketRunner(
-                require_ground_truth=request.include_resolved if request.include_resolved is not None else True
+                require_ground_truth=request.include_resolved
+                if request.include_resolved is not None
+                else True
             )
 
             # Map domains to tag-based category filter
@@ -209,21 +250,21 @@ async def preview_questions(request: QuestionPreviewRequest):
             elif request.tags:
                 # Map Polymarket tags to domains
                 tag_to_domain = {
-                    'politics': 'politics',
-                    'geopolitics': 'politics',
-                    'elections': 'politics',
-                    'crypto': 'finance',
-                    'finance': 'finance',
-                    'economy': 'finance',
-                    'sports': 'sports',
-                    'tech': 'technology',
-                    'ai': 'technology',
-                    'pop culture': 'culture',
-                    'entertainment': 'culture',
-                    'science': 'science',
-                    'business': 'business',
-                    'health': 'health',
-                    'pandemic': 'health',
+                    "politics": "politics",
+                    "geopolitics": "politics",
+                    "elections": "politics",
+                    "crypto": "finance",
+                    "finance": "finance",
+                    "economy": "finance",
+                    "sports": "sports",
+                    "tech": "technology",
+                    "ai": "technology",
+                    "pop culture": "culture",
+                    "entertainment": "culture",
+                    "science": "science",
+                    "business": "business",
+                    "health": "health",
+                    "pandemic": "health",
                 }
                 mapped_domains = []
                 for tag in request.tags:
@@ -253,7 +294,7 @@ async def preview_questions(request: QuestionPreviewRequest):
                     quality_requirements=quality,
                 )
             else:
-                logger.info(f"No search query provided, using standard collection")
+                logger.info("No search query provided, using standard collection")
                 result = await runner.collect(
                     count=request.count,
                     type_filter=type_filter_enums,
@@ -263,9 +304,15 @@ async def preview_questions(request: QuestionPreviewRequest):
 
             if result.success:
                 questions_list = result.questions
-                logger.info(f"Collected {len(questions_list)} questions from Polymarket")
+                logger.info(
+                    f"Collected {len(questions_list)} questions from Polymarket"
+                )
             else:
-                error_msg = result.error_message if hasattr(result, 'error_message') else str(result)
+                error_msg = (
+                    result.error_message
+                    if hasattr(result, "error_message")
+                    else str(result)
+                )
                 errors.append(f"Polymarket collection failed: {error_msg}")
 
         elif request.source == "news":
@@ -279,23 +326,30 @@ async def preview_questions(request: QuestionPreviewRequest):
             # Load article sources from config file
             sources_file = Path("config/sources.yaml")
 
-            with open(sources_file, 'r') as f:
+            with open(sources_file, "r") as f:
                 config_data = yaml.safe_load(f)
-                article_sources = [ArticleSource(**source_data) for source_data in config_data.get('sources', [])]
+                article_sources = [
+                    ArticleSource(**source_data)
+                    for source_data in config_data.get("sources", [])
+                ]
 
             logger.info(f"Loaded {len(article_sources)} article sources from config")
 
             # Filter sources by requested domains if specified
             if request.domains:
-                filtered_sources = [s for s in article_sources if s.domain in request.domains]
+                filtered_sources = [
+                    s for s in article_sources if s.domain in request.domains
+                ]
                 if filtered_sources:
                     article_sources = filtered_sources
-                    logger.info(f"Filtered to {len(article_sources)} sources matching domains: {request.domains}")
+                    logger.info(
+                        f"Filtered to {len(article_sources)} sources matching domains: {request.domains}"
+                    )
 
             if not article_sources:
                 raise HTTPException(
                     status_code=400,
-                    detail="No article sources available for the requested domains"
+                    detail="No article sources available for the requested domains",
                 )
 
             # Create default configurations
@@ -309,8 +363,6 @@ async def preview_questions(request: QuestionPreviewRequest):
                 end_date=end_date,
                 max_articles_per_source=10,  # Limit for preview
             )
-
-
 
             question_config = QuestionPipelineConfig()
 
@@ -353,12 +405,16 @@ async def preview_questions(request: QuestionPreviewRequest):
                 questions_list = result.questions
                 logger.info(f"Collected {len(questions_list)} questions from news")
             else:
-                error_msg = result.error_message if hasattr(result, 'error_message') else str(result)
+                error_msg = (
+                    result.error_message
+                    if hasattr(result, "error_message")
+                    else str(result)
+                )
                 errors.append(f"News collection failed: {error_msg}")
         else:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid source: {request.source}. Must be 'polymarket' or 'news'"
+                detail=f"Invalid source: {request.source}. Must be 'polymarket' or 'news'",
             )
 
         # Convert questions to dictionaries
@@ -374,7 +430,9 @@ async def preview_questions(request: QuestionPreviewRequest):
                 "target_event_id": q.target_event_id,
                 "related_event_ids": q.related_event_ids,
                 "quality_score": q.quality_score,
-                "resolution_date": q.resolution_date.isoformat() if q.resolution_date else None,
+                "resolution_date": q.resolution_date.isoformat()
+                if q.resolution_date
+                else None,
                 "resolution_criteria": q.resolution_criteria,
                 "ground_truth": q.ground_truth,
                 "metadata": q.metadata,
@@ -394,6 +452,7 @@ async def preview_questions(request: QuestionPreviewRequest):
     except Exception as e:
         logger.error(f"Failed to preview questions: {e}")
         import traceback
+
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -453,7 +512,9 @@ async def batch_save_questions(
                 logger.error(f"Error saving question {q_dict.get('id')}: {e}")
                 errors.append(f"Question {q_dict.get('id')}: {str(e)}")
 
-        logger.info(f"Batch save complete: {saved_count} saved, {skipped_count} skipped, {len(errors)} errors")
+        logger.info(
+            f"Batch save complete: {saved_count} saved, {skipped_count} skipped, {len(errors)} errors"
+        )
 
         return {
             "success": saved_count > 0,
@@ -485,32 +546,34 @@ async def get_questions(
         # Get all questions
         filters = {}
         if domain:
-            filters['domain'] = domain
+            filters["domain"] = domain
 
         questions = db.get_many(Question, filters=filters if filters else None)
 
         # Get article counts efficiently
         from src.domain.models import Article
-        article_counts = db.count_group_by(Article, 'collected_for_question_id')
+
+        article_counts = db.count_group_by(Article, "collected_for_question_id")
 
         # Get all forecasts and aggregate by question
         from src.domain.models.forecast import Forecast
+
         all_forecasts = db.get_many(Forecast)
         forecast_stats = {}  # qid -> {'count': int, 'modes': set}
-        
+
         for f in all_forecasts:
             if not f.question_id:
                 continue
-            
+
             if f.question_id not in forecast_stats:
-                forecast_stats[f.question_id] = {'count': 0, 'modes': set()}
-            
+                forecast_stats[f.question_id] = {"count": 0, "modes": set()}
+
             stats = forecast_stats[f.question_id]
-            stats['count'] += 1
+            stats["count"] += 1
             if f.mode:
                 # Handle enum or string mode
-                mode_val = f.mode.value if hasattr(f.mode, 'value') else str(f.mode)
-                stats['modes'].add(mode_val)
+                mode_val = f.mode.value if hasattr(f.mode, "value") else str(f.mode)
+                stats["modes"].add(mode_val)
 
         # Convert to simplified response model with article counts and forecast stats
         result = [
@@ -524,12 +587,16 @@ async def get_questions(
                 target_event_id=q.target_event_id,
                 related_event_ids=q.related_event_ids,
                 quality_score=q.quality_score,
-                resolution_date=q.resolution_date.isoformat() if q.resolution_date else None,
-                estimated_start_time=q.estimated_start_time.isoformat() if q.estimated_start_time else None,
+                resolution_date=q.resolution_date.isoformat()
+                if q.resolution_date
+                else None,
+                estimated_start_time=q.estimated_start_time.isoformat()
+                if q.estimated_start_time
+                else None,
                 metadata=q.metadata,
                 article_count=article_counts.get(q.id, 0),
-                forecast_count=forecast_stats.get(q.id, {}).get('count', 0),
-                forecast_modes=list(forecast_stats.get(q.id, {}).get('modes', [])),
+                forecast_count=forecast_stats.get(q.id, {}).get("count", 0),
+                forecast_modes=list(forecast_stats.get(q.id, {}).get("modes", [])),
             )
             for q in questions
         ]
@@ -559,7 +626,9 @@ async def get_question(
         question = db.get(Question, question_id)
 
         if not question:
-            raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Question {question_id} not found"
+            )
 
         return QuestionListItem(
             id=question.id,
@@ -571,9 +640,13 @@ async def get_question(
             target_event_id=question.target_event_id,
             related_event_ids=question.related_event_ids,
             quality_score=question.quality_score,
-            resolution_date=question.resolution_date.isoformat() if question.resolution_date else None,
+            resolution_date=question.resolution_date.isoformat()
+            if question.resolution_date
+            else None,
             metadata=question.metadata,
-            estimated_start_time=question.estimated_start_time.isoformat() if question.estimated_start_time else None,
+            estimated_start_time=question.estimated_start_time.isoformat()
+            if question.estimated_start_time
+            else None,
         )
 
     except HTTPException:
@@ -608,7 +681,9 @@ async def get_question_events(
         question = db.get(Question, question_id)
 
         if not question:
-            raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Question {question_id} not found"
+            )
 
         # Start with events directly referenced by question
         event_ids = set()
@@ -628,15 +703,17 @@ async def get_question_events(
                 extracted_events.add(event.id)
                 event_ids.add(event.id)
             # Fallback to metadata for pre-migration data
-            elif event.metadata.get('related_question_ids') and question_id in event.metadata['related_question_ids']:
+            elif (
+                event.metadata.get("related_question_ids")
+                and question_id in event.metadata["related_question_ids"]
+            ):
                 extracted_events.add(event.id)
                 event_ids.add(event.id)
 
         # Find all causal hypotheses discovered by this question
         all_hypotheses = db.get_many(CausalHypothesis)
         question_hypotheses = [
-            h for h in all_hypotheses
-            if question_id in h.discovered_by_question_ids
+            h for h in all_hypotheses if question_id in h.discovered_by_question_ids
         ]
 
         # Extract all source and target events from these hypotheses
@@ -696,38 +773,53 @@ async def get_question_forecasts(
         # Verify question exists
         question = db.get(Question, question_id)
         if not question:
-            raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Question {question_id} not found"
+            )
 
         # Get all forecasts for this question
-        forecasts = db.get_many(Forecast, filters={'question_id': question_id})
+        forecasts = db.get_many(Forecast, filters={"question_id": question_id})
 
         # Sort by timestamp (most recent first) - handle both timestamp and created_at
-        forecasts.sort(key=lambda f: getattr(f, 'timestamp', getattr(f, 'created_at', datetime.min)), reverse=True)
+        forecasts.sort(
+            key=lambda f: getattr(
+                f, "timestamp", getattr(f, "created_at", datetime.min)
+            ),
+            reverse=True,
+        )
 
         # Convert to dicts
         forecasts_data = []
         for f in forecasts:
             # Get timestamp - try timestamp first, fall back to created_at
-            ts = getattr(f, 'timestamp', getattr(f, 'created_at', None))
+            ts = getattr(f, "timestamp", getattr(f, "created_at", None))
             forecast_dict = {
-                'id': f.id,
-                'question_id': f.question_id,
-                'probability': getattr(f, 'probability', getattr(f, 'prediction', None)),
-                'confidence': f.confidence,
-                'reasoning': f.reasoning,
-                'mode': f.mode.value if hasattr(f.mode, 'value') else str(f.mode) if f.mode else 'container',
-                'db': getattr(f, 'db', None),
-                'session_id': f.session_id,
-                'created_at': ts.isoformat() if ts else None
+                "id": f.id,
+                "question_id": f.question_id,
+                "probability": getattr(
+                    f, "probability", getattr(f, "prediction", None)
+                ),
+                "confidence": f.confidence,
+                "reasoning": f.reasoning,
+                "mode": f.mode.value
+                if hasattr(f.mode, "value")
+                else str(f.mode)
+                if f.mode
+                else "container",
+                "db": getattr(f, "db", None),
+                "session_id": f.session_id,
+                "created_at": ts.isoformat() if ts else None,
             }
             forecasts_data.append(forecast_dict)
 
-        logger.info(f"Returning {len(forecasts_data)} forecasts for question {question_id}")
+        logger.info(
+            f"Returning {len(forecasts_data)} forecasts for question {question_id}"
+        )
 
         return {
             "question_id": question_id,
             "forecasts": forecasts_data,
-            "total": len(forecasts_data)
+            "total": len(forecasts_data),
         }
 
     except HTTPException:
@@ -735,6 +827,7 @@ async def get_question_forecasts(
     except Exception as e:
         logger.error(f"Failed to fetch forecasts: {e}")
         import traceback
+
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -742,7 +835,9 @@ async def get_question_forecasts(
 @router.get("/{question_id}/price_history")
 async def get_question_price_history(
     question_id: str,
-    interval: str = Query("1d", description="Time interval: 1m, 1w, 1d, 6h, 1h, or max"),
+    interval: str = Query(
+        "1d", description="Time interval: 1m, 1w, 1d, 6h, 1h, or max"
+    ),
     db: GenericDatabase = Depends(get_database),
 ):
     """Get price history for a Polymarket question.
@@ -772,7 +867,9 @@ async def get_question_price_history(
         question = db.get(Question, question_id)
 
         if not question:
-            raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Question {question_id} not found"
+            )
 
         logger.info(f"Question loaded, source={question.source}")
 
@@ -780,7 +877,7 @@ async def get_question_price_history(
         if question.source != "polymarket":
             raise HTTPException(
                 status_code=400,
-                detail=f"Price history only available for Polymarket questions (source={question.source})"
+                detail=f"Price history only available for Polymarket questions (source={question.source})",
             )
 
         # Extract data from metadata
@@ -789,8 +886,7 @@ async def get_question_price_history(
 
         if not clob_token_ids:
             raise HTTPException(
-                status_code=404,
-                detail="No CLOB token IDs available for this question"
+                status_code=404, detail="No CLOB token IDs available for this question"
             )
 
         logger.info(f"Found {len(clob_token_ids)} CLOB token IDs")
@@ -804,6 +900,7 @@ async def get_question_price_history(
             start_ts = int(question.estimated_start_time.timestamp())
         elif metadata.get("start_date"):
             from src.utils.date_utils import parse_iso_datetime
+
             start_dt = parse_iso_datetime(metadata["start_date"])
             start_ts = int(start_dt.timestamp())
 
@@ -820,54 +917,54 @@ async def get_question_price_history(
         # Strategy:
         # - For 'all' or 'max': Use interval-based API to get full history
         # - For specific intervals ('1h', '6h', '1d', '1w'): Calculate appropriate time range
-        
-        if interval in ['all', 'max']:
+
+        if interval in ["all", "max"]:
             # Get full history using interval-based API
             price_history = await get_price_history_for_market(
                 clob_token_ids,
                 interval=interval,
-                fidelity=720  # Higher fidelity for full history
+                fidelity=720,  # Higher fidelity for full history
             )
         else:
             # For specific intervals, calculate time range to display
-            from datetime import datetime, timezone, timedelta
-            
+            from datetime import datetime, timezone
+
             # Map intervals to days
             interval_to_days = {
-                '1h': 1/24,   # Last 1 hour
-                '6h': 0.25,   # Last 6 hours  
-                '1d': 1,      # Last 1 day
-                '1w': 7,      # Last 1 week
+                "1h": 1 / 24,  # Last 1 hour
+                "6h": 0.25,  # Last 6 hours
+                "1d": 1,  # Last 1 day
+                "1w": 7,  # Last 1 week
             }
-            
+
             days = interval_to_days.get(interval, 1)
-            
+
             # Use resolution_date as the end time (or now for unresolved questions)
             if end_ts:
                 interval_end_ts = end_ts
             else:
                 interval_end_ts = int(datetime.now(timezone.utc).timestamp())
-            
+
             # Calculate start time by subtracting the interval duration
             interval_start_ts = int(interval_end_ts - (days * 86400))
-            
+
             # Clamp to question's start time if available
             if start_ts and interval_start_ts < start_ts:
                 interval_start_ts = start_ts
-            
+
             logger.info(
                 f"Using custom interval '{interval}': "
                 f"start={interval_start_ts}, end={interval_end_ts}, "
                 f"range={(interval_end_ts - interval_start_ts) / 86400:.2f} days"
             )
-            
+
             # Use timestamp-based API for custom intervals
             price_history = await get_price_history_for_market(
                 clob_token_ids,
-                interval='all',  # Not used when timestamps provided
+                interval="all",  # Not used when timestamps provided
                 start_ts=interval_start_ts,
                 end_ts=interval_end_ts,
-                fidelity=30  # Lower fidelity for short ranges
+                fidelity=30,  # Lower fidelity for short ranges
             )
 
         if not price_history:
@@ -894,6 +991,7 @@ async def get_question_price_history(
         raise
     except Exception as e:
         import traceback
+
         logger.error(f"Failed to fetch price history: {e}")
         logger.error(f"Full traceback:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -924,7 +1022,9 @@ async def get_article_coverage(
         # Get question for resolution date
         question = db.get(Question, question_id)
         if not question:
-            raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Question {question_id} not found"
+            )
 
         # Get articles for this question and filter by time window
         from src.utils.article_analysis import filter_articles_by_time_window
@@ -932,13 +1032,16 @@ async def get_article_coverage(
 
         all_articles = db.get_many(Article)
         all_question_articles = [
-            a for a in all_articles
-            if a.collected_for_question_id == question_id
+            a for a in all_articles if a.collected_for_question_id == question_id
         ]
 
         # Track filtering stats for transparency
         q_resolution = ensure_timezone_aware(question.resolution_date)
-        q_start = ensure_timezone_aware(question.estimated_start_time) if question.estimated_start_time else None
+        q_start = (
+            ensure_timezone_aware(question.estimated_start_time)
+            if question.estimated_start_time
+            else None
+        )
 
         excluded_before_start = []
         excluded_after_resolution = []
@@ -949,27 +1052,31 @@ async def get_article_coverage(
             apd = ensure_timezone_aware(article.published_date)
 
             if apd >= q_resolution:
-                excluded_after_resolution.append({
-                    "id": article.id,
-                    "title": article.title,
-                    "published_date": apd.isoformat(),
-                    "source": article.source,
-                    "reason": "after_resolution"
-                })
+                excluded_after_resolution.append(
+                    {
+                        "id": article.id,
+                        "title": article.title,
+                        "published_date": apd.isoformat(),
+                        "source": article.source,
+                        "reason": "after_resolution",
+                    }
+                )
             elif q_start and apd < q_start:
-                excluded_before_start.append({
-                    "id": article.id,
-                    "title": article.title,
-                    "published_date": apd.isoformat(),
-                    "source": article.source,
-                    "reason": "before_market_start"
-                })
+                excluded_before_start.append(
+                    {
+                        "id": article.id,
+                        "title": article.title,
+                        "published_date": apd.isoformat(),
+                        "source": article.source,
+                        "reason": "before_market_start",
+                    }
+                )
 
         # Filter by time window using shared utility
         question_articles = filter_articles_by_time_window(
             all_question_articles,
             question.resolution_date,
-            question.estimated_start_time
+            question.estimated_start_time,
         )
 
         logger.info(
@@ -989,10 +1096,18 @@ async def get_article_coverage(
                 "articles_excluded_after_resolution": len(excluded_after_resolution),
                 "excluded_articles": {
                     "before_start": excluded_before_start,
-                    "after_resolution": excluded_after_resolution
+                    "after_resolution": excluded_after_resolution,
                 },
-                "timeline": {"has_dates": False, "resolution_date": question.resolution_date.isoformat()},
-                "sources": {"unique_sources": 0, "unique_domains": 0, "source_counts": {}, "top_sources": []},
+                "timeline": {
+                    "has_dates": False,
+                    "resolution_date": question.resolution_date.isoformat(),
+                },
+                "sources": {
+                    "unique_sources": 0,
+                    "unique_domains": 0,
+                    "source_counts": {},
+                    "top_sources": [],
+                },
                 "gaps": [],
                 "quality": {
                     "score": 0.0,
@@ -1000,32 +1115,37 @@ async def get_article_coverage(
                     "diversity_score": 0.0,
                     "coverage_score": 0.0,
                     "distribution_score": 0.0,
-                    "gap_severity": 0.0
+                    "gap_severity": 0.0,
                 },
-                "recommendation": "No valid articles in time window. " + (
+                "recommendation": "No valid articles in time window. "
+                + (
                     f"{len(all_question_articles)} articles collected but excluded (see excluded_articles)."
                     if all_question_articles
                     else "Start evidence collection with web_search and article_collector."
-                )
+                ),
             }
 
         # Perform complete analysis using shared utilities
         analysis = analyze_article_coverage(
-            question_articles,
-            question.resolution_date,
-            question.estimated_start_time
+            question_articles, question.resolution_date, question.estimated_start_time
         )
 
         # Convert datetime objects to ISO format for JSON serialization
         if analysis["timeline"].get("has_dates"):
-            analysis["timeline"]["earliest"] = analysis["timeline"]["earliest"].isoformat()
-            analysis["timeline"]["resolution_date"] = analysis["timeline"]["resolution_date"].isoformat()
+            analysis["timeline"]["earliest"] = analysis["timeline"][
+                "earliest"
+            ].isoformat()
+            analysis["timeline"]["resolution_date"] = analysis["timeline"][
+                "resolution_date"
+            ].isoformat()
             # Convert dates in gaps
             for gap in analysis["gaps"]:
                 gap["start"] = gap["start"].isoformat()
                 gap["end"] = gap["end"].isoformat()
         else:
-            analysis["timeline"]["resolution_date"] = analysis["timeline"]["resolution_date"].isoformat()
+            analysis["timeline"]["resolution_date"] = analysis["timeline"][
+                "resolution_date"
+            ].isoformat()
 
         # Add question_id and filtering stats to response
         analysis["question_id"] = question_id
@@ -1034,7 +1154,7 @@ async def get_article_coverage(
         analysis["articles_excluded_after_resolution"] = len(excluded_after_resolution)
         analysis["excluded_articles"] = {
             "before_start": excluded_before_start,
-            "after_resolution": excluded_after_resolution
+            "after_resolution": excluded_after_resolution,
         }
 
         logger.info(
@@ -1052,6 +1172,7 @@ async def get_article_coverage(
         raise
     except Exception as e:
         import traceback
+
         logger.error(f"Failed to fetch article coverage: {e}")
         logger.error(f"Full traceback:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1084,22 +1205,22 @@ async def get_causal_path_analysis(
         # Get question
         question = db.get(Question, question_id)
         if not question:
-            raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Question {question_id} not found"
+            )
 
         # Check if question has a target event
         if not question.target_event_id:
             return {
                 "question_id": question_id,
                 "has_target_event": False,
-                "message": "Question has no target event"
+                "message": "Question has no target event",
             }
 
         # Analyze paths to target
         analyzer = CausalPathAnalyzer(db)
         analysis = analyzer.analyze_paths_to_target(
-            target_event_id=question.target_event_id,
-            max_depth=10,
-            max_paths=20
+            target_event_id=question.target_event_id, max_depth=10, max_paths=20
         )
 
         # Get path statistics
@@ -1110,18 +1231,30 @@ async def get_causal_path_analysis(
         for path in analysis.paths:
             path_events = []
             for node in path:
-                path_events.append({
-                    "event_id": node.event_id,
-                    "title": node.event.title,
-                    "status": node.event.status.value,
-                    "occurred_date": node.event.occurred_date.isoformat() if node.event.occurred_date else None,
-                    "depth": node.depth,
-                    "edge_from_parent": {
-                        "relation_type": node.edge_from_parent.relation_type.value if node.edge_from_parent else None,
-                        "strength": node.edge_from_parent.strength if node.edge_from_parent else None,
-                        "confidence": node.edge_from_parent.confidence if node.edge_from_parent else None,
-                    } if node.edge_from_parent else None
-                })
+                path_events.append(
+                    {
+                        "event_id": node.event_id,
+                        "title": node.event.title,
+                        "status": node.event.status.value,
+                        "occurred_date": node.event.occurred_date.isoformat()
+                        if node.event.occurred_date
+                        else None,
+                        "depth": node.depth,
+                        "edge_from_parent": {
+                            "relation_type": node.edge_from_parent.relation_type.value
+                            if node.edge_from_parent
+                            else None,
+                            "strength": node.edge_from_parent.strength
+                            if node.edge_from_parent
+                            else None,
+                            "confidence": node.edge_from_parent.confidence
+                            if node.edge_from_parent
+                            else None,
+                        }
+                        if node.edge_from_parent
+                        else None,
+                    }
+                )
             all_paths_details.append(path_events)
 
         # Get related event IDs for this question
@@ -1131,7 +1264,9 @@ async def get_causal_path_analysis(
         event_ids = list(set(event_ids))  # Deduplicate
 
         # Get path information for each event
-        event_path_info = analyzer.get_path_for_events(event_ids, question.target_event_id)
+        event_path_info = analyzer.get_path_for_events(
+            event_ids, question.target_event_id
+        )
 
         logger.info(
             f"Found {stats['total_paths']} paths to target, "
@@ -1147,7 +1282,7 @@ async def get_causal_path_analysis(
             "event_path_info": event_path_info,
             "all_events_in_paths": list(analysis.all_events_in_paths),
             "confirmed_events": list(analysis.confirmed_event_ids),
-            "predicted_events": list(analysis.predicted_event_ids)
+            "predicted_events": list(analysis.predicted_event_ids),
         }
 
     except HTTPException:
@@ -1155,12 +1290,14 @@ async def get_causal_path_analysis(
     except Exception as e:
         logger.error(f"Failed to analyze causal paths: {e}")
         import traceback
+
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 class QuestionUpdateRequest(BaseModel):
     """Request to update a question."""
+
     question_text: Optional[str] = None
     question_type: Optional[str] = None
     domain: Optional[str] = None
@@ -1192,7 +1329,9 @@ async def update_question(
         # Get existing question
         question = db.get(Question, question_id)
         if not question:
-            raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Question {question_id} not found"
+            )
 
         # Update fields if provided
         if request.question_text is not None:
@@ -1225,7 +1364,9 @@ async def update_question(
             target_event_id=question.target_event_id,
             related_event_ids=question.related_event_ids,
             quality_score=question.quality_score,
-            resolution_date=question.resolution_date.isoformat() if question.resolution_date else None,
+            resolution_date=question.resolution_date.isoformat()
+            if question.resolution_date
+            else None,
             metadata=question.metadata,
         )
 
@@ -1234,6 +1375,7 @@ async def update_question(
     except Exception as e:
         logger.error(f"Failed to update question: {e}")
         import traceback
+
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1258,7 +1400,9 @@ async def delete_question(
         # Check if question exists
         question = db.get(Question, question_id)
         if not question:
-            raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Question {question_id} not found"
+            )
 
         # Delete the question
         db.delete(Question, question_id)
@@ -1266,7 +1410,7 @@ async def delete_question(
 
         return {
             "success": True,
-            "message": f"Question {question_id} deleted successfully"
+            "message": f"Question {question_id} deleted successfully",
         }
 
     except HTTPException:
@@ -1274,5 +1418,6 @@ async def delete_question(
     except Exception as e:
         logger.error(f"Failed to delete question: {e}")
         import traceback
+
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))

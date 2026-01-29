@@ -3,7 +3,7 @@
 Extracted from example scripts for reuse across the unified CLI.
 """
 
-from typing import Optional, Callable
+from typing import Callable
 from pathlib import Path
 import asyncio
 from functools import wraps
@@ -21,9 +21,11 @@ def async_command(func: Callable):
         async def my_command():
             await something()
     """
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         return asyncio.run(func(*args, **kwargs))
+
     return wrapper
 
 
@@ -120,4 +122,5 @@ def confirm_action(message: str, default: bool = False) -> bool:
         True if user confirms, False otherwise
     """
     from rich.prompt import Confirm
+
     return Confirm.ask(message, default=default)

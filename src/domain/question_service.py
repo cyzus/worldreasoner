@@ -3,7 +3,8 @@
 Contains pure domain logic without CLI dependencies.
 Used by both CLI and pipelines to break circular dependency.
 """
-from typing import Dict, List, Optional, Set
+
+from typing import Dict, List
 from datetime import datetime
 
 from src.core.database import GenericDatabase
@@ -53,16 +54,16 @@ class QuestionService:
 
         # Articles with explicit provenance field
         articles_by_provenance = [
-            a.id for a in all_articles
-            if a.collected_for_question_id == question_id
+            a.id for a in all_articles if a.collected_for_question_id == question_id
         ]
 
         # Fallback: articles with metadata (for pre-migration data)
         articles_by_metadata = [
-            a.id for a in all_articles
+            a.id
+            for a in all_articles
             if a.collected_for_question_id is None  # Not already counted
-            and a.metadata.get('related_question_ids')
-            and question_id in a.metadata['related_question_ids']
+            and a.metadata.get("related_question_ids")
+            and question_id in a.metadata["related_question_ids"]
         ]
 
         orphaned_article_ids = set(articles_by_provenance + articles_by_metadata)
@@ -72,16 +73,16 @@ class QuestionService:
 
         # Events with explicit provenance field
         events_by_provenance = [
-            e.id for e in all_events
-            if e.extracted_for_question_id == question_id
+            e.id for e in all_events if e.extracted_for_question_id == question_id
         ]
 
         # Fallback: events with metadata (for pre-migration data)
         events_by_metadata = [
-            e.id for e in all_events
+            e.id
+            for e in all_events
             if e.extracted_for_question_id is None  # Not already counted
-            and e.metadata.get('related_question_ids')
-            and question_id in e.metadata['related_question_ids']
+            and e.metadata.get("related_question_ids")
+            and question_id in e.metadata["related_question_ids"]
         ]
 
         orphaned_event_ids = set(events_by_provenance + events_by_metadata)
@@ -104,7 +105,10 @@ class QuestionService:
 
         for h in all_hypotheses:
             # Delete if either endpoint is an orphaned event
-            if h.source_event_id in orphaned_event_ids or h.target_event_id in orphaned_event_ids:
+            if (
+                h.source_event_id in orphaned_event_ids
+                or h.target_event_id in orphaned_event_ids
+            ):
                 hypotheses_to_delete.append(h.id)
             # Update if this question discovered it (and hypothesis won't be deleted)
             elif question_id in h.discovered_by_question_ids:
@@ -133,7 +137,7 @@ class QuestionService:
                 "will_delete_hypotheses": len(hypotheses_to_delete),
                 "will_update_hypotheses": len(hypotheses_to_update),
                 "will_keep_pre_existing_events": len(pre_existing_event_ids),
-            }
+            },
         }
 
     def clear_evidence(self, question_id: str, cascade: bool = True) -> Dict[str, int]:
@@ -157,7 +161,7 @@ class QuestionService:
             "articles": [],
             "events": [],
             "causal_hypotheses": [],
-            "hypotheses_updated": []
+            "hypotheses_updated": [],
         }
 
         # Delete causal hypotheses where source/target event will be deleted
@@ -197,10 +201,7 @@ class QuestionService:
         }
 
     def delete_question(
-        self,
-        question_id: str,
-        cascade: bool = True,
-        dry_run: bool = False
+        self, question_id: str, cascade: bool = True, dry_run: bool = False
     ) -> Dict:
         """Delete a question and optionally cascade to related entities."""
         analysis = self.analyze_cascade(question_id)
@@ -214,8 +215,10 @@ class QuestionService:
             return {
                 "dry_run": True,
                 "would_delete": would_delete,
-                "would_update": analysis["shared"]["causal_hypotheses_update"] if cascade else [],
-                "summary": analysis["summary"]
+                "would_update": analysis["shared"]["causal_hypotheses_update"]
+                if cascade
+                else [],
+                "summary": analysis["summary"],
             }
 
         deleted = {
@@ -223,7 +226,7 @@ class QuestionService:
             "events": [],
             "articles": [],
             "causal_hypotheses": [],
-            "hypotheses_updated": []
+            "hypotheses_updated": [],
         }
 
         # Delete question first
@@ -261,11 +264,13 @@ class QuestionService:
                 "events": len(deleted["events"]),
                 "articles": len(deleted["articles"]),
                 "causal_hypotheses": len(deleted["causal_hypotheses"]),
-                "hypotheses_updated": len(deleted["hypotheses_updated"])
-            }
+                "hypotheses_updated": len(deleted["hypotheses_updated"]),
+            },
         }
 
-    def delete_event(self, event_id: str, cascade: bool = True, dry_run: bool = False) -> Dict:
+    def delete_event(
+        self, event_id: str, cascade: bool = True, dry_run: bool = False
+    ) -> Dict:
         """Delete an event and cascade to related hypotheses/articles."""
         event = self.db.get(Event, event_id)
         if not event:
@@ -274,21 +279,23 @@ class QuestionService:
         # Find hypotheses that reference this event
         all_hypotheses = self.db.get_many(CausalHypothesis)
         hypotheses_to_delete = [
-            h.id for h in all_hypotheses
+            h.id
+            for h in all_hypotheses
             if h.source_event_id == event_id or h.target_event_id == event_id
         ]
 
         # Find questions that reference this event
         all_questions = self.db.get_many(Question)
         referencing_questions = [
-            q.id for q in all_questions
+            q.id
+            for q in all_questions
             if q.target_event_id == event_id or event_id in (q.related_event_ids or [])
         ]
 
         if referencing_questions:
             return {
                 "error": f"Event is referenced by questions: {referencing_questions}",
-                "hint": "Delete or update these questions first, or use delete_question with cascade"
+                "hint": "Delete or update these questions first, or use delete_question with cascade",
             }
 
         if dry_run:
@@ -297,8 +304,8 @@ class QuestionService:
                 "would_delete": {
                     "event": event_id,
                     "causal_hypotheses": hypotheses_to_delete if cascade else [],
-                    "articles": event.article_ids if cascade else []
-                }
+                    "articles": event.article_ids if cascade else [],
+                },
             }
 
         deleted = {"event": event_id, "causal_hypotheses": [], "articles": []}

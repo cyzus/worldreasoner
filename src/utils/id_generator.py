@@ -1,14 +1,12 @@
 """Unified ID generation utilities."""
+
 import uuid
 from datetime import datetime
 from src.domain.models.event import Domain
 
 
 def generate_entity_id(
-    entity_type: str,
-    domain: Domain,
-    date: datetime,
-    counter: int
+    entity_type: str, domain: Domain, date: datetime, counter: int
 ) -> str:
     """
     Generate unique entity ID with consistent format.
@@ -26,9 +24,9 @@ def generate_entity_id(
         >>> generate_entity_id("art", Domain.TECH, datetime(2024,1,1), 0)
         "art_tech_20240101_001_a1b2c3d4"
     """
-    date_str = date.strftime('%Y%m%d')
+    date_str = date.strftime("%Y%m%d")
     suffix = uuid.uuid4().hex[:8]
-    return f"{entity_type}_{domain.value}_{date_str}_{counter+1:03d}_{suffix}"
+    return f"{entity_type}_{domain.value}_{date_str}_{counter + 1:03d}_{suffix}"
 
 
 def generate_article_id(domain: Domain, date: datetime, counter: int) -> str:
@@ -48,13 +46,13 @@ def generate_question_id(domain: Domain, date: datetime, counter: int) -> str:
 
 def generate_timestamped_id(prefix: str) -> str:
     """Generate ID with timestamp and UUID suffix for uniqueness.
-    
+
     Args:
         prefix: ID prefix (e.g., "evt_fcst", "hyp_fcst")
-    
+
     Returns:
         Unique ID: {prefix}_{timestamp}_{uuid}
-    
+
     Example:
         >>> generate_timestamped_id("evt_fcst")
         "evt_fcst_1765926590_a1b2c3d4"
@@ -66,7 +64,7 @@ def generate_timestamped_id(prefix: str) -> str:
 
 def generate_forecast_event_id() -> str:
     """Generate forecast event ID with timestamp and UUID.
-    
+
     Returns:
         Unique ID: evt_fcst_{timestamp}_{uuid}
     """
@@ -75,7 +73,7 @@ def generate_forecast_event_id() -> str:
 
 def generate_forecast_hypothesis_id() -> str:
     """Generate forecast hypothesis ID with timestamp and UUID.
-    
+
     Returns:
         Unique ID: hyp_fcst_{timestamp}_{uuid}
     """

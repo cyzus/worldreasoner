@@ -14,76 +14,80 @@ from src.domain.models.question import Question
 
 class AgentFactory:
     """Factory for creating configured agents with standard settings.
-    
+
     This factory provides a centralized way to create agents, ensuring
     consistent configuration across the application and reducing boilerplate
     in pipeline stages.
-    
+
     Usage:
         # Create a web agent with custom tools
         agent = AgentFactory.create_web_agent(tools=[my_tool])
-        
+
         # Create a base agent
         agent = AgentFactory.create_base_agent(tools=[analysis_tool])
     """
-    
+
     @staticmethod
     def create_web_agent(
         tools: Optional[List[Tool]] = None,
         is_code: bool = False,
         config: Optional[Config] = None,
-        max_steps: int = 15
+        max_steps: int = 15,
     ) -> WebAgent:
         """Create a WebAgent with standard configuration.
-        
+
         WebAgents are specialized for web interactions and come pre-configured
         with web_search and web_fetch tools, plus any custom tools provided.
-        
+
         Args:
             tools: Optional list of custom tools to add to the agent.
                    Web tools (WebSearchTool, WebFetchTool) are added automatically.
             config: Optional custom configuration. If not provided, uses global config.
             max_steps: Maximum number of steps the agent can take (default: 15).
                       WebAgents need more steps for search → fetch → collect workflows.
-        
+
         Returns:
             Configured WebAgent instance
-        
+
         Example:
             >>> collector_tool = ArticleCollectorTool(db_path="db.sqlite")
             >>> agent = AgentFactory.create_web_agent(tools=[collector_tool])
             >>> result = agent.run("Search for AI news articles")
         """
         app_config = config or get_config()
-        return WebAgent(config=app_config, tools=tools, max_steps=max_steps, is_code=is_code)
-    
+        return WebAgent(
+            config=app_config, tools=tools, max_steps=max_steps, is_code=is_code
+        )
+
     @staticmethod
     def create_base_agent(
         tools: Optional[List[Tool]] = None,
         is_code: bool = False,
         config: Optional[Config] = None,
-        max_steps: int = 10
+        max_steps: int = 10,
     ) -> BaseAgent:
         """Create a BaseAgent with standard configuration.
-        
+
         BaseAgents are general-purpose agents without pre-configured tools.
         Use these for analysis, reasoning, and structured data processing tasks.
-        
+
         Args:
             tools: Optional list of tools to provide to the agent
             config: Optional custom configuration. If not provided, uses global config.
             max_steps: Maximum number of steps the agent can take (default: 10)
-        
+
         Returns:
             Configured BaseAgent instance
-        
+
         Example:
             >>> event_tool = EventIdentifierTool()
             >>> agent = AgentFactory.create_base_agent(tools=[event_tool])
             >>> result = agent.run("Analyze these articles for events")
         """
         app_config = config or get_config()
-        return BaseAgent(config=app_config, tools=tools, max_steps=max_steps, is_code=is_code)
+        return BaseAgent(
+            config=app_config, tools=tools, max_steps=max_steps, is_code=is_code
+        )
 
     @staticmethod
     def create_forecast_agent(
@@ -95,7 +99,7 @@ class AgentFactory:
         db_path: str = None,
         mode: str = "container",
         enable_causal_tools: bool = False,
-        max_steps: int = 15
+        max_steps: int = 15,
     ):
         """Create a ForecastAgent with standard configuration.
 
@@ -148,7 +152,7 @@ class AgentFactory:
             mode=mode,
             enable_causal_tools=enable_causal_tools,
             tools=tools,
-            max_steps=max_steps
+            max_steps=max_steps,
         )
 
     @staticmethod
@@ -161,7 +165,7 @@ class AgentFactory:
         # Forecast-specific parameters
         question: Optional[Question] = None,
         simulated_date: Optional[str] = None,
-        knowledge_cutoff: Optional[str] = None
+        knowledge_cutoff: Optional[str] = None,
     ):
         """Create an agent based on string type identifier.
 
@@ -209,24 +213,18 @@ class AgentFactory:
         elif agent_type == "forecast":
             # Validate required forecast parameters
             if question is None:
-                raise ValueError(
-                    "ForecastAgent requires 'question' parameter"
-                )
+                raise ValueError("ForecastAgent requires 'question' parameter")
             if simulated_date is None:
-                raise ValueError(
-                    "ForecastAgent requires 'simulated_date' parameter"
-                )
+                raise ValueError("ForecastAgent requires 'simulated_date' parameter")
             if knowledge_cutoff is None:
-                raise ValueError(
-                    "ForecastAgent requires 'knowledge_cutoff' parameter"
-                )
+                raise ValueError("ForecastAgent requires 'knowledge_cutoff' parameter")
 
             kwargs = {
                 "question": question,
                 "simulated_date": simulated_date,
                 "knowledge_cutoff": knowledge_cutoff,
                 "tools": tools,
-                "config": config
+                "config": config,
             }
             if max_steps is not None:
                 kwargs["max_steps"] = max_steps

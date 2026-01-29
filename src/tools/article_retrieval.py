@@ -1,6 +1,5 @@
 """Tool for retrieving articles from the database."""
 
-from typing import Optional, List
 from src.tools.database_mixin import DatabaseAwareTool
 from src.tools.base import ToolResponseMixin
 from src.domain.models import Article
@@ -29,7 +28,7 @@ class ArticleRetrievalTool(DatabaseAwareTool, ToolResponseMixin):
     inputs = {
         "article_id": {
             "type": "string",
-            "description": "The ID of the article to retrieve"
+            "description": "The ID of the article to retrieve",
         }
     }
     output_type = "string"
@@ -45,7 +44,7 @@ class ArticleRetrievalTool(DatabaseAwareTool, ToolResponseMixin):
             If neither db nor db_path is provided, will use default database path
         """
         super().__init__(db=db, db_path=db_path, ensure_tables=[Article])
-    
+
     def forward(self, article_id: str) -> str:
         """Retrieve article by ID.
 
@@ -69,13 +68,15 @@ class ArticleRetrievalTool(DatabaseAwareTool, ToolResponseMixin):
             "title": article.title,
             "url": article.url,
             "source": article.source,
-            "domain": article.domain.value if hasattr(article.domain, 'value') else article.domain,
+            "domain": article.domain.value
+            if hasattr(article.domain, "value")
+            else article.domain,
             "published_date": article.published_date.isoformat(),
             "author": article.author,
             "word_count": article.word_count,
             "tags": article.tags,
             "content": article.content,  # Full content!
-            "event_ids": article.event_ids
+            "event_ids": article.event_ids,
         }
 
         return self.json_response(response)

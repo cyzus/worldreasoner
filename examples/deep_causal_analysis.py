@@ -35,7 +35,14 @@ import asyncio
 from datetime import datetime, timezone
 from src.agents.hindsight_agent import HindsightAgent
 from src.pipelines.prompts import HindsightCausalAnalysisPrompts
-from src.domain.models import Question, QuestionType, Domain, Event, Article, CausalHypothesis
+from src.domain.models import (
+    Question,
+    QuestionType,
+    Domain,
+    Event,
+    Article,
+    CausalHypothesis,
+)
 from src.core.database import GenericDatabase
 from src.config import get_config
 from src.utils.logging import logger
@@ -49,51 +56,104 @@ def parse_args():
     )
 
     # Database configuration
-    parser.add_argument('--db', type=str, default='test.db',
-                       help='Path to database file (default: test.db)')
+    parser.add_argument(
+        "--db",
+        type=str,
+        default="test.db",
+        help="Path to database file (default: test.db)",
+    )
 
     # Question source (either from DB or custom)
     question_group = parser.add_mutually_exclusive_group(required=True)
-    question_group.add_argument('--question-id', type=str,
-                                help='Question ID to load from database')
-    question_group.add_argument('--question', type=str,
-                                help='Custom question text (requires --ground-truth and --resolution-date)')
+    question_group.add_argument(
+        "--question-id", type=str, help="Question ID to load from database"
+    )
+    question_group.add_argument(
+        "--question",
+        type=str,
+        help="Custom question text (requires --ground-truth and --resolution-date)",
+    )
 
     # Custom question parameters (required if --question is used)
-    parser.add_argument('--ground-truth', type=str,
-                       help='Ground truth answer (true/false for boolean, or value)')
-    parser.add_argument('--resolution-date', type=str,
-                       help='Resolution date in ISO format (YYYY-MM-DD)')
-    parser.add_argument('--question-type', type=str, default='boolean',
-                       choices=enum_to_list(QuestionType),
-                       help='Type of question (default: boolean)')
-    parser.add_argument('--domain', type=str, default='politics',
-                       choices=enum_to_list(Domain),
-                       help='Question domain (default: politics)')
-    parser.add_argument('--difficulty', type=int, default=4, choices=[1, 2, 3, 4, 5],
-                       help='Question difficulty 1-5 (default: 4)')
+    parser.add_argument(
+        "--ground-truth",
+        type=str,
+        help="Ground truth answer (true/false for boolean, or value)",
+    )
+    parser.add_argument(
+        "--resolution-date", type=str, help="Resolution date in ISO format (YYYY-MM-DD)"
+    )
+    parser.add_argument(
+        "--question-type",
+        type=str,
+        default="boolean",
+        choices=enum_to_list(QuestionType),
+        help="Type of question (default: boolean)",
+    )
+    parser.add_argument(
+        "--domain",
+        type=str,
+        default="politics",
+        choices=enum_to_list(Domain),
+        help="Question domain (default: politics)",
+    )
+    parser.add_argument(
+        "--difficulty",
+        type=int,
+        default=4,
+        choices=[1, 2, 3, 4, 5],
+        help="Question difficulty 1-5 (default: 4)",
+    )
 
     # Agent configuration
-    parser.add_argument('--max-steps', type=int, default=30,
-                       help='Maximum steps for manager agent (default: 30)')
-    parser.add_argument('--min-depth', type=int, default=3,
-                       help='Minimum causal chain depth required (default: 3)')
-    parser.add_argument('--min-quality', type=float, default=0.7,
-                       help='Minimum quality score required (default: 0.7)')
+    parser.add_argument(
+        "--max-steps",
+        type=int,
+        default=30,
+        help="Maximum steps for manager agent (default: 30)",
+    )
+    parser.add_argument(
+        "--min-depth",
+        type=int,
+        default=3,
+        help="Minimum causal chain depth required (default: 3)",
+    )
+    parser.add_argument(
+        "--min-quality",
+        type=float,
+        default=0.7,
+        help="Minimum quality score required (default: 0.7)",
+    )
 
     # Evidence collection
-    parser.add_argument('--evidence-window', type=int, default=90,
-                       help='Days before resolution to collect evidence (default: 90)')
-    parser.add_argument('--min-articles', type=int, default=5,
-                       help='Minimum evidence articles required (default: 5)')
-    parser.add_argument('--confidence-threshold', type=float, default=0.6,
-                       help='Minimum confidence for causal links (default: 0.6)')
+    parser.add_argument(
+        "--evidence-window",
+        type=int,
+        default=90,
+        help="Days before resolution to collect evidence (default: 90)",
+    )
+    parser.add_argument(
+        "--min-articles",
+        type=int,
+        default=5,
+        help="Minimum evidence articles required (default: 5)",
+    )
+    parser.add_argument(
+        "--confidence-threshold",
+        type=float,
+        default=0.6,
+        help="Minimum confidence for causal links (default: 0.6)",
+    )
 
     # Output control
-    parser.add_argument('--verbose', action='store_true',
-                       help='Show detailed output and visualization')
-    parser.add_argument('--skip-visualization', action='store_true',
-                       help='Skip graph visualization after completion')
+    parser.add_argument(
+        "--verbose", action="store_true", help="Show detailed output and visualization"
+    )
+    parser.add_argument(
+        "--skip-visualization",
+        action="store_true",
+        help="Skip graph visualization after completion",
+    )
 
     return parser.parse_args()
 
@@ -124,12 +184,14 @@ async def run_deep_causal_analysis(args):
     else:
         # Validate custom question parameters
         if not args.ground_truth or not args.resolution_date:
-            logger.error("--ground-truth and --resolution-date are required when using --question")
+            logger.error(
+                "--ground-truth and --resolution-date are required when using --question"
+            )
             return
 
         # Parse ground truth
-        if args.question_type == 'boolean':
-            ground_truth = args.ground_truth.lower() == 'true'
+        if args.question_type == "boolean":
+            ground_truth = args.ground_truth.lower() == "true"
         else:
             ground_truth = args.ground_truth
 
@@ -217,6 +279,7 @@ async def run_deep_causal_analysis(args):
 
         if args.verbose:
             import traceback
+
             logger.error(traceback.format_exc())
 
         raise
@@ -242,12 +305,11 @@ def visualize_causal_graph(question_id: str, db_path: str, verbose: bool = False
 
     # Filter for this question
     question_hypotheses = [
-        h for h in all_hypotheses
-        if question_id in h.discovered_by_question_ids
+        h for h in all_hypotheses if question_id in h.discovered_by_question_ids
     ]
 
     if verbose:
-        logger.info(f"\n🔍 DATABASE CONTENTS:")
+        logger.info("\n🔍 DATABASE CONTENTS:")
         logger.info(f"  Total Articles: {len(all_articles)}")
         logger.info(f"  Total Events: {len(all_events)}")
         logger.info(f"  Total Hypotheses: {len(all_hypotheses)}")
@@ -255,10 +317,10 @@ def visualize_causal_graph(question_id: str, db_path: str, verbose: bool = False
 
     if not question_hypotheses:
         logger.warning(f"\n❌ No causal graph found for question {question_id}")
-        logger.warning(f"\nPossible issues:")
-        logger.warning(f"  1. Agent didn't complete causal analysis")
-        logger.warning(f"  2. Hypotheses weren't persisted to database")
-        logger.warning(f"  3. Question ID mismatch in tool calls")
+        logger.warning("\nPossible issues:")
+        logger.warning("  1. Agent didn't complete causal analysis")
+        logger.warning("  2. Hypotheses weren't persisted to database")
+        logger.warning("  3. Question ID mismatch in tool calls")
         return
 
     # Get all events
@@ -269,21 +331,23 @@ def visualize_causal_graph(question_id: str, db_path: str, verbose: bool = False
 
     events = {evt.id: evt for evt in all_events if evt.id in event_ids}
 
-    logger.info(f"\n📊 GRAPH SUMMARY")
+    logger.info("\n📊 GRAPH SUMMARY")
     logger.info(f"Events: {len(events)}")
     logger.info(f"Causal Links: {len(question_hypotheses)}")
 
     # Display events
     if verbose:
-        logger.info(f"\n📍 EVENTS:")
+        logger.info("\n📍 EVENTS:")
         for evt_id, evt in events.items():
             logger.info(f"  [{evt_id}]")
             logger.info(f"    Title: {evt.title}")
-            logger.info(f"    Type: {evt.event_type.value if evt.event_type else 'N/A'}")
+            logger.info(
+                f"    Type: {evt.event_type.value if evt.event_type else 'N/A'}"
+            )
             logger.info(f"    Date: {evt.occurred_date or evt.predicted_date}")
 
     # Display causal chains
-    logger.info(f"\n🔗 CAUSAL CHAINS:")
+    logger.info("\n🔗 CAUSAL CHAINS:")
     for i, hyp in enumerate(question_hypotheses, 1):
         source = events.get(hyp.source_event_id)
         target = events.get(hyp.target_event_id)
@@ -292,7 +356,9 @@ def visualize_causal_graph(question_id: str, db_path: str, verbose: bool = False
         target_title = target.title if target else hyp.target_event_id
 
         logger.info(f"\n  {i}. {source_title}")
-        logger.info(f"     ↓ {hyp.relation_type.value} (conf: {hyp.confidence:.2f}, str: {hyp.strength:.2f})")
+        logger.info(
+            f"     ↓ {hyp.relation_type.value} (conf: {hyp.confidence:.2f}, str: {hyp.strength:.2f})"
+        )
         logger.info(f"     {target_title}")
 
         if verbose:
@@ -334,12 +400,16 @@ def visualize_causal_graph(question_id: str, db_path: str, verbose: bool = False
         # Count how many times each event appears as a source
         source_counts = {}
         for event_id in all_targets:
-            source_counts[event_id] = sum(1 for h in question_hypotheses if h.source_event_id == event_id)
+            source_counts[event_id] = sum(
+                1 for h in question_hypotheses if h.source_event_id == event_id
+            )
 
         # Pick the one that's a target but appears least as a source
         if source_counts:
             target_event_id = min(source_counts, key=source_counts.get)
-            logger.info(f"Auto-detected target event: {target_event_id} (appears {source_counts[target_event_id]} times as source)")
+            logger.info(
+                f"Auto-detected target event: {target_event_id} (appears {source_counts[target_event_id]} times as source)"
+            )
 
     if target_event_id:
         max_depth = find_max_depth(target_event_id)
@@ -349,9 +419,9 @@ def visualize_causal_graph(question_id: str, db_path: str, verbose: bool = False
     avg_str = sum(h.strength for h in question_hypotheses) / len(question_hypotheses)
     with_evidence = sum(1 for h in question_hypotheses if h.evidence_article_ids)
 
-    logger.info(f"\n{'='*80}")
-    logger.info(f"📊 GRAPH METRICS")
-    logger.info(f"{'='*80}")
+    logger.info(f"\n{'=' * 80}")
+    logger.info("📊 GRAPH METRICS")
+    logger.info(f"{'=' * 80}")
     logger.info(f"Maximum Causal Depth: {max_depth} levels")
     logger.info(f"Total Events: {len(events)}")
     logger.info(f"Total Links: {len(question_hypotheses)}")
@@ -363,11 +433,13 @@ def visualize_causal_graph(question_id: str, db_path: str, verbose: bool = False
     if max_depth >= 3:
         logger.info(f"✓ Graph is DEEP ({max_depth} levels) - Excellent!")
     elif max_depth == 2:
-        logger.info(f"⚠ Graph has moderate depth ({max_depth} levels) - Could be deeper")
+        logger.info(
+            f"⚠ Graph has moderate depth ({max_depth} levels) - Could be deeper"
+        )
     else:
         logger.info(f"❌ Graph is SHALLOW ({max_depth} level) - Needs improvement")
 
-    logger.info(f"{'='*80}\n")
+    logger.info(f"{'=' * 80}\n")
 
 
 def main():

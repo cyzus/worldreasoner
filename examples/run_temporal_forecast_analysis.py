@@ -56,83 +56,71 @@ def parse_args():
 
     # Question selection (required)
     parser.add_argument(
-        '--question-id',
-        type=str,
-        required=True,
-        help='Question ID to analyze'
+        "--question-id", type=str, required=True, help="Question ID to analyze"
     )
 
     # Database
     parser.add_argument(
-        '--db',
+        "--db",
         type=str,
-        default='worldreasoner.db',
-        help='Path to database file (default: worldreasoner.db)'
+        default="worldreasoner.db",
+        help="Path to database file (default: worldreasoner.db)",
     )
 
     # Temporal configuration
     parser.add_argument(
-        '--knowledge-cutoff',
+        "--knowledge-cutoff",
         type=str,
-        default='2024-05-01',
-        help='LLM training cutoff date (YYYY-MM-DD, default: 2024-05-01)'
+        default="2024-05-01",
+        help="LLM training cutoff date (YYYY-MM-DD, default: 2024-05-01)",
     )
 
     parser.add_argument(
-        '--num-points',
+        "--num-points",
         type=int,
         default=5,
-        help='Number of forecast points to generate (default: 5)'
+        help="Number of forecast points to generate (default: 5)",
     )
 
     parser.add_argument(
-        '--min-context-items',
+        "--min-context-items",
         type=int,
         default=2,
-        help='Minimum context items needed for first forecast (default: 2)'
+        help="Minimum context items needed for first forecast (default: 2)",
     )
 
     # Agent configuration
     parser.add_argument(
-        '--max-steps',
-        type=int,
-        default=15,
-        help='Maximum agent steps (default: 15)'
+        "--max-steps", type=int, default=15, help="Maximum agent steps (default: 15)"
     )
 
     parser.add_argument(
-        '--model',
+        "--model",
         type=str,
         default=None,
-        help='Override LLM model (e.g., gpt-4, claude-sonnet-4)'
+        help="Override LLM model (e.g., gpt-4, claude-sonnet-4)",
     )
 
     parser.add_argument(
-        '--mode',
-        default='container',
-        choices=['knowledge_only', 'container', 'real_time'],
-        help='Forecasting mode (default: container)'
+        "--mode",
+        default="container",
+        choices=["knowledge_only", "container", "real_time"],
+        help="Forecasting mode (default: container)",
     )
 
     # Output control
     parser.add_argument(
-        '--output',
+        "--output",
         type=str,
         default=None,
-        help='Save results to JSON file (default: temporal_analysis/<question_id>.json)'
+        help="Save results to JSON file (default: temporal_analysis/<question_id>.json)",
     )
 
     parser.add_argument(
-        '--no-viz',
-        action='store_true',
-        help='Skip visualization generation'
+        "--no-viz", action="store_true", help="Skip visualization generation"
     )
 
-    parser.add_argument(
-        '--verbose',
-        action='store_true',
-        help='Show detailed output'
-    )
+    parser.add_argument("--verbose", action="store_true", help="Show detailed output")
 
     return parser.parse_args()
 
@@ -152,8 +140,7 @@ def ensure_aware(dt: datetime) -> datetime:
 
 
 def get_context_timeline(
-    question: Question,
-    db: GenericDatabase
+    question: Question, db: GenericDatabase
 ) -> List[Tuple[datetime, int, str]]:
     """Get timeline of when context items become available.
 
@@ -171,25 +158,28 @@ def get_context_timeline(
         for event_id in question.related_event_ids:
             event = db.get(Event, event_id)
             if event and event.occurred_date:
-                timeline.append((ensure_aware(event.occurred_date), 'event', event.id))
+                timeline.append((ensure_aware(event.occurred_date), "event", event.id))
 
     # Get target event if it exists
     if question.target_event_id:
         event = db.get(Event, question.target_event_id)
         if event and event.occurred_date:
-            timeline.append((ensure_aware(event.occurred_date), 'event', event.id))
+            timeline.append((ensure_aware(event.occurred_date), "event", event.id))
 
     # Get all articles and filter for those related to this question
     all_articles = db.get_many(Article)
     question_articles = [
-        a for a in all_articles
-        if 'related_question_ids' in a.metadata
-        and question.id in a.metadata['related_question_ids']
+        a
+        for a in all_articles
+        if "related_question_ids" in a.metadata
+        and question.id in a.metadata["related_question_ids"]
     ]
 
     for article in question_articles:
         if article.published_date:
-            timeline.append((ensure_aware(article.published_date), 'article', article.id))
+            timeline.append(
+                (ensure_aware(article.published_date), "article", article.id)
+            )
 
     # Sort by timestamp
     timeline.sort(key=lambda x: x[0])
@@ -204,10 +194,7 @@ def get_context_timeline(
 
 
 def calculate_forecast_points(
-    question: Question,
-    db: GenericDatabase,
-    num_points: int,
-    min_context_items: int
+    question: Question, db: GenericDatabase, num_points: int, min_context_items: int
 ) -> List[Dict[str, Any]]:
     """Calculate optimal forecast points along the timeline.
 
@@ -231,7 +218,8 @@ def calculate_forecast_points(
 
     # Filter to events before resolution
     valid_timeline = [
-        (ts, count, item_type) for ts, count, item_type in timeline
+        (ts, count, item_type)
+        for ts, count, item_type in timeline
         if ts < question.resolution_date
     ]
 
@@ -245,10 +233,16 @@ def calculate_forecast_points(
     forecast_points = []
 
     # Find indices where we have enough context
-    valid_indices = [i for i in range(len(valid_timeline)) if valid_timeline[i][1] >= min_context_items]
+    valid_indices = [
+        i
+        for i in range(len(valid_timeline))
+        if valid_timeline[i][1] >= min_context_items
+    ]
 
     if not valid_indices:
-        raise ValueError(f"No valid forecast points found with {min_context_items}+ context items")
+        raise ValueError(
+            f"No valid forecast points found with {min_context_items}+ context items"
+        )
 
     # Distribute forecast points evenly across valid timeline
     if num_points <= len(valid_indices):
@@ -266,11 +260,13 @@ def calculate_forecast_points(
     # Create forecast points
     for idx in selected_indices:
         timestamp, context_count, item_type = valid_timeline[idx]
-        forecast_points.append({
-            'simulated_date': timestamp,
-            'context_count': context_count,
-            'days_before_resolution': (question.resolution_date - timestamp).days
-        })
+        forecast_points.append(
+            {
+                "simulated_date": timestamp,
+                "context_count": context_count,
+                "days_before_resolution": (question.resolution_date - timestamp).days,
+            }
+        )
 
     return forecast_points
 
@@ -282,7 +278,7 @@ def run_single_temporal_forecast(
     db: GenericDatabase,
     config,
     args,
-    evaluator: ForecastEvaluator
+    evaluator: ForecastEvaluator,
 ) -> Dict[str, Any]:
     """Run forecast at a specific point in time.
 
@@ -310,7 +306,7 @@ def run_single_temporal_forecast(
             knowledge_cutoff=args.knowledge_cutoff,
             config=config,
             max_steps=args.max_steps,
-            mode=args.mode
+            mode=args.mode,
         )
 
         # Run agent
@@ -320,22 +316,19 @@ def run_single_temporal_forecast(
 
         # Get the forecast that was just submitted
         # Filter by timestamp to get only forecasts created in this run
-        all_forecasts = db.get_many(Forecast, filters={'question_id': question.id})
+        all_forecasts = db.get_many(Forecast, filters={"question_id": question.id})
 
         # Find most recent forecast (created in last few seconds)
         recent_cutoff = datetime.now(timezone.utc) - timedelta(seconds=30)
-        recent_forecasts = [
-            f for f in all_forecasts
-            if f.timestamp > recent_cutoff
-        ]
+        recent_forecasts = [f for f in all_forecasts if f.timestamp > recent_cutoff]
 
         if not recent_forecasts:
             logger.warning(f"No recent forecast found for {question.id}")
             return {
-                'simulated_date': simulated_date.isoformat(),
-                'context_count': context_count,
-                'status': 'error',
-                'error': 'No forecast created'
+                "simulated_date": simulated_date.isoformat(),
+                "context_count": context_count,
+                "status": "error",
+                "error": "No forecast created",
             }
 
         # Get most recent
@@ -352,30 +345,32 @@ def run_single_temporal_forecast(
                 print(f"  Brier Score: {evaluation.brier_score:.4f}")
 
         return {
-            'simulated_date': simulated_date.isoformat(),
-            'context_count': context_count,
-            'days_before_resolution': (question.resolution_date - simulated_date).days,
-            'forecast_id': forecast.id,
-            'status': 'success',
-            'evaluation': {
-                'is_correct': evaluation.is_correct,
-                'accuracy': evaluation.accuracy,
-                'brier_score': evaluation.brier_score,
-                'log_score': evaluation.log_score,
-                'confidence': evaluation.confidence,
-                'prediction': evaluation.prediction,
-                'ground_truth': evaluation.ground_truth,
+            "simulated_date": simulated_date.isoformat(),
+            "context_count": context_count,
+            "days_before_resolution": (question.resolution_date - simulated_date).days,
+            "forecast_id": forecast.id,
+            "status": "success",
+            "evaluation": {
+                "is_correct": evaluation.is_correct,
+                "accuracy": evaluation.accuracy,
+                "brier_score": evaluation.brier_score,
+                "log_score": evaluation.log_score,
+                "confidence": evaluation.confidence,
+                "prediction": evaluation.prediction,
+                "ground_truth": evaluation.ground_truth,
             },
-            'metadata': evaluation.evaluation_metadata
+            "metadata": evaluation.evaluation_metadata,
         }
 
     except Exception as e:
-        logger.error(f"Error in temporal forecast at {simulated_date}: {e}", exc_info=True)
+        logger.error(
+            f"Error in temporal forecast at {simulated_date}: {e}", exc_info=True
+        )
         return {
-            'simulated_date': simulated_date.isoformat(),
-            'context_count': context_count,
-            'status': 'error',
-            'error': str(e)
+            "simulated_date": simulated_date.isoformat(),
+            "context_count": context_count,
+            "status": "error",
+            "error": str(e),
         }
 
 
@@ -394,7 +389,7 @@ def print_results_summary(results: List[Dict[str, Any]]):
     """
     print_header("TEMPORAL FORECAST ANALYSIS RESULTS")
 
-    successful = [r for r in results if r['status'] == 'success']
+    successful = [r for r in results if r["status"] == "success"]
 
     if not successful:
         print("\nNo successful forecasts to analyze!")
@@ -405,23 +400,33 @@ def print_results_summary(results: List[Dict[str, Any]]):
     print(f"Failed: {len(results) - len(successful)}")
 
     print("\n" + "-" * 80)
-    print(f"{'Date':<12} {'Context':<10} {'Days Left':<12} {'Correct':<10} {'Confidence':<12} {'Brier':<10}")
+    print(
+        f"{'Date':<12} {'Context':<10} {'Days Left':<12} {'Correct':<10} {'Confidence':<12} {'Brier':<10}"
+    )
     print("-" * 80)
 
     for result in results:
-        if result['status'] != 'success':
-            date_str = result['simulated_date'][:10]
-            print(f"{date_str:<12} {'N/A':<10} {'N/A':<12} {'ERROR':<10} {'N/A':<12} {'N/A':<10}")
+        if result["status"] != "success":
+            date_str = result["simulated_date"][:10]
+            print(
+                f"{date_str:<12} {'N/A':<10} {'N/A':<12} {'ERROR':<10} {'N/A':<12} {'N/A':<10}"
+            )
             continue
 
-        date_str = result['simulated_date'][:10]
+        date_str = result["simulated_date"][:10]
         context = f"{result['context_count']} items"
         days_left = f"{result['days_before_resolution']} days"
-        correct = "YES" if result['evaluation']['is_correct'] else "NO"
+        correct = "YES" if result["evaluation"]["is_correct"] else "NO"
         confidence = f"{result['evaluation']['confidence']:.1%}"
-        brier = f"{result['evaluation']['brier_score']:.4f}" if result['evaluation']['brier_score'] is not None else "N/A"
+        brier = (
+            f"{result['evaluation']['brier_score']:.4f}"
+            if result["evaluation"]["brier_score"] is not None
+            else "N/A"
+        )
 
-        print(f"{date_str:<12} {context:<10} {days_left:<12} {correct:<10} {confidence:<12} {brier:<10}")
+        print(
+            f"{date_str:<12} {context:<10} {days_left:<12} {correct:<10} {confidence:<12} {brier:<10}"
+        )
 
     print("-" * 80)
 
@@ -431,11 +436,17 @@ def print_results_summary(results: List[Dict[str, Any]]):
         last = successful[-1]
 
         print("\nProgression Analysis:")
-        print(f"  Context Growth: {first['context_count']} -> {last['context_count']} items")
-        print(f"  Confidence Change: {first['evaluation']['confidence']:.1%} -> {last['evaluation']['confidence']:.1%}")
+        print(
+            f"  Context Growth: {first['context_count']} -> {last['context_count']} items"
+        )
+        print(
+            f"  Confidence Change: {first['evaluation']['confidence']:.1%} -> {last['evaluation']['confidence']:.1%}"
+        )
 
-        if first['evaluation']['brier_score'] and last['evaluation']['brier_score']:
-            brier_change = last['evaluation']['brier_score'] - first['evaluation']['brier_score']
+        if first["evaluation"]["brier_score"] and last["evaluation"]["brier_score"]:
+            brier_change = (
+                last["evaluation"]["brier_score"] - first["evaluation"]["brier_score"]
+            )
             direction = "improved" if brier_change < 0 else "worsened"
             print(f"  Brier Score Change: {brier_change:+.4f} ({direction})")
 
@@ -443,9 +454,7 @@ def print_results_summary(results: List[Dict[str, Any]]):
 
 
 def generate_visualization(
-    results: List[Dict[str, Any]],
-    question: Question,
-    output_path: Path
+    results: List[Dict[str, Any]], question: Question, output_path: Path
 ):
     """Generate visualization of temporal progression.
 
@@ -463,67 +472,94 @@ def generate_visualization(
         print("Install with: uv sync --group viz")
         return
 
-    successful = [r for r in results if r['status'] == 'success']
+    successful = [r for r in results if r["status"] == "success"]
     if len(successful) < 2:
         print("WARNING: Need at least 2 successful forecasts for visualization")
         return
 
     # Extract data
-    dates = [datetime.fromisoformat(r['simulated_date']) for r in successful]
-    context_counts = [r['context_count'] for r in successful]
-    confidences = [r['evaluation']['confidence'] for r in successful]
-    is_correct = [r['evaluation']['is_correct'] for r in successful]
-    brier_scores = [r['evaluation']['brier_score'] for r in successful if r['evaluation']['brier_score'] is not None]
+    dates = [datetime.fromisoformat(r["simulated_date"]) for r in successful]
+    context_counts = [r["context_count"] for r in successful]
+    confidences = [r["evaluation"]["confidence"] for r in successful]
+    is_correct = [r["evaluation"]["is_correct"] for r in successful]
+    brier_scores = [
+        r["evaluation"]["brier_score"]
+        for r in successful
+        if r["evaluation"]["brier_score"] is not None
+    ]
 
     # Create figure with subplots
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 10))
 
     # Plot 1: Context availability over time
-    ax1.plot(dates, context_counts, marker='o', linewidth=2, markersize=8, color='#3498db')
-    ax1.fill_between(dates, context_counts, alpha=0.3, color='#3498db')
-    ax1.set_ylabel('Context Items Available', fontsize=11)
-    ax1.set_title(f'Temporal Forecast Progression: {question.id}', fontsize=13, fontweight='bold')
+    ax1.plot(
+        dates, context_counts, marker="o", linewidth=2, markersize=8, color="#3498db"
+    )
+    ax1.fill_between(dates, context_counts, alpha=0.3, color="#3498db")
+    ax1.set_ylabel("Context Items Available", fontsize=11)
+    ax1.set_title(
+        f"Temporal Forecast Progression: {question.id}", fontsize=13, fontweight="bold"
+    )
     ax1.grid(alpha=0.3)
-    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
 
     # Plot 2: Confidence over time (color by correctness)
-    colors = ['#2ecc71' if correct else '#e74c3c' for correct in is_correct]
-    ax2.scatter(dates, confidences, c=colors, s=100, alpha=0.7, edgecolors='black', linewidth=1)
-    ax2.plot(dates, confidences, linewidth=2, alpha=0.5, color='#7f8c8d')
-    ax2.set_ylabel('Forecast Confidence', fontsize=11)
+    colors = ["#2ecc71" if correct else "#e74c3c" for correct in is_correct]
+    ax2.scatter(
+        dates, confidences, c=colors, s=100, alpha=0.7, edgecolors="black", linewidth=1
+    )
+    ax2.plot(dates, confidences, linewidth=2, alpha=0.5, color="#7f8c8d")
+    ax2.set_ylabel("Forecast Confidence", fontsize=11)
     ax2.set_ylim([0, 1.05])
     ax2.grid(alpha=0.3)
-    ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax2.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
 
     # Add legend
     from matplotlib.patches import Patch
+
     legend_elements = [
-        Patch(facecolor='#2ecc71', label='Correct'),
-        Patch(facecolor='#e74c3c', label='Incorrect')
+        Patch(facecolor="#2ecc71", label="Correct"),
+        Patch(facecolor="#e74c3c", label="Incorrect"),
     ]
-    ax2.legend(handles=legend_elements, loc='upper right')
+    ax2.legend(handles=legend_elements, loc="upper right")
 
     # Plot 3: Brier score over time (if available)
     if brier_scores and len(brier_scores) > 1:
-        ax3.plot(dates[:len(brier_scores)], brier_scores, marker='s', linewidth=2, markersize=8, color='#e67e22')
-        ax3.fill_between(dates[:len(brier_scores)], brier_scores, alpha=0.3, color='#e67e22')
-        ax3.set_ylabel('Brier Score (lower=better)', fontsize=11)
-        ax3.set_xlabel('Simulated Date', fontsize=11)
+        ax3.plot(
+            dates[: len(brier_scores)],
+            brier_scores,
+            marker="s",
+            linewidth=2,
+            markersize=8,
+            color="#e67e22",
+        )
+        ax3.fill_between(
+            dates[: len(brier_scores)], brier_scores, alpha=0.3, color="#e67e22"
+        )
+        ax3.set_ylabel("Brier Score (lower=better)", fontsize=11)
+        ax3.set_xlabel("Simulated Date", fontsize=11)
         ax3.grid(alpha=0.3)
-        ax3.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+        ax3.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
     else:
-        ax3.text(0.5, 0.5, 'Insufficient Brier Score Data',
-                ha='center', va='center', transform=ax3.transAxes, fontsize=12)
-        ax3.set_xlabel('Simulated Date', fontsize=11)
+        ax3.text(
+            0.5,
+            0.5,
+            "Insufficient Brier Score Data",
+            ha="center",
+            va="center",
+            transform=ax3.transAxes,
+            fontsize=12,
+        )
+        ax3.set_xlabel("Simulated Date", fontsize=11)
 
     # Rotate x-axis labels
     for ax in [ax1, ax2, ax3]:
-        plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+        plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha="right")
 
     plt.tight_layout()
 
     # Save figure
-    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    plt.savefig(output_path, dpi=150, bbox_inches="tight")
     print(f"\nVisualization saved to: {output_path}")
     plt.close()
 
@@ -565,7 +601,7 @@ def main():
             question=question,
             db=db,
             num_points=args.num_points,
-            min_context_items=args.min_context_items
+            min_context_items=args.min_context_items,
         )
     except ValueError as e:
         print(f"\nERROR: {e}")
@@ -586,12 +622,12 @@ def main():
 
         result = run_single_temporal_forecast(
             question=question,
-            simulated_date=point['simulated_date'],
-            context_count=point['context_count'],
+            simulated_date=point["simulated_date"],
+            context_count=point["context_count"],
             db=db,
             config=config,
             args=args,
-            evaluator=evaluator
+            evaluator=evaluator,
         )
         results.append(result)
 
@@ -601,33 +637,33 @@ def main():
 
     # Save results to JSON
     output_data = {
-        'analysis_info': {
-            'question_id': args.question_id,
-            'question_text': question.question_text,
-            'resolution_date': question.resolution_date.isoformat(),
-            'ground_truth': question.ground_truth,
-            'model': args.model or config.llm.model,
-            'knowledge_cutoff': args.knowledge_cutoff,
-            'num_points': len(results),
-            'mode': args.mode
+        "analysis_info": {
+            "question_id": args.question_id,
+            "question_text": question.question_text,
+            "resolution_date": question.resolution_date.isoformat(),
+            "ground_truth": question.ground_truth,
+            "model": args.model or config.llm.model,
+            "knowledge_cutoff": args.knowledge_cutoff,
+            "num_points": len(results),
+            "mode": args.mode,
         },
-        'results': results
+        "results": results,
     }
 
     if args.output:
         output_path = Path(args.output)
     else:
-        output_dir = Path('temporal_analysis')
+        output_dir = Path("temporal_analysis")
         output_dir.mkdir(exist_ok=True)
         output_path = output_dir / f"{args.question_id}.json"
 
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         json.dump(output_data, f, indent=2, default=str)
     print(f"\nResults saved to: {output_path}")
 
     # Generate visualization
     if not args.no_viz:
-        viz_path = output_path.with_suffix('.png')
+        viz_path = output_path.with_suffix(".png")
         generate_visualization(results, question, viz_path)
 
     print("\nTemporal analysis complete!")

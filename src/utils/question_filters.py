@@ -6,7 +6,7 @@ pipeline-specific code for reusability across the codebase.
 """
 
 from typing import List, Optional, Dict, Union
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 from src.domain.models import Question
 from src.config.collection_goal import QualityRequirements
@@ -27,7 +27,9 @@ def filter_questions_by_type(
         Filtered list of questions
     """
     logger.warning(f"Filtering by types: {allowed_types}")
-    logger.warning(f"Question types in input: {set(q.question_type for q in questions)}")
+    logger.warning(
+        f"Question types in input: {set(q.question_type for q in questions)}"
+    )
     return [q for q in questions if q.question_type in allowed_types]
 
 
@@ -48,7 +50,7 @@ def filter_questions_by_category(
         Filtered list of questions
     """
     from src.domain.models.domain import Domain
-    
+
     if isinstance(category_filter, dict):
         allowed_categories = category_filter.keys()
     else:
@@ -63,10 +65,7 @@ def filter_questions_by_category(
         else:
             allowed_categories_strs.add(str(cat))
 
-    return [
-        q for q in questions
-        if q.domain in allowed_categories_strs
-    ]
+    return [q for q in questions if q.domain in allowed_categories_strs]
 
 
 def apply_quality_requirements(
@@ -99,7 +98,11 @@ def apply_quality_requirements(
     for question in questions:
         # Check difficulty
         if question.difficulty:
-            if not (requirements.min_difficulty <= question.difficulty <= requirements.max_difficulty):
+            if not (
+                requirements.min_difficulty
+                <= question.difficulty
+                <= requirements.max_difficulty
+            ):
                 skip_difficulty += 1
                 continue
 
@@ -164,7 +167,9 @@ def filter_questions(
         Filtered list of questions
     """
     filtered = questions
-    logger.info(f"category_filter: {category_filter}, type_filter: {type_filter}, quality_requirements: {quality_requirements}")
+    logger.info(
+        f"category_filter: {category_filter}, type_filter: {type_filter}, quality_requirements: {quality_requirements}"
+    )
     # Filter by type
     if type_filter:
         filtered = filter_questions_by_type(filtered, type_filter)
@@ -234,7 +239,7 @@ def tag_questions_with_source(
         question.source = source_name
 
         # Initialize metadata if needed
-        if not hasattr(question, 'metadata') or question.metadata is None:
+        if not hasattr(question, "metadata") or question.metadata is None:
             question.metadata = {}
 
         # Add source to metadata

@@ -4,7 +4,7 @@ CLI wrapper that delegates to PipelineExecutor for actual work.
 Maintains backward compatibility for existing CLI commands.
 """
 
-from typing import List, Optional, Callable, Dict, Any
+from typing import List, Optional, Callable, Dict
 
 from src.config import get_config, Config
 from src.core.database import GenericDatabase
@@ -60,7 +60,7 @@ class PipelineRunner:
         pipeline_type: PipelineType,
         question_ids: List[str],
         on_progress: Optional[Callable[[PipelineProgress], None]] = None,
-        **kwargs
+        **kwargs,
     ) -> PipelineResult:
         """Run a pipeline on selected questions.
 
@@ -75,7 +75,9 @@ class PipelineRunner:
         Returns:
             PipelineResult with processed/failed/skipped items
         """
-        return await self.executor.execute(pipeline_type, question_ids, on_progress, **kwargs)
+        return await self.executor.execute(
+            pipeline_type, question_ids, on_progress, **kwargs
+        )
 
     async def clear_evidence(
         self,

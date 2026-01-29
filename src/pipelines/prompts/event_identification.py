@@ -3,11 +3,9 @@
 from datetime import datetime
 from typing import List, Optional
 from src.domain.models import Article, Domain
-from src.utils.enums import enum_to_list
 from .base import ContextualPromptGenerator, PromptTemplate
 
-ARTICLE_TEMPLATE = \
-"""
+ARTICLE_TEMPLATE = """
 Article {idx} (ID: {article_id}):
 - Title: {title}
 - Source: {source}
@@ -16,8 +14,7 @@ Article {idx} (ID: {article_id}):
 - Content Preview: {content_preview}
 """
 
-IDENTIFICATION_PROMPT = \
-"""
+IDENTIFICATION_PROMPT = """
 Analyze the following {num_articles} articles and identify events that would make good forecast questions.
 
 {articles_text}
@@ -48,41 +45,49 @@ Call final_answer only after you finish the task.
 
 class EventIdentificationPrompts(ContextualPromptGenerator[Article]):
     """Prompts for the event identification stage."""
-    
+
     # Template for formatting individual articles
     ARTICLE_TEMPLATE = PromptTemplate(
         template=ARTICLE_TEMPLATE,
-        required_vars=["idx", "article_id", "title", "source", "published_date", "domain", "content_preview"]
+        required_vars=[
+            "idx",
+            "article_id",
+            "title",
+            "source",
+            "published_date",
+            "domain",
+            "content_preview",
+        ],
     )
-    
+
     # Template for the main identification instruction
     IDENTIFICATION_TEMPLATE = PromptTemplate(
         template=IDENTIFICATION_PROMPT,
-        required_vars=["num_articles", "articles_text", "confidence_threshold", "domain_options"],
-        optional_vars={"tool_name": "batch_event_identifier"}
+        required_vars=[
+            "num_articles",
+            "articles_text",
+            "confidence_threshold",
+            "domain_options",
+        ],
+        optional_vars={"tool_name": "batch_event_identifier"},
     )
-    
+
     def format_item(
-        self,
-        item: Article,
-        idx: int,
-        content_preview_length: int = 300,
-        **context
+        self, item: Article, idx: int, content_preview_length: int = 300, **context
     ) -> str:
         """Format a single article for the prompt.
-        
+
         Args:
             item: Article to format
             idx: Index of the article (1-based)
             content_preview_length: Length of content preview (default: 300)
             **context: Additional context (not used)
-            
+
         Returns:
             Formatted article summary
         """
         content_preview = self.format_content_preview(
-            item.content,
-            max_length=content_preview_length
+            item.content, max_length=content_preview_length
         )
 
         return self.ARTICLE_TEMPLATE.format(
@@ -92,9 +97,9 @@ class EventIdentificationPrompts(ContextualPromptGenerator[Article]):
             source=item.source,
             published_date=item.published_date,
             domain=item.domain,
-            content_preview=content_preview
+            content_preview=content_preview,
         )
-    
+
     def get_instruction(
         self,
         current_date: datetime,
@@ -102,7 +107,7 @@ class EventIdentificationPrompts(ContextualPromptGenerator[Article]):
         confidence_threshold: float,
         content_preview_length: int = 300,
         tool_name: str = "batch_event_identifier",
-        category_hints: Optional[List[str]] = None
+        category_hints: Optional[List[str]] = None,
     ) -> str:
         """Generate instruction for event identification.
 
@@ -119,8 +124,7 @@ class EventIdentificationPrompts(ContextualPromptGenerator[Article]):
         """
         # Format all articles
         articles_text = self.format_items(
-            articles,
-            content_preview_length=content_preview_length
+            articles, content_preview_length=content_preview_length
         )
 
         # Build domain options from category hints (fully adaptive)
@@ -128,14 +132,13 @@ class EventIdentificationPrompts(ContextualPromptGenerator[Article]):
 
         # Build priority guidance from hints
         priority_guidance = self.build_priority_guidance(
-            category_hints=category_hints,
-            prefix="\n\n⚠️ PRIORITY DOMAINS NEEDED: "
+            category_hints=category_hints, prefix="\n\n⚠️ PRIORITY DOMAINS NEEDED: "
         )
         # Adjust the suffix message if needed
         if priority_guidance:
             priority_guidance = priority_guidance.replace(
                 "Focus on generating questions of these types/categories first!",
-                "Focus on identifying events in these domains first!"
+                "Focus on identifying events in these domains first!",
             )
 
         # Format the instruction body
@@ -144,7 +147,7 @@ class EventIdentificationPrompts(ContextualPromptGenerator[Article]):
             articles_text=articles_text,
             confidence_threshold=confidence_threshold,
             domain_options=domain_options,
-            tool_name=tool_name
+            tool_name=tool_name,
         )
 
         # Add priority guidance if provided
@@ -152,4 +155,3 @@ class EventIdentificationPrompts(ContextualPromptGenerator[Article]):
             instruction_body = instruction_body + priority_guidance
 
         return self.build_instruction(current_date, instruction_body)
-    

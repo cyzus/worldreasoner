@@ -2,30 +2,30 @@
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Dict, List, Optional, TypeVar, Generic, Tuple
+from typing import Dict, List, Optional, TypeVar, Generic, Tuple
 from dataclasses import dataclass
 
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @dataclass
 class PromptTemplate:
     """A reusable prompt template with variable substitution."""
-    
+
     template: str
     required_vars: List[str]
     optional_vars: Dict[str, str] = None  # var_name -> default_value
-    
+
     def format(self, **kwargs) -> str:
         """Format the template with provided variables.
-        
+
         Args:
             **kwargs: Variables to substitute in the template
-            
+
         Returns:
             Formatted prompt string
-            
+
         Raises:
             ValueError: If required variables are missing
         """
@@ -33,53 +33,55 @@ class PromptTemplate:
         missing = [var for var in self.required_vars if var not in kwargs]
         if missing:
             raise ValueError(f"Missing required variables: {missing}")
-        
+
         # Add optional variables with defaults
         if self.optional_vars:
             for var, default in self.optional_vars.items():
                 if var not in kwargs:
                     kwargs[var] = default
-        
+
         return self.template.format(**kwargs)
 
 
 class BasePromptGenerator(ABC, Generic[T]):
     """Base class for prompt generators.
-    
+
     Provides common functionality for formatting and generating prompts.
     """
-    
+
     @staticmethod
-    def format_datetime(dt: datetime, format_str: str = '%Y-%m-%d') -> str:
+    def format_datetime(dt: datetime, format_str: str = "%Y-%m-%d") -> str:
         """Format a datetime consistently.
-        
+
         Args:
             dt: Datetime to format
             format_str: Format string (default: YYYY-MM-DD)
-            
+
         Returns:
             Formatted date string
         """
         return dt.strftime(format_str)
-    
+
     @staticmethod
     def truncate_text(text: str, max_length: int, suffix: str = "...") -> str:
         """Truncate text to a maximum length.
-        
+
         Args:
             text: Text to truncate
             max_length: Maximum length
             suffix: Suffix to add if truncated
-            
+
         Returns:
             Truncated text
         """
         if len(text) <= max_length:
             return text
-        return text[:max_length - len(suffix)] + suffix
-    
+        return text[: max_length - len(suffix)] + suffix
+
     @staticmethod
-    def format_list(items: List[str], separator: str = ", ", empty_value: str = "None") -> str:
+    def format_list(
+        items: List[str], separator: str = ", ", empty_value: str = "None"
+    ) -> str:
         """Format a list of items as a string.
 
         Args:
@@ -93,7 +95,9 @@ class BasePromptGenerator(ABC, Generic[T]):
         return separator.join(items) if items else empty_value
 
     @staticmethod
-    def format_content_preview(content: str, max_length: int = 300, suffix: str = "...") -> str:
+    def format_content_preview(
+        content: str, max_length: int = 300, suffix: str = "..."
+    ) -> str:
         """Format content preview with consistent truncation.
 
         Args:
@@ -110,7 +114,7 @@ class BasePromptGenerator(ABC, Generic[T]):
     def build_priority_guidance(
         type_hints: Optional[List[str]] = None,
         category_hints: Optional[List[str]] = None,
-        prefix: str = "\n\n⚠️ COLLECTION PRIORITIES:\n"
+        prefix: str = "\n\n⚠️ COLLECTION PRIORITIES:\n",
     ) -> str:
         """Build priority guidance section from hints.
 
@@ -127,14 +131,24 @@ class BasePromptGenerator(ABC, Generic[T]):
 
         guidance_parts = []
         if type_hints:
-            guidance_parts.append(f"PRIORITY TYPES NEEDED: {BasePromptGenerator.format_list(type_hints)}")
+            guidance_parts.append(
+                f"PRIORITY TYPES NEEDED: {BasePromptGenerator.format_list(type_hints)}"
+            )
         if category_hints:
-            guidance_parts.append(f"PRIORITY CATEGORIES NEEDED: {BasePromptGenerator.format_list(category_hints)}")
+            guidance_parts.append(
+                f"PRIORITY CATEGORIES NEEDED: {BasePromptGenerator.format_list(category_hints)}"
+            )
 
-        return prefix + "\n".join(guidance_parts) + "\nFocus on generating questions of these types/categories first!"
+        return (
+            prefix
+            + "\n".join(guidance_parts)
+            + "\nFocus on generating questions of these types/categories first!"
+        )
 
     @staticmethod
-    def build_domain_options(category_hints: Optional[List[str]] = None, fallback_enum = None) -> str:
+    def build_domain_options(
+        category_hints: Optional[List[str]] = None, fallback_enum=None
+    ) -> str:
         """Build domain options string from hints or enum.
 
         Args:
@@ -148,6 +162,7 @@ class BasePromptGenerator(ABC, Generic[T]):
             return f"One of ({', '.join(category_hints)})"
         elif fallback_enum:
             from src.utils.enums import enum_to_list
+
             return f"One of ({', '.join(enum_to_list(fallback_enum))})"
         else:
             return "One of the available domains"
@@ -155,24 +170,24 @@ class BasePromptGenerator(ABC, Generic[T]):
     @abstractmethod
     def format_item(self, item: T, idx: int, **context) -> str:
         """Format a single item for inclusion in a prompt.
-        
+
         Args:
             item: Item to format
             idx: Index of the item (1-based)
             **context: Additional context (e.g., current_date)
-            
+
         Returns:
             Formatted item string
         """
         pass
-    
+
     def format_items(self, items: List[T], **context) -> str:
         """Format multiple items for inclusion in a prompt.
-        
+
         Args:
             items: List of items to format
             **context: Additional context
-            
+
         Returns:
             Formatted items string
         """
@@ -180,14 +195,14 @@ class BasePromptGenerator(ABC, Generic[T]):
         for idx, item in enumerate(items, 1):
             formatted.append(self.format_item(item, idx, **context))
         return "\n".join(formatted)
-    
+
     @abstractmethod
     def get_instruction(self, **kwargs) -> str:
         """Generate the full instruction prompt.
-        
+
         Args:
             **kwargs: Context and configuration for the prompt
-            
+
         Returns:
             Complete instruction string
         """
@@ -201,7 +216,7 @@ class ContextualPromptGenerator(BasePromptGenerator[T]):
         self,
         current_date: datetime,
         instruction_body: str,
-        include_date_header: bool = True
+        include_date_header: bool = True,
     ) -> str:
         """Build complete instruction with optional date context header.
 
@@ -232,7 +247,7 @@ class ContextualPromptGenerator(BasePromptGenerator[T]):
         current_date: datetime,
         require_past_events: bool,
         events: Optional[List] = None,
-        future_days: int = 365
+        future_days: int = 365,
     ) -> Tuple[datetime, datetime]:
         """Calculate resolution date window for questions.
 
@@ -253,10 +268,14 @@ class ContextualPromptGenerator(BasePromptGenerator[T]):
                 event_dates = [
                     e.occurred_date or e.predicted_date
                     for e in events
-                    if (e.occurred_date or e.predicted_date) and
-                       (e.occurred_date or e.predicted_date) < current_date
+                    if (e.occurred_date or e.predicted_date)
+                    and (e.occurred_date or e.predicted_date) < current_date
                 ]
-                min_date = min(event_dates) if event_dates else current_date - timedelta(days=365)
+                min_date = (
+                    min(event_dates)
+                    if event_dates
+                    else current_date - timedelta(days=365)
+                )
             else:
                 min_date = current_date - timedelta(days=365)
             max_date = current_date

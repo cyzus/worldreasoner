@@ -1,6 +1,6 @@
 """Gap analysis for collection progress."""
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 from dataclasses import dataclass
 
 from .progress import CollectionProgress
@@ -11,6 +11,7 @@ from src.utils.logging import logger
 @dataclass
 class GapAnalysis:
     """Analysis of gaps in collection progress."""
+
     type_gaps: Dict[str, int]  # qtype -> count needed
     category_gaps: Dict[str, int]  # category -> count needed
     total_needed: int
@@ -38,7 +39,7 @@ class GapAnalyzer:
         self,
         progress: CollectionProgress,
         goal: CollectionGoal,
-        include_skipped: bool = False
+        include_skipped: bool = False,
     ) -> GapAnalysis:
         """Analyze gaps between progress and goal.
 
@@ -84,14 +85,18 @@ class GapAnalyzer:
         analysis = GapAnalysis(
             type_gaps=type_gaps_dict,
             category_gaps=category_gaps_dict,
-            total_needed=total_needed
+            total_needed=total_needed,
         )
 
         # Report gaps if we need more questions OR have distribution gaps
         if total_needed > 0:
-            logger.info(f"Gap analysis: need {total_needed} more questions to reach total goal")
+            logger.info(
+                f"Gap analysis: need {total_needed} more questions to reach total goal"
+            )
             if analysis.has_gaps:
-                logger.info(f"  Distribution gaps - Types: {analysis.type_gaps}, Categories: {analysis.category_gaps}")
+                logger.info(
+                    f"  Distribution gaps - Types: {analysis.type_gaps}, Categories: {analysis.category_gaps}"
+                )
         elif analysis.has_gaps:
             logger.info("Total goal met, but distribution gaps remain:")
             logger.info(f"  Types: {analysis.type_gaps}")

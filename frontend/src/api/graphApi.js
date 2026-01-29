@@ -32,6 +32,12 @@ export async function fetchGraph(params = {}) {
   if (params.end_date) {
     queryParams.append('end_date', params.end_date)
   }
+  if (params.includeOutcomes !== undefined) {
+    queryParams.append('include_outcomes', params.includeOutcomes)
+  }
+  if (params.outcomeQuestionId) {
+    queryParams.append('outcome_question_id', params.outcomeQuestionId)
+  }
 
   const response = await axios.get(
     `${API_BASE_URL}/graph/?${queryParams.toString()}`
@@ -242,5 +248,57 @@ export async function saveQuestionsBatch(data) {
  */
 export async function startNewsCollectionJob(payload) {
   const response = await axios.post(`${API_BASE_URL}/pipelines/jobs`, payload)
+  return response.data
+}
+
+/**
+ * Fetch outcome events for a question
+ */
+export async function fetchOutcomes(questionId) {
+  const response = await axios.get(`${API_BASE_URL}/outcomes/questions/${questionId}/outcomes`)
+  return response.data
+}
+
+/**
+ * Fetch outcome impact edges for a specific outcome event
+ */
+export async function fetchOutcomeImpacts(outcomeId, minConfidence = null, impactDirection = null) {
+  const params = new URLSearchParams()
+  if (minConfidence !== null) {
+    params.append('min_confidence', minConfidence)
+  }
+  if (impactDirection) {
+    params.append('impact_direction', impactDirection)
+  }
+  const response = await axios.get(
+    `${API_BASE_URL}/outcomes/outcomes/${outcomeId}/impacts?${params.toString()}`
+  )
+  return response.data
+}
+
+/**
+ * Fetch impact edges from a specific event
+ */
+export async function fetchEventImpacts(eventId, minConfidence = null, impactDirection = null) {
+  const params = new URLSearchParams()
+  if (minConfidence !== null) {
+    params.append('min_confidence', minConfidence)
+  }
+  if (impactDirection) {
+    params.append('impact_direction', impactDirection)
+  }
+  const response = await axios.get(
+    `${API_BASE_URL}/outcomes/events/${eventId}/impacts?${params.toString()}`
+  )
+  return response.data
+}
+
+/**
+ * Mark an outcome event as the actual outcome
+ */
+export async function markActualOutcome(outcomeId, isActual) {
+  const response = await axios.post(
+    `${API_BASE_URL}/outcomes/outcomes/${outcomeId}/mark-actual?is_actual=${isActual}`
+  )
   return response.data
 }

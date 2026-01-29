@@ -49,7 +49,7 @@ class DatabaseAwareTool(Tool):
         self,
         db: Optional[GenericDatabase] = None,
         db_path: Optional[str] = None,
-        ensure_tables: Optional[List[Type]] = None
+        ensure_tables: Optional[List[Type]] = None,
     ):
         """Initialize database connection.
 
@@ -87,11 +87,7 @@ class DatabaseAwareTool(Tool):
                 self.db.create_table(model_class)
 
     def not_found_response(
-        self,
-        item_type: str,
-        item_id: str,
-        model_class: Type,
-        limit: int = 10
+        self, item_type: str, item_id: str, model_class: Type, limit: int = 10
     ) -> str:
         """Generate standardized 'not found' error with available IDs.
 
@@ -120,7 +116,7 @@ class DatabaseAwareTool(Tool):
 
         error_response = {
             "error": f"{item_type} '{item_id}' not found in database",
-            "available_items": available_ids
+            "available_items": available_ids,
         }
 
         return json.dumps(error_response, indent=2)

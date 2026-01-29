@@ -37,12 +37,14 @@ class EventDetailsTool(DatabaseAwareTool, ToolResponseMixin):
     inputs = {
         "event_id": {
             "type": "string",
-            "description": "The ID of the event (e.g., 'evt_tech_20251019_001')"
+            "description": "The ID of the event (e.g., 'evt_tech_20251019_001')",
         }
     }
     output_type = "string"
 
-    def __init__(self, db: Optional["GenericDatabase"] = None, db_path: Optional[str] = None):
+    def __init__(
+        self, db: Optional["GenericDatabase"] = None, db_path: Optional[str] = None
+    ):
         """Initialize tool with database.
 
         Args:
@@ -53,7 +55,7 @@ class EventDetailsTool(DatabaseAwareTool, ToolResponseMixin):
             If neither db nor db_path is provided, will use default database path
         """
         super().__init__(db=db, db_path=db_path, ensure_tables=[Event, Article])
-    
+
     def forward(self, event_id: str) -> str:
         """Get full details for an event.
 
@@ -73,20 +75,22 @@ class EventDetailsTool(DatabaseAwareTool, ToolResponseMixin):
         if event.article_ids:
             articles = self.db.get_many(Article, ids=event.article_ids)
             for article in articles:
-                linked_articles.append({
-                    "id": article.id,
-                    "title": article.title,
-                    "url": article.url,
-                    "source": article.source,
-                    "published_date": str(article.published_date),
-                    "content": article.content,  # Full content!
-                    "word_count": article.word_count
-                })
+                linked_articles.append(
+                    {
+                        "id": article.id,
+                        "title": article.title,
+                        "url": article.url,
+                        "source": article.source,
+                        "published_date": str(article.published_date),
+                        "content": article.content,  # Full content!
+                        "word_count": article.word_count,
+                    }
+                )
 
         # Build response
         response = self._build_response(event, linked_articles)
         return self.json_response(response)
-    
+
     def _build_response(self, event: Event, linked_articles: List[dict]) -> dict:
         """Build standardized response structure.
 
@@ -102,15 +106,24 @@ class EventDetailsTool(DatabaseAwareTool, ToolResponseMixin):
                 "id": event.id,
                 "title": event.title,
                 "description": event.description,  # Full description
-                "occurred_date": str(event.occurred_date) if event.occurred_date else None,
-                "predicted_date": str(event.predicted_date) if event.predicted_date else None,
-                "event_type": event.event_type.value if hasattr(event.event_type, 'value') else event.event_type,
-                "domain": event.domain.value if hasattr(event.domain, 'value') else event.domain,
-                "status": event.status.value if hasattr(event.status, 'value') else event.status,
+                "occurred_date": str(event.occurred_date)
+                if event.occurred_date
+                else None,
+                "predicted_date": str(event.predicted_date)
+                if event.predicted_date
+                else None,
+                "event_type": event.event_type.value
+                if hasattr(event.event_type, "value")
+                else event.event_type,
+                "domain": event.domain.value
+                if hasattr(event.domain, "value")
+                else event.domain,
+                "status": event.status.value
+                if hasattr(event.status, "value")
+                else event.status,
                 "metadata": event.metadata,
-                "tags": event.tags if hasattr(event, 'tags') else []
+                "tags": event.tags if hasattr(event, "tags") else [],
             },
             "linked_articles": linked_articles,
-            "summary": f"Event '{event.title}' with {len(linked_articles)} linked article(s)"
+            "summary": f"Event '{event.title}' with {len(linked_articles)} linked article(s)",
         }
-

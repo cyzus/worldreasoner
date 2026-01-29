@@ -3,7 +3,7 @@
 Defines targets for question collection with distribution requirements.
 """
 
-from typing import Dict, Optional
+from typing import Dict
 from pydantic import BaseModel, Field
 import yaml
 from ..domain.models.question import QuestionType
@@ -14,34 +14,27 @@ class QualityRequirements(BaseModel):
     """Quality constraints for collected questions."""
 
     min_difficulty: int = Field(
-        default=2,
-        ge=1,
-        le=5,
-        description="Minimum difficulty level (1-5)"
+        default=2, ge=1, le=5, description="Minimum difficulty level (1-5)"
     )
     max_difficulty: int = Field(
-        default=5,
-        ge=1,
-        le=5,
-        description="Maximum difficulty level (1-5)"
+        default=5, ge=1, le=5, description="Maximum difficulty level (1-5)"
     )
     min_resolution_days: int = Field(
         default=7,
-        description="Days from now: positive = future, negative = past (e.g., -90 = resolved up to 90 days ago)"
+        description="Days from now: positive = future, negative = past (e.g., -90 = resolved up to 90 days ago)",
     )
     max_resolution_days: int = Field(
         default=365,
-        description="Maximum days until resolution (negative for past dates)"
+        description="Maximum days until resolution (negative for past dates)",
     )
     require_resolution_criteria: bool = Field(
-        default=True,
-        description="Questions must have clear resolution criteria"
+        default=True, description="Questions must have clear resolution criteria"
     )
     min_confidence_score: float = Field(
         default=0.7,
         ge=0.0,
         le=1.0,
-        description="Minimum confidence score for questions needing validation"
+        description="Minimum confidence score for questions needing validation",
     )
 
 
@@ -53,9 +46,7 @@ class CollectionGoal(BaseModel):
     """
 
     total_questions: int = Field(
-        default=100,
-        ge=1,
-        description="Total number of questions to collect"
+        default=100, ge=1, description="Total number of questions to collect"
     )
 
     # Distribution by question type (minimum counts)
@@ -64,9 +55,9 @@ class CollectionGoal(BaseModel):
             QuestionType.BINARY: 40,
             QuestionType.MCQ: 30,
             QuestionType.QUANTITY: 20,
-            QuestionType.TIMEFRAME: 10
+            QuestionType.TIMEFRAME: 10,
         },
-        description="Minimum count for each question type (can collect more to reach total)"
+        description="Minimum count for each question type (can collect more to reach total)",
     )
 
     # Distribution by category/domain
@@ -77,30 +68,27 @@ class CollectionGoal(BaseModel):
             Domain.POLITICS: 20,
             Domain.SCIENCE: 15,
             Domain.SPORTS: 10,
-            Domain.GENERAL: 5
+            Domain.GENERAL: 5,
         },
-        description="Minimum count for each category (can collect more to reach total)"
+        description="Minimum count for each category (can collect more to reach total)",
     )
 
     # Quality constraints
     quality: QualityRequirements = Field(
         default_factory=QualityRequirements,
-        description="Quality requirements for collected questions"
+        description="Quality requirements for collected questions",
     )
 
     # Ground truth requirement
     require_ground_truth: bool = Field(
         default=True,
-        description="If true, collect resolved questions with known outcomes. If false, collect future predictions."
+        description="If true, collect resolved questions with known outcomes. If false, collect future predictions.",
     )
 
     # Source priorities and minimums
     source_minimums: Dict[str, int] = Field(
-        default={
-            "polymarket": 40,
-            "news": 30
-        },
-        description="Minimum questions to collect from each source during initial collection phase"
+        default={"polymarket": 40, "news": 30},
+        description="Minimum questions to collect from each source during initial collection phase",
     )
 
     def validate_distributions(self) -> bool:
@@ -130,7 +118,7 @@ class CollectionGoal(BaseModel):
         Returns:
             CollectionGoal instance
         """
-        with open(path, 'r', encoding='utf-8') as f:
+        with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         return cls(**data)
@@ -141,10 +129,5 @@ class CollectionGoal(BaseModel):
         Args:
             path: Path to save YAML configuration
         """
-        with open(path, 'w', encoding='utf-8') as f:
-            yaml.dump(
-                self.model_dump(),
-                f,
-                default_flow_style=False,
-                sort_keys=False
-            )
+        with open(path, "w", encoding="utf-8") as f:
+            yaml.dump(self.model_dump(), f, default_flow_style=False, sort_keys=False)

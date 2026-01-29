@@ -41,7 +41,7 @@ async def build_index(
     db_path: str = "worldreasoner.db",
     embedding_model: Optional[str] = None,
     rebuild: bool = False,
-    batch_size: int = 100
+    batch_size: int = 100,
 ):
     """Build search index for all articles.
 
@@ -140,39 +140,36 @@ Other:
   - gemini/gemini-embedding-001 (Gemini)
 
 See https://docs.litellm.ai/docs/embedding/supported_embedding for full list.
-        """
+        """,
     )
     parser.add_argument(
         "--db",
         default="worldreasoner.db",
-        help="Path to database file (default: worldreasoner.db)"
+        help="Path to database file (default: worldreasoner.db)",
     )
     parser.add_argument(
         "--model",
         default=None,
-        help="LiteLLM embedding model (default: from config.yaml)"
+        help="LiteLLM embedding model (default: from config.yaml)",
     )
     parser.add_argument(
-        "--rebuild",
-        action="store_true",
-        help="Clear and rebuild indexes from scratch"
+        "--rebuild", action="store_true", help="Clear and rebuild indexes from scratch"
     )
     parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=2,
-        help="Batch size for embedding generation"
+        "--batch-size", type=int, default=2, help="Batch size for embedding generation"
     )
 
     args = parser.parse_args()
 
     try:
-        asyncio.run(build_index(
-            db_path=args.db,
-            embedding_model=args.model,
-            rebuild=args.rebuild,
-            batch_size=args.batch_size
-        ))
+        asyncio.run(
+            build_index(
+                db_path=args.db,
+                embedding_model=args.model,
+                rebuild=args.rebuild,
+                batch_size=args.batch_size,
+            )
+        )
     except Exception as e:
         logger.error(f"Failed to build index: {e}", exc_info=True)
         sys.exit(1)

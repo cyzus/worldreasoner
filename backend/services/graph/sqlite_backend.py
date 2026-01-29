@@ -10,7 +10,8 @@ from datetime import datetime
 from collections import deque
 
 from src.core.database import GenericDatabase
-from src.domain.models import Event, Article, CausalHypothesis
+from src.domain.models import Event, CausalHypothesis
+from src.domain.models.event_outcome_impact import EventOutcomeImpact
 from src.utils.logging import logger
 from .interface import (
     GraphService,
@@ -65,22 +66,34 @@ class SQLiteGraphService(GraphService):
         # If center node specified, do neighborhood search
         if query.center_node_id:
             events = self._filter_by_neighborhood(
-                events,
-                query.center_node_id,
-                query.max_depth or 1
+                events, query.center_node_id, query.max_depth or 1
             )
 
         # Apply node limits
         if query.max_nodes:
-            events = events[:query.max_nodes]
+            events = events[: query.max_nodes]
 
         # Convert to graph format
         nodes = self._events_to_nodes(events)
         edges = self._get_causal_edges([e.id for e in events], query)
 
+        # Optionally include outcome impact edges
+        if query.include_outcomes:
+            impact_edges = await self.get_impact_edges(
+                min_confidence=query.min_edge_weight
+            )
+            # Filter to only include impacts where both nodes exist in graph
+            event_ids_set = {e.id for e in events}
+            impact_edges = [
+                edge
+                for edge in impact_edges
+                if edge.source_id in event_ids_set and edge.target_id in event_ids_set
+            ]
+            edges.extend(impact_edges)
+
         # Apply edge limits
         if query.max_edges and len(edges) > query.max_edges:
-            edges = edges[:query.max_edges]
+            edges = edges[: query.max_edges]
 
         return GraphData(
             nodes=nodes,
@@ -89,7 +102,7 @@ class SQLiteGraphService(GraphService):
                 "total_events": len(events),
                 "total_links": len(edges),
                 "generated_at": datetime.now().isoformat(),
-            }
+            },
         )
 
     async def get_node(self, node_id: str) -> Optional[GraphNode]:
@@ -108,10 +121,7 @@ class SQLiteGraphService(GraphService):
         return self._event_to_node(event)
 
     async def get_neighborhood(
-        self,
-        node_id: str,
-        max_depth: int = 1,
-        direction: str = "both"
+        self, node_id: str, max_depth: int = 1, direction: str = "both"
     ) -> GraphData:
         """Get the neighborhood around an event node.
 
@@ -131,16 +141,12 @@ class SQLiteGraphService(GraphService):
 
         # BFS to find neighborhood
         neighborhood_ids = self._bfs_neighborhood(
-            node_id,
-            event_map,
-            max_depth,
-            direction
+            node_id, event_map, max_depth, direction
         )
 
         # Get events in neighborhood
         neighborhood_events = [
-            event_map[eid] for eid in neighborhood_ids
-            if eid in event_map
+            event_map[eid] for eid in neighborhood_ids if eid in event_map
         ]
 
         # Convert to graph format
@@ -154,14 +160,11 @@ class SQLiteGraphService(GraphService):
                 "center_node_id": node_id,
                 "max_depth": max_depth,
                 "direction": direction,
-            }
+            },
         )
 
     async def find_paths(
-        self,
-        source_id: str,
-        target_id: str,
-        max_depth: int = 5
+        self, source_id: str, target_id: str, max_depth: int = 5
     ) -> List[List[str]]:
         """Find causal paths between two events.
 
@@ -235,7 +238,11 @@ class SQLiteGraphService(GraphService):
         # Count hypotheses by type
         edge_type_counts = {}
         for h in hypotheses:
-            relation = h.relation_type.value if hasattr(h.relation_type, 'value') else str(h.relation_type)
+            relation = (
+                h.relation_type.value
+                if hasattr(h.relation_type, "value")
+                else str(h.relation_type)
+            )
             edge_type_counts[relation] = edge_type_counts.get(relation, 0) + 1
 
         # Count nodes by domain
@@ -245,8 +252,12 @@ class SQLiteGraphService(GraphService):
             node_types[domain] = node_types.get(domain, 0) + 1
 
         # Count hypotheses by discovery count
-        single_discovery = sum(1 for h in hypotheses if len(h.discovered_by_question_ids) == 1)
-        multi_discovery = sum(1 for h in hypotheses if len(h.discovered_by_question_ids) > 1)
+        single_discovery = sum(
+            1 for h in hypotheses if len(h.discovered_by_question_ids) == 1
+        )
+        multi_discovery = sum(
+            1 for h in hypotheses if len(h.discovered_by_question_ids) > 1
+        )
 
         return {
             "total_nodes": len(events),
@@ -257,6 +268,101 @@ class SQLiteGraphService(GraphService):
             "single_discovery_edges": single_discovery,
             "multi_discovery_edges": multi_discovery,
         }
+
+    async def get_outcome_events(self, question_id: str) -> List[GraphNode]:
+        """Get outcome events for a specific question.
+
+        Args:
+            question_id: Question ID to get outcomes for
+
+        Returns:
+            List of GraphNodes representing outcome events
+        """
+        # Query events where is_outcome=True and extracted_for_question_id matches
+        all_events = self.db.get_many(Event, filters={})
+        outcome_events = [
+            e
+            for e in all_events
+            if e.is_outcome and e.extracted_for_question_id == question_id
+        ]
+
+        return self._events_to_nodes(outcome_events)
+
+    async def get_impact_edges(
+        self,
+        outcome_event_id: Optional[str] = None,
+        event_id: Optional[str] = None,
+        min_confidence: Optional[float] = None,
+        impact_direction: Optional[str] = None,
+    ) -> List[GraphEdge]:
+        """Get impact edges with optional filtering.
+
+        Args:
+            outcome_event_id: Filter impacts to this outcome event
+            event_id: Filter impacts from this event
+            min_confidence: Minimum confidence threshold
+            impact_direction: Filter by impact direction (positive, negative, etc.)
+
+        Returns:
+            List of GraphEdges representing impact relationships
+        """
+        # Fetch all event outcome impacts
+        all_impacts = self.db.get_many(EventOutcomeImpact, filters={})
+
+        # Apply filters
+        filtered_impacts = []
+        for impact in all_impacts:
+            # Filter by outcome event
+            if outcome_event_id and impact.outcome_event_id != outcome_event_id:
+                continue
+
+            # Filter by source event
+            if event_id and impact.event_id != event_id:
+                continue
+
+            # Filter by confidence
+            if min_confidence is not None and impact.confidence < min_confidence:
+                continue
+
+            # Filter by direction
+            if impact_direction and impact.impact_direction.value != impact_direction:
+                continue
+
+            filtered_impacts.append(impact)
+
+        # Convert impacts to graph edges
+        edges = []
+        for impact in filtered_impacts:
+            edge_type = f"impact_{impact.impact_direction.value}"
+
+            edges.append(
+                GraphEdge(
+                    source_id=impact.event_id,
+                    target_id=impact.outcome_event_id,
+                    edge_type=edge_type,
+                    properties={
+                        "impact_direction": impact.impact_direction.value,
+                        "impact_magnitude": impact.impact_magnitude,
+                        "confidence": impact.confidence,
+                        "reasoning": impact.reasoning,
+                        "evidence_article_ids": impact.evidence_article_ids,
+                        "evidence_count": len(impact.evidence_article_ids),
+                        "causal_chain_hypothesis_ids": impact.causal_chain_hypothesis_ids,
+                        "discovered_by_question_ids": impact.discovered_by_question_ids,
+                        "identified_by": impact.identified_by,
+                        "first_identified_at": impact.first_identified_at.isoformat()
+                        if impact.first_identified_at
+                        else None,
+                        "last_confirmed_at": impact.last_confirmed_at.isoformat()
+                        if impact.last_confirmed_at
+                        else None,
+                    },
+                    weight=impact.impact_magnitude,
+                    label=f"{impact.impact_direction.value} impact",
+                )
+            )
+
+        return edges
 
     async def subscribe_to_updates(self, callback) -> None:
         """Subscribe to graph updates.
@@ -293,7 +399,8 @@ class SQLiteGraphService(GraphService):
         # Apply temporal filtering
         if query.start_date or query.end_date:
             events = [
-                e for e in events
+                e
+                for e in events
                 if self._in_time_range(e, query.start_date, query.end_date)
             ]
 
@@ -312,10 +419,7 @@ class SQLiteGraphService(GraphService):
         return events
 
     def _filter_by_neighborhood(
-        self,
-        events: List[Event],
-        center_id: str,
-        max_depth: int
+        self, events: List[Event], center_id: str, max_depth: int
     ) -> List[Event]:
         """Filter events to only those in neighborhood of center node.
 
@@ -329,20 +433,13 @@ class SQLiteGraphService(GraphService):
         """
         event_map = {e.id: e for e in events}
         neighborhood_ids = self._bfs_neighborhood(
-            center_id,
-            event_map,
-            max_depth,
-            "both"
+            center_id, event_map, max_depth, "both"
         )
 
         return [e for e in events if e.id in neighborhood_ids]
 
     def _bfs_neighborhood(
-        self,
-        start_id: str,
-        event_map: Dict[str, Event],
-        max_depth: int,
-        direction: str
+        self, start_id: str, event_map: Dict[str, Event], max_depth: int, direction: str
     ) -> Set[str]:
         """BFS to find neighborhood nodes.
 
@@ -414,20 +511,28 @@ class SQLiteGraphService(GraphService):
             node_type=event.domain or "unknown",
             properties={
                 "description": event.description,
-                "occurred_date": event.occurred_date.isoformat() if event.occurred_date else None,
-                "predicted_date": event.predicted_date.isoformat() if event.predicted_date else None,
+                "occurred_date": event.occurred_date.isoformat()
+                if event.occurred_date
+                else None,
+                "predicted_date": event.predicted_date.isoformat()
+                if event.predicted_date
+                else None,
                 "event_type": event.event_type.value if event.event_type else None,
                 "status": event.status.value if event.status else None,
-                "importance": getattr(event, 'importance', 1.0),
+                "importance": getattr(event, "importance", 1.0),
+                "is_outcome": getattr(event, "is_outcome", False),
+                "outcome_scenario": getattr(event, "outcome_scenario", None),
+                "is_actual_outcome": getattr(event, "is_actual_outcome", False),
+                "extracted_for_question_id": getattr(
+                    event, "extracted_for_question_id", None
+                ),
             },
-            size=getattr(event, 'importance', 1.0),
+            size=getattr(event, "importance", 1.0),
             color=self._domain_to_color(event.domain),
         )
 
     def _get_causal_edges(
-        self,
-        event_ids: List[str],
-        query: Optional[GraphQuery] = None
+        self, event_ids: List[str], query: Optional[GraphQuery] = None
     ) -> List[GraphEdge]:
         """Get causal edges from causal_hypotheses table.
 
@@ -469,25 +574,31 @@ class SQLiteGraphService(GraphService):
                     continue
 
             # Create edge from hypothesis
-            edges.append(GraphEdge(
-                source_id=hypothesis.source_event_id,
-                target_id=hypothesis.target_event_id,
-                edge_type=hypothesis.relation_type,
-                properties={
-                    "strength": hypothesis.strength,
-                    "confidence": hypothesis.confidence,
-                    "reasoning": hypothesis.reasoning,
-                    "evidence_article_ids": hypothesis.evidence_article_ids,
-                    "evidence_count": len(hypothesis.evidence_article_ids),
-                    "discovered_by_question_ids": hypothesis.discovered_by_question_ids,
-                    "discovery_count": len(hypothesis.discovered_by_question_ids),
-                    "identified_by": hypothesis.identified_by,
-                    "first_identified_at": hypothesis.first_identified_at.isoformat() if hypothesis.first_identified_at else None,
-                    "last_confirmed_at": hypothesis.last_confirmed_at.isoformat() if hypothesis.last_confirmed_at else None,
-                },
-                weight=hypothesis.strength,
-                label=hypothesis.relation_type,
-            ))
+            edges.append(
+                GraphEdge(
+                    source_id=hypothesis.source_event_id,
+                    target_id=hypothesis.target_event_id,
+                    edge_type=hypothesis.relation_type,
+                    properties={
+                        "strength": hypothesis.strength,
+                        "confidence": hypothesis.confidence,
+                        "reasoning": hypothesis.reasoning,
+                        "evidence_article_ids": hypothesis.evidence_article_ids,
+                        "evidence_count": len(hypothesis.evidence_article_ids),
+                        "discovered_by_question_ids": hypothesis.discovered_by_question_ids,
+                        "discovery_count": len(hypothesis.discovered_by_question_ids),
+                        "identified_by": hypothesis.identified_by,
+                        "first_identified_at": hypothesis.first_identified_at.isoformat()
+                        if hypothesis.first_identified_at
+                        else None,
+                        "last_confirmed_at": hypothesis.last_confirmed_at.isoformat()
+                        if hypothesis.last_confirmed_at
+                        else None,
+                    },
+                    weight=hypothesis.strength,
+                    label=hypothesis.relation_type,
+                )
+            )
 
         return edges
 
@@ -526,10 +637,7 @@ class SQLiteGraphService(GraphService):
         return [h for h in all_hypotheses if h.target_event_id == event_id]
 
     def _in_time_range(
-        self,
-        event: Event,
-        start_date: Optional[datetime],
-        end_date: Optional[datetime]
+        self, event: Event, start_date: Optional[datetime], end_date: Optional[datetime]
     ) -> bool:
         """Check if event is in time range.
 
@@ -563,13 +671,13 @@ class SQLiteGraphService(GraphService):
             Color string
         """
         color_map = {
-            "politics": "#ef4444",      # Red
-            "economics": "#3b82f6",     # Blue
-            "technology": "#8b5cf6",    # Purple
-            "science": "#06b6d4",       # Cyan
-            "climate": "#10b981",       # Green
-            "health": "#f59e0b",        # Amber
-            "finance": "#3b82f6",       # Blue
-            "tech": "#8b5cf6",          # Purple
+            "politics": "#ef4444",  # Red
+            "economics": "#3b82f6",  # Blue
+            "technology": "#8b5cf6",  # Purple
+            "science": "#06b6d4",  # Cyan
+            "climate": "#10b981",  # Green
+            "health": "#f59e0b",  # Amber
+            "finance": "#3b82f6",  # Blue
+            "tech": "#8b5cf6",  # Purple
         }
         return color_map.get(domain or "unknown", "#6366f1")  # Indigo default

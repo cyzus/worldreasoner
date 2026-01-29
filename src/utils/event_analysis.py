@@ -4,18 +4,17 @@ These utilities can be used to analyze event temporal distribution in causal gra
 similar to how article_analysis.py analyzes article coverage.
 """
 
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from src.domain.models import Event
-from src.utils.date_utils import ensure_timezone_aware
 
 
 def filter_events_by_time_window(
     events: List[Event],
     resolution_date: datetime,
-    estimated_start_time: Optional[datetime] = None
+    estimated_start_time: Optional[datetime] = None,
 ) -> List[Event]:
     """Filter events to valid time window for a question.
 
@@ -31,31 +30,28 @@ def filter_events_by_time_window(
         List of events within the valid time window
     """
     import warnings
+
     warnings.warn(
         "filter_events_by_time_window is deprecated. Use TemporalFilterService.filter_by_window",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
     # Delegate to new service
     from src.core.temporal_filter_service import TemporalFilterService
 
     window_start, window_end = TemporalFilterService.get_evidence_window(
-        resolution_date,
-        estimated_start_time
+        resolution_date, estimated_start_time
     )
     return TemporalFilterService.filter_by_window(
-        events,
-        window_start,
-        window_end,
-        date_field="occurred_date"
+        events, window_start, window_end, date_field="occurred_date"
     )
 
 
 def analyze_event_timeline(
     events: List[Event],
     resolution_date: datetime,
-    coverage_start: Optional[datetime] = None
+    coverage_start: Optional[datetime] = None,
 ) -> Dict:
     """Analyze temporal distribution of events.
 
@@ -97,14 +93,16 @@ def analyze_event_timeline(
         month_key = date.strftime("%Y-%m")
         monthly[month_key] += 1
 
-    result.update({
-        "has_dates": True,
-        "earliest": earliest,
-        "latest": latest,
-        "span_days": span_days,
-        "monthly": dict(monthly),
-        "dates": dates
-    })
+    result.update(
+        {
+            "has_dates": True,
+            "earliest": earliest,
+            "latest": latest,
+            "span_days": span_days,
+            "monthly": dict(monthly),
+            "dates": dates,
+        }
+    )
 
     return result
 
@@ -129,11 +127,7 @@ def identify_event_gaps(timeline_data: Dict, min_gap_days: int = 30) -> List[Dic
     for i in range(len(dates) - 1):
         gap_days = (dates[i + 1] - dates[i]).days
         if gap_days > min_gap_days:
-            gaps.append({
-                "start": dates[i],
-                "end": dates[i + 1],
-                "days": gap_days
-            })
+            gaps.append({"start": dates[i], "end": dates[i + 1], "days": gap_days})
 
     return gaps
 
@@ -156,7 +150,7 @@ def calculate_event_gap_severity(gaps: List[Dict], timeline_span_days: int) -> f
 
     total_penalty = 0.0
     for gap in gaps:
-        gap_days = gap['days']
+        gap_days = gap["days"]
 
         # Absolute penalty: more lenient for events than articles
         # 30-60 days: mild, 60-120 days: moderate, 120+ days: severe
@@ -179,9 +173,7 @@ def calculate_event_gap_severity(gaps: List[Dict], timeline_span_days: int) -> f
 
 
 def calculate_early_event_gap_penalty(
-    earliest_event: datetime,
-    coverage_start: datetime,
-    timeline_span_days: int
+    earliest_event: datetime, coverage_start: datetime, timeline_span_days: int
 ) -> float:
     """Penalize missing event coverage at start of window.
 
@@ -219,10 +211,10 @@ def calculate_event_distribution_score(timeline_data: Dict) -> float:
     Returns:
         Distribution score (0-1), where 1.0 is perfectly even distribution
     """
-    if not timeline_data.get('has_dates') or not timeline_data.get('monthly'):
+    if not timeline_data.get("has_dates") or not timeline_data.get("monthly"):
         return 0.0
 
-    monthly_counts = list(timeline_data['monthly'].values())
+    monthly_counts = list(timeline_data["monthly"].values())
     if len(monthly_counts) <= 1:
         return 0.5  # Only one month has events
 
@@ -232,7 +224,7 @@ def calculate_event_distribution_score(timeline_data: Dict) -> float:
         return 0.0
 
     variance = sum((x - mean) ** 2 for x in monthly_counts) / len(monthly_counts)
-    std_dev = variance ** 0.5
+    std_dev = variance**0.5
     cv = std_dev / mean
 
     # Convert CV to score - more lenient for events
@@ -244,7 +236,7 @@ def calculate_event_temporal_quality(
     events: List[Event],
     timeline_data: Dict,
     gaps: List[Dict],
-    coverage_start: Optional[datetime] = None
+    coverage_start: Optional[datetime] = None,
 ) -> Dict:
     """Calculate temporal coverage quality for events.
 
@@ -271,23 +263,21 @@ def calculate_event_temporal_quality(
             "coverage_score": 0.0,
             "distribution_score": 0.0,
             "gap_severity": 0.0,
-            "early_gap_penalty": 0.0
+            "early_gap_penalty": 0.0,
         }
 
     # Use expected span (coverage_start to resolution) if available,
     # otherwise fall back to event span (earliest to latest)
-    timeline_span = timeline_data.get('expected_span_days', timeline_data['span_days'])
+    timeline_span = timeline_data.get("expected_span_days", timeline_data["span_days"])
 
     # Gap severity penalty
     gap_severity = calculate_event_gap_severity(gaps, timeline_span)
 
     # Early coverage gap penalty
     early_gap_penalty = 0.0
-    if coverage_start and timeline_data.get('earliest'):
+    if coverage_start and timeline_data.get("earliest"):
         early_gap_penalty = calculate_early_event_gap_penalty(
-            timeline_data['earliest'],
-            coverage_start,
-            timeline_span
+            timeline_data["earliest"], coverage_start, timeline_span
         )
 
     # Distribution score (how evenly events are spread)
@@ -306,7 +296,7 @@ def calculate_event_temporal_quality(
         "coverage_score": coverage_score,
         "distribution_score": distribution_score,
         "gap_severity": gap_severity,
-        "early_gap_penalty": early_gap_penalty
+        "early_gap_penalty": early_gap_penalty,
     }
 
 
@@ -314,7 +304,7 @@ def get_event_temporal_recommendation(
     quality: Dict,
     gaps: List[Dict],
     timeline_data: Dict,
-    coverage_start: Optional[datetime] = None
+    coverage_start: Optional[datetime] = None,
 ) -> str:
     """Generate actionable recommendation based on event temporal coverage.
 
@@ -327,7 +317,7 @@ def get_event_temporal_recommendation(
     Returns:
         Human-readable recommendation string
     """
-    if quality['temporal_score'] >= 0.8:
+    if quality["temporal_score"] >= 0.8:
         return "✓ Excellent temporal coverage! Events are well-distributed across the timeline."
 
     issues = []
@@ -335,24 +325,29 @@ def get_event_temporal_recommendation(
     if not timeline_data.get("has_dates"):
         return "⚠ No event dates available - cannot assess temporal coverage"
 
-    if quality.get('early_gap_penalty', 0) > 0.1 and coverage_start:
-        earliest = timeline_data.get('earliest')
+    if quality.get("early_gap_penalty", 0) > 0.1 and coverage_start:
+        earliest = timeline_data.get("earliest")
         if earliest:
             gap_days = (earliest - coverage_start).days
-            issues.append(f"Missing early events (first event {gap_days} days after start)")
+            issues.append(
+                f"Missing early events (first event {gap_days} days after start)"
+            )
 
     if gaps:
-        top_gap = max(gaps, key=lambda g: g['days'])
+        top_gap = max(gaps, key=lambda g: g["days"])
         issues.append(
             f"Large time gap: {top_gap['start'].strftime('%Y-%m-%d')} to "
             f"{top_gap['end'].strftime('%Y-%m-%d')} ({top_gap['days']} days)"
         )
 
-    if quality['distribution_score'] < 0.5:
+    if quality["distribution_score"] < 0.5:
         issues.append("Events are clustered unevenly across timeline")
 
     if issues:
-        return ("⚠ " + " | ".join(issues) +
-                "\n  → Consider identifying intermediate events to fill temporal gaps")
+        return (
+            "⚠ "
+            + " | ".join(issues)
+            + "\n  → Consider identifying intermediate events to fill temporal gaps"
+        )
 
     return "Fair temporal coverage, but could be improved with better distribution."

@@ -1,6 +1,6 @@
 """Unit tests for CausalHypothesis model."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 import pytest
 

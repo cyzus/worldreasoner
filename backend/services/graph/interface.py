@@ -6,7 +6,7 @@ without changing application code.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, Dict, Any, Set
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -18,8 +18,7 @@ class GraphNode(BaseModel):
     label: str = Field(..., description="Human-readable label")
     node_type: str = Field(..., description="Type of node (event, article, etc.)")
     properties: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Additional node properties"
+        default_factory=dict, description="Additional node properties"
     )
 
     # Visual properties
@@ -34,8 +33,7 @@ class GraphEdge(BaseModel):
     target_id: str = Field(..., description="Target node ID")
     edge_type: str = Field(..., description="Type of edge (causes, mentions, etc.)")
     properties: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Additional edge properties"
+        default_factory=dict, description="Additional edge properties"
     )
 
     # Visual properties
@@ -48,56 +46,45 @@ class GraphQuery(BaseModel):
 
     # Node filtering
     node_ids: Optional[List[str]] = Field(
-        None,
-        description="Specific node IDs to include"
+        None, description="Specific node IDs to include"
     )
-    node_types: Optional[List[str]] = Field(
-        None,
-        description="Filter by node types"
-    )
+    node_types: Optional[List[str]] = Field(None, description="Filter by node types")
     exclude_node_types: Optional[List[str]] = Field(
-        None,
-        description="Exclude specific node types"
+        None, description="Exclude specific node types"
     )
 
     # Edge filtering
-    edge_types: Optional[List[str]] = Field(
-        None,
-        description="Filter by edge types"
-    )
+    edge_types: Optional[List[str]] = Field(None, description="Filter by edge types")
     min_edge_weight: Optional[float] = Field(
-        None,
-        description="Minimum edge weight threshold"
+        None, description="Minimum edge weight threshold"
     )
 
     # Temporal filtering
-    start_date: Optional[datetime] = Field(
-        None,
-        description="Start of time window"
-    )
-    end_date: Optional[datetime] = Field(
-        None,
-        description="End of time window"
-    )
+    start_date: Optional[datetime] = Field(None, description="Start of time window")
+    end_date: Optional[datetime] = Field(None, description="End of time window")
 
     # Graph traversal
     center_node_id: Optional[str] = Field(
-        None,
-        description="Center node for neighborhood queries"
+        None, description="Center node for neighborhood queries"
     )
     max_depth: Optional[int] = Field(
-        None,
-        description="Maximum traversal depth from center node"
+        None, description="Maximum traversal depth from center node"
+    )
+
+    # Outcome impact filtering
+    include_outcomes: bool = Field(
+        False, description="Include outcome impact edges in graph"
+    )
+    outcome_question_id: Optional[str] = Field(
+        None, description="Filter outcome impacts to specific question"
     )
 
     # Limits
     max_nodes: Optional[int] = Field(
-        None,
-        description="Maximum number of nodes to return"
+        None, description="Maximum number of nodes to return"
     )
     max_edges: Optional[int] = Field(
-        None,
-        description="Maximum number of edges to return"
+        None, description="Maximum number of edges to return"
     )
 
 
@@ -107,8 +94,7 @@ class GraphData(BaseModel):
     nodes: List[GraphNode] = Field(default_factory=list)
     edges: List[GraphEdge] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Graph-level metadata"
+        default_factory=dict, description="Graph-level metadata"
     )
 
 
@@ -151,10 +137,7 @@ class GraphService(ABC):
 
     @abstractmethod
     async def get_neighborhood(
-        self,
-        node_id: str,
-        max_depth: int = 1,
-        direction: str = "both"
+        self, node_id: str, max_depth: int = 1, direction: str = "both"
     ) -> GraphData:
         """Get the neighborhood around a node.
 
@@ -170,10 +153,7 @@ class GraphService(ABC):
 
     @abstractmethod
     async def find_paths(
-        self,
-        source_id: str,
-        target_id: str,
-        max_depth: int = 5
+        self, source_id: str, target_id: str, max_depth: int = 5
     ) -> List[List[str]]:
         """Find causal paths between two nodes.
 
@@ -199,6 +179,39 @@ class GraphService(ABC):
             - edge_type_counts
             - average_degree
             - etc.
+        """
+        pass
+
+    @abstractmethod
+    async def get_outcome_events(self, question_id: str) -> List[GraphNode]:
+        """Get outcome events for a specific question.
+
+        Args:
+            question_id: Question ID to get outcomes for
+
+        Returns:
+            List of GraphNodes representing outcome events
+        """
+        pass
+
+    @abstractmethod
+    async def get_impact_edges(
+        self,
+        outcome_event_id: Optional[str] = None,
+        event_id: Optional[str] = None,
+        min_confidence: Optional[float] = None,
+        impact_direction: Optional[str] = None,
+    ) -> List[GraphEdge]:
+        """Get impact edges with optional filtering.
+
+        Args:
+            outcome_event_id: Filter impacts to this outcome event
+            event_id: Filter impacts from this event
+            min_confidence: Minimum confidence threshold
+            impact_direction: Filter by impact direction (positive, negative, etc.)
+
+        Returns:
+            List of GraphEdges representing impact relationships
         """
         pass
 

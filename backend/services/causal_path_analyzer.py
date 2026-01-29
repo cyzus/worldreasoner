@@ -5,11 +5,10 @@ and event status for forecasting visualization.
 """
 
 from typing import List, Dict, Optional, Set, Tuple, Any
-from datetime import datetime
 from collections import deque
 
 from src.core.database import GenericDatabase
-from src.domain.models import Event, CausalHypothesis, Question
+from src.domain.models import Event, CausalHypothesis
 from src.domain.models.event import EventStatus, CausalRelationType
 from src.utils.logging import logger
 
@@ -22,7 +21,7 @@ class CausalPathNode:
         event_id: str,
         event: Event,
         depth: int,
-        edge_from_parent: Optional[CausalHypothesis] = None
+        edge_from_parent: Optional[CausalHypothesis] = None,
     ):
         self.event_id = event_id
         self.event = event
@@ -74,7 +73,7 @@ class CausalPathAnalysis:
                 "total_events": 0,
                 "confirmed_events": 0,
                 "predicted_events": 0,
-                "completion_ratio": 0.0
+                "completion_ratio": 0.0,
             }
 
         path_lengths = [len(p) for p in self.paths]
@@ -87,7 +86,7 @@ class CausalPathAnalysis:
             "total_events": len(self.all_events_in_paths),
             "confirmed_events": len(self.confirmed_event_ids),
             "predicted_events": len(self.predicted_event_ids),
-            "completion_ratio": self.get_completion_ratio()
+            "completion_ratio": self.get_completion_ratio(),
         }
 
 
@@ -100,10 +99,7 @@ class CausalPathAnalyzer:
         self._hypotheses_cache: Optional[List[CausalHypothesis]] = None
 
     def analyze_paths_to_target(
-        self,
-        target_event_id: str,
-        max_depth: int = 5,
-        max_paths: int = 10
+        self, target_event_id: str, max_depth: int = 5, max_paths: int = 10
     ) -> CausalPathAnalysis:
         """Find and analyze all causal paths leading to the target event.
 
@@ -192,7 +188,7 @@ class CausalPathAnalyzer:
                     event_id=source_id,
                     event=events[source_id],
                     depth=len(path),
-                    edge_from_parent=hypothesis
+                    edge_from_parent=hypothesis,
                 )
 
                 # Add to path and continue search
@@ -203,9 +199,7 @@ class CausalPathAnalyzer:
         return analysis
 
     def get_path_for_events(
-        self,
-        event_ids: List[str],
-        target_event_id: str
+        self, event_ids: List[str], target_event_id: str
     ) -> Dict[str, Dict[str, Any]]:
         """Get path information for specific events relative to target.
 
@@ -236,10 +230,7 @@ class CausalPathAnalyzer:
 
             # Find shortest path from this event to target
             path = self._find_shortest_path(
-                event_id,
-                target_event_id,
-                outgoing_edges,
-                events
+                event_id, target_event_id, outgoing_edges, events
             )
 
             # Analyze path direction (does it lead toward target?)
@@ -251,7 +242,9 @@ class CausalPathAnalyzer:
                 "path_analysis": path_analysis,
                 "event_status": event.status.value,
                 "is_confirmed": event.status == EventStatus.OCCURRED,
-                "occurred_date": event.occurred_date.isoformat() if event.occurred_date else None
+                "occurred_date": event.occurred_date.isoformat()
+                if event.occurred_date
+                else None,
             }
 
         return result
@@ -262,7 +255,7 @@ class CausalPathAnalyzer:
         target_id: str,
         outgoing_edges: Dict[str, List[CausalHypothesis]],
         events: Dict[str, Event],
-        max_depth: int = 10
+        max_depth: int = 10,
     ) -> Optional[List[CausalHypothesis]]:
         """Find shortest path from source to target using BFS."""
         if source_id == target_id:
@@ -295,10 +288,7 @@ class CausalPathAnalyzer:
 
         return None
 
-    def _analyze_path_direction(
-        self,
-        path: List[CausalHypothesis]
-    ) -> Dict[str, Any]:
+    def _analyze_path_direction(self, path: List[CausalHypothesis]) -> Dict[str, Any]:
         """Analyze the direction and strength of a causal path."""
         if not path:
             return {
@@ -307,20 +297,17 @@ class CausalPathAnalyzer:
                 "negative_links": 0,
                 "neutral_links": 0,
                 "combined_strength": 0.0,
-                "combined_confidence": 0.0
+                "combined_confidence": 0.0,
             }
 
         positive_types = {
             CausalRelationType.CAUSES,
             CausalRelationType.ENABLES,
             CausalRelationType.AMPLIFIES,
-            CausalRelationType.TRIGGERS
+            CausalRelationType.TRIGGERS,
         }
 
-        negative_types = {
-            CausalRelationType.INHIBITS,
-            CausalRelationType.PREVENTS
-        }
+        negative_types = {CausalRelationType.INHIBITS, CausalRelationType.PREVENTS}
 
         positive_links = 0
         negative_links = 0
@@ -357,7 +344,7 @@ class CausalPathAnalyzer:
             "negative_links": negative_links,
             "neutral_links": neutral_links,
             "combined_strength": combined_strength,
-            "combined_confidence": combined_confidence
+            "combined_confidence": combined_confidence,
         }
 
     def _get_events(self) -> Dict[str, Event]:

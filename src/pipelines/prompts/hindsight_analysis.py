@@ -6,8 +6,7 @@ from src.domain.models import Question, Article
 from src.pipelines.prompts.base import ContextualPromptGenerator, PromptTemplate
 
 
-EVIDENCE_ARTICLE_TEMPLATE = \
-"""
+EVIDENCE_ARTICLE_TEMPLATE = """
 Evidence Article {idx} (ID: {article_id}):
 - Title: {title}
 - Source: {source}
@@ -17,8 +16,7 @@ Evidence Article {idx} (ID: {article_id}):
 """
 
 
-HINDSIGHT_ANALYSIS_TEMPLATE = \
-"""You are analyzing what caused the following outcome with the benefit of HINDSIGHT.
+HINDSIGHT_ANALYSIS_TEMPLATE = """You are analyzing what caused the following outcome with the benefit of HINDSIGHT.
 
 ========== QUESTION DETAILS ==========
 Question ID: {question_id}
@@ -101,8 +99,7 @@ AVAILABLE TOOLS:
 
 Return a summary when finished identifying all causal relationships (direct and multi-hop)."""
 
-EVIDENCE_COLLECTION_TEMPLATE = \
-"""Search for evidence articles that explain what caused the following outcome.
+EVIDENCE_COLLECTION_TEMPLATE = """Search for evidence articles that explain what caused the following outcome.
 
 ========== OUTCOME DETAILS ==========
 Question: {question_text}
@@ -140,8 +137,7 @@ FOCUS ON:
 
 Return a summary when you've collected enough evidence articles."""
 
-EVENT_IDENTIFICATION_PROMPT = \
-"""Today's date is {date_str}.
+EVENT_IDENTIFICATION_PROMPT = """Today's date is {date_str}.
 
 You are analyzing evidence articles related to a forecast question to extract key events.
 
@@ -166,32 +162,55 @@ GUIDELINES:
 Only call event_identifier for real, important events. Do not create hypothetical events."""
 
 
-class HindsightAnalysisPrompts(ContextualPromptGenerator[Tuple[Question, List[Article]]]):
+class HindsightAnalysisPrompts(
+    ContextualPromptGenerator[Tuple[Question, List[Article]]]
+):
     """Prompts for analyzing evidence with hindsight to identify causal relationships."""
 
     # Template for formatting evidence articles
     EVIDENCE_ARTICLE_TEMPLATE = PromptTemplate(
         template=EVIDENCE_ARTICLE_TEMPLATE,
-        required_vars=["idx", "article_id", "title", "source", "published_date",
-                       "resolution_date", "domain", "content_preview"]
+        required_vars=[
+            "idx",
+            "article_id",
+            "title",
+            "source",
+            "published_date",
+            "resolution_date",
+            "domain",
+            "content_preview",
+        ],
     )
 
     # Template for hindsight causal analysis instruction
     HINDSIGHT_ANALYSIS_TEMPLATE = PromptTemplate(
         template=HINDSIGHT_ANALYSIS_TEMPLATE,
         required_vars=[
-            "question_id", "question_text", "ground_truth", "resolution_date",
-            "target_event_id", "evidence_articles_text", "related_events_text",
-            "min_confidence", "min_strength", "max_causal_depth"
-        ]
+            "question_id",
+            "question_text",
+            "ground_truth",
+            "resolution_date",
+            "target_event_id",
+            "evidence_articles_text",
+            "related_events_text",
+            "min_confidence",
+            "min_strength",
+            "max_causal_depth",
+        ],
     )
 
     # Template for evidence collection instruction
     EVIDENCE_COLLECTION_TEMPLATE = PromptTemplate(
         template=EVIDENCE_COLLECTION_TEMPLATE,
         required_vars=[
-            "question_text", "ground_truth", "resolution_date", "domain", "min_articles", "start_date", "end_date"
-        ]
+            "question_text",
+            "ground_truth",
+            "resolution_date",
+            "domain",
+            "min_articles",
+            "start_date",
+            "end_date",
+        ],
     )
 
     def format_item(
@@ -199,7 +218,7 @@ class HindsightAnalysisPrompts(ContextualPromptGenerator[Tuple[Question, List[Ar
         item: Tuple[Question, List[Article]],
         idx: int,
         content_preview_length: int = 200,
-        **context
+        **context,
     ) -> str:
         """Format a question-evidence pair for the prompt.
 
@@ -220,8 +239,7 @@ class HindsightAnalysisPrompts(ContextualPromptGenerator[Tuple[Question, List[Ar
         formatted = []
         for article_idx, article in enumerate(evidence_articles, 1):
             content_preview = self.format_content_preview(
-                article.content,
-                max_length=content_preview_length
+                article.content, max_length=content_preview_length
             )
 
             formatted_article = self.EVIDENCE_ARTICLE_TEMPLATE.format(
@@ -230,9 +248,11 @@ class HindsightAnalysisPrompts(ContextualPromptGenerator[Tuple[Question, List[Ar
                 title=article.title,
                 source=article.source,
                 published_date=self.format_datetime(article.published_date),
-                resolution_date=self.format_datetime(question.resolution_date) if question.resolution_date else "N/A",
+                resolution_date=self.format_datetime(question.resolution_date)
+                if question.resolution_date
+                else "N/A",
                 domain=article.domain,
-                content_preview=content_preview
+                content_preview=content_preview,
             )
             formatted.append(formatted_article)
 
@@ -265,13 +285,17 @@ class HindsightAnalysisPrompts(ContextualPromptGenerator[Tuple[Question, List[Ar
             Formatted instruction string
         """
         date_str = self.format_datetime(current_date)
-        resolution_str = self.format_datetime(question.resolution_date) if question.resolution_date else "N/A"
+        resolution_str = (
+            self.format_datetime(question.resolution_date)
+            if question.resolution_date
+            else "N/A"
+        )
 
         # Format evidence articles
         evidence_text = self.format_item(
             (question, evidence_articles),
             idx=1,
-            content_preview_length=content_preview_length
+            content_preview_length=content_preview_length,
         )
 
         # Format related events
@@ -328,7 +352,11 @@ class HindsightAnalysisPrompts(ContextualPromptGenerator[Tuple[Question, List[Ar
             Formatted instruction string
         """
         date_str = self.format_datetime(current_date)
-        resolution_str = self.format_datetime(question.resolution_date) if question.resolution_date else "N/A"
+        resolution_str = (
+            self.format_datetime(question.resolution_date)
+            if question.resolution_date
+            else "N/A"
+        )
 
         # Calculate evidence window with fallback logic
         from src.utils.article_analysis import get_evidence_window
@@ -341,7 +369,7 @@ class HindsightAnalysisPrompts(ContextualPromptGenerator[Tuple[Question, List[Ar
             window_start, window_end = get_evidence_window(
                 question.resolution_date,
                 question.estimated_start_time,
-                fallback_window_days=evidence_window_days
+                fallback_window_days=evidence_window_days,
             )
             start_date_str = self.format_datetime(window_start)
             end_date_str = self.format_datetime(window_end)
@@ -384,8 +412,7 @@ class HindsightAnalysisPrompts(ContextualPromptGenerator[Tuple[Question, List[Ar
         article_summaries = []
         for idx, article in enumerate(articles, 1):
             content_preview = self.format_content_preview(
-                article.content,
-                max_length=content_preview_length
+                article.content, max_length=content_preview_length
             )
             summary = self.EVIDENCE_ARTICLE_TEMPLATE.format(
                 idx=idx,
@@ -395,7 +422,7 @@ class HindsightAnalysisPrompts(ContextualPromptGenerator[Tuple[Question, List[Ar
                 published_date=self.format_datetime(article.published_date),
                 resolution_date=self.format_datetime(question_resolution_date),
                 domain=article.domain,
-                content_preview=content_preview
+                content_preview=content_preview,
             )
             article_summaries.append(summary)
 
@@ -404,7 +431,7 @@ class HindsightAnalysisPrompts(ContextualPromptGenerator[Tuple[Question, List[Ar
         instruction = EVENT_IDENTIFICATION_PROMPT.format(
             date_str=date_str,
             articles_text=articles_text,
-            question_domain=question_domain
+            question_domain=question_domain,
         )
 
         return instruction
@@ -419,7 +446,7 @@ class HindsightAnalysisPrompts(ContextualPromptGenerator[Tuple[Question, List[Ar
         Returns:
             Formatted instruction string
         """
-        if 'evidence_articles' in kwargs:
+        if "evidence_articles" in kwargs:
             return self.get_hindsight_analysis_instruction(**kwargs)
         else:
             return self.get_evidence_collection_instruction(**kwargs)

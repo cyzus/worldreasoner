@@ -3,7 +3,6 @@
 Provides REST API for building and managing search indexes.
 """
 
-import asyncio
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -22,6 +21,7 @@ router = APIRouter()
 
 class SearchIndexStatus(BaseModel):
     """Search index status information."""
+
     total_articles: int
     fts_indexed: int
     embeddings_indexed: int
@@ -32,6 +32,7 @@ class SearchIndexStatus(BaseModel):
 
 class SearchIndexBuildRequest(BaseModel):
     """Request to build search indexes."""
+
     rebuild: bool = False
     embedding_model: Optional[str] = None
     batch_size: int = 2
@@ -39,6 +40,7 @@ class SearchIndexBuildRequest(BaseModel):
 
 class SearchIndexBuildResponse(BaseModel):
     """Response for search index build operation."""
+
     success: bool
     message: str
     total_articles: int
@@ -49,6 +51,7 @@ class SearchIndexBuildResponse(BaseModel):
 
 class CleanupResponse(BaseModel):
     """Response for cleanup operation."""
+
     success: bool
     message: str
     orphaned_removed: int
@@ -77,15 +80,15 @@ async def get_search_index_status():
         total_articles = len(db.get_many(Article))
         stats = search.get_index_stats()
 
-        needs_indexing = total_articles > stats['embeddings_indexed']
+        needs_indexing = total_articles > stats["embeddings_indexed"]
 
         return SearchIndexStatus(
             total_articles=total_articles,
-            fts_indexed=stats['fts_indexed'],
-            embeddings_indexed=stats['embeddings_indexed'],
-            models=stats['models'],
+            fts_indexed=stats["fts_indexed"],
+            embeddings_indexed=stats["embeddings_indexed"],
+            models=stats["models"],
             needs_indexing=needs_indexing,
-            embedding_model=embedding_model
+            embedding_model=embedding_model,
         )
     except Exception as e:
         logger.error(f"Failed to get search index status: {e}")
@@ -112,7 +115,9 @@ async def build_search_index(request: SearchIndexBuildRequest):
             config = get_config()
             embedding_model = config.llm.embedding_model
 
-        logger.info(f"Building search index: db={db_path}, model={embedding_model}, rebuild={request.rebuild}")
+        logger.info(
+            f"Building search index: db={db_path}, model={embedding_model}, rebuild={request.rebuild}"
+        )
 
         # Check if there are articles to index
         db = GenericDatabase(db_path)
@@ -126,7 +131,7 @@ async def build_search_index(request: SearchIndexBuildRequest):
                 total_articles=0,
                 newly_indexed=0,
                 final_indexed=0,
-                status="no_articles"
+                status="no_articles",
             )
 
         # Determine skip_existing based on rebuild flag
@@ -136,39 +141,39 @@ async def build_search_index(request: SearchIndexBuildRequest):
         result = await auto_index_articles(
             db_path=db_path,
             embedding_model=embedding_model,
-            skip_existing=skip_existing
+            skip_existing=skip_existing,
         )
 
         # Build response based on result
-        if result['status'] == 'success':
+        if result["status"] == "success":
             return SearchIndexBuildResponse(
                 success=True,
                 message=f"Successfully indexed {result['newly_indexed']} articles",
-                total_articles=result['total_articles'],
-                newly_indexed=result['newly_indexed'],
-                final_indexed=result['final_indexed'],
-                status=result['status']
+                total_articles=result["total_articles"],
+                newly_indexed=result["newly_indexed"],
+                final_indexed=result["final_indexed"],
+                status=result["status"],
             )
-        elif result['status'] == 'up_to_date':
+        elif result["status"] == "up_to_date":
             return SearchIndexBuildResponse(
                 success=True,
                 message="All articles already indexed",
-                total_articles=result['total_articles'],
+                total_articles=result["total_articles"],
                 newly_indexed=0,
-                final_indexed=result['already_indexed'],
-                status=result['status']
+                final_indexed=result["already_indexed"],
+                status=result["status"],
             )
         else:
             # Failed
-            error_msg = result.get('error', 'Unknown error')
+            error_msg = result.get("error", "Unknown error")
             logger.error(f"Search indexing failed: {error_msg}")
             return SearchIndexBuildResponse(
                 success=False,
                 message=f"Indexing failed: {error_msg}",
-                total_articles=result['total_articles'],
+                total_articles=result["total_articles"],
                 newly_indexed=0,
-                final_indexed=result['already_indexed'],
-                status=result['status']
+                final_indexed=result["already_indexed"],
+                status=result["status"],
             )
 
     except Exception as e:
@@ -179,7 +184,7 @@ async def build_search_index(request: SearchIndexBuildRequest):
 @router.post("/cleanup", response_model=CleanupResponse)
 async def cleanup_orphaned_embeddings():
     """Clean up orphaned embeddings (embeddings for deleted articles).
-    
+
     Returns:
         Cleanup status and count of removed embeddings
     """
@@ -187,14 +192,14 @@ async def cleanup_orphaned_embeddings():
         db_path = get_current_db_path()
         config = get_config()
         embedding_model = config.llm.embedding_model
-        
+
         search = HybridSearch(db_path, embedding_model=embedding_model)
         orphaned_count = search.cleanup_orphaned_embeddings()
-        
+
         return CleanupResponse(
             success=True,
             message=f"Removed {orphaned_count} orphaned embeddings",
-            orphaned_removed=orphaned_count
+            orphaned_removed=orphaned_count,
         )
     except Exception as e:
         logger.error(f"Failed to cleanup orphaned embeddings: {e}", exc_info=True)

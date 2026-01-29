@@ -13,7 +13,7 @@ async def get_price_history(
     session: Optional[aiohttp.ClientSession] = None,
     start_ts: Optional[int] = None,
     end_ts: Optional[int] = None,
-    fidelity: int = 30
+    fidelity: int = 30,
 ) -> List[Dict[str, Any]]:
     """
     Fetch price history for a Polymarket token.
@@ -56,7 +56,7 @@ async def get_price_history(
                 fidelity = 720
         elif interval in ["1d", "6h", "1h"] and fidelity < 60:
             fidelity = 60
-        
+
         url = f"https://clob.polymarket.com/prices-history?market={token_id}&interval={interval}&fidelity={fidelity}"
 
     close_session = False
@@ -68,11 +68,13 @@ async def get_price_history(
         async with session.get(url) as response:
             if response.status == 200:
                 data = await response.json()
-                history = data.get('history', [])
+                history = data.get("history", [])
                 logger.info(f"Fetched {len(history)} price points for token {token_id}")
                 return history
             else:
-                logger.warning(f"Failed to fetch price history for {token_id}: HTTP {response.status}")
+                logger.warning(
+                    f"Failed to fetch price history for {token_id}: HTTP {response.status}"
+                )
                 return []
     except Exception as e:
         logger.error(f"Error fetching price history for {token_id}: {e}")
@@ -87,7 +89,7 @@ async def get_price_history_for_market(
     interval: str = "1d",
     start_ts: Optional[int] = None,
     end_ts: Optional[int] = None,
-    fidelity: int = 30
+    fidelity: int = 30,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
     Fetch price history for multiple tokens (outcomes) in a market.
@@ -113,7 +115,7 @@ async def get_price_history_for_market(
                 session=session,
                 start_ts=start_ts,
                 end_ts=end_ts,
-                fidelity=fidelity
+                fidelity=fidelity,
             )
             if history:
                 results[token_id] = history

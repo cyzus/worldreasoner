@@ -1,9 +1,7 @@
 """News-based question generation stage (Articles -> Questions)."""
 
-import json
-from typing import List, Optional, Union, Dict
+from typing import List, Optional
 from datetime import datetime, timezone
-from pydantic import BaseModel
 
 from ..base import PipelineStage
 from src.domain.models import Article, Question
@@ -18,20 +16,26 @@ from src.utils.usage_tracking import UsageTracker, log_usage
 
 class NewsQuestionGenerationStage(PipelineStage[Article, Question]):
     """Generates forecast questions directly from articles (skipping event object creation).
-    
+
     This streamlines the news pipeline: Articles -> [LLM] -> Questions.
     The LLM implicitly identifies events and deduplicates them during question generation.
     """
-    
-    def __init__(self, config: QuestionPipelineConfig, article_config: Optional['ArticleCollectionConfig'] = None,
-                 db_path: Optional[str] = None,
-                 type_hints: Optional[List[str]] = None, category_hints: Optional[List[str]] = None,
-                 existing_question_ids: Optional[set] = None, target_count: Optional[int] = None):
+
+    def __init__(
+        self,
+        config: QuestionPipelineConfig,
+        article_config: Optional["ArticleCollectionConfig"] = None,
+        db_path: Optional[str] = None,
+        type_hints: Optional[List[str]] = None,
+        category_hints: Optional[List[str]] = None,
+        existing_question_ids: Optional[set] = None,
+        target_count: Optional[int] = None,
+    ):
         super().__init__(name="NewsQuestionGeneration", config=config)
 
         # Store db_path for tools
         self.db_path = db_path
-        
+
         # Store article config for sources
         self.article_config = article_config
 
@@ -59,7 +63,7 @@ class NewsQuestionGenerationStage(PipelineStage[Article, Question]):
 
         # Usage tracking
         self.usage_tracker = UsageTracker()
-        
+
     async def process(self, inputs: List[Article]) -> List[Question]:
         """Generate forecast questions from articles.
 
@@ -73,11 +77,17 @@ class NewsQuestionGenerationStage(PipelineStage[Article, Question]):
             return []
 
         # Early exit if we already have enough questions
-        max_questions = self.target_count if self.target_count is not None else (self.config.max_questions or 10)
+        max_questions = (
+            self.target_count
+            if self.target_count is not None
+            else (self.config.max_questions or 10)
+        )
         current_count = len(self.collector.get_all())
 
         if current_count >= max_questions:
-            logger.info(f"Already collected {current_count}/{max_questions} questions, skipping batch")
+            logger.info(
+                f"Already collected {current_count}/{max_questions} questions, skipping batch"
+            )
             return []
 
         remaining_needed = max_questions - current_count
@@ -87,15 +97,20 @@ class NewsQuestionGenerationStage(PipelineStage[Article, Question]):
             current_date = datetime.now(timezone.utc)
 
             # Determine target domains
-            target_domains = self.category_hints if self.category_hints else self.config.domains
+            target_domains = (
+                self.category_hints if self.category_hints else self.config.domains
+            )
 
             # Filter articles by domain if target_domains is specified
             if target_domains:
                 filtered_articles = [
-                    article for article in inputs
+                    article
+                    for article in inputs
                     if article.domain.value in target_domains
                 ]
-                logger.info(f"Filtered {len(inputs)} articles to {len(filtered_articles)} matching domains: {target_domains}")
+                logger.info(
+                    f"Filtered {len(inputs)} articles to {len(filtered_articles)} matching domains: {target_domains}"
+                )
             else:
                 filtered_articles = inputs
 
@@ -103,7 +118,9 @@ class NewsQuestionGenerationStage(PipelineStage[Article, Question]):
             # For articles, we might want to cap explicitly to avoid token limits
             max_batch = 15  # Reasonable limit for article summaries in context
             if len(filtered_articles) > max_batch:
-                logger.info(f"Capping inputs to {max_batch} articles from {len(filtered_articles)}")
+                logger.info(
+                    f"Capping inputs to {max_batch} articles from {len(filtered_articles)}"
+                )
                 filtered_articles = filtered_articles[:max_batch]
 
             if not filtered_articles:
@@ -114,7 +131,7 @@ class NewsQuestionGenerationStage(PipelineStage[Article, Question]):
             self.base_agent = AgentFactory.create_web_agent(
                 tools=[self.question_tool, self.article_retrieval_tool],
                 is_code=True,
-                max_steps=20
+                max_steps=20,
             )
 
             # Extract sources if available
@@ -131,9 +148,9 @@ class NewsQuestionGenerationStage(PipelineStage[Article, Question]):
                 sources=sources_list,  # NEW: Pass trusted sources
                 require_ground_truth=self.config.require_ground_truth,
                 type_hints=self.type_hints,
-                category_hints=self.category_hints
+                category_hints=self.category_hints,
             )
-            
+
             # Run the agent
             result = self.base_agent.run(instruction)
 
@@ -144,7 +161,9 @@ class NewsQuestionGenerationStage(PipelineStage[Article, Question]):
                 log_usage(usage_metrics, context="NewsQuestionGeneration")
 
             # Agent's response is just a summary
-            logger.debug(f"Agent response: {result[:200] if isinstance(result, str) else result}")
+            logger.debug(
+                f"Agent response: {result[:200] if isinstance(result, str) else result}"
+            )
 
             # Get generated questions
             questions = self.collector.get_all()
@@ -153,7 +172,7 @@ class NewsQuestionGenerationStage(PipelineStage[Article, Question]):
                 self.usage_tracker.log_summary(context="NewsQuestionGeneration")
 
             return questions
-            
+
         except Exception as e:
             logger.error(f"Error generating questions from articles: {e}")
             return []

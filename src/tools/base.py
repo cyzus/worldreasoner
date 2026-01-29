@@ -24,13 +24,14 @@ Tools can inherit from multiple base classes as needed:
 - DatabaseAwareTool only: ArticleRetrievalTool
 - ToolResponseMixin: Can be added to any tool
 """
+
 import json
 from typing import Any, Generic, TypeVar, Optional, List, Dict
 from smolagents import Tool
 from src.core.collectors import ResultCollector
 from src.utils.logging import logger
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class CollectorAwareTool(Tool, Generic[T]):
@@ -115,7 +116,9 @@ class ToolResponseMixin:
         return json.dumps(data, default=str)
 
     @staticmethod
-    def error_response(message: str, details: Optional[Dict[str, Any]] = None, **kwargs) -> str:
+    def error_response(
+        message: str, details: Optional[Dict[str, Any]] = None, **kwargs
+    ) -> str:
         """Format error response for LLM.
 
         Args:

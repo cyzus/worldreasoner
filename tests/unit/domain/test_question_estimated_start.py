@@ -1,6 +1,6 @@
 """Unit tests for estimated_start_time field."""
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 

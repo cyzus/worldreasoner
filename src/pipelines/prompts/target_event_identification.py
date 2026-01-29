@@ -4,8 +4,7 @@ from datetime import datetime
 from src.domain.models import Question
 from .base import BasePromptGenerator, PromptTemplate
 
-TARGET_EVENT_IDENTIFICATION_PROMPT = \
-"""You are analyzing a resolved forecast question to identify the target event (what actually happened).
+TARGET_EVENT_IDENTIFICATION_PROMPT = """You are analyzing a resolved forecast question to identify the target event (what actually happened).
 
 Question: {question_text}
 Question Type: {question_type}
@@ -40,13 +39,20 @@ Return a JSON object with the event description:
 
 Only return the JSON object, nothing else."""
 
+
 class TargetEventIdentificationPrompts(BasePromptGenerator[Question]):
     """Prompts for identifying target events from resolved questions."""
 
     # Template for event extraction instruction
     EXTRACTION_TEMPLATE = PromptTemplate(
         template=TARGET_EVENT_IDENTIFICATION_PROMPT,
-        required_vars=["question_text", "question_type", "ground_truth", "resolution_date", "domain"]
+        required_vars=[
+            "question_text",
+            "question_type",
+            "ground_truth",
+            "resolution_date",
+            "domain",
+        ],
     )
 
     def format_item(self, item: Question, idx: int, **context) -> str:
@@ -64,10 +70,7 @@ class TargetEventIdentificationPrompts(BasePromptGenerator[Question]):
         return f"{idx}. {item.question_text}"
 
     def get_instruction(
-        self,
-        question: Question,
-        current_date: datetime = None,
-        **kwargs
+        self, question: Question, current_date: datetime = None, **kwargs
     ) -> str:
         """Generate instruction for extracting target event from a question.
 
@@ -88,5 +91,5 @@ class TargetEventIdentificationPrompts(BasePromptGenerator[Question]):
             question_type=question.question_type.value,
             ground_truth=str(question.ground_truth),
             resolution_date=resolution_date_str,
-            domain=question.domain.value
+            domain=question.domain.value,
         )

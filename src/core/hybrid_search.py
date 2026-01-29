@@ -16,7 +16,6 @@ Architecture:
 """
 
 import sqlite3
-import asyncio
 import numpy as np
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
@@ -36,7 +35,7 @@ class HybridSearch:
         self,
         db_path: str = "worldreasoner.db",
         embedding_model: Optional[str] = None,
-        embedding_config: Optional[Dict[str, Any]] = None
+        embedding_config: Optional[Dict[str, Any]] = None,
     ):
         """Initialize hybrid search engine.
 
@@ -123,29 +122,32 @@ class HybridSearch:
 
             # Index in FTS5
             # FTS5 doesn't support primary keys, so DELETE first to avoid duplicates
-            cursor.execute("DELETE FROM articles_fts WHERE article_id = ?", (article.id,))
-            cursor.execute("""
+            cursor.execute(
+                "DELETE FROM articles_fts WHERE article_id = ?", (article.id,)
+            )
+            cursor.execute(
+                """
                 INSERT INTO articles_fts (article_id, title, content)
                 VALUES (?, ?, ?)
-            """, (article.id, article.title, article.content))
+            """,
+                (article.id, article.title, article.content),
+            )
 
             # Generate embedding using LiteLLM
             text_to_embed = f"{article.title}\n\n{article.content}"
             embeddings = await self.llm_client.aembedding(
-                inputs=[text_to_embed],
-                model=self.embedding_model
+                inputs=[text_to_embed], model=self.embedding_model
             )
             embedding = np.array(embeddings[0], dtype=np.float32)
 
             # Store as binary blob
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO article_embeddings (article_id, embedding, model_name)
                 VALUES (?, ?, ?)
-            """, (
-                article.id,
-                embedding.tobytes(),
-                self.embedding_model
-            ))
+            """,
+                (article.id, embedding.tobytes(), self.embedding_model),
+            )
 
             conn.commit()
 
@@ -164,19 +166,24 @@ class HybridSearch:
 
             # Get article IDs that already have embeddings for current model
             article_ids = [a.id for a in articles]
-            placeholders = ','.join(['?'] * len(article_ids))
-            cursor.execute(f"""
+            placeholders = ",".join(["?"] * len(article_ids))
+            cursor.execute(
+                f"""
                 SELECT article_id FROM article_embeddings
                 WHERE model_name = ? AND article_id IN ({placeholders})
-            """, [self.embedding_model] + article_ids)
+            """,
+                [self.embedding_model] + article_ids,
+            )
 
-            already_indexed = {row['article_id'] for row in cursor.fetchall()}
+            already_indexed = {row["article_id"] for row in cursor.fetchall()}
 
         # Filter to only articles that need indexing
         articles_to_index = [a for a in articles if a.id not in already_indexed]
 
         if already_indexed:
-            logger.info(f"Skipping {len(already_indexed)} articles that are already indexed")
+            logger.info(
+                f"Skipping {len(already_indexed)} articles that are already indexed"
+            )
 
         if not articles_to_index:
             logger.info("All articles are already indexed. Nothing to do!")
@@ -193,33 +200,41 @@ class HybridSearch:
             cursor = conn.cursor()
             # Delete existing entries for these article IDs
             article_ids_to_delete = [(a.id,) for a in articles_to_index]
-            cursor.executemany("DELETE FROM articles_fts WHERE article_id = ?", article_ids_to_delete)
+            cursor.executemany(
+                "DELETE FROM articles_fts WHERE article_id = ?", article_ids_to_delete
+            )
             # Now insert fresh data
-            cursor.executemany("""
+            cursor.executemany(
+                """
                 INSERT INTO articles_fts (article_id, title, content)
                 VALUES (?, ?, ?)
-            """, fts_data)
+            """,
+                fts_data,
+            )
             conn.commit()
 
         # Generate embeddings in batches and persist immediately
         total_batches = (len(articles_to_index) - 1) // batch_size + 1
 
         for batch_idx in range(0, len(articles_to_index), batch_size):
-            batch_articles = articles_to_index[batch_idx:batch_idx + batch_size]
+            batch_articles = articles_to_index[batch_idx : batch_idx + batch_size]
             batch_num = batch_idx // batch_size + 1
 
-            logger.info(f"Processing batch {batch_num}/{total_batches} ({len(batch_articles)} articles)...")
+            logger.info(
+                f"Processing batch {batch_num}/{total_batches} ({len(batch_articles)} articles)..."
+            )
 
             # Generate embeddings for this batch
             batch_texts = [f"{a.title}\n\n{a.content}" for a in batch_articles]
 
             try:
                 batch_embeddings = await self.llm_client.aembedding(
-                    inputs=batch_texts,
-                    model=self.embedding_model
+                    inputs=batch_texts, model=self.embedding_model
                 )
             except Exception as e:
-                logger.error(f"Failed to generate embeddings for batch {batch_num}: {e}")
+                logger.error(
+                    f"Failed to generate embeddings for batch {batch_num}: {e}"
+                )
                 raise
 
             # Convert to numpy and prepare for storage
@@ -231,21 +246,23 @@ class HybridSearch:
             # Persist this batch immediately
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.executemany("""
+                cursor.executemany(
+                    """
                     INSERT OR REPLACE INTO article_embeddings (article_id, embedding, model_name)
                     VALUES (?, ?, ?)
-                """, embedding_data)
+                """,
+                    embedding_data,
+                )
                 conn.commit()
 
-            logger.info(f"Batch {batch_num}/{total_batches} saved successfully ({len(batch_articles)} embeddings)")
+            logger.info(
+                f"Batch {batch_num}/{total_batches} saved successfully ({len(batch_articles)} embeddings)"
+            )
 
         logger.info(f"Successfully indexed {len(articles_to_index)} new articles")
 
     def _fts_search(
-        self,
-        query: str,
-        max_results: int = 100,
-        cutoff_date: Optional[datetime] = None
+        self, query: str, max_results: int = 100, cutoff_date: Optional[datetime] = None
     ) -> List[Tuple[str, float]]:
         """Perform FTS5 keyword search with BM25 ranking.
 
@@ -311,15 +328,12 @@ class HybridSearch:
                 params = [fts_query, max_results]
 
             cursor.execute(sql, params)
-            results = [(row['article_id'], row['score']) for row in cursor.fetchall()]
+            results = [(row["article_id"], row["score"]) for row in cursor.fetchall()]
 
         return results
 
     async def _semantic_search(
-        self,
-        query: str,
-        max_results: int = 100,
-        cutoff_date: Optional[datetime] = None
+        self, query: str, max_results: int = 100, cutoff_date: Optional[datetime] = None
     ) -> List[Tuple[str, float]]:
         """Perform semantic search using embeddings.
 
@@ -333,8 +347,7 @@ class HybridSearch:
         """
         # Generate query embedding using LiteLLM
         embeddings = await self.llm_client.aembedding(
-            inputs=[query],
-            model=self.embedding_model
+            inputs=[query], model=self.embedding_model
         )
         query_embedding = np.array(embeddings[0], dtype=np.float32)
 
@@ -365,8 +378,8 @@ class HybridSearch:
         similarities = []
 
         for row in rows:
-            article_id = row['article_id']
-            embedding_bytes = row['embedding']
+            article_id = row["article_id"]
+            embedding_bytes = row["embedding"]
             embedding = np.frombuffer(embedding_bytes, dtype=np.float32)
 
             # Cosine similarity
@@ -379,10 +392,7 @@ class HybridSearch:
 
         # Sort by similarity and take top results
         sorted_indices = np.argsort(similarities)[::-1][:max_results]
-        results = [
-            (article_ids[i], similarities[i])
-            for i in sorted_indices
-        ]
+        results = [(article_ids[i], similarities[i]) for i in sorted_indices]
 
         return results
 
@@ -392,7 +402,7 @@ class HybridSearch:
         max_results: int = 10,
         cutoff_date: Optional[datetime] = None,
         alpha: float = 0.5,
-        fts_multiplier: int = 3
+        fts_multiplier: int = 3,
     ) -> List[Tuple[str, float]]:
         """Perform hybrid search combining FTS5 and semantic search.
 
@@ -409,13 +419,19 @@ class HybridSearch:
         # Retrieve more results from each method for better fusion
         candidate_size = max_results * fts_multiplier
 
-        logger.debug(f"Hybrid search: query='{query}', max_results={max_results}, alpha={alpha}")
+        logger.debug(
+            f"Hybrid search: query='{query}', max_results={max_results}, alpha={alpha}"
+        )
 
         # Get results from both methods
         fts_results = self._fts_search(query, candidate_size, cutoff_date)
-        semantic_results = await self._semantic_search(query, candidate_size, cutoff_date)
+        semantic_results = await self._semantic_search(
+            query, candidate_size, cutoff_date
+        )
 
-        logger.debug(f"FTS results: {len(fts_results)}, Semantic results: {len(semantic_results)}")
+        logger.debug(
+            f"FTS results: {len(fts_results)}, Semantic results: {len(semantic_results)}"
+        )
 
         # Normalize scores to [0, 1] range
         def normalize_scores(results: List[Tuple[str, float]]) -> Dict[str, float]:
@@ -452,9 +468,7 @@ class HybridSearch:
 
         # Sort by combined score and take top results
         sorted_results = sorted(
-            combined_scores.items(),
-            key=lambda x: x[1],
-            reverse=True
+            combined_scores.items(), key=lambda x: x[1], reverse=True
         )[:max_results]
 
         logger.debug(f"Combined results: {len(sorted_results)}")
@@ -467,7 +481,7 @@ class HybridSearch:
         max_results: int = 10,
         cutoff_date: Optional[datetime] = None,
         method: str = "hybrid",
-        **kwargs
+        **kwargs,
     ) -> List[str]:
         """Unified search interface.
 
@@ -486,7 +500,9 @@ class HybridSearch:
         elif method == "semantic":
             results = await self._semantic_search(query, max_results, cutoff_date)
         elif method == "hybrid":
-            results = await self.hybrid_search(query, max_results, cutoff_date, **kwargs)
+            results = await self.hybrid_search(
+                query, max_results, cutoff_date, **kwargs
+            )
         else:
             raise ValueError(f"Unknown search method: {method}")
 
@@ -503,15 +519,18 @@ class HybridSearch:
 
             # FTS5 count
             cursor.execute("SELECT COUNT(*) as count FROM articles_fts")
-            fts_count = cursor.fetchone()['count']
+            fts_count = cursor.fetchone()["count"]
 
             # Embeddings count for CURRENT model
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT COUNT(*) as count 
                 FROM article_embeddings 
                 WHERE model_name = ?
-            """, (self.embedding_model,))
-            embeddings_count = cursor.fetchone()['count']
+            """,
+                (self.embedding_model,),
+            )
+            embeddings_count = cursor.fetchone()["count"]
 
             # Embeddings by model
             cursor.execute("""
@@ -519,13 +538,13 @@ class HybridSearch:
                 FROM article_embeddings
                 GROUP BY model_name
             """)
-            models = {row['model_name']: row['count'] for row in cursor.fetchall()}
+            models = {row["model_name"]: row["count"] for row in cursor.fetchall()}
 
         return {
             "fts_indexed": fts_count,
             "embeddings_indexed": embeddings_count,
             "models": models,
-            "current_model": self.embedding_model
+            "current_model": self.embedding_model,
         }
 
     async def reindex_all(self, articles: List[Article]):
@@ -547,48 +566,48 @@ class HybridSearch:
 
     def cleanup_orphaned_embeddings(self) -> int:
         """Remove embeddings for articles that no longer exist in the database.
-        
+
         Returns:
             Number of orphaned embeddings removed
         """
         from .database import GenericDatabase
         from ..domain.models import Article
-        
+
         logger.info("Checking for orphaned embeddings...")
-        
+
         # Get all article IDs from the main articles table
         db = GenericDatabase(str(self.db_path))
         db.create_table(Article)
         valid_article_ids = {a.id for a in db.get_many(Article)}
-        
+
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            
+
             # Get all article IDs from embeddings
             cursor.execute("SELECT DISTINCT article_id FROM article_embeddings")
-            embedded_ids = {row['article_id'] for row in cursor.fetchall()}
-            
+            embedded_ids = {row["article_id"] for row in cursor.fetchall()}
+
             # Find orphaned IDs
             orphaned_ids = embedded_ids - valid_article_ids
-            
+
             if not orphaned_ids:
                 logger.info("No orphaned embeddings found")
                 return 0
-            
+
             # Delete orphaned embeddings
-            placeholders = ','.join(['?'] * len(orphaned_ids))
+            placeholders = ",".join(["?"] * len(orphaned_ids))
             cursor.execute(
                 f"DELETE FROM article_embeddings WHERE article_id IN ({placeholders})",
-                list(orphaned_ids)
+                list(orphaned_ids),
             )
-            
+
             # Also clean up FTS
             cursor.execute(
                 f"DELETE FROM articles_fts WHERE article_id IN ({placeholders})",
-                list(orphaned_ids)
+                list(orphaned_ids),
             )
-            
+
             conn.commit()
-            
+
         logger.info(f"Removed {len(orphaned_ids)} orphaned embeddings")
         return len(orphaned_ids)

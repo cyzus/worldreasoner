@@ -1,21 +1,19 @@
 """Target event identification stage - creates/identifies target events for questions."""
 
-import asyncio
 from typing import List, Tuple, Optional
-from datetime import datetime, timezone
-import uuid
 import hashlib
 
 from pydantic import BaseModel, Field
 
 from src.pipelines.base import PipelineStage
-from src.pipelines.prompts.target_event_identification import TargetEventIdentificationPrompts
+from src.pipelines.prompts.target_event_identification import (
+    TargetEventIdentificationPrompts,
+)
 from src.domain.models import Question, Event, Article
-from src.domain.models.domain import Domain
 from src.domain.models.event import EventType, EventStatus
 from src.core.database import GenericDatabase
 from src.utils.logging import logger
-from src.utils.usage_tracking import UsageTracker, log_usage
+from src.utils.usage_tracking import UsageTracker
 from src.utils.llm_utils import parse_json_response
 from src.utils.similarity import SimilarityMatcher
 from src.llm import LiteLLMClient
@@ -29,35 +27,34 @@ class TargetEventIdentificationConfig(BaseModel):
         default=0.8,
         ge=0.0,
         le=1.0,
-        description="Similarity threshold for matching existing events"
+        description="Similarity threshold for matching existing events",
     )
     create_if_not_found: bool = Field(
-        default=True,
-        description="Create new event if no match found"
+        default=True, description="Create new event if no match found"
     )
 
 
-class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]], Question]):
+class TargetEventIdentificationStage(
+    PipelineStage[Tuple[Question, List[Article]], Question]
+):
     """Identifies or creates target events for questions without them.
-    
+
     This stage:
     1. Takes questions that have no target_event_id (e.g., from Polymarket)
     2. Uses ground truth + question text to identify what event occurred
     3. Searches for matching existing events
     4. Creates new target event if needed
     5. Updates the question with target_event_id
-    
+
     Example transformations:
     - "Will Bitcoin reach $100k by Dec 31, 2024?" (resolved=True)
       → Event: "Bitcoin reaches $100,000 USD"
-    - "Will Trump win the 2024 election?" (resolved=True)  
+    - "Will Trump win the 2024 election?" (resolved=True)
       → Event: "Donald Trump wins 2024 US Presidential Election"
     """
 
     def __init__(
-        self,
-        config: TargetEventIdentificationConfig,
-        db_path: str = "worldreasoner.db"
+        self, config: TargetEventIdentificationConfig, db_path: str = "worldreasoner.db"
     ):
         """Initialize target event identification stage.
 
@@ -75,7 +72,7 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
 
         # Initialize prompts generator
         self.prompts = TargetEventIdentificationPrompts()
-        
+
         # Initialize similarity matcher for event deduplication
         self._matcher = SimilarityMatcher(
             db=self.db,
@@ -85,8 +82,7 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
         )
 
     async def process(
-        self,
-        inputs: List[Tuple[Question, List[Article]]]
+        self, inputs: List[Tuple[Question, List[Article]]]
     ) -> List[Question]:
         """Identify target events for questions.
 
@@ -103,17 +99,23 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
         for idx, (question, evidence_articles) in enumerate(inputs, 1):
             # Skip if question already has a target event
             if question.target_event_id:
-                logger.debug(f"[{idx}/{len(inputs)}] Question {question.id} already has target event")
+                logger.debug(
+                    f"[{idx}/{len(inputs)}] Question {question.id} already has target event"
+                )
                 updated_questions.append(question)
                 continue
 
             # Skip if question is not resolved
             if question.ground_truth is None:
-                logger.debug(f"[{idx}/{len(inputs)}] Question {question.id} not resolved, skipping")
+                logger.debug(
+                    f"[{idx}/{len(inputs)}] Question {question.id} not resolved, skipping"
+                )
                 updated_questions.append(question)
                 continue
 
-            logger.debug(f"[{idx}/{len(inputs)}] Identifying target event for: {question.id}")
+            logger.debug(
+                f"[{idx}/{len(inputs)}] Identifying target event for: {question.id}"
+            )
 
             try:
                 # Identify or create target event
@@ -125,7 +127,9 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
                     # Update question
                     question.target_event_id = target_event_id
                     self.db.save(Question, question)
-                    logger.info(f"Updated question {question.id} with target_event_id: {target_event_id}")
+                    logger.info(
+                        f"Updated question {question.id} with target_event_id: {target_event_id}"
+                    )
                 else:
                     logger.warning(f"Could not identify target event for {question.id}")
 
@@ -143,9 +147,7 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
         return updated_questions
 
     async def _identify_target_event(
-        self,
-        question: Question,
-        evidence_articles: List[Article]
+        self, question: Question, evidence_articles: List[Article]
     ) -> Optional[str]:
         """Identify or create target event for a question.
 
@@ -158,7 +160,7 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
         """
         # Use LLM to extract event description from question + ground truth
         event_description = await self._extract_event_description(question)
-        
+
         if not event_description:
             logger.warning(f"Could not extract event description from {question.id}")
             return None
@@ -169,7 +171,9 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
         )
 
         if existing_event:
-            logger.info(f"Found matching event: {existing_event.id} for question {question.id}")
+            logger.info(
+                f"Found matching event: {existing_event.id} for question {question.id}"
+            )
             return existing_event.id
 
         # Create new event if configured
@@ -177,21 +181,29 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
             new_event = self._create_target_event(
                 event_description, question, evidence_articles
             )
-            logger.debug(f"About to save event: {new_event.id} with domain={new_event.domain}, occurred_date={new_event.occurred_date}")
+            logger.debug(
+                f"About to save event: {new_event.id} with domain={new_event.domain}, occurred_date={new_event.occurred_date}"
+            )
             try:
                 save_result = self.db.save(Event, new_event)
-                logger.info(f"Created new target event: {new_event.id} for question {question.id} (save_result={save_result})")
-                
+                logger.info(
+                    f"Created new target event: {new_event.id} for question {question.id} (save_result={save_result})"
+                )
+
                 # Verify the event was actually saved
                 verify = self.db.get(Event, new_event.id)
                 if verify:
                     logger.debug(f"Verified event {new_event.id} exists in database")
                 else:
-                    logger.error(f"ERROR: Event {new_event.id} was NOT found after save! Database save may have failed.")
-                
+                    logger.error(
+                        f"ERROR: Event {new_event.id} was NOT found after save! Database save may have failed."
+                    )
+
                 return new_event.id
             except Exception as e:
-                logger.error(f"Exception saving event {new_event.id}: {e}", exc_info=True)
+                logger.error(
+                    f"Exception saving event {new_event.id}: {e}", exc_info=True
+                )
                 raise
 
         return None
@@ -228,7 +240,9 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
                 logger.warning(f"Event description too short: {len(description)} chars")
                 return None
             if len(description) > 200:
-                logger.warning(f"Event description too long ({len(description)} chars), truncating")
+                logger.warning(
+                    f"Event description too long ({len(description)} chars), truncating"
+                )
                 description = description[:200]
 
             return description
@@ -241,7 +255,7 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
         self,
         event_description: str,
         question: Question,
-        evidence_articles: List[Article]
+        evidence_articles: List[Article],
     ) -> Optional[Event]:
         """Find existing event matching the description.
 
@@ -257,7 +271,7 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
         """
         # Define temporal filter - events within 30 days of resolution
         time_window_days = 30
-        
+
         def temporal_filter(event: Event) -> bool:
             if not event.occurred_date:
                 return False
@@ -266,7 +280,11 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
 
         # Use the generic matcher with domain filter and temporal filter
         match = self._matcher.find_match(
-            filters={"domain": question.domain.value if hasattr(question.domain, 'value') else question.domain},
+            filters={
+                "domain": question.domain.value
+                if hasattr(question.domain, "value")
+                else question.domain
+            },
             additional_filter=temporal_filter,
             title=event_description,
             description=event_description,
@@ -281,7 +299,7 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
         self,
         event_description: str,
         question: Question,
-        evidence_articles: List[Article]
+        evidence_articles: List[Article],
     ) -> Event:
         """Create new target event.
 
@@ -317,14 +335,18 @@ class TargetEventIdentificationStage(PipelineStage[Tuple[Question, List[Article]
             event_type=event_type,
             domain=question.domain,
             status=status,
-            occurred_date=question.resolution_date if question.ground_truth is not False else None,
+            occurred_date=question.resolution_date
+            if question.ground_truth is not False
+            else None,
             resolution_date=question.resolution_date,
-            article_ids=[a.id for a in evidence_articles[:5]] if evidence_articles else [],  # Link to evidence if available
+            article_ids=[a.id for a in evidence_articles[:5]]
+            if evidence_articles
+            else [],  # Link to evidence if available
             metadata={
-                'created_from_question': question.id,
-                'source': 'target_event_identification',
-                'ground_truth': question.ground_truth,
-            }
+                "created_from_question": question.id,
+                "source": "target_event_identification",
+                "ground_truth": question.ground_truth,
+            },
         )
 
         return event

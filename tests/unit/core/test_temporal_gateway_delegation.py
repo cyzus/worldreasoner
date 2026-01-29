@@ -27,7 +27,7 @@ def sample_articles():
             published_date=datetime(2024, 5, 1, tzinfo=timezone.utc),
             content="This is test article content that must be at least 100 characters long to satisfy pydantic validation. Additional text added.",
             source="Test Source",
-            domain=Domain.GENERAL
+            domain=Domain.GENERAL,
         ),
         Article(
             id="a2",
@@ -36,7 +36,7 @@ def sample_articles():
             published_date=datetime(2024, 5, 15, tzinfo=timezone.utc),
             content="This is test article content that must be at least 100 characters long to satisfy pydantic validation. Additional text added.",
             source="Test Source",
-            domain=Domain.GENERAL
+            domain=Domain.GENERAL,
         ),
         Article(
             id="a3",
@@ -45,7 +45,7 @@ def sample_articles():
             published_date=datetime(2024, 6, 15, tzinfo=timezone.utc),
             content="This is test article content that must be at least 100 characters long to satisfy pydantic validation. Additional text added.",
             source="Test Source",
-            domain=Domain.GENERAL
+            domain=Domain.GENERAL,
         ),
         Article(
             id="a4",
@@ -54,7 +54,7 @@ def sample_articles():
             published_date=datetime(2024, 6, 1, tzinfo=timezone.utc),
             content="This is test article content that must be at least 100 characters long to satisfy pydantic validation. Additional text added.",
             source="Test Source",
-            domain=Domain.GENERAL
+            domain=Domain.GENERAL,
         ),
     ]
 
@@ -69,7 +69,7 @@ def sample_events():
             description="Event that occurred before the cutoff date",
             occurred_date=datetime(2024, 5, 1, tzinfo=timezone.utc),
             event_type=EventType.MILESTONE,
-            domain=Domain.GENERAL
+            domain=Domain.GENERAL,
         ),
         Event(
             id="e2",
@@ -77,7 +77,7 @@ def sample_events():
             description="Another event before cutoff",
             occurred_date=datetime(2024, 5, 15, tzinfo=timezone.utc),
             event_type=EventType.MILESTONE,
-            domain=Domain.GENERAL
+            domain=Domain.GENERAL,
         ),
         Event(
             id="e3",
@@ -85,7 +85,7 @@ def sample_events():
             description="Event that occurred after cutoff",
             occurred_date=datetime(2024, 6, 15, tzinfo=timezone.utc),
             event_type=EventType.MILESTONE,
-            domain=Domain.GENERAL
+            domain=Domain.GENERAL,
         ),
         Event(
             id="e4",
@@ -93,7 +93,7 @@ def sample_events():
             description="Event at exactly the cutoff date",
             occurred_date=datetime(2024, 6, 1, tzinfo=timezone.utc),
             event_type=EventType.MILESTONE,
-            domain=Domain.GENERAL
+            domain=Domain.GENERAL,
         ),
         Event(
             id="e5",
@@ -101,7 +101,7 @@ def sample_events():
             description="Event with no occurred date",
             occurred_date=None,
             event_type=EventType.OUTCOME,
-            domain=Domain.GENERAL
+            domain=Domain.GENERAL,
         ),
     ]
 
@@ -115,9 +115,7 @@ def test_filter_articles_delegates_to_service(cutoff_date, sample_articles):
 
     # Filter using service directly
     service_result = TemporalFilterService.filter_by_cutoff(
-        sample_articles,
-        cutoff_date,
-        date_field="published_date"
+        sample_articles, cutoff_date, date_field="published_date"
     )
 
     # Results should be identical
@@ -140,9 +138,7 @@ def test_filter_events_delegates_to_service(cutoff_date, sample_events):
 
     # Filter using service directly
     service_result = TemporalFilterService.filter_by_cutoff(
-        sample_events,
-        cutoff_date,
-        date_field="occurred_date"
+        sample_events, cutoff_date, date_field="occurred_date"
     )
 
     # Results should be identical
@@ -166,9 +162,7 @@ def test_is_article_accessible_consistent(cutoff_date, sample_articles):
 
         # Single article check should match filter result
         filter_result = TemporalFilterService.filter_by_cutoff(
-            [article],
-            cutoff_date,
-            date_field="published_date"
+            [article], cutoff_date, date_field="published_date"
         )
 
         assert is_accessible == (len(filter_result) > 0)
@@ -188,9 +182,7 @@ def test_is_event_accessible_consistent(cutoff_date, sample_events):
         else:
             # Single event check should match filter result
             filter_result = TemporalFilterService.filter_by_cutoff(
-                [event],
-                cutoff_date,
-                date_field="occurred_date"
+                [event], cutoff_date, date_field="occurred_date"
             )
 
             assert is_accessible == (len(filter_result) > 0)
@@ -234,7 +226,7 @@ def test_boundary_conditions(cutoff_date, sample_articles, sample_events):
         published_date=cutoff_date - timedelta(seconds=1),
         content="This is test article content that must be at least 100 characters long to satisfy pydantic validation. Additional text added.",
         source="Test Source",
-        domain=Domain.GENERAL
+        domain=Domain.GENERAL,
     )
     assert gateway.is_article_accessible(article_before)
 
@@ -245,7 +237,7 @@ def test_boundary_conditions(cutoff_date, sample_articles, sample_events):
         description="Event just before cutoff",
         occurred_date=cutoff_date - timedelta(seconds=1),
         event_type=EventType.MILESTONE,
-        domain=Domain.GENERAL
+        domain=Domain.GENERAL,
     )
     assert gateway.is_event_accessible(event_before)
 

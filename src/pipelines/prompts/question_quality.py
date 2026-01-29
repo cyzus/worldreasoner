@@ -18,27 +18,72 @@ QUALITY_ASSESSMENT_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "question_id": {"type": "string"},
-                    "composite_score": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+                    "composite_score": {
+                        "type": "number",
+                        "minimum": 0.0,
+                        "maximum": 1.0,
+                    },
                     "dimensions": {
                         "type": "object",
                         "properties": {
-                            "interestingness": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-                            "clarity": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-                            "verifiability": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-                            "temporal_validity": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-                            "context_sufficiency": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-                            "difficulty_appropriateness": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-                            "format_consistency": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+                            "interestingness": {
+                                "type": "number",
+                                "minimum": 0.0,
+                                "maximum": 1.0,
+                            },
+                            "clarity": {
+                                "type": "number",
+                                "minimum": 0.0,
+                                "maximum": 1.0,
+                            },
+                            "verifiability": {
+                                "type": "number",
+                                "minimum": 0.0,
+                                "maximum": 1.0,
+                            },
+                            "temporal_validity": {
+                                "type": "number",
+                                "minimum": 0.0,
+                                "maximum": 1.0,
+                            },
+                            "context_sufficiency": {
+                                "type": "number",
+                                "minimum": 0.0,
+                                "maximum": 1.0,
+                            },
+                            "difficulty_appropriateness": {
+                                "type": "number",
+                                "minimum": 0.0,
+                                "maximum": 1.0,
+                            },
+                            "format_consistency": {
+                                "type": "number",
+                                "minimum": 0.0,
+                                "maximum": 1.0,
+                            },
                         },
-                        "required": ["interestingness", "clarity", "verifiability", "temporal_validity", "context_sufficiency", "difficulty_appropriateness", "format_consistency"]
+                        "required": [
+                            "interestingness",
+                            "clarity",
+                            "verifiability",
+                            "temporal_validity",
+                            "context_sufficiency",
+                            "difficulty_appropriateness",
+                            "format_consistency",
+                        ],
                     },
-                    "reasoning": {"type": "string"}
+                    "reasoning": {"type": "string"},
                 },
-                "required": ["question_id", "composite_score", "dimensions", "reasoning"]
-            }
+                "required": [
+                    "question_id",
+                    "composite_score",
+                    "dimensions",
+                    "reasoning",
+                ],
+            },
         }
     },
-    "required": ["assessments"]
+    "required": ["assessments"],
 }
 
 
@@ -126,5 +171,5 @@ _quality_assessment_template = dedent("""
 
 QUESTION_QUALITY_ASSESSMENT_PROMPT = PromptTemplate(
     template=_quality_assessment_template,
-    required_vars=["num_questions", "questions_json"]
+    required_vars=["num_questions", "questions_json"],
 )

@@ -1,12 +1,12 @@
 """Datetime utilities with safe parsing."""
+
 from datetime import datetime, timezone
 from typing import Optional
 from src.utils.logging import logger
 
 
 def parse_iso_datetime(
-    date_str: Optional[str],
-    fallback: Optional[datetime] = None
+    date_str: Optional[str], fallback: Optional[datetime] = None
 ) -> datetime:
     """
     Parse ISO datetime string with timezone handling.
@@ -30,7 +30,7 @@ def parse_iso_datetime(
 
     try:
         # Handle 'Z' suffix by replacing with +00:00
-        normalized = date_str.replace('Z', '+00:00')
+        normalized = date_str.replace("Z", "+00:00")
         dt = datetime.fromisoformat(normalized)
         # Ensure result is timezone-aware (treat naive as UTC)
         if dt.tzinfo is None:
@@ -59,8 +59,7 @@ def ensure_timezone_aware(dt: datetime) -> datetime:
 
 
 def parse_flexible_datetime(
-    date_str: Optional[str],
-    fallback: Optional[datetime] = None
+    date_str: Optional[str], fallback: Optional[datetime] = None
 ) -> datetime:
     """
     Parse datetime string that may be ISO datetime or date-only format.
@@ -88,12 +87,12 @@ def parse_flexible_datetime(
 
     try:
         # Handle date-only format (no 'T' separator)
-        if 'T' not in date_str:
+        if "T" not in date_str:
             # Add time component at midnight UTC
             date_str = f"{date_str}T00:00:00+00:00"
 
         # Handle 'Z' suffix by replacing with +00:00
-        normalized = date_str.replace('Z', '+00:00')
+        normalized = date_str.replace("Z", "+00:00")
         return datetime.fromisoformat(normalized)
     except (ValueError, AttributeError) as e:
         logger.warning(f"Failed to parse datetime '{date_str}': {e}")
@@ -104,7 +103,7 @@ def validate_date_against_question_window(
     date: datetime,
     question_start_time: Optional[datetime],
     question_resolution_date: datetime,
-    entity_type: str = "item"
+    entity_type: str = "item",
 ) -> Optional[dict]:
     """
     Validate that a date falls within the question's valid time window.
@@ -177,8 +176,10 @@ def validate_date_against_question_window(
             "warnings": warning_messages,
             "recommendation": recommended_window,
             "date": date.isoformat(),
-            "question_start": question_start_time.isoformat() if question_start_time else None,
-            "question_resolution": question_resolution_date.isoformat()
+            "question_start": question_start_time.isoformat()
+            if question_start_time
+            else None,
+            "question_resolution": question_resolution_date.isoformat(),
         }
 
     return None

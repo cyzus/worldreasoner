@@ -19,7 +19,7 @@ def setup_logging(
     level: str = "INFO",
     log_file: str = None,
     rotation: str = "10 MB",
-    retention: str = "7 days"
+    retention: str = "7 days",
 ) -> None:
     """Configure loguru logger with sensible defaults.
 
@@ -32,6 +32,7 @@ def setup_logging(
     # Use default log file pattern if not specified
     if log_file is None:
         from src.config import LOGS_DIR
+
         log_file = str(LOGS_DIR / "worldreasoner_{time}.log")
 
     # Remove default handler
@@ -43,7 +44,7 @@ def setup_logging(
         format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{extra[short_name]:<20}</cyan> - <level>{message}</level>",
         level=level,
         colorize=True,
-        filter=_shorten_name
+        filter=_shorten_name,
     )
 
     # Add file handler with rotation
@@ -56,7 +57,7 @@ def setup_logging(
         level=level,
         rotation=rotation,
         retention=retention,
-        compression="zip"
+        compression="zip",
     )
 
     logger.info(f"Logging initialized at level {level}")

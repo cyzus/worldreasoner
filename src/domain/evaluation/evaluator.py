@@ -10,14 +10,13 @@ from pydantic import BaseModel, Field
 
 from src.core.database import GenericDatabase
 from src.domain.models import Forecast, Question
-from src.domain.models.question import QuestionType
 from src.utils.logging import logger
 
 from .metrics import (
     calculate_accuracy,
     calculate_brier_score,
     calculate_log_score,
-    calculate_calibration_metrics
+    calculate_calibration_metrics,
 )
 
 
@@ -26,6 +25,7 @@ class EvaluationResult(BaseModel):
 
     Contains all evaluation metrics and metadata about the evaluation.
     """
+
     forecast_id: str = Field(..., description="ID of the forecast being evaluated")
     question_id: str = Field(..., description="ID of the question")
 
@@ -34,7 +34,9 @@ class EvaluationResult(BaseModel):
     accuracy: float = Field(..., description="Accuracy score (1.0 or 0.0)")
 
     # Probabilistic metrics
-    brier_score: Optional[float] = Field(None, description="Brier score (0-1, lower is better)")
+    brier_score: Optional[float] = Field(
+        None, description="Brier score (0-1, lower is better)"
+    )
     log_score: Optional[float] = Field(None, description="Log score (higher is better)")
 
     # Metadata
@@ -45,13 +47,12 @@ class EvaluationResult(BaseModel):
 
     # Additional analysis
     evaluation_metadata: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Additional evaluation details"
+        default_factory=dict, description="Additional evaluation details"
     )
 
     evaluated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        description="When the evaluation was performed"
+        description="When the evaluation was performed",
     )
 
 
@@ -108,9 +109,7 @@ class ForecastEvaluator:
         return True
 
     def evaluate_forecast(
-        self,
-        forecast: Forecast,
-        question: Question
+        self, forecast: Forecast, question: Question
     ) -> EvaluationResult:
         """Evaluate a single forecast against ground truth.
 
@@ -139,9 +138,7 @@ class ForecastEvaluator:
 
         # Calculate metrics
         accuracy = calculate_accuracy(
-            forecast.prediction,
-            question.ground_truth,
-            question.question_type
+            forecast.prediction, question.ground_truth, question.question_type
         )
 
         is_correct = accuracy == 1.0
@@ -150,28 +147,31 @@ class ForecastEvaluator:
             forecast.prediction,
             question.ground_truth,
             forecast.confidence,
-            question.question_type
+            question.question_type,
         )
 
         log_score = calculate_log_score(
             forecast.prediction,
             question.ground_truth,
             forecast.confidence,
-            question.question_type
+            question.question_type,
         )
 
         # Build evaluation metadata
         evaluation_metadata = {
-            'question_text': question.question_text,
-            'resolution_date': question.resolution_date.isoformat(),
-            'simulated_date': forecast.simulated_date.isoformat() if forecast.simulated_date else None,
-            'forecast_horizon_days': (
+            "question_text": question.question_text,
+            "resolution_date": question.resolution_date.isoformat(),
+            "simulated_date": forecast.simulated_date.isoformat()
+            if forecast.simulated_date
+            else None,
+            "forecast_horizon_days": (
                 (question.resolution_date - forecast.simulated_date).days
-                if forecast.simulated_date else None
+                if forecast.simulated_date
+                else None
             ),
-            'articles_accessed_count': len(forecast.articles_accessed),
-            'searches_performed_count': len(forecast.searches_performed),
-            'reasoning_word_count': forecast.get_reasoning_word_count(),
+            "articles_accessed_count": len(forecast.articles_accessed),
+            "searches_performed_count": len(forecast.searches_performed),
+            "reasoning_word_count": forecast.get_reasoning_word_count(),
         }
 
         # Create evaluation result
@@ -186,7 +186,7 @@ class ForecastEvaluator:
             ground_truth=question.ground_truth,
             confidence=forecast.confidence,
             question_type=question.question_type.value,
-            evaluation_metadata=evaluation_metadata
+            evaluation_metadata=evaluation_metadata,
         )
 
         # Format scores for logging
@@ -201,9 +201,7 @@ class ForecastEvaluator:
         return result
 
     def update_forecast_with_evaluation(
-        self,
-        forecast: Forecast,
-        evaluation: EvaluationResult
+        self, forecast: Forecast, evaluation: EvaluationResult
     ) -> Forecast:
         """Update a forecast object with evaluation results.
 
@@ -229,8 +227,7 @@ class ForecastEvaluator:
         return forecast
 
     def evaluate_all_resolved(
-        self,
-        update_forecasts: bool = True
+        self, update_forecasts: bool = True
     ) -> List[EvaluationResult]:
         """Evaluate all forecasts for resolved questions.
 
@@ -265,8 +262,7 @@ class ForecastEvaluator:
         for forecast in all_forecasts:
             # Find matching question
             question = next(
-                (q for q in resolved_questions if q.id == forecast.question_id),
-                None
+                (q for q in resolved_questions if q.id == forecast.question_id), None
             )
 
             if not question:
@@ -289,8 +285,7 @@ class ForecastEvaluator:
 
             except Exception as e:
                 logger.error(
-                    f"Error evaluating forecast {forecast.id}: {e}",
-                    exc_info=True
+                    f"Error evaluating forecast {forecast.id}: {e}", exc_info=True
                 )
                 continue
 
@@ -302,8 +297,7 @@ class ForecastEvaluator:
         return results
 
     def generate_evaluation_report(
-        self,
-        results: List[EvaluationResult]
+        self, results: List[EvaluationResult]
     ) -> Dict[str, Any]:
         """Generate a summary report from evaluation results.
 
@@ -314,10 +308,7 @@ class ForecastEvaluator:
             Dict with summary statistics
         """
         if not results:
-            return {
-                'total_forecasts': 0,
-                'message': 'No evaluation results available'
-            }
+            return {"total_forecasts": 0, "message": "No evaluation results available"}
 
         # Overall statistics
         total = len(results)
@@ -338,34 +329,38 @@ class ForecastEvaluator:
             qtype = result.question_type
             if qtype not in by_type:
                 by_type[qtype] = {
-                    'count': 0,
-                    'correct': 0,
-                    'brier_scores': [],
-                    'log_scores': []
+                    "count": 0,
+                    "correct": 0,
+                    "brier_scores": [],
+                    "log_scores": [],
                 }
 
-            by_type[qtype]['count'] += 1
+            by_type[qtype]["count"] += 1
             if result.is_correct:
-                by_type[qtype]['correct'] += 1
+                by_type[qtype]["correct"] += 1
             if result.brier_score is not None:
-                by_type[qtype]['brier_scores'].append(result.brier_score)
+                by_type[qtype]["brier_scores"].append(result.brier_score)
             if result.log_score is not None:
-                by_type[qtype]['log_scores'].append(result.log_score)
+                by_type[qtype]["log_scores"].append(result.log_score)
 
         # Calculate averages by type
         type_summary = {}
         for qtype, stats in by_type.items():
             type_summary[qtype] = {
-                'count': stats['count'],
-                'accuracy': stats['correct'] / stats['count'] if stats['count'] > 0 else 0.0,
-                'avg_brier_score': (
-                    sum(stats['brier_scores']) / len(stats['brier_scores'])
-                    if stats['brier_scores'] else None
+                "count": stats["count"],
+                "accuracy": stats["correct"] / stats["count"]
+                if stats["count"] > 0
+                else 0.0,
+                "avg_brier_score": (
+                    sum(stats["brier_scores"]) / len(stats["brier_scores"])
+                    if stats["brier_scores"]
+                    else None
                 ),
-                'avg_log_score': (
-                    sum(stats['log_scores']) / len(stats['log_scores'])
-                    if stats['log_scores'] else None
-                )
+                "avg_log_score": (
+                    sum(stats["log_scores"]) / len(stats["log_scores"])
+                    if stats["log_scores"]
+                    else None
+                ),
             }
 
         # By forecast mode
@@ -377,24 +372,28 @@ class ForecastEvaluator:
                 forecast = self.db.get(Forecast, result.forecast_id)
                 if not forecast:
                     continue
-                    
-                mode = forecast.mode.value if hasattr(forecast.mode, 'value') else str(forecast.mode)
-                
+
+                mode = (
+                    forecast.mode.value
+                    if hasattr(forecast.mode, "value")
+                    else str(forecast.mode)
+                )
+
                 if mode not in by_mode:
                     by_mode[mode] = {
-                        'count': 0,
-                        'correct': 0,
-                        'brier_scores': [],
-                        'log_scores': []
+                        "count": 0,
+                        "correct": 0,
+                        "brier_scores": [],
+                        "log_scores": [],
                     }
 
-                by_mode[mode]['count'] += 1
+                by_mode[mode]["count"] += 1
                 if result.is_correct:
-                    by_mode[mode]['correct'] += 1
+                    by_mode[mode]["correct"] += 1
                 if result.brier_score is not None:
-                    by_mode[mode]['brier_scores'].append(result.brier_score)
+                    by_mode[mode]["brier_scores"].append(result.brier_score)
                 if result.log_score is not None:
-                    by_mode[mode]['log_scores'].append(result.log_score)
+                    by_mode[mode]["log_scores"].append(result.log_score)
             except Exception:
                 continue
 
@@ -402,40 +401,46 @@ class ForecastEvaluator:
         mode_summary = {}
         for mode, stats in by_mode.items():
             mode_summary[mode] = {
-                'count': stats['count'],
-                'accuracy': stats['correct'] / stats['count'] if stats['count'] > 0 else 0.0,
-                'avg_brier_score': (
-                    sum(stats['brier_scores']) / len(stats['brier_scores'])
-                    if stats['brier_scores'] else None
+                "count": stats["count"],
+                "accuracy": stats["correct"] / stats["count"]
+                if stats["count"] > 0
+                else 0.0,
+                "avg_brier_score": (
+                    sum(stats["brier_scores"]) / len(stats["brier_scores"])
+                    if stats["brier_scores"]
+                    else None
                 ),
-                'avg_log_score': (
-                    sum(stats['log_scores']) / len(stats['log_scores'])
-                    if stats['log_scores'] else None
-                )
+                "avg_log_score": (
+                    sum(stats["log_scores"]) / len(stats["log_scores"])
+                    if stats["log_scores"]
+                    else None
+                ),
             }
 
         # Calibration metrics (for boolean questions)
-        boolean_results = [r for r in results if r.question_type == 'boolean']
+        boolean_results = [r for r in results if r.question_type == "boolean"]
         calibration = None
         if boolean_results:
             predictions = [r.prediction for r in boolean_results]
             ground_truths = [r.ground_truth for r in boolean_results]
             confidences = [r.confidence for r in boolean_results]
-            calibration = calculate_calibration_metrics(predictions, ground_truths, confidences)
+            calibration = calculate_calibration_metrics(
+                predictions, ground_truths, confidences
+            )
 
         # Collect model information from forecasts
         model_info = self._collect_model_info(results)
 
         return {
-            'total_forecasts': total,
-            'overall_accuracy': accuracy_rate,
-            'avg_brier_score': avg_brier,
-            'avg_log_score': avg_log,
-            'by_question_type': type_summary,
-            'by_mode': mode_summary,
-            'calibration': calibration,
-            'model_info': model_info,
-            'evaluation_timestamp': datetime.now(timezone.utc).isoformat()
+            "total_forecasts": total,
+            "overall_accuracy": accuracy_rate,
+            "avg_brier_score": avg_brier,
+            "avg_log_score": avg_log,
+            "by_question_type": type_summary,
+            "by_mode": mode_summary,
+            "calibration": calibration,
+            "model_info": model_info,
+            "evaluation_timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     def _collect_model_info(self, results: List[EvaluationResult]) -> Dict[str, Any]:
@@ -459,13 +464,13 @@ class ForecastEvaluator:
                     model_name = forecast.model_name
                     if model_name not in models:
                         models[model_name] = {
-                            'count': 0,
-                            'correct': 0,
-                            'version': forecast.model_version
+                            "count": 0,
+                            "correct": 0,
+                            "version": forecast.model_version,
                         }
-                    models[model_name]['count'] += 1
+                    models[model_name]["count"] += 1
                     if result.is_correct:
-                        models[model_name]['correct'] += 1
+                        models[model_name]["correct"] += 1
             except Exception:
                 continue
 
@@ -473,12 +478,11 @@ class ForecastEvaluator:
         model_summary = {}
         for model_name, stats in models.items():
             model_summary[model_name] = {
-                'count': stats['count'],
-                'accuracy': stats['correct'] / stats['count'] if stats['count'] > 0 else 0.0,
-                'version': stats['version']
+                "count": stats["count"],
+                "accuracy": stats["correct"] / stats["count"]
+                if stats["count"] > 0
+                else 0.0,
+                "version": stats["version"],
             }
 
-        return {
-            'models': model_summary,
-            'total_unique_models': len(models)
-        }
+        return {"models": model_summary, "total_unique_models": len(models)}

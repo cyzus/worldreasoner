@@ -5,8 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 import uuid
 
-from smolagents import Tool
-from src.domain.models import Event, Question, QuestionType, Domain
+from src.domain.models import Question, QuestionType, Domain
 from src.utils.enums import enum_to_list
 from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
 from src.tools.base import CollectorAwareTool
@@ -14,98 +13,97 @@ from src.tools.base import CollectorAwareTool
 
 class QuestionGeneratorTool(CollectorAwareTool[Question]):
     """Stores and structures generated forecast questions.
-    
+
     This tool helps the agent:
     1. Convert generated question text into structured Question format
     2. Generate unique question IDs
     3. Link questions to source events
     4. Set resolution criteria and dates
-    
+
     NOTE: This tool does NOT generate questions itself.
     The agent should first analyze events and create forecast question text using its LLM reasoning,
     then use this tool to store each question in the proper structure.
     """
-    
+
     name = "question_generator"
     description = """Stores a generated forecast question as a structured Question object. Output will be the generation status."""
-    
+
     # Auto-generate inputs from Enum classes (single source of truth)
     inputs = {
-        "question_text": {
-            "type": "string",
-            "description": "The actual question text"
-        },
+        "question_text": {"type": "string", "description": "The actual question text"},
         "question_type": {
             "type": "string",
             "description": f"Question type - MUST be one of: {', '.join(enum_to_list(QuestionType))}",
-            "enum": enum_to_list(QuestionType)
+            "enum": enum_to_list(QuestionType),
         },
         "domain": {
             "type": "string",
             "description": f"Question domain - one of: {', '.join(enum_to_list(Domain))}",
-            "enum": enum_to_list(Domain)
+            "enum": enum_to_list(Domain),
         },
-        "difficulty": {
-            "type": "integer",
-            "description": "Difficulty level 1-5"
-        },
+        "difficulty": {"type": "integer", "description": "Difficulty level 1-5"},
         "resolution_date": {
             "type": "string",
-            "description": "When question can be resolved (ISO 8601 WITH timezone, e.g. 2025-12-31T23:59:59Z or 2025-12-31T23:59:59+00:00; MUST include 'Z' or an explicit offset)"
+            "description": "When question can be resolved (ISO 8601 WITH timezone, e.g. 2025-12-31T23:59:59Z or 2025-12-31T23:59:59+00:00; MUST include 'Z' or an explicit offset)",
         },
         "resolution_criteria": {
             "type": "string",
-            "description": "Objective rules for how to verify/resolve this question"
+            "description": "Objective rules for how to verify/resolve this question",
         },
         "related_event_ids": {
             "type": "string",
             "description": "Comma-separated event IDs",
-            "nullable": True
+            "nullable": True,
         },
         "related_article_ids": {
             "type": "string",
             "description": "Comma-separated article IDs that this question was generated from",
-            "nullable": True
+            "nullable": True,
         },
         "ground_truth": {
             "type": "string",
             "description": "Answer if already resolved",
-            "nullable": True
+            "nullable": True,
         },
         "resolution_reasoning": {
             "type": "string",
             "description": "Evidence/explanation for why ground_truth is what it is (only if ground_truth is provided)",
-            "nullable": True
+            "nullable": True,
         },
         "context": {
             "type": "string",
             "description": "Optional background information to help understand the question",
-            "nullable": True
+            "nullable": True,
         },
         "options": {
             "type": "string",
             "description": "For MCQ: comma-separated answer choices",
-            "nullable": True
+            "nullable": True,
         },
         "quantity_unit": {
             "type": "string",
             "description": "For quantity: unit (e.g., USD, users, GW)",
-            "nullable": True
+            "nullable": True,
         },
         "quantity_bounds": {
             "type": "string",
             "description": "For quantity: range as min:X,max:Y",
-            "nullable": True
+            "nullable": True,
         },
         "estimated_start_time": {
             "type": "string",
             "description": "ISO 8601 datetime with timezone indicating when the question becomes forecastable with meaningful information. Should be set far enough before resolution_date (e.g., 1 week to several months, or even 1+ year for long-term questions) to allow sufficient time for evidence gathering and forecast updates, but not so early that relevant context doesn't yet exist.",
-            "nullable": True
+            "nullable": True,
         },
     }
     output_type = "string"  # JSON string
-    
-    def __init__(self, require_ground_truth, collector=None, existing_question_ids: Optional[set] = None):
+
+    def __init__(
+        self,
+        require_ground_truth,
+        collector=None,
+        existing_question_ids: Optional[set] = None,
+    ):
         """Initialize the question generator.
 
         Args:
@@ -116,7 +114,7 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
         super().__init__(collector)
         self.require_ground_truth = require_ground_truth
         self.existing_question_ids = existing_question_ids or set()
-    
+
     def forward(
         self,
         question_text: str,
@@ -133,7 +131,7 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
         options: str = None,
         quantity_unit: str = None,
         quantity_bounds: str = None,
-        estimated_start_time: str = None
+        estimated_start_time: str = None,
     ) -> str:
         """Store question data and return as structured JSON.
 
@@ -158,8 +156,7 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
         """
         # Parse resolution date
         res_date = parse_iso_datetime(
-            resolution_date,
-            fallback=datetime.now(timezone.utc) + timedelta(days=30)
+            resolution_date, fallback=datetime.now(timezone.utc) + timedelta(days=30)
         )
         res_date = ensure_timezone_aware(res_date)
 
@@ -173,6 +170,7 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
                 # Validate: must be before resolution_date
                 if est_start_time >= res_date:
                     from src.utils.logging import logger
+
                     logger.warning(
                         f"estimated_start_time ({est_start_time}) >= resolution_date ({res_date}), "
                         f"ignoring estimated_start_time"
@@ -180,6 +178,7 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
                     est_start_time = None
             except Exception as e:
                 from src.utils.logging import logger
+
                 logger.debug(f"Failed to parse estimated_start_time: {e}")
                 # For ground truth mode, strict validation requires valid date
                 if self.require_ground_truth:
@@ -194,15 +193,15 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             else:
                 # Default to now for future questions
                 est_start_time = datetime.now(timezone.utc)
-        
+
         # CRITICAL VALIDATION: estimated_start_time is REQUIRED for ground truth
         if self.require_ground_truth and not est_start_time:
             error_msg = (
-                f"REJECTED: estimated_start_time is MISSING or INVALID.\n"
-                f"For ground truth questions (past events), you MUST provide the estimated_start_time "
-                f"(when the question would have become viable to forecast).\n"
-                f"This is essential for calculating the question's time horizon.\n"
-                f"Please regenerate with a valid estimated_start_time (ISO 8601)."
+                "REJECTED: estimated_start_time is MISSING or INVALID.\n"
+                "For ground truth questions (past events), you MUST provide the estimated_start_time "
+                "(when the question would have become viable to forecast).\n"
+                "This is essential for calculating the question's time horizon.\n"
+                "Please regenerate with a valid estimated_start_time (ISO 8601)."
             )
             return json.dumps({"error": error_msg, "status": "rejected"})
 
@@ -221,11 +220,12 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
         if self.require_ground_truth and ground_truth:
             # Check if ground_truth contains year 2025/2026/2027 etc that's in the future
             import re
-            future_date_pattern = r'(202[5-9]|20[3-9][0-9])'  # Matches 2025 onwards
+
+            future_date_pattern = r"(202[5-9]|20[3-9][0-9])"  # Matches 2025 onwards
             if re.search(future_date_pattern, str(ground_truth)):
                 # Check if it's actually a future date
                 current_year = current_time.year
-                matched_years = re.findall(r'20\d{2}', str(ground_truth))
+                matched_years = re.findall(r"20\d{2}", str(ground_truth))
                 for year_str in matched_years:
                     year = int(year_str)
                     if year > current_year:
@@ -240,45 +240,46 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
         # CRITICAL VALIDATION: If ground_truth provided, resolution_reasoning must be provided
         if ground_truth and not resolution_reasoning:
             error_msg = (
-                f"REJECTED: ground_truth provided but resolution_reasoning is missing.\n"
-                f"When a question has a known answer (ground_truth), you MUST provide resolution_reasoning.\n"
-                f"The resolution_reasoning should explain the evidence/sources that confirm this answer.\n"
-                f"Example: 'Based on CoinMarketCap data showing BTC closed at $95,431 on Dec 31, 2024'"
+                "REJECTED: ground_truth provided but resolution_reasoning is missing.\n"
+                "When a question has a known answer (ground_truth), you MUST provide resolution_reasoning.\n"
+                "The resolution_reasoning should explain the evidence/sources that confirm this answer.\n"
+                "Example: 'Based on CoinMarketCap data showing BTC closed at $95,431 on Dec 31, 2024'"
             )
             return json.dumps({"error": error_msg, "status": "rejected"})
 
         # VALIDATION: If resolution_reasoning provided without ground_truth, reject
         if resolution_reasoning and not ground_truth:
             error_msg = (
-                f"REJECTED: resolution_reasoning provided but ground_truth is missing.\n"
-                f"You can only provide resolution_reasoning for questions that have been resolved (have ground_truth).\n"
-                f"For unresolved questions, omit resolution_reasoning."
+                "REJECTED: resolution_reasoning provided but ground_truth is missing.\n"
+                "You can only provide resolution_reasoning for questions that have been resolved (have ground_truth).\n"
+                "For unresolved questions, omit resolution_reasoning."
             )
             return json.dumps({"error": error_msg, "status": "rejected"})
 
         # Parse event IDs
         event_ids = []
         if related_event_ids:
-            event_ids = [eid.strip() for eid in related_event_ids.split(',')]
+            event_ids = [eid.strip() for eid in related_event_ids.split(",")]
 
         # Parse options for MCQ questions
         options_list = None
         if options:
-            options_list = [opt.strip() for opt in options.split(',')]
+            options_list = [opt.strip() for opt in options.split(",")]
 
         # Parse quantity bounds
         bounds_dict = None
         if quantity_bounds:
             try:
                 # Format: "min:X,max:Y"
-                parts = quantity_bounds.split(',')
+                parts = quantity_bounds.split(",")
                 bounds_dict = {}
                 for part in parts:
-                    key, value = part.split(':')
+                    key, value = part.split(":")
                     bounds_dict[key.strip()] = float(value.strip())
             except:
-                print(f"Warning: Could not parse quantity_bounds '{quantity_bounds}', expected format 'min:X,max:Y'")
-
+                print(
+                    f"Warning: Could not parse quantity_bounds '{quantity_bounds}', expected format 'min:X,max:Y'"
+                )
 
         # Validate and normalize enums early
         qtype_enum = QuestionType(question_type)
@@ -287,21 +288,22 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
         # Normalize ground_truth to proper type based on question_type
         normalized_ground_truth = None
         if ground_truth:
-            normalized_ground_truth = self._normalize_ground_truth(ground_truth, qtype_enum)
+            normalized_ground_truth = self._normalize_ground_truth(
+                ground_truth, qtype_enum
+            )
 
         # Generate unique question ID using stored count
         counter = self.get_stored_count()
         question_id = self._generate_question_id(domain_enum, res_date, counter)
-        
+
         # Check for duplicates - skip if this question ID already exists
         if question_id in self.existing_question_ids:
             from src.utils.logging import logger
+
             logger.debug(f"Skipping duplicate question: {question_id}")
-            return json.dumps({
-                "status": "skipped",
-                "reason": "duplicate",
-                "id": question_id
-            })
+            return json.dumps(
+                {"status": "skipped", "reason": "duplicate", "id": question_id}
+            )
 
         # Determine time horizon based on resolution date
         # Use current time as reference if cutoff_date not provided
@@ -311,9 +313,13 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
         # Validate resolution date is reasonable (not too far in past/future)
         # The prompt should guide the agent to use appropriate dates, but we log warnings
         if days_until_resolution < -730:  # More than 2 years in the past
-            print(f"Warning: Resolution date {res_date} is very far in the past (relative to {reference_date})")
+            print(
+                f"Warning: Resolution date {res_date} is very far in the past (relative to {reference_date})"
+            )
         elif days_until_resolution > 730:  # More than 2 years in the future
-            print(f"Warning: Resolution date {res_date} is very far in the future (relative to {reference_date})")
+            print(
+                f"Warning: Resolution date {res_date} is very far in the future (relative to {reference_date})"
+            )
 
         # Create Question object
         question = Question(
@@ -328,7 +334,9 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             ground_truth=normalized_ground_truth,  # Use normalized value
             target_event_id=event_ids[0] if event_ids else None,
             related_event_ids=event_ids,
-            related_article_ids=[aid.strip() for aid in related_article_ids.split(',')] if related_article_ids else [],
+            related_article_ids=[aid.strip() for aid in related_article_ids.split(",")]
+            if related_article_ids
+            else [],
             context=context,  # Optional background information
             resolution_criteria=resolution_criteria,  # How to verify/resolve
             resolution_reasoning=resolution_reasoning,  # Why ground_truth is what it is (if resolved)
@@ -337,30 +345,34 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             quantity_unit=quantity_unit,  # For quantity questions
             quantity_bounds=bounds_dict,  # For quantity questions
         )
-        
+
         # Store question using unified collector interface
         self.store_result(question, context=f"Question {question.id}")
-        
+
         # Return summary to save tokens (NOT full question)
         summary = {
             "id": question.id,
-            "question_text": question_text[:200] + "..." if len(question_text) > 200 else question_text,
+            "question_text": question_text[:200] + "..."
+            if len(question_text) > 200
+            else question_text,
             "question_type": question.question_type.value,
             "domain": question.domain.value,
             "difficulty": question.difficulty,
             "resolution_date": question.resolution_date.isoformat(),
-            "status": "stored"
+            "status": "stored",
         }
-        
+
         return json.dumps(summary, indent=2, default=str)
-    
-    def _generate_question_id(self, domain: Domain, resolution_date: datetime, counter: int) -> str:
+
+    def _generate_question_id(
+        self, domain: Domain, resolution_date: datetime, counter: int
+    ) -> str:
         """Generate unique question ID."""
-        date_str = resolution_date.strftime('%Y%m%d')
+        date_str = resolution_date.strftime("%Y%m%d")
         # Append a short UUID suffix to reduce chance of collisions/overwrites
         suffix = uuid.uuid4().hex[:8]
         # Domain is a str enum, so it works directly in f-strings
-        return f"q_{domain.value}_{date_str}_{counter+1:03d}_{suffix}"
+        return f"q_{domain.value}_{date_str}_{counter + 1:03d}_{suffix}"
 
     def _normalize_ground_truth(self, ground_truth: str, question_type: QuestionType):
         """Normalize ground_truth string to proper type based on question_type.
@@ -380,8 +392,8 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
         if question_type == QuestionType.BINARY:
             # Convert to boolean for binary questions
             # Accept: YES, yes, Yes, TRUE, true, True, 1, etc.
-            positive_values = {'yes', 'true', '1', 'y', 't'}
-            negative_values = {'no', 'false', '0', 'n', 'f'}
+            positive_values = {"yes", "true", "1", "y", "t"}
+            negative_values = {"no", "false", "0", "n", "f"}
 
             lower = ground_truth_str.lower()
             if lower in positive_values:
@@ -389,19 +401,23 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             elif lower in negative_values:
                 return False
             else:
-                print(f"Warning: Could not parse binary ground_truth '{ground_truth}', expected YES/NO, TRUE/FALSE, etc. Storing as None.")
+                print(
+                    f"Warning: Could not parse binary ground_truth '{ground_truth}', expected YES/NO, TRUE/FALSE, etc. Storing as None."
+                )
                 return None
 
         elif question_type == QuestionType.QUANTITY:
             # Convert to number
             try:
                 # Try int first, then float
-                if '.' in ground_truth_str:
+                if "." in ground_truth_str:
                     return float(ground_truth_str)
                 else:
                     return int(ground_truth_str)
             except ValueError:
-                print(f"Warning: Could not parse quantity ground_truth '{ground_truth}' as number. Storing as None.")
+                print(
+                    f"Warning: Could not parse quantity ground_truth '{ground_truth}' as number. Storing as None."
+                )
                 return None
 
         elif question_type == QuestionType.MCQ:
@@ -415,4 +431,3 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
         else:
             # Default: keep as string
             return ground_truth_str
-

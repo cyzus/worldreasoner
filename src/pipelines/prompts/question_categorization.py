@@ -5,8 +5,7 @@ from src.domain.models import Question, Domain
 from src.utils.enums import enum_to_list
 from .base import BasePromptGenerator, PromptTemplate
 
-CATEGORIZATION_PROMPT = \
-"""Categorize these prediction market questions into domains.
+CATEGORIZATION_PROMPT = """Categorize these prediction market questions into domains.
 
 Questions:
 {questions_text}
@@ -18,21 +17,17 @@ Return a JSON object with a "categorizations" key containing an array:
 
 Only return the JSON object, nothing else."""
 
+
 class QuestionCategorizationPrompts(BasePromptGenerator[Question]):
     """Prompts for categorizing questions into domains."""
 
     # Template for the categorization instruction
     CATEGORIZATION_TEMPLATE = PromptTemplate(
         template=CATEGORIZATION_PROMPT,
-        required_vars=["questions_text", "available_domains"]
+        required_vars=["questions_text", "available_domains"],
     )
 
-    def format_item(
-        self,
-        item: Question,
-        idx: int,
-        **context
-    ) -> str:
+    def format_item(self, item: Question, idx: int, **context) -> str:
         """Format a single question for categorization.
 
         Args:
@@ -44,7 +39,11 @@ class QuestionCategorizationPrompts(BasePromptGenerator[Question]):
             Formatted question string
         """
         # Extract tags from metadata
-        tags = item.metadata.get('tags', []) if hasattr(item, 'metadata') and item.metadata else []
+        tags = (
+            item.metadata.get("tags", [])
+            if hasattr(item, "metadata") and item.metadata
+            else []
+        )
         tags_list = tags[:3] if isinstance(tags, list) else []
 
         return (
@@ -54,9 +53,7 @@ class QuestionCategorizationPrompts(BasePromptGenerator[Question]):
         )
 
     def get_instruction(
-        self,
-        questions: List[Question],
-        available_domains: List[str] = None
+        self, questions: List[Question], available_domains: List[str] = None
     ) -> str:
         """Generate instruction for question categorization.
 
@@ -77,5 +74,5 @@ class QuestionCategorizationPrompts(BasePromptGenerator[Question]):
         # Format the instruction
         return self.CATEGORIZATION_TEMPLATE.format(
             questions_text=questions_text,
-            available_domains=", ".join(available_domains)
+            available_domains=", ".join(available_domains),
         )

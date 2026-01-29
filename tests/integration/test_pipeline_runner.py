@@ -71,7 +71,9 @@ class TestPipelineRunner:
         # Verify result structure
         assert isinstance(result, PipelineResult)
         assert len(progress_updates) == len(sample_questions)
-        assert result.success_count + result.failure_count + result.skip_count == len(sample_questions)
+        assert result.success_count + result.failure_count + result.skip_count == len(
+            sample_questions
+        )
         assert result.duration_seconds > 0
 
     @pytest.mark.integration
@@ -210,7 +212,7 @@ class TestPipelineRunner:
 
         # Verify we got progress for each question
         assert len(progress_updates) == len(sample_questions)
-        
+
         # Verify progress is sequential
         for i, update in enumerate(progress_updates, 1):
             assert update.current == i

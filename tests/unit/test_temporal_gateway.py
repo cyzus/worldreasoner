@@ -3,12 +3,16 @@
 import pytest
 from datetime import datetime, timezone, timedelta
 
-from src.core.temporal_gateway import (
-    TemporalGateway,
-    TemporalContext,
-    ValidationResult
+from src.core.temporal_gateway import TemporalGateway, TemporalContext, ValidationResult
+from src.domain.models import (
+    Article,
+    Event,
+    Question,
+    Forecast,
+    EventStatus,
+    EventType,
+    QuestionType,
 )
-from src.domain.models import Article, Event, Question, Forecast, EventStatus, EventType, QuestionType
 
 
 class TestTemporalGateway:
@@ -30,10 +34,11 @@ class TestTemporalGateway:
         return Article(
             id="art_before",
             title="Article Before Cutoff",
-            content="This article was published before the cutoff date. " * 10,  # > 100 chars
+            content="This article was published before the cutoff date. "
+            * 10,  # > 100 chars
             source="Test Source",
             published_date=cutoff_date - timedelta(days=1),
-            domain="tech"
+            domain="tech",
         )
 
     @pytest.fixture
@@ -42,10 +47,11 @@ class TestTemporalGateway:
         return Article(
             id="art_after",
             title="Article After Cutoff",
-            content="This article was published after the cutoff date. " * 10,  # > 100 chars
+            content="This article was published after the cutoff date. "
+            * 10,  # > 100 chars
             source="Test Source",
             published_date=cutoff_date + timedelta(days=1),
-            domain="tech"
+            domain="tech",
         )
 
     @pytest.fixture
@@ -54,10 +60,11 @@ class TestTemporalGateway:
         return Article(
             id="art_at_cutoff",
             title="Article At Cutoff",
-            content="This article was published exactly at the cutoff date. " * 10,  # > 100 chars
+            content="This article was published exactly at the cutoff date. "
+            * 10,  # > 100 chars
             source="Test Source",
             published_date=cutoff_date,
-            domain="tech"
+            domain="tech",
         )
 
     @pytest.fixture
@@ -70,7 +77,7 @@ class TestTemporalGateway:
             event_type=EventType.OUTCOME,
             domain="tech",
             status=EventStatus.OCCURRED,
-            occurred_date=cutoff_date - timedelta(days=2)
+            occurred_date=cutoff_date - timedelta(days=2),
         )
 
     @pytest.fixture
@@ -83,7 +90,7 @@ class TestTemporalGateway:
             event_type=EventType.OUTCOME,
             domain="tech",
             status=EventStatus.OCCURRED,
-            occurred_date=cutoff_date + timedelta(days=2)
+            occurred_date=cutoff_date + timedelta(days=2),
         )
 
     @pytest.fixture
@@ -96,7 +103,7 @@ class TestTemporalGateway:
             event_type=EventType.MILESTONE,  # Use valid EventType
             domain="tech",
             status=EventStatus.PREDICTED,
-            occurred_date=None
+            occurred_date=None,
         )
 
     # TemporalGateway initialization tests
@@ -134,11 +141,7 @@ class TestTemporalGateway:
         assert len(filtered) == 0
 
     def test_filter_articles_mixed(
-        self,
-        gateway,
-        article_before_cutoff,
-        article_after_cutoff,
-        article_at_cutoff
+        self, gateway, article_before_cutoff, article_after_cutoff, article_at_cutoff
     ):
         """Should filter mixed list correctly."""
         articles = [article_before_cutoff, article_after_cutoff, article_at_cutoff]
@@ -175,11 +178,7 @@ class TestTemporalGateway:
         assert len(filtered) == 0
 
     def test_filter_events_mixed(
-        self,
-        gateway,
-        event_before_cutoff,
-        event_after_cutoff,
-        event_none_date
+        self, gateway, event_before_cutoff, event_after_cutoff, event_none_date
     ):
         """Should filter mixed event list correctly."""
         events = [event_before_cutoff, event_after_cutoff, event_none_date]
@@ -222,7 +221,7 @@ class TestTemporalGateway:
             difficulty=3,
             cutoff_date=cutoff_date,
             resolution_date=cutoff_date + timedelta(days=2),
-            ground_truth=True
+            ground_truth=True,
         )
 
         forecast = Forecast(
@@ -232,7 +231,7 @@ class TestTemporalGateway:
             prediction=True,
             confidence=0.7,
             reasoning="Based on thorough analysis of available information and trends, this prediction is made.",
-            simulated_date=cutoff_date - timedelta(hours=1)
+            simulated_date=cutoff_date - timedelta(hours=1),
         )
 
         result = gateway.validate_forecast(forecast, question)
@@ -252,7 +251,7 @@ class TestTemporalGateway:
             difficulty=3,
             cutoff_date=cutoff_date,
             resolution_date=cutoff_date + timedelta(days=2),
-            ground_truth=True
+            ground_truth=True,
         )
 
         forecast = Forecast(
@@ -262,7 +261,7 @@ class TestTemporalGateway:
             prediction=True,
             confidence=0.7,
             reasoning="Based on thorough analysis of available information and trends, this prediction is made.",
-            simulated_date=cutoff_date + timedelta(hours=1)  # AFTER cutoff!
+            simulated_date=cutoff_date + timedelta(hours=1),  # AFTER cutoff!
         )
 
         result = gateway.validate_forecast(forecast, question)
@@ -284,7 +283,7 @@ class TestTemporalGateway:
             cutoff_date=None,  # No cutoff
             resolution_date=cutoff_date + timedelta(days=2),
             ground_truth=True,
-            created_at=cutoff_date
+            created_at=cutoff_date,
         )
 
         forecast = Forecast(
@@ -294,7 +293,7 @@ class TestTemporalGateway:
             prediction=True,
             confidence=0.7,
             reasoning="Based on thorough analysis of available information and trends, this prediction is made.",
-            simulated_date=cutoff_date - timedelta(hours=1)
+            simulated_date=cutoff_date - timedelta(hours=1),
         )
 
         result = gateway.validate_forecast(forecast, question)

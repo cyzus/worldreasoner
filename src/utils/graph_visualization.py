@@ -1,6 +1,6 @@
 """Shared utilities for graph visualization and analysis."""
 
-from typing import Dict, List, Set, Optional, Tuple, Any
+from typing import Dict, List, Set, Tuple, Any
 
 
 class GraphVisualizer:
@@ -21,13 +21,11 @@ class GraphVisualizer:
             return ""
         if len(text) <= max_len:
             return text
-        return text[:max_len-3] + "..."
+        return text[: max_len - 3] + "..."
 
     @staticmethod
     def find_max_depth_from_node(
-        graph: Dict[str, List[str]],
-        node: str,
-        visited: Set[str]
+        graph: Dict[str, List[str]], node: str, visited: Set[str]
     ) -> int:
         """Find maximum depth from a node using DFS.
 
@@ -41,7 +39,7 @@ class GraphVisualizer:
         """
         if node in visited:
             return 0
-        
+
         # Leaf nodes (root causes with no incoming edges) have depth 1
         if node not in graph:
             return 1
@@ -50,7 +48,9 @@ class GraphVisualizer:
         max_child_depth = 0
 
         for source in graph[node]:
-            depth = GraphVisualizer.find_max_depth_from_node(graph, source, visited.copy())
+            depth = GraphVisualizer.find_max_depth_from_node(
+                graph, source, visited.copy()
+            )
             max_child_depth = max(max_child_depth, depth)
 
         return 1 + max_child_depth
@@ -64,7 +64,7 @@ class GraphVisualizer:
         visited: Set[str],
         get_event_title: callable,
         prefix: str = "",
-        is_last: bool = True
+        is_last: bool = True,
     ) -> List[str]:
         """Build ASCII tree representation of causal graph.
 
@@ -83,42 +83,52 @@ class GraphVisualizer:
         """
         if event_id in visited:
             return [f"{prefix}{'└─' if is_last else '├─'} [CYCLE: {event_id[:8]}...]"]
-        
+
         visited.add(event_id)
         lines = []
-        
+
         event = events.get(event_id)
         event_desc = GraphVisualizer.truncate(
             get_event_title(event) if event else event_id, 50
         )
-        
+
         # Current node
         connector = "└─" if is_last else "├─"
         lines.append(f"{prefix}{connector} {event_desc}")
-        
+
         # Children (sources that cause this event)
         sources = graph.get(event_id, [])
         if sources:
             extension = "  " if is_last else "│ "
             for i, source_id in enumerate(sources):
-                is_last_child = (i == len(sources) - 1)
+                is_last_child = i == len(sources) - 1
                 hyp = hypothesis_map.get((source_id, event_id))
-                
+
                 # Add hypothesis info
                 if hyp:
                     conf_str = f"conf: {hyp.confidence:.1f}"
                     strength_str = f"str: {hyp.strength:.1f}"
-                    evidence_count = len(hyp.evidence_article_ids) if hyp.evidence_article_ids else 0
+                    evidence_count = (
+                        len(hyp.evidence_article_ids) if hyp.evidence_article_ids else 0
+                    )
                     evidence_str = f"{evidence_count} articles"
-                    lines.append(f"{prefix}{extension}  [{conf_str}, {strength_str}, {evidence_str}]")
-                
+                    lines.append(
+                        f"{prefix}{extension}  [{conf_str}, {strength_str}, {evidence_str}]"
+                    )
+
                 # Recursively build subtree
                 child_lines = GraphVisualizer.build_causal_tree(
-                    source_id, events, graph, hypothesis_map,
-                    visited.copy(), get_event_title, prefix + extension, is_last_child
+                    source_id,
+                    events,
+                    graph,
+                    hypothesis_map,
+                    visited.copy(),
+                    get_event_title,
+                    prefix + extension,
+                    is_last_child,
                 )
                 lines.extend(child_lines)
-        
+
         return lines
 
     @staticmethod
@@ -126,7 +136,7 @@ class GraphVisualizer:
         target_id: str,
         events: Dict[str, Any],
         graph: Dict[str, List[str]],
-        hypothesis_map: Dict[tuple, Any]
+        hypothesis_map: Dict[tuple, Any],
     ) -> List[List[Tuple[str, Any]]]:
         """Find all causal chains from root causes to target.
 
@@ -140,14 +150,14 @@ class GraphVisualizer:
             List of chains, where each chain is [(event_id, hypothesis), ...]
         """
         all_chains = []
-        
+
         def dfs(current_id: str, path: List[Tuple[str, Any]], visited: Set[str]):
             if current_id in visited:
                 return
-            
+
             visited.add(current_id)
             sources = graph.get(current_id, [])
-            
+
             if not sources:
                 # Reached a root cause - save this chain
                 all_chains.append(list(reversed(path)))
@@ -155,13 +165,13 @@ class GraphVisualizer:
                 for source_id in sources:
                     hyp = hypothesis_map.get((source_id, current_id))
                     dfs(source_id, path + [(source_id, hyp)], visited.copy())
-        
+
         # Start DFS from target
         dfs(target_id, [(target_id, None)], set())
-        
+
         # Sort by depth (longest first)
         all_chains.sort(key=lambda c: len(c), reverse=True)
-        
+
         return all_chains
 
     @staticmethod

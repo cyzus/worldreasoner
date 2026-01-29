@@ -8,10 +8,13 @@ from ...core.database import register_model
 from .domain import Domain
 
 
-@register_model('articles', indexes=['domain', 'source', 'published_date', 'collected_for_question_id'])
+@register_model(
+    "articles",
+    indexes=["domain", "source", "published_date", "collected_for_question_id"],
+)
 class Article(BaseModel):
     """News article with temporal and causal metadata.
-    
+
     This is the fundamental unit of information in the system.
     Articles can be real (scraped from news sources) or synthetic
     (generated for controlled testing).
@@ -22,40 +25,44 @@ class Article(BaseModel):
     title: str = Field(..., min_length=10, max_length=500)
     content: str = Field(..., min_length=100, description="Full article text")
     url: Optional[str] = Field(None, description="Source URL of the article")
-    
+
     # Source information
     source: str = Field(..., description="Publication source name")
     author: Optional[str] = None
     published_date: datetime = Field(..., description="Publication timestamp")
-    
+
     # Classification
     domain: Domain = Field(..., description="Primary domain")
     tags: List[str] = Field(default_factory=list, description="Topic tags")
-    
+
     # Metadata
-    is_synthetic: bool = Field(default=False, description="Whether article is generated")
+    is_synthetic: bool = Field(
+        default=False, description="Whether article is generated"
+    )
     language: str = Field(default="en", description="ISO 639-1 language code")
 
     # Event references
     event_ids: List[str] = Field(
         default_factory=list,
-        description="IDs of events discussed or documented in this article"
+        description="IDs of events discussed or documented in this article",
     )
 
     # Provenance tracking (for evidence pipeline)
     collected_for_question_id: Optional[str] = Field(
         None,
-        description="Question ID this article was collected for during evidence pipeline (None if pre-existing)"
+        description="Question ID this article was collected for during evidence pipeline (None if pre-existing)",
     )
 
     # Computed fields
     word_count: Optional[int] = Field(None, description="Number of words in content")
-    reading_time_minutes: Optional[int] = Field(None, description="Estimated reading time")
+    reading_time_minutes: Optional[int] = Field(
+        None, description="Estimated reading time"
+    )
 
     # Additional metadata
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
-        description="Additional article-specific metadata (e.g., evidence_type, related_question_ids)"
+        description="Additional article-specific metadata (e.g., evidence_type, related_question_ids)",
     )
 
     # Audit timestamps

@@ -7,9 +7,6 @@ from src.core.database import GenericDatabase
 from src.config.pipeline import EvidenceSatisfactionConfig
 from src.domain.question_monitor_service import (
     QuestionMonitorService,
-    EvidenceSatisfaction,
-    ForecastReadiness,
-    ModelUsageStats,
 )
 from src.domain.models.question import Question, QuestionType
 from src.domain.models.forecast import Forecast, ForecastMode
@@ -131,14 +128,18 @@ def question_with_evidence(test_db, resolved_question):
 class TestGetEvidenceNeeds:
     """Test get_evidence_needs method."""
 
-    def test_returns_resolved_questions(self, service, resolved_question, unresolved_question):
+    def test_returns_resolved_questions(
+        self, service, resolved_question, unresolved_question
+    ):
         """Only resolved questions are returned."""
         needs = service.get_evidence_needs()
         ids = [q.id for q in needs]
         assert resolved_question.id in ids
         assert unresolved_question.id not in ids
 
-    def test_excludes_skipped_questions(self, service, resolved_question, skipped_question):
+    def test_excludes_skipped_questions(
+        self, service, resolved_question, skipped_question
+    ):
         """Skipped questions are not returned."""
         needs = service.get_evidence_needs()
         ids = [q.id for q in needs]
@@ -235,7 +236,9 @@ class TestGetForecastReadiness:
         readiness = service.get_forecast_readiness(resolved_question.id)
         assert ForecastMode.KNOWLEDGE_ONLY in readiness.available_modes
 
-    def test_container_requires_satisfaction(self, service, unresolved_question, question_with_evidence):
+    def test_container_requires_satisfaction(
+        self, service, unresolved_question, question_with_evidence
+    ):
         """CONTAINER mode requires evidence satisfaction."""
         # Without evidence (unresolved_question has no evidence)
         readiness = service.get_forecast_readiness(unresolved_question.id)
@@ -250,7 +253,7 @@ class TestGetForecastReadiness:
         readiness = service.get_forecast_readiness(resolved_question.id)
         for mode, config in readiness.tool_config.items():
             # Causal tools can be enabled for any mode
-            assert hasattr(config, 'causal_tools')
+            assert hasattr(config, "causal_tools")
 
     def test_nonexistent_question_raises(self, service):
         """Raises error for nonexistent question."""
@@ -278,10 +281,10 @@ class TestGetModelUsageStats:
             test_db.save(Forecast, f)
 
         stats = service.get_model_usage_stats()
-        
+
         # Should have 2 models
         assert len(stats) == 2
-        
+
         # gpt-4 should have 2 forecasts
         gpt4_stats = next(s for s in stats if s.model_name == "gpt-4")
         assert gpt4_stats.forecast_count == 2

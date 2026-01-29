@@ -6,16 +6,13 @@ it has built during its reasoning process.
 
 from src.tools.database_mixin import DatabaseAwareTool
 import json
-from typing import Optional, Dict, List, Set
+from typing import Dict, List, Set
 from collections import defaultdict
 
 from src.domain.models.forecast_graph import ForecastEvent, ForecastHypothesis
 from src.utils.logging import logger
 from src.utils.graph_visualization import GraphVisualizer
-from src.utils.formatting_utils import (
-    format_inspector_header,
-    format_section_header
-)
+from src.utils.formatting_utils import format_inspector_header, format_section_header
 
 
 class ForecastGraphInspectorTool(DatabaseAwareTool):
@@ -50,14 +47,18 @@ class ForecastGraphInspectorTool(DatabaseAwareTool):
     inputs = {}
     output_type = "string"
 
-    def __init__(self, forecast_db_path: str = "worldreasoner.db", session_id: str = None):
+    def __init__(
+        self, forecast_db_path: str = "worldreasoner.db", session_id: str = None
+    ):
         """Initialize the forecast graph inspector.
 
         Args:
             forecast_db_path: Path to forecast database
             session_id: Session ID for tracking this forecast session
         """
-        super().__init__(db_path=forecast_db_path, ensure_tables=[ForecastEvent, ForecastHypothesis])
+        super().__init__(
+            db_path=forecast_db_path, ensure_tables=[ForecastEvent, ForecastHypothesis]
+        )
         # Use self.db as forecast_db for consistency
         self.forecast_db = self.db
         self.session_id = session_id
@@ -70,8 +71,12 @@ class ForecastGraphInspectorTool(DatabaseAwareTool):
         """
         try:
             # Query forecast DB for events and hypotheses in this session
-            events = self.forecast_db.get_many(ForecastEvent, filters={'session_id': self.session_id})
-            hypotheses = self.forecast_db.get_many(ForecastHypothesis, filters={'session_id': self.session_id})
+            events = self.forecast_db.get_many(
+                ForecastEvent, filters={"session_id": self.session_id}
+            )
+            hypotheses = self.forecast_db.get_many(
+                ForecastHypothesis, filters={"session_id": self.session_id}
+            )
 
             if not events and not hypotheses:
                 return self._format_empty_graph()
@@ -104,7 +109,7 @@ class ForecastGraphInspectorTool(DatabaseAwareTool):
         self,
         events: List[ForecastEvent],
         hypotheses: List[ForecastHypothesis],
-        graph: Dict[str, List[str]]
+        graph: Dict[str, List[str]],
     ) -> Dict:
         """Analyze the graph structure and compute metrics.
 
@@ -128,25 +133,35 @@ class ForecastGraphInspectorTool(DatabaseAwareTool):
         # Calculate depths from target events (endpoints of causal chains)
         # Target events are those that are effects but not causes of other events
         target_events = all_targets - all_sources if all_targets else event_ids
-        
+
         max_depth = 0
         for event_id in target_events:
             depth = self._find_max_depth_from_node(graph, event_id, set())
             max_depth = max(max_depth, depth)
 
         # Calculate average metrics
-        avg_confidence = sum(h.confidence for h in hypotheses) / len(hypotheses) if hypotheses else 0.0
-        avg_strength = sum(h.strength for h in hypotheses) / len(hypotheses) if hypotheses else 0.0
+        avg_confidence = (
+            sum(h.confidence for h in hypotheses) / len(hypotheses)
+            if hypotheses
+            else 0.0
+        )
+        avg_strength = (
+            sum(h.strength for h in hypotheses) / len(hypotheses) if hypotheses else 0.0
+        )
 
         # Quality combines depth, confidence, and evidence support
         depth_score = min(max_depth / 3.0, 1.0) if max_depth > 0 else 0.0
-        evidence_score = sum(1 for h in hypotheses if h.evidence_article_ids) / len(hypotheses) if hypotheses else 0.0
+        evidence_score = (
+            sum(1 for h in hypotheses if h.evidence_article_ids) / len(hypotheses)
+            if hypotheses
+            else 0.0
+        )
 
         quality_score = (
-            depth_score * 0.4 +
-            avg_confidence * 0.3 +
-            avg_strength * 0.2 +
-            evidence_score * 0.1
+            depth_score * 0.4
+            + avg_confidence * 0.3
+            + avg_strength * 0.2
+            + evidence_score * 0.1
         )
 
         return {
@@ -159,21 +174,20 @@ class ForecastGraphInspectorTool(DatabaseAwareTool):
             "avg_strength": round(avg_strength, 2),
             "with_evidence": sum(1 for h in hypotheses if h.evidence_article_ids),
             "quality_score": round(quality_score, 2),
-            "status": "analyzed"
+            "status": "analyzed",
         }
 
     def _find_max_depth_from_node(
-        self,
-        graph: Dict[str, List[str]],
-        node: str,
-        visited: Set[str]
+        self, graph: Dict[str, List[str]], node: str, visited: Set[str]
     ) -> int:
         """Find maximum depth from a node using DFS."""
         return GraphVisualizer.find_max_depth_from_node(graph, node, visited)
 
     def _get_recommendation(self, stats: Dict) -> str:
         """Generate recommendation based on graph statistics."""
-        return GraphVisualizer.get_recommendation(stats["max_depth"], stats["quality_score"])
+        return GraphVisualizer.get_recommendation(
+            stats["max_depth"], stats["quality_score"]
+        )
 
     def _format_empty_graph(self) -> str:
         """Format output for empty graph."""
@@ -197,7 +211,7 @@ RECOMMENDATION:
         events: Dict[str, ForecastEvent],
         graph: Dict[str, List[str]],
         hypothesis_map: Dict[tuple, ForecastHypothesis],
-        stats: Dict
+        stats: Dict,
     ) -> str:
         """Format the graph as a visual text representation.
 
@@ -221,19 +235,21 @@ RECOMMENDATION:
 
         # Visual graph section
         sections.extend(format_section_header("CAUSAL GRAPH STRUCTURE"))
-        
+
         # Find potential target events (effects with no outgoing edges)
         all_sources = set()
         for sources in graph.values():
             all_sources.update(sources)
         all_targets = set(graph.keys())
         potential_targets = all_targets - all_sources
-        
+
         if potential_targets:
             # Build tree from each target event
             for target_id in list(potential_targets)[:3]:  # Show up to 3 targets
                 if target_id in events:
-                    sections.append(f"Target: {self._truncate(events[target_id].title, 50)}")
+                    sections.append(
+                        f"Target: {self._truncate(events[target_id].title, 50)}"
+                    )
                     sections.append("")
                     tree_lines = self._build_causal_tree(
                         target_id, events, graph, hypothesis_map, set()
@@ -246,44 +262,56 @@ RECOMMENDATION:
             sections.append("")
             for target_id, source_ids in list(graph.items())[:10]:  # Limit output
                 target_event = events.get(target_id)
-                target_desc = self._truncate(target_event.title if target_event else target_id, 50)
+                target_desc = self._truncate(
+                    target_event.title if target_event else target_id, 50
+                )
                 sections.append(f"  ▸ {target_desc}")
                 for source_id in source_ids:
                     source_event = events.get(source_id)
-                    source_desc = self._truncate(source_event.title if source_event else source_id, 45)
+                    source_desc = self._truncate(
+                        source_event.title if source_event else source_id, 45
+                    )
                     hyp = hypothesis_map.get((source_id, target_id))
                     conf = f"[conf: {hyp.confidence:.1f}]" if hyp else ""
                     sections.append(f"    └─→ {source_desc} {conf}")
                 sections.append("")
-        
+
         # Causal chains section
         sections.extend(format_section_header("CAUSAL CHAINS (Root → Target)"))
-        
+
         if potential_targets:
             all_chains = []
             for target_id in potential_targets:
-                chains = self._find_all_causal_chains(target_id, events, graph, hypothesis_map)
+                chains = self._find_all_causal_chains(
+                    target_id, events, graph, hypothesis_map
+                )
                 all_chains.extend(chains)
-            
+
             if all_chains:
                 all_chains.sort(key=lambda c: len(c), reverse=True)
                 for i, chain in enumerate(all_chains[:5], 1):  # Show top 5 chains
-                    sections.append(f"Chain {i} (depth: {len(chain)-1}):")
+                    sections.append(f"Chain {i} (depth: {len(chain) - 1}):")
                     for j, (event_id, hyp) in enumerate(chain):
                         event = events.get(event_id)
                         desc = self._truncate(event.title if event else event_id, 55)
                         indent = "  " * j
-                        
+
                         if j == 0:
                             sections.append(f"  {indent}🌱 {desc}")
                         elif j == len(chain) - 1:
                             sections.append(f"  {indent}🎯 {desc}")
                         else:
                             sections.append(f"  {indent}⚡ {desc}")
-                        
+
                         if hyp and j < len(chain) - 1:
-                            evidence_str = f"[{len(hyp.evidence_article_ids)} articles]" if hyp.evidence_article_ids else "[no evidence]"
-                            sections.append(f"  {indent}   └─ conf: {hyp.confidence:.1f}, strength: {hyp.strength:.1f} {evidence_str}")
+                            evidence_str = (
+                                f"[{len(hyp.evidence_article_ids)} articles]"
+                                if hyp.evidence_article_ids
+                                else "[no evidence]"
+                            )
+                            sections.append(
+                                f"  {indent}   └─ conf: {hyp.confidence:.1f}, strength: {hyp.strength:.1f} {evidence_str}"
+                            )
                     sections.append("")
             else:
                 sections.append("  No complete causal chains found.")
@@ -291,7 +319,7 @@ RECOMMENDATION:
         else:
             sections.append("  No target events identified yet.")
             sections.append("")
-        
+
         # Statistics section
         sections.extend(format_section_header("GRAPH STATISTICS"))
         sections.append(f"  Events:           {stats['events']}")
@@ -300,16 +328,18 @@ RECOMMENDATION:
         sections.append(f"  Leaf Events:      {stats['leaf_events']} (root causes)")
         sections.append(f"  Avg Confidence:   {stats['avg_confidence']:.2f}")
         sections.append(f"  Avg Strength:     {stats['avg_strength']:.2f}")
-        sections.append(f"  With Evidence:    {stats['with_evidence']}/{stats['hypotheses']}")
+        sections.append(
+            f"  With Evidence:    {stats['with_evidence']}/{stats['hypotheses']}"
+        )
         sections.append(f"  Quality Score:    {stats['quality_score']:.2f}")
         sections.append("")
-        
+
         # Recommendation
         recommendation = self._get_recommendation(stats)
         sections.extend(format_section_header("RECOMMENDATION"))
         sections.append(f"  {recommendation}")
         sections.append("")
-        
+
         return "\n".join(sections)
 
     def _build_causal_tree(
@@ -320,13 +350,18 @@ RECOMMENDATION:
         hypothesis_map: Dict[tuple, ForecastHypothesis],
         visited: Set[str],
         prefix: str = "",
-        is_last: bool = True
+        is_last: bool = True,
     ) -> List[str]:
         """Build ASCII tree representation of causal graph."""
         return GraphVisualizer.build_causal_tree(
-            event_id, events, graph, hypothesis_map, visited,
+            event_id,
+            events,
+            graph,
+            hypothesis_map,
+            visited,
             get_event_title=lambda e: e.title if e else "",
-            prefix=prefix, is_last=is_last
+            prefix=prefix,
+            is_last=is_last,
         )
 
     def _find_all_causal_chains(
@@ -334,10 +369,12 @@ RECOMMENDATION:
         target_id: str,
         events: Dict[str, ForecastEvent],
         graph: Dict[str, List[str]],
-        hypothesis_map: Dict[tuple, ForecastHypothesis]
+        hypothesis_map: Dict[tuple, ForecastHypothesis],
     ) -> List[List[tuple]]:
         """Find all causal chains from root causes to target."""
-        return GraphVisualizer.find_all_causal_chains(target_id, events, graph, hypothesis_map)
+        return GraphVisualizer.find_all_causal_chains(
+            target_id, events, graph, hypothesis_map
+        )
 
     def _truncate(self, text: str, max_len: int) -> str:
         """Truncate text to max length with ellipsis."""

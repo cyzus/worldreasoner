@@ -1,7 +1,10 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 import pytest
 
-from src.pipelines.stages.evidence_collection import EvidenceCollectionConfig, HindsightEvidenceCollectionStage
+from src.pipelines.stages.evidence_collection import (
+    EvidenceCollectionConfig,
+    HindsightEvidenceCollectionStage,
+)
 from src.domain.models.question import Question, QuestionType, Domain
 
 

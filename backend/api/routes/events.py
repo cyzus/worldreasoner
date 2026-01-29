@@ -3,7 +3,7 @@
 Provides REST API for querying event details.
 """
 
-from typing import List, Optional
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 
 from src.core.database import GenericDatabase
@@ -73,7 +73,7 @@ async def list_events(
 
         # Manual pagination
         total = len(events)
-        events = events[offset:offset + limit]
+        events = events[offset : offset + limit]
 
         return {
             "events": events,
@@ -107,8 +107,7 @@ async def get_event_articles(event_id: str):
         # Do a reverse lookup: find all articles that reference this event in their event_ids
         all_articles = db.get_many(Article)
         related_articles = [
-            article for article in all_articles
-            if event_id in article.event_ids
+            article for article in all_articles if event_id in article.event_ids
         ]
 
         # Also check event.article_ids for backward compatibility
@@ -140,7 +139,7 @@ async def get_event_questions(event_id: str):
     """
     try:
         from src.domain.models import CausalHypothesis
-        
+
         db = get_db()
         event = db.get(Event, event_id)
 
@@ -152,7 +151,8 @@ async def get_event_questions(event_id: str):
 
         # 1. Direct references: questions with this event as target or related
         directly_related = [
-            q for q in all_questions
+            q
+            for q in all_questions
             if q.target_event_id == event_id or event_id in q.related_event_ids
         ]
 
@@ -167,7 +167,10 @@ async def get_event_questions(event_id: str):
             if event.extracted_for_question_id == q.id:
                 evidence_related.append(q)
             # Fallback to metadata for pre-migration data
-            elif event.metadata.get('related_question_ids') and q.id in event.metadata['related_question_ids']:
+            elif (
+                event.metadata.get("related_question_ids")
+                and q.id in event.metadata["related_question_ids"]
+            ):
                 evidence_related.append(q)
 
         # 3. Causal hypothesis links: find questions linked via hypotheses
@@ -180,8 +183,7 @@ async def get_event_questions(event_id: str):
                 hypothesis_question_ids.update(h.discovered_by_question_ids)
 
         hypothesis_related = [
-            q for q in all_questions
-            if q.id in hypothesis_question_ids
+            q for q in all_questions if q.id in hypothesis_question_ids
         ]
 
         # Combine and deduplicate

@@ -5,7 +5,6 @@ from typing import Dict, List, Optional, Union
 from dataclasses import dataclass
 
 from src.pipelines.question.sources.base import QuestionSourceRunner, CollectionResult
-from src.domain.models import Question
 from src.config.collection_goal import QualityRequirements
 from src.utils.logging import logger
 
@@ -13,6 +12,7 @@ from src.utils.logging import logger
 @dataclass
 class SourceRequest:
     """Request to collect from a source."""
+
     source_name: str
     runner: QuestionSourceRunner
     count: int
@@ -22,9 +22,10 @@ class SourceRequest:
     existing_question_ids: Optional[set] = None
 
 
-@dataclass  
+@dataclass
 class CoordinatorResult:
     """Result from coordinator with collected questions and errors."""
+
     results: List[CollectionResult]
     errors: List[str]
 
@@ -44,8 +45,7 @@ class SourceCoordinator:
         self.parallel = parallel
 
     async def collect_from_sources(
-        self,
-        requests: List[SourceRequest]
+        self, requests: List[SourceRequest]
     ) -> List[CollectionResult]:
         """Execute collection from multiple sources.
 
@@ -61,8 +61,7 @@ class SourceCoordinator:
             return await self._collect_sequential(requests)
 
     async def _collect_parallel(
-        self,
-        requests: List[SourceRequest]
+        self, requests: List[SourceRequest]
     ) -> List[CollectionResult]:
         """Run sources in parallel."""
         tasks = [self._collect_from_source(req) for req in requests]
@@ -73,22 +72,23 @@ class SourceCoordinator:
             if isinstance(result, Exception):
                 logger.error(f"{requests[i].source_name}: {result}")
                 # Create failed result with error
-                valid_results.append(CollectionResult(
-                    success=False,
-                    questions=[],
-                    source_name=requests[i].source_name,
-                    requested_count=requests[i].count,
-                    actual_count=0,
-                    errors=[str(result)]
-                ))
+                valid_results.append(
+                    CollectionResult(
+                        success=False,
+                        questions=[],
+                        source_name=requests[i].source_name,
+                        requested_count=requests[i].count,
+                        actual_count=0,
+                        errors=[str(result)],
+                    )
+                )
             else:
                 valid_results.append(result)
 
         return valid_results
 
     async def _collect_sequential(
-        self,
-        requests: List[SourceRequest]
+        self, requests: List[SourceRequest]
     ) -> List[CollectionResult]:
         """Run sources sequentially."""
         results = []
@@ -98,21 +98,20 @@ class SourceCoordinator:
                 results.append(result)
             except Exception as e:
                 logger.error(f"{req.source_name}: {e}")
-                results.append(CollectionResult(
-                    success=False,
-                    questions=[],
-                    source_name=req.source_name,
-                    requested_count=req.count,
-                    actual_count=0,
-                    errors=[str(e)]
-                ))
+                results.append(
+                    CollectionResult(
+                        success=False,
+                        questions=[],
+                        source_name=req.source_name,
+                        requested_count=req.count,
+                        actual_count=0,
+                        errors=[str(e)],
+                    )
+                )
 
         return results
 
-    async def _collect_from_source(
-        self,
-        request: SourceRequest
-    ) -> CollectionResult:
+    async def _collect_from_source(self, request: SourceRequest) -> CollectionResult:
         """Execute single source collection.
 
         Args:
@@ -138,8 +137,6 @@ class SourceCoordinator:
                 f"✓ '{request.source_name}': collected {len(result.questions)} questions"
             )
         else:
-            logger.warning(
-                f"✗ '{request.source_name}': no questions collected"
-            )
+            logger.warning(f"✗ '{request.source_name}': no questions collected")
 
         return result

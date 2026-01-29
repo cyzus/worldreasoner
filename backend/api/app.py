@@ -9,7 +9,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from src.utils.logging import logger
-from .routes import graph, events, websocket, questions, database, pipelines, forecast_graphs, search, evaluation, monitor
+from .routes import (
+    graph,
+    events,
+    websocket,
+    questions,
+    database,
+    pipelines,
+    forecast_graphs,
+    search,
+    evaluation,
+    monitor,
+    outcomes,
+)
 from src.core.database import GenericDatabase
 from src.config import get_config
 
@@ -51,7 +63,9 @@ async def lifespan(app: FastAPI):
                 logger.info("MCP server initialized successfully")
             except Exception as e:
                 logger.warning(f"Failed to start MCP server on startup: {e}")
-                logger.warning("MCP server can be started manually or will auto-start on database switch")
+                logger.warning(
+                    "MCP server can be started manually or will auto-start on database switch"
+                )
         else:
             logger.info("MCP auto-start disabled (MCP_AUTO_START=false)")
             logger.info("MCP server will auto-start on first database switch")
@@ -92,7 +106,10 @@ def create_app() -> FastAPI:
     # CORS middleware for frontend
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://localhost:5173"],  # React dev servers
+        allow_origins=[
+            "http://localhost:3000",
+            "http://localhost:5173",
+        ],  # React dev servers
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -108,6 +125,7 @@ def create_app() -> FastAPI:
     app.include_router(forecast_graphs.router, prefix="/api", tags=["forecast-graphs"])
     app.include_router(evaluation.router, prefix="/api/evaluation", tags=["evaluation"])
     app.include_router(monitor.router, prefix="/api/monitor", tags=["monitor"])
+    app.include_router(outcomes.router, prefix="/api/outcomes", tags=["outcomes"])
     app.include_router(websocket.router, prefix="/ws", tags=["websocket"])
 
     @app.get("/")

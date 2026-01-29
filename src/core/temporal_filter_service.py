@@ -24,7 +24,7 @@ class TemporalFilterService:
     def get_evidence_window(
         resolution_date: datetime,
         estimated_start_time: Optional[datetime] = None,
-        fallback_window_days: int = 365
+        fallback_window_days: int = 365,
     ) -> Tuple[Optional[datetime], datetime]:
         """Calculate the evidence collection time window for a question.
 
@@ -58,7 +58,7 @@ class TemporalFilterService:
         items: List[Union[Article, Event]],
         window_start: Optional[datetime],
         window_end: datetime,
-        date_field: str = "published_date"
+        date_field: str = "published_date",
     ) -> List[Union[Article, Event]]:
         """Filter items to those within a time window.
 
@@ -104,7 +104,7 @@ class TemporalFilterService:
     def filter_by_cutoff(
         items: List[Union[Article, Event]],
         cutoff_date: datetime,
-        date_field: str = "published_date"
+        date_field: str = "published_date",
     ) -> List[Union[Article, Event]]:
         """Filter items to those before a cutoff date.
 

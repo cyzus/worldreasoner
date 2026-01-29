@@ -4,7 +4,7 @@ This pipeline uses managed agents (evidence_collector, causal_analyzer) that can
 self-evaluate and iterate to build deep causal graphs.
 
 Features:
-- Deeper causal graphs: 3+ levels vs 1 level shallow graphs  
+- Deeper causal graphs: 3+ levels vs 1 level shallow graphs
 - Self-evaluation: Agents assess their own work and iterate
 - Adaptive behavior: Handles failures gracefully
 - Built-in quality metrics: Article quality, graph quality,depth analysis
@@ -18,7 +18,7 @@ from ..base import Pipeline, PipelineStageResult, PipelineStageStatus
 from src.pipelines.prompts import HindsightCausalAnalysisPrompts
 from src.config.pipeline import EvidencePipelineConfig
 from src.config import DatabaseConfig
-from src.domain.models import Question, Article, CausalHypothesis, Event
+from src.domain.models import Question, Article, CausalHypothesis
 from src.core.database import GenericDatabase
 from src.agents.hindsight_agent import HindsightAgent
 from src.utils.logging import logger
@@ -27,9 +27,9 @@ from src.utils.usage_tracking import UsageTracker
 
 class EvidencePipeline(Pipeline):
     """Evidence pipeline using adaptive multi-agent system.
-    
+
     Flow: Resolved Questions → Agent-based Causal Analysis → Deep Causal Graphs
-    
+
     This pipeline:
     - Uses HindsightAgent with managed sub-agents (evidence_collector, causal_analyzer)
     - Agents self-evaluate and iterate to improve graph depth (3+ levels)
@@ -98,14 +98,14 @@ class EvidencePipeline(Pipeline):
         error_message: Optional[str] = None,
     ) -> PipelineStageResult:
         """Create a PipelineStageResult with consistent fields.
-        
+
         Args:
             status: Status of the stage
             items_processed: Number of items processed
             items_output: Number of items output
             outputs: List of output items
             error_message: Optional error message for failed stages
-            
+
         Returns:
             PipelineStageResult
         """
@@ -123,11 +123,11 @@ class EvidencePipeline(Pipeline):
 
     def _format_question_error(self, question_id: str, error: Any) -> str:
         """Format error message for a failed question.
-        
+
         Args:
             question_id: ID of the question that failed
             error: Error or failure reason
-            
+
         Returns:
             Formatted error message
         """
@@ -180,18 +180,17 @@ class EvidencePipeline(Pipeline):
 
             # Run question processing tasks in parallel with concurrency limit
             question_results = await asyncio.gather(
-                *question_tasks,
-                return_exceptions=True
+                *question_tasks, return_exceptions=True
             )
 
             # Collect results and hypotheses
             successful_count = 0
             failed_count = 0
             failure_reasons = []
-            
+
             for i, result in enumerate(question_results):
                 question_id = self.resolved_questions[i].id
-                
+
                 if isinstance(result, Exception):
                     error_msg = self._format_question_error(question_id, result)
                     logger.error(error_msg)
@@ -214,7 +213,11 @@ class EvidencePipeline(Pipeline):
 
             if not self.causal_hypotheses:
                 logger.error("No causal hypotheses generated - pipeline failed")
-                error_message = "; ".join(failure_reasons) if failure_reasons else "No causal hypotheses generated"
+                error_message = (
+                    "; ".join(failure_reasons)
+                    if failure_reasons
+                    else "No causal hypotheses generated"
+                )
                 failed_result = self._create_stage_result(
                     status=PipelineStageStatus.FAILED,
                     items_processed=len(self.resolved_questions),
@@ -225,8 +228,10 @@ class EvidencePipeline(Pipeline):
                 self._results.append(failed_result)
                 return self._results
 
-            logger.info(f"Total: {len(self.evidence_articles)} evidence articles, "
-                       f"{len(self.causal_hypotheses)} causal hypotheses")
+            logger.info(
+                f"Total: {len(self.evidence_articles)} evidence articles, "
+                f"{len(self.causal_hypotheses)} causal hypotheses"
+            )
 
             # Add a success result for the pipeline runner to detect
             success_result = self._create_stage_result(
@@ -283,7 +288,9 @@ class EvidencePipeline(Pipeline):
                 # Run agent in thread pool to avoid blocking
                 # Agent execution is automatically saved to logs/agent_runs/{agent_name}_{question_id}_{timestamp}.json
                 logger.debug(f"[{question.id}] Starting HindsightAgent...")
-                result = await asyncio.to_thread(hindsight_agent.run, prompt, run_id=question.id)
+                result = await asyncio.to_thread(
+                    hindsight_agent.run, prompt, run_id=question.id
+                )
                 logger.info(f"[{question.id}] Agent completed successfully")
 
                 # Extract results from database (agent persisted everything)
@@ -295,7 +302,8 @@ class EvidencePipeline(Pipeline):
 
                 # Filter hypotheses for this question
                 question_hypotheses = [
-                    h for h in all_hypotheses
+                    h
+                    for h in all_hypotheses
                     if question.id in h.discovered_by_question_ids
                 ]
 
@@ -304,7 +312,9 @@ class EvidencePipeline(Pipeline):
                 for hyp in question_hypotheses:
                     evidence_article_ids.update(hyp.evidence_article_ids)
 
-                evidence_articles = [a for a in all_articles if a.id in evidence_article_ids]
+                evidence_articles = [
+                    a for a in all_articles if a.id in evidence_article_ids
+                ]
 
                 logger.info(
                     f"[{question.id}] Agent results: "
@@ -317,7 +327,7 @@ class EvidencePipeline(Pipeline):
                     analyze_timeline,
                     analyze_sources,
                     identify_gaps,
-                    calculate_quality
+                    calculate_quality,
                 )
 
                 article_quality_score = 0.0
@@ -328,13 +338,25 @@ class EvidencePipeline(Pipeline):
                     from src.utils.date_utils import ensure_timezone_aware
 
                     # Pass coverage_start for expected coverage window calculation
-                    coverage_start = ensure_timezone_aware(question.estimated_start_time) if question.estimated_start_time else None
-                    timeline_data = analyze_timeline(evidence_articles, question.resolution_date, coverage_start=coverage_start)
+                    coverage_start = (
+                        ensure_timezone_aware(question.estimated_start_time)
+                        if question.estimated_start_time
+                        else None
+                    )
+                    timeline_data = analyze_timeline(
+                        evidence_articles,
+                        question.resolution_date,
+                        coverage_start=coverage_start,
+                    )
                     source_data = analyze_sources(evidence_articles)
                     gaps = identify_gaps(timeline_data)
 
                     quality_metrics = calculate_quality(
-                        evidence_articles, timeline_data, source_data, gaps, coverage_start=coverage_start
+                        evidence_articles,
+                        timeline_data,
+                        source_data,
+                        gaps,
+                        coverage_start=coverage_start,
                     )
 
                     article_quality_score = quality_metrics["score"]
@@ -346,7 +368,7 @@ class EvidencePipeline(Pipeline):
                         "sources": {"unique_sources": source_data["unique_sources"]},
                         "coverage_end_date": question.resolution_date,
                         "timeline": timeline_data,
-                        "gaps": gaps
+                        "gaps": gaps,
                     }
 
                     logger.info(
@@ -356,7 +378,9 @@ class EvidencePipeline(Pipeline):
                         f"{len(gaps)} time gaps)"
                     )
                 else:
-                    logger.warning(f"[{question.id}] No evidence articles collected - article quality: 0.0")
+                    logger.warning(
+                        f"[{question.id}] No evidence articles collected - article quality: 0.0"
+                    )
 
                 # Evaluate graph quality using shared utilities
                 from src.utils.graph_analysis import calculate_graph_quality
@@ -367,41 +391,51 @@ class EvidencePipeline(Pipeline):
                 if question_hypotheses:
                     # Determine target event ID (use existing or infer from graph)
                     target_event_id = question.target_event_id
-                    
+
                     if not target_event_id:
                         # Use shared utility to infer target from graph
                         from src.utils.graph_analysis import infer_target_event_id
-                        
+
                         inferred_id = infer_target_event_id(question_hypotheses)
-                        
+
                         if inferred_id:
                             target_event_id = inferred_id
-                            logger.info(f"[{question.id}] Inferred target event from graph: {target_event_id}")
-                            
+                            logger.info(
+                                f"[{question.id}] Inferred target event from graph: {target_event_id}"
+                            )
+
                             # Update the question in DB with the inferred target event
                             try:
                                 question.target_event_id = target_event_id
                                 db.save(Question, question)
-                                logger.debug(f"[{question.id}] Updated question with inferred target event")
+                                logger.debug(
+                                    f"[{question.id}] Updated question with inferred target event"
+                                )
                             except Exception as e:
-                                logger.warning(f"[{question.id}] Failed to persist inferred target event: {e}")
+                                logger.warning(
+                                    f"[{question.id}] Failed to persist inferred target event: {e}"
+                                )
                         else:
                             # Fallback if no specific sink (e.g. cycles)
                             # Pick arbitrary target to allow graph analysis to proceed
-                            all_targets = set(h.target_event_id for h in question_hypotheses)
+                            all_targets = set(
+                                h.target_event_id for h in question_hypotheses
+                            )
                             if all_targets:
                                 target_event_id = list(all_targets)[0]
-                                logger.warning(f"[{question.id}] Circular graph detected? Using arbitrary target: {target_event_id}")
+                                logger.warning(
+                                    f"[{question.id}] Circular graph detected? Using arbitrary target: {target_event_id}"
+                                )
 
                     # Calculate graph quality using shared utility
                     quality_metrics = calculate_graph_quality(
                         hypotheses=question_hypotheses,
                         target_event_id=target_event_id,
-                        min_depth_for_full_score=self.min_graph_depth
+                        min_depth_for_full_score=self.min_graph_depth,
                     )
 
-                    graph_quality_score = quality_metrics['quality_score']
-                    max_depth = quality_metrics['max_depth']
+                    graph_quality_score = quality_metrics["quality_score"]
+                    max_depth = quality_metrics["max_depth"]
 
                     logger.info(
                         f"[{question.id}] Graph quality: {graph_quality_score:.2f} "
@@ -409,12 +443,16 @@ class EvidencePipeline(Pipeline):
                         f"hypotheses: {quality_metrics['hypothesis_count']})"
                     )
                 else:
-                    logger.warning(f"[{question.id}] No causal hypotheses generated - graph quality: 0.0")
+                    logger.warning(
+                        f"[{question.id}] No causal hypotheses generated - graph quality: 0.0"
+                    )
 
                 # Check if pipeline should be marked as failed based on quality
                 status_message = None
                 if article_quality_score == 0.0:
-                    status_message = "Failed: Article quality is zero (no/insufficient articles)"
+                    status_message = (
+                        "Failed: Article quality is zero (no/insufficient articles)"
+                    )
                     logger.error(f"[{question.id}] {status_message}")
                 elif graph_quality_score == 0.0:
                     status_message = "Failed: Graph quality is zero (no/insufficient causal hypotheses)"
@@ -434,7 +472,7 @@ class EvidencePipeline(Pipeline):
                         "failure_reason": status_message,
                         "article_quality": article_quality_score,
                         "graph_quality": graph_quality_score,
-                        "graph_depth": max_depth
+                        "graph_depth": max_depth,
                     }
 
                 # Success
@@ -446,7 +484,7 @@ class EvidencePipeline(Pipeline):
                     "status": "success",
                     "article_quality": article_quality_score,
                     "graph_quality": graph_quality_score,
-                    "graph_depth": max_depth
+                    "graph_depth": max_depth,
                 }
 
             except Exception as e:
@@ -457,7 +495,7 @@ class EvidencePipeline(Pipeline):
                     "causal_hypotheses": [],
                     "stage_results": [],
                     "status": "failed",
-                    "failure_reason": str(e)
+                    "failure_reason": str(e),
                 }
 
     def _load_resolved_questions(self) -> List[Question]:
@@ -471,7 +509,11 @@ class EvidencePipeline(Pipeline):
 
         # Calculate date range
         min_age = timedelta(days=self.evidence_config.min_resolution_age_days)
-        max_age = timedelta(days=self.evidence_config.max_resolution_age_days) if self.evidence_config.max_resolution_age_days else None
+        max_age = (
+            timedelta(days=self.evidence_config.max_resolution_age_days)
+            if self.evidence_config.max_resolution_age_days
+            else None
+        )
 
         min_resolution_date = current_date - max_age if max_age else None
         max_resolution_date = current_date - min_age
@@ -481,7 +523,9 @@ class EvidencePipeline(Pipeline):
 
         # Capture DB stats
         self.db_total_questions = len(all_questions)
-        resolved_with_ground_truth = [q for q in all_questions if q.resolution_date and q.ground_truth is not None]
+        resolved_with_ground_truth = [
+            q for q in all_questions if q.resolution_date and q.ground_truth is not None
+        ]
         self.db_resolved_questions = len(resolved_with_ground_truth)
 
         # Get all existing causal hypotheses to check which questions were already processed
@@ -526,7 +570,10 @@ class EvidencePipeline(Pipeline):
                 continue  # Too old
 
             # Filter by domains if specified
-            if self.evidence_config.domains and q.domain not in self.evidence_config.domains:
+            if (
+                self.evidence_config.domains
+                and q.domain not in self.evidence_config.domains
+            ):
                 continue
 
             # Skip if quality score is below threshold
@@ -537,7 +584,9 @@ class EvidencePipeline(Pipeline):
             # Skip if marked to skip evidence processing (low quality, noisy, etc.)
             if q.skip_evidence:
                 skipped_low_quality += 1
-                logger.debug(f"Skipping question marked for skip_evidence: {q.id} - {q.skip_reason}")
+                logger.debug(
+                    f"Skipping question marked for skip_evidence: {q.id} - {q.skip_reason}"
+                )
                 continue
 
             # Handle already-processed questions (but don't clear yet)
@@ -555,16 +604,23 @@ class EvidencePipeline(Pipeline):
         if not self.evidence_config.skip_already_processed:
             # Force-reprocess mode: prioritize already-processed questions first
             # (the whole point is to reprocess them!)
-            resolved.sort(key=lambda q: (q.id not in processed_question_ids, -(q.quality_score or 0.0)))
+            resolved.sort(
+                key=lambda q: (
+                    q.id not in processed_question_ids,
+                    -(q.quality_score or 0.0),
+                )
+            )
             logger.info("Prioritizing already-processed questions for reprocessing")
         elif self.min_quality_score is not None:
             # Normal mode with quality filter: sort by quality score only
             resolved.sort(key=lambda q: q.quality_score or 0.0, reverse=True)
-            logger.info(f"Prioritizing questions by quality score (min_score={self.min_quality_score}).")
+            logger.info(
+                f"Prioritizing questions by quality score (min_score={self.min_quality_score})."
+            )
 
         # Apply max_questions limit if configured
         if self.evidence_config.max_questions is not None:
-            resolved = resolved[:self.evidence_config.max_questions]
+            resolved = resolved[: self.evidence_config.max_questions]
 
         # Now clear evidence for any questions being reprocessed (after applying limits)
         for q in resolved:
@@ -589,14 +645,20 @@ class EvidencePipeline(Pipeline):
         )
 
         if skipped_already_processed > 0:
-            logger.info(f"Skipped {skipped_already_processed} already processed questions")
+            logger.info(
+                f"Skipped {skipped_already_processed} already processed questions"
+            )
 
         if skipped_low_quality > 0:
-            logger.info(f"Skipped {skipped_low_quality} low-quality questions (marked skip_evidence)")
+            logger.info(
+                f"Skipped {skipped_low_quality} low-quality questions (marked skip_evidence)"
+            )
 
         return resolved
 
-    def _clear_evidence_for_question(self, question_id: str, db: GenericDatabase) -> dict:
+    def _clear_evidence_for_question(
+        self, question_id: str, db: GenericDatabase
+    ) -> dict:
         """Clear evidence pipeline data for a question before reprocessing.
 
         Uses QuestionService to avoid circular dependency with CLI layer.

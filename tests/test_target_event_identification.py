@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from src.pipelines.stages import (
     TargetEventIdentificationStage,
-    TargetEventIdentificationConfig
+    TargetEventIdentificationConfig,
 )
 from src.domain.models import Question, Article
 from src.domain.models.domain import Domain
@@ -19,14 +19,13 @@ from src.utils.logging import logger
 
 async def test_target_event_identification():
     """Test target event identification with sample questions."""
-    
+
     # Initialize stage
     config = TargetEventIdentificationConfig(
-        similarity_threshold=0.75,
-        create_if_not_found=True
+        similarity_threshold=0.75, create_if_not_found=True
     )
     stage = TargetEventIdentificationStage(config, db_path="worldreasoner.db")
-    
+
     # Create sample questions without target events (like Polymarket questions)
     sample_questions = [
         Question(
@@ -53,7 +52,7 @@ async def test_target_event_identification():
             ground_truth=True,
             target_event_id=None,
             related_event_ids=[],
-            created_at=datetime.now(timezone.utc)
+            created_at=datetime.now(timezone.utc),
         ),
         Question(
             id="test_polymarket_003",
@@ -66,10 +65,10 @@ async def test_target_event_identification():
             ground_truth=False,  # Didn't happen
             target_event_id=None,
             related_event_ids=[],
-            created_at=datetime.now(timezone.utc)
-        )
+            created_at=datetime.now(timezone.utc),
+        ),
     ]
-    
+
     # Create dummy evidence articles (stage needs them but won't use much)
     dummy_articles = [
         Article(
@@ -79,30 +78,30 @@ async def test_target_event_identification():
             content="Bitcoin has reached new all-time highs in December 2024, breaking through the $100,000 barrier for the first time in history. Market analysts attribute this surge to increased institutional adoption and favorable regulatory developments.",
             source="Crypto News Daily",
             published_date=datetime(2024, 12, 30, tzinfo=timezone.utc),
-            domain=Domain.FINANCE
+            domain=Domain.FINANCE,
         )
     ]
-    
+
     # Prepare inputs (Question, List[Article] pairs)
     inputs = [(q, dummy_articles) for q in sample_questions]
-    
+
     # Run the stage
     logger.info("=" * 60)
     logger.info("Testing Target Event Identification Stage")
     logger.info("=" * 60)
-    
+
     try:
         updated_questions = await stage.process(inputs)
-        
+
         logger.info("=" * 60)
         logger.info("RESULTS")
         logger.info("=" * 60)
-        
+
         for question in updated_questions:
             logger.info(f"Question: {question.question_text}")
             logger.info(f"  Ground Truth: {question.ground_truth}")
             logger.info(f"  Target Event ID: {question.target_event_id}")
-            
+
             if question.target_event_id:
                 # Try to fetch the created event
                 db = GenericDatabase("worldreasoner.db")
@@ -111,11 +110,11 @@ async def test_target_event_identification():
                     logger.info(f"  Event Name: {event.title}")
                     logger.info(f"  Event Date: {event.occurred_date}")
                     logger.info(f"  Event Domain: {event.domain}")
-        
+
         logger.info("=" * 60)
         logger.info(f"Successfully processed {len(updated_questions)} questions")
         logger.info("=" * 60)
-        
+
     except Exception as e:
         logger.error(f"Test failed: {e}", exc_info=True)
         raise
@@ -124,5 +123,5 @@ async def test_target_event_identification():
 if __name__ == "__main__":
     # Need to import Event here for the test
     from src.domain.models import Event
-    
+
     asyncio.run(test_target_event_identification())

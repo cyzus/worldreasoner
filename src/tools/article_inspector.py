@@ -1,7 +1,6 @@
 """Article inspector tool - analyze timeline and coverage of collected articles."""
 
 from typing import Optional, List, Dict
-from datetime import datetime
 
 from src.tools.database_mixin import DatabaseAwareTool
 from src.domain.models import Article, Question
@@ -11,7 +10,7 @@ from src.utils.article_analysis import (
     analyze_sources,
     identify_gaps,
     calculate_quality,
-    get_recommendation
+    get_recommendation,
 )
 from src.utils.date_utils import ensure_timezone_aware
 from src.utils.formatting_utils import (
@@ -21,7 +20,6 @@ from src.utils.formatting_utils import (
     format_coverage_range,
     render_monthly_bar_chart,
     format_timeline_gaps,
-    format_metric_line
 )
 
 
@@ -56,7 +54,9 @@ class ArticleInspectorTool(DatabaseAwareTool):
     inputs = {}
     output_type = "string"
 
-    def __init__(self, db_path: str = "worldreasoner.db", question_id: Optional[str] = None):
+    def __init__(
+        self, db_path: str = "worldreasoner.db", question_id: Optional[str] = None
+    ):
         """Initialize the article inspector.
 
         Args:
@@ -82,15 +82,12 @@ class ArticleInspectorTool(DatabaseAwareTool):
 
         # Get articles for this question efficiently
         question_articles = self.db.get_many(
-            Article, 
-            filters={'collected_for_question_id': self.question_id}
+            Article, filters={"collected_for_question_id": self.question_id}
         )
 
         # Filter articles by time window using shared utility
         filtered_articles = filter_articles_by_time_window(
-            question_articles,
-            question.resolution_date,
-            question.estimated_start_time
+            question_articles, question.resolution_date, question.estimated_start_time
         )
 
         if not filtered_articles:
@@ -100,7 +97,7 @@ class ArticleInspectorTool(DatabaseAwareTool):
         timeline_data = analyze_timeline(
             filtered_articles,
             question.resolution_date,
-            coverage_start=question.estimated_start_time
+            coverage_start=question.estimated_start_time,
         )
         source_data = analyze_sources(filtered_articles)
         gaps = identify_gaps(timeline_data)
@@ -109,7 +106,7 @@ class ArticleInspectorTool(DatabaseAwareTool):
             timeline_data,
             source_data,
             gaps,
-            coverage_start=question.estimated_start_time
+            coverage_start=question.estimated_start_time,
         )
 
         return self._format_visualization(
@@ -126,7 +123,9 @@ class ArticleInspectorTool(DatabaseAwareTool):
             Formatted empty state message
         """
         header = format_inspector_header("ARTICLE COVERAGE INSPECTOR")
-        time_window_lines = format_time_window(question.resolution_date, question.estimated_start_time, indent="")
+        time_window_lines = format_time_window(
+            question.resolution_date, question.estimated_start_time, indent=""
+        )
         time_window = "\n".join(time_window_lines)
 
         return f"""{header}
@@ -158,7 +157,7 @@ ERROR: {error}
         source_data: Dict,
         gaps: List[Dict],
         question: Question,
-        quality: Dict
+        quality: Dict,
     ) -> str:
         """Format the article analysis as visual text.
 
@@ -183,11 +182,11 @@ ERROR: {error}
         sections.append(f"Total Articles: {len(articles)}")
 
         # Show time window
-        sections.extend(format_time_window(
-            question.resolution_date,
-            question.estimated_start_time,
-            indent=""
-        ))
+        sections.extend(
+            format_time_window(
+                question.resolution_date, question.estimated_start_time, indent=""
+            )
+        )
 
         sections.append("")
 
@@ -196,57 +195,69 @@ ERROR: {error}
             sections.extend(format_section_header("TIMELINE DISTRIBUTION"))
 
             # Show coverage range (considering estimated_start_time)
-            earliest = timeline_data.get('earliest')
+            earliest = timeline_data.get("earliest")
             latest = ensure_timezone_aware(question.resolution_date)
             q_start = question.estimated_start_time
 
             if earliest:
                 # Note: For articles, we show to resolution_date (not latest article date)
-                sections.extend(format_coverage_range(
-                    earliest,
-                    latest,
-                    question.resolution_date,
-                    question.estimated_start_time,
-                    timeline_data['span_days'],
-                    item_type="Article"
-                ))
+                sections.extend(
+                    format_coverage_range(
+                        earliest,
+                        latest,
+                        question.resolution_date,
+                        question.estimated_start_time,
+                        timeline_data["span_days"],
+                        item_type="Article",
+                    )
+                )
 
             sections.append("")
 
             # Monthly bar chart
-            sections.extend(render_monthly_bar_chart(
-                timeline_data.get('monthly', {}),
-                item_type="Articles"
-            ))
+            sections.extend(
+                render_monthly_bar_chart(
+                    timeline_data.get("monthly", {}), item_type="Articles"
+                )
+            )
 
         # Gaps section
         if gaps:
-            sections.extend(format_timeline_gaps(
-                gaps,
-                min_gap_label=">7 days",
-                max_display=5,
-                compact=False
-            ))
-        
+            sections.extend(
+                format_timeline_gaps(
+                    gaps, min_gap_label=">7 days", max_display=5, compact=False
+                )
+            )
+
         # Source diversity
         sections.extend(format_section_header("SOURCE DIVERSITY"))
         sections.append(f"  Unique Sources:  {source_data['unique_sources']}")
         sections.append(f"  Unique Domains:  {source_data['unique_domains']}")
         sections.append("")
         sections.append("  Top Sources:")
-        for source, count in source_data['top_sources']:
+        for source, count in source_data["top_sources"]:
             sections.append(f"    • {source}: {count} articles")
         sections.append("")
-        
+
         # Coverage quality
         sections.extend(format_section_header("COVERAGE QUALITY"))
         sections.append(f"  Quality Score:  {quality['score']:.2f}/1.00")
-        sections.append(f"  Volume:         {quality['volume_score']:.2f} ({len(articles)} articles)")
-        sections.append(f"  Diversity:      {quality['diversity_score']:.2f} ({source_data['unique_sources']} sources)")
-        sections.append(f"  Coverage:       {quality['coverage_score']:.2f} (gaps: {len(gaps)})")
+        sections.append(
+            f"  Volume:         {quality['volume_score']:.2f} ({len(articles)} articles)"
+        )
+        sections.append(
+            f"  Diversity:      {quality['diversity_score']:.2f} ({source_data['unique_sources']} sources)"
+        )
+        sections.append(
+            f"  Coverage:       {quality['coverage_score']:.2f} (gaps: {len(gaps)})"
+        )
         if timeline_data.get("has_dates"):
-            sections.append(f"  Distribution:   {quality['distribution_score']:.2f} (evenness)")
-            sections.append(f"  Gap Severity:   {quality['gap_severity']:.2f} (penalty)")
+            sections.append(
+                f"  Distribution:   {quality['distribution_score']:.2f} (evenness)"
+            )
+            sections.append(
+                f"  Gap Severity:   {quality['gap_severity']:.2f} (penalty)"
+            )
         sections.append("")
 
         # Recommendation

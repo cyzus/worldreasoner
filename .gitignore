@@ -226,4 +226,5 @@ logs/
 
 # Agents
 .claude
-.vscode
+.vscode*.db-shm
+*.db-wal

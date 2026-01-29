@@ -14,6 +14,7 @@ export const useGraphStore = create(
       maxEdges: 5000,
       minEdgeWeight: 0,
     },
+    includeOutcomes: false, // Show outcome impact edges
     timeFilter: null, // { start: Date, end: Date }
     loading: false,
     error: null,
@@ -27,6 +28,7 @@ export const useGraphStore = create(
     }),
     clearSelectedNode: () => set({ selectedNode: null }),
     setFilters: (filters) => set({ filters }),
+    setIncludeOutcomes: (includeOutcomes) => set({ includeOutcomes }),
     setTimeFilter: (timeFilter) => set({ timeFilter }),
     setLoading: (loading) => set({ loading }),
     setError: (error) => set({ error }),

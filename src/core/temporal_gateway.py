@@ -4,8 +4,8 @@ This module ensures temporal validity in forecasting by restricting access to
 information published or occurred before a specified cutoff date.
 """
 
-from datetime import datetime, timezone
-from typing import List, Optional, Dict, Any, TYPE_CHECKING
+from datetime import datetime
+from typing import List, Optional, TYPE_CHECKING
 from dataclasses import dataclass
 
 from ..utils.logging import logger
@@ -60,10 +60,14 @@ class TemporalGateway:
             ValueError: If cutoff_date is not timezone-aware
         """
         if cutoff_date.tzinfo is None:
-            raise ValueError("cutoff_date must be timezone-aware (use datetime.now(timezone.utc))")
+            raise ValueError(
+                "cutoff_date must be timezone-aware (use datetime.now(timezone.utc))"
+            )
 
         self.cutoff_date = cutoff_date
-        logger.debug(f"TemporalGateway initialized with cutoff: {cutoff_date.isoformat()}")
+        logger.debug(
+            f"TemporalGateway initialized with cutoff: {cutoff_date.isoformat()}"
+        )
 
     def filter_articles(self, articles: List["Article"]) -> List["Article"]:
         """Filter articles to only those published before cutoff.
@@ -81,9 +85,7 @@ class TemporalGateway:
 
         # Delegate to TemporalFilterService
         filtered = TemporalFilterService.filter_by_cutoff(
-            articles,
-            self.cutoff_date,
-            date_field="published_date"
+            articles, self.cutoff_date, date_field="published_date"
         )
 
         # Log filtered count for debugging
@@ -117,9 +119,7 @@ class TemporalGateway:
 
         # Delegate to TemporalFilterService
         filtered = TemporalFilterService.filter_by_cutoff(
-            events,
-            self.cutoff_date,
-            date_field="occurred_date"
+            events, self.cutoff_date, date_field="occurred_date"
         )
 
         # Log filtered counts
@@ -131,7 +131,6 @@ class TemporalGateway:
             )
 
         return filtered
-
 
     def is_article_accessible(self, article: "Article") -> bool:
         """Check if a single article is accessible.
@@ -150,9 +149,7 @@ class TemporalGateway:
 
         # Use TemporalFilterService for single-item check
         result = TemporalFilterService.filter_by_cutoff(
-            [article],
-            self.cutoff_date,
-            date_field="published_date"
+            [article], self.cutoff_date, date_field="published_date"
         )
 
         return len(result) > 0
@@ -175,18 +172,13 @@ class TemporalGateway:
 
         # Use TemporalFilterService for single-item check
         result = TemporalFilterService.filter_by_cutoff(
-            [event],
-            self.cutoff_date,
-            date_field="occurred_date"
+            [event], self.cutoff_date, date_field="occurred_date"
         )
 
         return len(result) > 0
 
     def validate_forecast(
-        self,
-        forecast: "Forecast",
-        question: "Question",
-        db = None
+        self, forecast: "Forecast", question: "Question", db=None
     ) -> ValidationResult:
         """Validate that a forecast respects temporal constraints.
 
@@ -209,7 +201,9 @@ class TemporalGateway:
 
         # Check cutoff_date exists
         if question.cutoff_date is None:
-            result.add_warning("Question has no cutoff_date - using creation date as fallback")
+            result.add_warning(
+                "Question has no cutoff_date - using creation date as fallback"
+            )
             cutoff = question.created_at
         else:
             cutoff = question.cutoff_date
@@ -239,7 +233,6 @@ class TemporalGateway:
 
         # Check identified events if database provided
         if db is not None and forecast.identified_events:
-            from .database import GenericDatabase
 
             for event_id in forecast.identified_events:
                 event = db.get(Event, event_id)
@@ -248,7 +241,9 @@ class TemporalGateway:
                     result.add_warning(f"Event {event_id} not found in database")
                     continue
 
-                if event.occurred_date is not None and not self.is_event_accessible(event):
+                if event.occurred_date is not None and not self.is_event_accessible(
+                    event
+                ):
                     result.add_error(
                         f"Identified event {event_id} occurred after cutoff "
                         f"({event.occurred_date.isoformat()} > {cutoff.isoformat()})"
@@ -263,11 +258,7 @@ class TemporalGateway:
 
         return result
 
-    def get_accessible_article_ids(
-        self,
-        all_article_ids: List[str],
-        db
-    ) -> List[str]:
+    def get_accessible_article_ids(self, all_article_ids: List[str], db) -> List[str]:
         """Get list of article IDs that are accessible.
 
         Args:
@@ -277,7 +268,6 @@ class TemporalGateway:
         Returns:
             List of article IDs that pass temporal check
         """
-        from .database import GenericDatabase
 
         accessible = []
 
@@ -288,11 +278,7 @@ class TemporalGateway:
 
         return accessible
 
-    def get_accessible_event_ids(
-        self,
-        all_event_ids: List[str],
-        db
-    ) -> List[str]:
+    def get_accessible_event_ids(self, all_event_ids: List[str], db) -> List[str]:
         """Get list of event IDs that are accessible.
 
         Args:
@@ -302,7 +288,6 @@ class TemporalGateway:
         Returns:
             List of event IDs that pass temporal check
         """
-        from .database import GenericDatabase
 
         accessible = []
 
@@ -341,7 +326,9 @@ class TemporalContext:
         """Enter context - set cutoff date."""
         self._previous_cutoff = TemporalContext._cutoff_date
         TemporalContext._cutoff_date = self.cutoff_date
-        logger.debug(f"Entered TemporalContext with cutoff: {self.cutoff_date.isoformat()}")
+        logger.debug(
+            f"Entered TemporalContext with cutoff: {self.cutoff_date.isoformat()}"
+        )
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

@@ -13,8 +13,6 @@ Usage:
     wr db list questions --domain politics
 """
 
-from typing import Optional
-from pathlib import Path
 import typer
 from rich.console import Console
 
@@ -84,7 +82,9 @@ def main(
         if verbose:
             console.print(f"[dim]Initialized database; ensured {tables} tables[/dim]")
     except Exception as e:
-        console.print(f"[yellow]Warning:[/yellow] Failed to initialize database tables: {e}")
+        console.print(
+            f"[yellow]Warning:[/yellow] Failed to initialize database tables: {e}"
+        )
 
 
 def cli():

@@ -5,17 +5,13 @@ Polymarket, news sources, and goal-oriented orchestration.
 """
 
 import asyncio
-from typing import Optional
 from pathlib import Path
 import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
-from rich.panel import Panel
 
 from src.config.collection_goal import CollectionGoal
-from src.core.database import GenericDatabase
-from src.domain.models import Question
 from src.utils.logging import logger
 
 app = typer.Typer(help="Question collection commands")
@@ -84,7 +80,9 @@ def goal(
     if not goal_path.exists():
         console.print(f"[red]Goal config not found: {goal_config}[/red]")
         console.print("\nCreate one from the example:")
-        console.print("  [cyan]cp config/collection_goal.example.yaml config/collection_goal.yaml[/cyan]")
+        console.print(
+            "  [cyan]cp config/collection_goal.example.yaml config/collection_goal.yaml[/cyan]"
+        )
         raise typer.Exit(1)
 
     # Load and display goal
@@ -123,16 +121,18 @@ def goal(
     console.print("\n[bold cyan]Starting collection orchestration...[/bold cyan]")
 
     try:
-        result = asyncio.run(_run_goal_collection_async(
-            goal_path=str(goal_path),
-            goal=goal,
-            db_path=db_path,
-            sources_config=sources_config,
-            enable_polymarket=not no_polymarket,
-            enable_news=not no_news,
-            parallel_sources=not sequential,
-            skip_indexing=skip_indexing,
-        ))
+        result = asyncio.run(
+            _run_goal_collection_async(
+                goal_path=str(goal_path),
+                goal=goal,
+                db_path=db_path,
+                sources_config=sources_config,
+                enable_polymarket=not no_polymarket,
+                enable_news=not no_news,
+                parallel_sources=not sequential,
+                skip_indexing=skip_indexing,
+            )
+        )
 
         # Display results
         _display_collection_results(result, goal)
@@ -157,7 +157,11 @@ async def _run_goal_collection_async(
     skip_indexing: bool,
 ):
     """Execute goal-oriented collection asynchronously using PipelineRunner."""
-    from src.cli.core.pipeline_runner import PipelineRunner, PipelineType, PipelineProgress
+    from src.cli.core.pipeline_runner import (
+        PipelineRunner,
+        PipelineType,
+        PipelineProgress,
+    )
 
     runner = PipelineRunner(db_path=db_path)
 
@@ -202,7 +206,9 @@ def _display_collection_results(result, goal: CollectionGoal):
 
     # Extract metadata from last processed item (contains collection metadata)
     metadata = result.processed[-1] if result.processed else {}
-    questions = result.processed[:-1] if result.processed else []  # All except last (metadata)
+    questions = (
+        result.processed[:-1] if result.processed else []
+    )  # All except last (metadata)
 
     # Summary
     goal_met = metadata.get("goal_met", False)
@@ -267,10 +273,12 @@ def _display_collection_results(result, goal: CollectionGoal):
     if questions:
         console.print("\n[bold]Sample Questions[/bold]")
         for i, q in enumerate(questions[:3], 1):
-            qtype = q.get("type", "").replace('QuestionType.', '')
-            domain = q.get("domain", "").replace('Domain.', '')
+            qtype = q.get("type", "").replace("QuestionType.", "")
+            domain = q.get("domain", "").replace("Domain.", "")
             console.print(f"\n{i}. {q.get('text', 'N/A')}")
-            console.print(f"   Type: {qtype} | Source: {q.get('source', 'N/A')} | Domain: {domain}")
+            console.print(
+                f"   Type: {qtype} | Source: {q.get('source', 'N/A')} | Domain: {domain}"
+            )
 
         if len(questions) > 3:
             console.print(f"\n   ... and {len(questions) - 3} more questions")

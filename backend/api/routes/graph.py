@@ -3,7 +3,7 @@
 Provides REST API for querying and visualizing the causal graph.
 """
 
-from typing import Optional, List
+from typing import Optional
 from datetime import datetime
 from fastapi import APIRouter, Query, HTTPException, Depends
 
@@ -26,24 +26,30 @@ async def get_graph(
     # Node filtering
     node_ids: Optional[str] = Query(None, description="Comma-separated node IDs"),
     node_types: Optional[str] = Query(None, description="Comma-separated node types"),
-    exclude_node_types: Optional[str] = Query(None, description="Node types to exclude"),
-
+    exclude_node_types: Optional[str] = Query(
+        None, description="Node types to exclude"
+    ),
     # Edge filtering
     edge_types: Optional[str] = Query(None, description="Comma-separated edge types"),
     min_edge_weight: Optional[float] = Query(None, ge=0.0, le=1.0),
-
     # Temporal filtering
     start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
-
     # Neighborhood query
-    center_node_id: Optional[str] = Query(None, description="Center node for neighborhood query"),
-    max_depth: Optional[int] = Query(None, ge=1, le=5, description="Max depth for neighborhood"),
-
+    center_node_id: Optional[str] = Query(
+        None, description="Center node for neighborhood query"
+    ),
+    max_depth: Optional[int] = Query(
+        None, ge=1, le=5, description="Max depth for neighborhood"
+    ),
+    # Outcome impact filtering
+    include_outcomes: bool = Query(False, description="Include outcome impact edges"),
+    outcome_question_id: Optional[str] = Query(
+        None, description="Filter outcomes to specific question"
+    ),
     # Limits
     max_nodes: Optional[int] = Query(100, ge=1, le=1000),
     max_edges: Optional[int] = Query(500, ge=1, le=5000),
-
     # Dependency injection
     graph_service: SQLiteGraphService = Depends(get_graph_service),
 ):
@@ -65,7 +71,9 @@ async def get_graph(
         # Parse comma-separated lists
         node_ids_list = node_ids.split(",") if node_ids else None
         node_types_list = node_types.split(",") if node_types else None
-        exclude_types_list = exclude_node_types.split(",") if exclude_node_types else None
+        exclude_types_list = (
+            exclude_node_types.split(",") if exclude_node_types else None
+        )
         edge_types_list = edge_types.split(",") if edge_types else None
 
         # Build query
@@ -79,6 +87,8 @@ async def get_graph(
             end_date=end_date,
             center_node_id=center_node_id,
             max_depth=max_depth,
+            include_outcomes=include_outcomes,
+            outcome_question_id=outcome_question_id,
             max_nodes=max_nodes,
             max_edges=max_edges,
         )
@@ -145,9 +155,7 @@ async def get_neighborhood(
     """
     try:
         graph_data = await graph_service.get_neighborhood(
-            node_id,
-            max_depth=max_depth,
-            direction=direction
+            node_id, max_depth=max_depth, direction=direction
         )
 
         logger.info(
@@ -181,14 +189,10 @@ async def find_paths(
     """
     try:
         paths = await graph_service.find_paths(
-            source_id,
-            target_id,
-            max_depth=max_depth
+            source_id, target_id, max_depth=max_depth
         )
 
-        logger.info(
-            f"Found {len(paths)} paths from {source_id} to {target_id}"
-        )
+        logger.info(f"Found {len(paths)} paths from {source_id} to {target_id}")
 
         return {"paths": paths, "count": len(paths)}
 

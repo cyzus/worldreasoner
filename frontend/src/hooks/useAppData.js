@@ -15,6 +15,7 @@ export const useAppData = () => {
     const setError = useGraphStore(state => state.setError)
     const filters = useGraphStore(state => state.filters)
     const setFilters = useGraphStore(state => state.setFilters)
+    const includeOutcomes = useGraphStore(state => state.includeOutcomes)
 
     // Question store
     const setSelectedNode = useGraphStore(state => state.setSelectedNode)
@@ -40,7 +41,12 @@ export const useAppData = () => {
         setError(null)
 
         try {
-            const data = await fetchGraph(queryParams)
+            // Include outcomes parameter in the request
+            const params = {
+                ...queryParams,
+                includeOutcomes: includeOutcomes
+            }
+            const data = await fetchGraph(params)
             console.log('Received graph data:', data)
 
             // Convert to react-force-graph format
@@ -58,6 +64,7 @@ export const useAppData = () => {
                     source: edge.source_id,
                     target: edge.target_id,
                     type: edge.edge_type,
+                    edge_type: edge.edge_type, // Also set edge_type for impact edge detection
                     weight: edge.weight,
                     label: edge.label,
                     properties: edge.properties,
@@ -72,7 +79,7 @@ export const useAppData = () => {
             )
             const cleanNodes = graphFormatted.nodes.map(node => ({
                 ...node,
-                isOutcome: false
+                isOutcome: node.properties?.is_outcome || false
             }))
 
             const cleanGraphData = {
@@ -89,7 +96,7 @@ export const useAppData = () => {
         } finally {
             setLoading(false)
         }
-    }, [setFullGraphData, setGraphData, setLoading, setError])
+    }, [setFullGraphData, setGraphData, setLoading, setError, includeOutcomes])
 
     // Load statistics
     const loadStatistics = useCallback(async () => {

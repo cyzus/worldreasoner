@@ -6,16 +6,15 @@ to analyze article collections.
 
 from typing import List, Dict, Optional, Tuple
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from src.domain.models import Article
-from src.utils.date_utils import ensure_timezone_aware
 
 
 def get_evidence_window(
     resolution_date: datetime,
     estimated_start_time: Optional[datetime] = None,
-    fallback_window_days: int = 365
+    fallback_window_days: int = 365,
 ) -> Tuple[Optional[datetime], datetime]:
     """Calculate the evidence collection time window for a question.
 
@@ -31,19 +30,18 @@ def get_evidence_window(
         Tuple of (window_start, window_end)
     """
     import warnings
+
     warnings.warn(
         "get_evidence_window is deprecated. Use TemporalFilterService.get_evidence_window",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
     # Delegate to new service
     from src.core.temporal_filter_service import TemporalFilterService
 
     return TemporalFilterService.get_evidence_window(
-        resolution_date,
-        estimated_start_time,
-        fallback_window_days
+        resolution_date, estimated_start_time, fallback_window_days
     )
 
 
@@ -51,7 +49,7 @@ def filter_articles_by_time_window(
     articles: List[Article],
     resolution_date: datetime,
     estimated_start_time: Optional[datetime] = None,
-    fallback_window_days: int = 365
+    fallback_window_days: int = 365,
 ) -> List[Article]:
     """Filter articles to valid time window for a question.
 
@@ -72,27 +70,24 @@ def filter_articles_by_time_window(
         List of articles within the valid time window
     """
     import warnings
+
     warnings.warn(
         "filter_articles_by_time_window is deprecated. Use TemporalFilterService.filter_by_window",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
     # Delegate to new service
     from src.core.temporal_filter_service import TemporalFilterService
 
     window_start, window_end = TemporalFilterService.get_evidence_window(
-        resolution_date,
-        estimated_start_time,
-        fallback_window_days
+        resolution_date, estimated_start_time, fallback_window_days
     )
     return TemporalFilterService.filter_by_window(articles, window_start, window_end)
 
 
 def analyze_timeline(
-    articles: List[Article],
-    resolution_date: datetime,
-    coverage_start: datetime = None
+    articles: List[Article], resolution_date: datetime, coverage_start: datetime = None
 ) -> Dict:
     """Analyze temporal distribution of articles.
 
@@ -132,13 +127,15 @@ def analyze_timeline(
         month_key = date.strftime("%Y-%m")
         monthly[month_key] += 1
 
-    result.update({
-        "has_dates": True,
-        "earliest": earliest,
-        "span_days": span_days,
-        "monthly": dict(monthly),
-        "dates": dates
-    })
+    result.update(
+        {
+            "has_dates": True,
+            "earliest": earliest,
+            "span_days": span_days,
+            "monthly": dict(monthly),
+            "dates": dates,
+        }
+    )
 
     return result
 
@@ -169,7 +166,7 @@ def analyze_sources(articles: List[Article]) -> Dict:
         "unique_sources": len(sources),
         "unique_domains": len(domains),
         "source_counts": dict(sources),
-        "top_sources": sorted(sources.items(), key=lambda x: x[1], reverse=True)[:5]
+        "top_sources": sorted(sources.items(), key=lambda x: x[1], reverse=True)[:5],
     }
 
 
@@ -193,11 +190,7 @@ def identify_gaps(timeline_data: Dict, min_gap_days: int = 7) -> List[Dict]:
     for i in range(len(dates) - 1):
         gap_days = (dates[i + 1] - dates[i]).days
         if gap_days > min_gap_days:
-            gaps.append({
-                "start": dates[i],
-                "end": dates[i + 1],
-                "days": gap_days
-            })
+            gaps.append({"start": dates[i], "end": dates[i + 1], "days": gap_days})
 
     return gaps
 
@@ -257,7 +250,7 @@ def calculate_gap_severity(gaps: List[Dict], timeline_span_days: int) -> float:
 
     total_penalty = 0.0
     for gap in gaps:
-        gap_days = gap['days']
+        gap_days = gap["days"]
 
         # Absolute penalty: exponential scaling for larger gaps
         # 7-14 days: mild, 15-30 days: moderate, 30+ days: severe
@@ -280,9 +273,7 @@ def calculate_gap_severity(gaps: List[Dict], timeline_span_days: int) -> float:
 
 
 def calculate_early_gap_penalty(
-    earliest_article: datetime,
-    coverage_start: datetime,
-    timeline_span_days: int
+    earliest_article: datetime, coverage_start: datetime, timeline_span_days: int
 ) -> float:
     """Penalize missing coverage at start of window.
 
@@ -319,10 +310,10 @@ def calculate_distribution_score(timeline_data: Dict) -> float:
     Returns:
         Distribution score (0-1), where 1.0 is perfectly even distribution
     """
-    if not timeline_data.get('has_dates') or not timeline_data.get('monthly'):
+    if not timeline_data.get("has_dates") or not timeline_data.get("monthly"):
         return 0.0
 
-    monthly_counts = list(timeline_data['monthly'].values())
+    monthly_counts = list(timeline_data["monthly"].values())
     if len(monthly_counts) <= 1:
         return 0.5  # Only one month has articles
 
@@ -332,7 +323,7 @@ def calculate_distribution_score(timeline_data: Dict) -> float:
         return 0.0
 
     variance = sum((x - mean) ** 2 for x in monthly_counts) / len(monthly_counts)
-    std_dev = variance ** 0.5
+    std_dev = variance**0.5
     cv = std_dev / mean
 
     # Convert CV to score (0 = perfect uniformity, high CV = clustered)
@@ -345,7 +336,7 @@ def calculate_quality(
     timeline_data: Dict,
     source_data: Dict,
     gaps: List[Dict],
-    coverage_start: datetime = None
+    coverage_start: datetime = None,
 ) -> Dict:
     """Calculate overall coverage quality score.
 
@@ -372,13 +363,15 @@ def calculate_quality(
     volume_score = calculate_volume_score(len(articles))
 
     # Improved diversity score (stricter penalties for 1-3 sources)
-    diversity_score = calculate_diversity_score(source_data['unique_sources'])
+    diversity_score = calculate_diversity_score(source_data["unique_sources"])
 
     # Coverage score with gap severity and distribution
     if timeline_data.get("has_dates"):
         # Use expected span (coverage_start to resolution) if available,
         # otherwise fall back to article span (earliest to resolution)
-        timeline_span = timeline_data.get('expected_span_days', timeline_data['span_days'])
+        timeline_span = timeline_data.get(
+            "expected_span_days", timeline_data["span_days"]
+        )
 
         # Gap severity penalty (considers both absolute and relative gap sizes)
         # Now calculated relative to the EXPECTED coverage window, not just article span
@@ -386,11 +379,9 @@ def calculate_quality(
 
         # Early coverage gap penalty
         early_gap_penalty = 0.0
-        if coverage_start and timeline_data.get('earliest'):
+        if coverage_start and timeline_data.get("earliest"):
             early_gap_penalty = calculate_early_gap_penalty(
-                timeline_data['earliest'],
-                coverage_start,
-                timeline_span
+                timeline_data["earliest"], coverage_start, timeline_span
             )
 
         # Distribution score (how evenly articles are spread)
@@ -406,7 +397,7 @@ def calculate_quality(
         gap_severity = 0.0
 
     # Overall quality - adjusted weights (Volume: 35%, Diversity: 25%, Coverage: 40%)
-    overall = (volume_score * 0.35 + diversity_score * 0.25 + coverage_score * 0.40)
+    overall = volume_score * 0.35 + diversity_score * 0.25 + coverage_score * 0.40
 
     return {
         "score": overall,
@@ -414,15 +405,12 @@ def calculate_quality(
         "diversity_score": diversity_score,
         "coverage_score": coverage_score,
         "distribution_score": distribution_score,
-        "gap_severity": gap_severity
+        "gap_severity": gap_severity,
     }
 
 
 def get_recommendation(
-    quality: Dict,
-    gaps: List[Dict],
-    source_data: Dict,
-    timeline_data: Dict
+    quality: Dict, gaps: List[Dict], source_data: Dict, timeline_data: Dict
 ) -> str:
     """Generate actionable recommendation based on coverage analysis.
 
@@ -435,23 +423,31 @@ def get_recommendation(
     Returns:
         Human-readable recommendation string
     """
-    if quality['score'] >= 0.8:
+    if quality["score"] >= 0.8:
         return "✓ Excellent coverage! You have sufficient diverse articles with good timeline coverage."
 
     issues = []
 
-    if quality['volume_score'] < 0.5:
+    if quality["volume_score"] < 0.5:
         issues.append("Need more articles (aim for 5-10)")
 
-    if quality['diversity_score'] < 0.6:
-        issues.append(f"Low source diversity (only {source_data['unique_sources']} sources)")
+    if quality["diversity_score"] < 0.6:
+        issues.append(
+            f"Low source diversity (only {source_data['unique_sources']} sources)"
+        )
 
     if gaps:
-        top_gap = max(gaps, key=lambda g: g['days'])
-        issues.append(f"Large time gap: {top_gap['start'].strftime('%Y-%m-%d')} to {top_gap['end'].strftime('%Y-%m-%d')}")
+        top_gap = max(gaps, key=lambda g: g["days"])
+        issues.append(
+            f"Large time gap: {top_gap['start'].strftime('%Y-%m-%d')} to {top_gap['end'].strftime('%Y-%m-%d')}"
+        )
 
     if issues:
-        return "⚠ " + " | ".join(issues) + "\n  → Search for more articles to fill gaps and increase diversity"
+        return (
+            "⚠ "
+            + " | ".join(issues)
+            + "\n  → Search for more articles to fill gaps and increase diversity"
+        )
 
     return "Good coverage, but could be improved with a few more diverse sources."
 
@@ -472,17 +468,10 @@ def calculate_simple_quality(articles: List[Article]) -> Dict:
         - unique_sources: Number of unique sources
     """
     if not articles:
-        return {
-            "score": 0.0,
-            "article_count": 0,
-            "unique_sources": 0
-        }
+        return {"score": 0.0, "article_count": 0, "unique_sources": 0}
 
     article_count = len(articles)
-    sources = {
-        getattr(article, "source", "unknown")
-        for article in articles
-    }
+    sources = {getattr(article, "source", "unknown") for article in articles}
     unique_sources = len(sources)
 
     # Simple quality score based on count and source diversity
@@ -492,22 +481,19 @@ def calculate_simple_quality(articles: List[Article]) -> Dict:
     source_diversity_factor = min(unique_sources / 10.0, 1.0)
 
     # Weighted combination (60% coverage, 40% diversity)
-    quality_score = max(0.0, min(
-        (coverage_factor * 0.6) + (source_diversity_factor * 0.4),
-        1.0
-    ))
+    quality_score = max(
+        0.0, min((coverage_factor * 0.6) + (source_diversity_factor * 0.4), 1.0)
+    )
 
     return {
         "score": quality_score,
         "article_count": article_count,
-        "unique_sources": unique_sources
+        "unique_sources": unique_sources,
     }
 
 
 def analyze_article_coverage(
-    articles: List[Article],
-    resolution_date: datetime,
-    coverage_start: datetime = None
+    articles: List[Article], resolution_date: datetime, coverage_start: datetime = None
 ) -> Dict:
     """Perform complete article coverage analysis.
 
@@ -522,10 +508,14 @@ def analyze_article_coverage(
     Returns:
         Complete analysis including timeline, sources, gaps, quality, and recommendations
     """
-    timeline_data = analyze_timeline(articles, resolution_date, coverage_start=coverage_start)
+    timeline_data = analyze_timeline(
+        articles, resolution_date, coverage_start=coverage_start
+    )
     source_data = analyze_sources(articles)
     gaps = identify_gaps(timeline_data)
-    quality = calculate_quality(articles, timeline_data, source_data, gaps, coverage_start)
+    quality = calculate_quality(
+        articles, timeline_data, source_data, gaps, coverage_start
+    )
     recommendation = get_recommendation(quality, gaps, source_data, timeline_data)
 
     return {
@@ -534,5 +524,5 @@ def analyze_article_coverage(
         "sources": source_data,
         "gaps": gaps,
         "quality": quality,
-        "recommendation": recommendation
+        "recommendation": recommendation,
     }

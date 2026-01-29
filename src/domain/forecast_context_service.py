@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Optional
 
-from src.core.database import GenericDatabase
 from src.domain.models import Question
 from src.domain.service_base import ServiceBase
 from src.utils.date_utils import parse_flexible_datetime
@@ -29,6 +28,7 @@ class ForecastContext:
         db_path: Optional database path for per-request DB switching
         question: Cached Question object (loaded on first access)
     """
+
     question_id: str
     simulated_date: datetime
     knowledge_cutoff: Optional[datetime]
@@ -70,13 +70,17 @@ class ForecastContextService(ServiceBase):
             ValueError: If required headers are missing or invalid
         """
         # Extract headers (case-insensitive)
-        question_id = headers.get('x-question-id') or headers.get('X-Question-ID')
-        simulated_date_str = headers.get('x-simulated-date') or headers.get('X-Simulated-Date')
-        knowledge_cutoff_str = headers.get('x-knowledge-cutoff') or headers.get('X-Knowledge-Cutoff')
-        session_id = headers.get('x-session-id') or headers.get('X-Session-ID')
-        model_name = headers.get('x-model-name') or headers.get('X-Model-Name')
-        forecast_mode = headers.get('x-forecast-mode') or headers.get('X-Forecast-Mode')
-        db_path = headers.get('x-database-path') or headers.get('X-Database-Path')
+        question_id = headers.get("x-question-id") or headers.get("X-Question-ID")
+        simulated_date_str = headers.get("x-simulated-date") or headers.get(
+            "X-Simulated-Date"
+        )
+        knowledge_cutoff_str = headers.get("x-knowledge-cutoff") or headers.get(
+            "X-Knowledge-Cutoff"
+        )
+        session_id = headers.get("x-session-id") or headers.get("X-Session-ID")
+        model_name = headers.get("x-model-name") or headers.get("X-Model-Name")
+        forecast_mode = headers.get("x-forecast-mode") or headers.get("X-Forecast-Mode")
+        db_path = headers.get("x-database-path") or headers.get("X-Database-Path")
 
         # Validate required fields
         if not question_id:
@@ -94,7 +98,11 @@ class ForecastContextService(ServiceBase):
 
         # Parse dates
         simulated_date = parse_flexible_datetime(simulated_date_str)
-        knowledge_cutoff = parse_flexible_datetime(knowledge_cutoff_str) if knowledge_cutoff_str else None
+        knowledge_cutoff = (
+            parse_flexible_datetime(knowledge_cutoff_str)
+            if knowledge_cutoff_str
+            else None
+        )
 
         # Generate session ID if not provided
         if not session_id:
@@ -109,7 +117,7 @@ class ForecastContextService(ServiceBase):
             model_name=model_name or "unknown",
             forecast_mode=forecast_mode or "container",
             db_path=db_path,
-            question=None  # Loaded on demand
+            question=None,  # Loaded on demand
         )
 
     def validate_context(self, context: ForecastContext) -> None:
@@ -126,7 +134,10 @@ class ForecastContextService(ServiceBase):
             ValueError: If context is invalid
         """
         # Validate knowledge cutoff < simulated date if provided
-        if context.knowledge_cutoff and context.knowledge_cutoff >= context.simulated_date:
+        if (
+            context.knowledge_cutoff
+            and context.knowledge_cutoff >= context.simulated_date
+        ):
             logger.error(
                 f"Invalid dates: knowledge_cutoff {context.knowledge_cutoff.date()} "
                 f"must be before simulated_date {context.simulated_date.date()}"

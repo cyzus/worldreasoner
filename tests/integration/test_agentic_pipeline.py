@@ -3,7 +3,10 @@
 import asyncio
 from datetime import datetime, timedelta
 from src.pipelines.question.sources.news import NewsBasedRunner
-from src.pipelines.stages.article_collection import ArticleSource, ArticleCollectionConfig
+from src.pipelines.stages.article_collection import (
+    ArticleSource,
+    ArticleCollectionConfig,
+)
 from src.config.pipeline import QuestionPipelineConfig
 from src.config import get_config, reset_config
 
@@ -27,14 +30,14 @@ async def test_agentic_pipeline():
             name="climate change",
             url="https://news.google.com",
             scraper_type="web",
-            domain="climate"
+            domain="climate",
         ),
         ArticleSource(
             name="artificial intelligence",
             url="https://news.google.com",
             scraper_type="web",
-            domain="tech"
-        )
+            domain="tech",
+        ),
     ]
 
     article_config = ArticleCollectionConfig(
@@ -42,16 +45,14 @@ async def test_agentic_pipeline():
         start_date=datetime.now() - timedelta(days=7),
         end_date=datetime.now(),
         max_articles_per_source=3,
-        domains=["technology", "environment"]
+        domains=["technology", "environment"],
     )
-
-
 
     # Configure question generation
     question_config = QuestionPipelineConfig(
         domains=["technology", "environment"],
         max_questions=5,
-        difficulty_levels=[2, 3, 4]
+        difficulty_levels=[2, 3, 4],
     )
 
     print(f"   - Article sources: {len(article_sources)}")
@@ -63,7 +64,7 @@ async def test_agentic_pipeline():
     runner = NewsBasedRunner(
         article_config=article_config,
         question_config=question_config,
-        db_path=config.database.db_path
+        db_path=config.database.db_path,
     )
 
     print("   [OK] Runner created with:")
@@ -82,10 +83,14 @@ async def test_agentic_pipeline():
         questions = result.questions
 
         print("-" * 80)
-        print(f"\n4. Collection completed successfully!")
+        print("\n4. Collection completed successfully!")
         print(f"   [OK] Generated {len(questions)} forecast questions")
-        print(f"   [OK] Articles collected: {result.metadata.get('articles_collected', 0)}")
-        print(f"   [OK] Events identified: {result.metadata.get('events_identified', 0)}")
+        print(
+            f"   [OK] Articles collected: {result.metadata.get('articles_collected', 0)}"
+        )
+        print(
+            f"   [OK] Events identified: {result.metadata.get('events_identified', 0)}"
+        )
 
         # Display results
         print("\n5. Results:")
@@ -109,13 +114,14 @@ async def test_agentic_pipeline():
 
     except Exception as e:
         print("-" * 80)
-        print(f"\n[ERROR] Collection failed with error:")
+        print("\n[ERROR] Collection failed with error:")
         print(f"   {type(e).__name__}: {e}")
         print("\n" + "=" * 80)
         print("[FAIL] NewsBasedRunner Test FAILED")
         print("=" * 80)
 
         import traceback
+
         traceback.print_exc()
 
         return False

@@ -8,30 +8,21 @@ from src.utils.logging import logger
 
 def main():
     """Start the WorldReasoner API server."""
-    parser = argparse.ArgumentParser(
-        description="WorldReasoner API Server"
+    parser = argparse.ArgumentParser(description="WorldReasoner API Server")
+    parser.add_argument(
+        "--host", default="127.0.0.1", help="Host to bind to (default: 127.0.0.1)"
     )
     parser.add_argument(
-        "--host",
-        default="127.0.0.1",
-        help="Host to bind to (default: 127.0.0.1)"
+        "--port", type=int, default=8018, help="Port to bind to (default: 8018)"
     )
     parser.add_argument(
-        "--port",
-        type=int,
-        default=8018,
-        help="Port to bind to (default: 8018)"
-    )
-    parser.add_argument(
-        "--reload",
-        action="store_true",
-        help="Enable auto-reload for development"
+        "--reload", action="store_true", help="Enable auto-reload for development"
     )
     parser.add_argument(
         "--log-level",
         default="info",
         choices=["debug", "info", "warning", "error"],
-        help="Logging level (default: info)"
+        help="Logging level (default: info)",
     )
 
     args = parser.parse_args()

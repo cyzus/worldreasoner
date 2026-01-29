@@ -19,10 +19,10 @@ def main():
         description="Create forecasts table in WorldReasoner database"
     )
     parser.add_argument(
-        '--db',
+        "--db",
         type=str,
-        default='worldreasoner.db',
-        help='Path to database file (default: worldreasoner.db)'
+        default="worldreasoner.db",
+        help="Path to database file (default: worldreasoner.db)",
     )
     args = parser.parse_args()
 

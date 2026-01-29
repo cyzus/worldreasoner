@@ -8,7 +8,11 @@ import asyncio
 from typing import List, Optional
 import typer
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+)
 from rich.panel import Panel
 from rich.table import Table
 
@@ -155,21 +159,23 @@ def run(
 
     try:
         # Use PipelineRunner to execute the forecast
-        result = asyncio.run(_run_forecast_async(
-            [question],
-            db_path,
-            model,
-            mode,
-            enable_causal_tools,
-            offset_days,
-        ))
-        
+        result = asyncio.run(
+            _run_forecast_async(
+                [question],
+                db_path,
+                model,
+                mode,
+                enable_causal_tools,
+                offset_days,
+            )
+        )
+
         # Display result
         _display_forecast_result(result, question)
-        
+
         if result.failure_count > 0:
             raise typer.Exit(1)
-            
+
     except Exception as e:
         logger.error(f"Forecast failed: {e}")
         console.print(f"\n[red]Forecast failed: {e}[/red]")
@@ -236,7 +242,9 @@ def _display_forecast_result(result, question: Question):
         console.print(panel)
     elif result.failed:
         item = result.failed[0]
-        console.print(f"[red]Forecast failed: {item.get('error', 'Unknown error')}[/red]")
+        console.print(
+            f"[red]Forecast failed: {item.get('error', 'Unknown error')}[/red]"
+        )
 
 
 @app.command()
@@ -324,7 +332,9 @@ def batch(
             raise typer.Exit(0)
 
     # Confirm before running
-    console.print(f"\n[bold]Will forecast on {len(questions_to_process)} question(s)[/bold]")
+    console.print(
+        f"\n[bold]Will forecast on {len(questions_to_process)} question(s)[/bold]"
+    )
     console.print(f"  Model: {model or 'default'}")
     console.print(f"  Mode: {mode}")
     console.print(f"  Causal tools: {'enabled' if enable_causal_tools else 'disabled'}")
@@ -336,20 +346,22 @@ def batch(
     console.print("\n[bold cyan]Running batch forecasts...[/bold cyan]")
 
     try:
-        result = asyncio.run(_run_forecast_async(
-            questions_to_process,
-            db_path,
-            model,
-            mode,
-            enable_causal_tools,
-        ))
-        
+        result = asyncio.run(
+            _run_forecast_async(
+                questions_to_process,
+                db_path,
+                model,
+                mode,
+                enable_causal_tools,
+            )
+        )
+
         # Display results
         _display_batch_forecast_results(result)
-        
+
         if result.failure_count > 0:
             raise typer.Exit(1)
-            
+
     except Exception as e:
         logger.error(f"Batch forecast failed: {e}")
         console.print(f"\n[red]Batch forecast failed: {e}[/red]")
@@ -358,7 +370,7 @@ def batch(
 
 def _display_batch_forecast_results(result):
     """Display formatted batch forecast results."""
-    console.print(f"\n[bold]Forecast Results:[/bold]")
+    console.print("\n[bold]Forecast Results:[/bold]")
     console.print(f"  Duration: {result.duration_seconds:.1f}s")
     console.print(f"  [green]Succeeded: {result.success_count}[/green]")
     console.print(f"  [yellow]Skipped: {result.skip_count}[/yellow]")

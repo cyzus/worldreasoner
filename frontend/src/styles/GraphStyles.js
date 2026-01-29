@@ -27,6 +27,11 @@ export const GraphStyles = {
         correlates_with: '#8b5cf6', // Purple (correlation)
         correlates: '#8b5cf6',      // Alias for correlates_with
         conditional: '#ec4899', // Pink (conditional)
+        // Outcome impact relations
+        impact_positive: '#22c55e', // Bright green - makes outcome more likely
+        impact_negative: '#ef4444', // Bright red - makes outcome less likely
+        impact_neutral: '#94a3b8',  // Slate gray - no clear directional impact
+        impact_mixed: '#a855f7',    // Purple - complex/contradictory effects
         default: '#94a3b8'      // Slate grey
     },
 

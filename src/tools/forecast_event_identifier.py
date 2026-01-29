@@ -6,11 +6,11 @@ ForecastEvent instances to the forecast database.
 
 import json
 from typing import Optional
-from datetime import datetime, timezone
+from datetime import datetime
 
 from smolagents import Tool
 from src.domain.models.forecast_graph import ForecastEvent
-from src.domain.models.event import Event, EventType, EventStatus
+from src.domain.models.event import Event, EventType
 from src.core.database import GenericDatabase
 from src.utils.logging import logger
 from src.utils.enums import parse_domain, parse_event_type, enum_to_list, Domain
@@ -45,39 +45,37 @@ class ForecastEventIdentifierTool(Tool):
     """
 
     inputs = {
-        "title": {
-            "type": "string",
-            "description": "Short event title"
-        },
-        "description": {
-            "type": "string",
-            "description": "Detailed event description"
-        },
+        "title": {"type": "string", "description": "Short event title"},
+        "description": {"type": "string", "description": "Detailed event description"},
         "domain": {
             "type": "string",
             "description": f"Event domain - one of: {', '.join(enum_to_list(Domain))}",
-            "enum": enum_to_list(Domain)
+            "enum": enum_to_list(Domain),
         },
         "occurred_date": {
             "type": "string",
-            "description": "When event occurred (ISO 8601 WITH timezone, e.g. 2025-11-27T14:30:00Z)"
+            "description": "When event occurred (ISO 8601 WITH timezone, e.g. 2025-11-27T14:30:00Z)",
         },
         "event_type": {
             "type": "string",
             "description": f"Event type - one of: {', '.join(enum_to_list(EventType))}",
             "enum": enum_to_list(EventType),
-            "nullable": True
+            "nullable": True,
         },
         "source_article_ids": {
             "type": "string",
             "description": "Comma-separated article IDs",
-            "nullable": True
+            "nullable": True,
         },
     }
     output_type = "string"
 
-    def __init__(self, question_db_path: str = "worldreasoner.db",
-                 forecast_db_path: str = None, session_id: str = None):
+    def __init__(
+        self,
+        question_db_path: str = "worldreasoner.db",
+        forecast_db_path: str = None,
+        session_id: str = None,
+    ):
         """Initialize the forecast event identifier.
 
         Args:
@@ -88,7 +86,6 @@ class ForecastEventIdentifierTool(Tool):
         super().__init__()
 
         # Initialize databases using simplified pattern
-        from src.core.database import GenericDatabase
 
         # Question DB for reading existing events
         self.question_db = GenericDatabase(question_db_path)
@@ -99,8 +96,15 @@ class ForecastEventIdentifierTool(Tool):
 
         self.session_id = session_id
 
-    def forward(self, title: str, description: str, domain: str, occurred_date: str,
-                event_type: Optional[str] = None, source_article_ids: Optional[str] = None) -> str:
+    def forward(
+        self,
+        title: str,
+        description: str,
+        domain: str,
+        occurred_date: str,
+        event_type: Optional[str] = None,
+        source_article_ids: Optional[str] = None,
+    ) -> str:
         """Identify event and save to forecast database.
 
         Args:
@@ -120,7 +124,11 @@ class ForecastEventIdentifierTool(Tool):
             occurred_date_obj = parse_iso_datetime(occurred_date)
             occurred_date_obj = ensure_timezone_aware(occurred_date_obj)
             event_type_enum = parse_event_type(event_type) if event_type else None
-            article_ids = [aid.strip() for aid in source_article_ids.split(',') if aid.strip()] if source_article_ids else []
+            article_ids = (
+                [aid.strip() for aid in source_article_ids.split(",") if aid.strip()]
+                if source_article_ids
+                else []
+            )
 
             # Check question DB for existing event
             existing = self._find_existing_event(title, occurred_date_obj, domain_enum)
@@ -136,15 +144,24 @@ class ForecastEventIdentifierTool(Tool):
                     occurred_date=existing.occurred_date,
                     event_type=existing.event_type,
                     source_article_ids=article_ids,
-                    identified_by="forecast_agent_reused"
+                    identified_by="forecast_agent_reused",
                 )
                 self.forecast_db.save(ForecastEvent, forecast_event)
                 logger.info(f"Reused existing event: {existing.id}")
-                return json.dumps({"status": "reused", "event": {
-                    "id": forecast_event.id,
-                    "title": forecast_event.title,
-                    "domain": forecast_event.domain.value if hasattr(forecast_event.domain, 'value') else forecast_event.domain
-                }}, indent=2, default=str)
+                return json.dumps(
+                    {
+                        "status": "reused",
+                        "event": {
+                            "id": forecast_event.id,
+                            "title": forecast_event.title,
+                            "domain": forecast_event.domain.value
+                            if hasattr(forecast_event.domain, "value")
+                            else forecast_event.domain,
+                        },
+                    },
+                    indent=2,
+                    default=str,
+                )
 
             # Create new ForecastEvent
             event_id = generate_forecast_event_id()
@@ -157,22 +174,33 @@ class ForecastEventIdentifierTool(Tool):
                 domain=domain_enum,
                 occurred_date=occurred_date_obj,
                 event_type=event_type_enum,
-                source_article_ids=article_ids
+                source_article_ids=article_ids,
             )
 
             self.forecast_db.save(ForecastEvent, forecast_event)
             logger.info(f"Saved forecast event: {event_id}")
-            return json.dumps({"status": "created", "event": {
-                "id": forecast_event.id,
-                "title": forecast_event.title,
-                "domain": forecast_event.domain.value if hasattr(forecast_event.domain, 'value') else forecast_event.domain
-            }}, indent=2, default=str)
+            return json.dumps(
+                {
+                    "status": "created",
+                    "event": {
+                        "id": forecast_event.id,
+                        "title": forecast_event.title,
+                        "domain": forecast_event.domain.value
+                        if hasattr(forecast_event.domain, "value")
+                        else forecast_event.domain,
+                    },
+                },
+                indent=2,
+                default=str,
+            )
 
         except Exception as e:
             logger.error(f"Error identifying forecast event: {e}")
             return json.dumps({"error": str(e)})
 
-    def _find_existing_event(self, title: str, occurred_date: datetime, domain) -> Optional[Event]:
+    def _find_existing_event(
+        self, title: str, occurred_date: datetime, domain
+    ) -> Optional[Event]:
         """Find existing event in question DB for deduplication.
 
         Args:
@@ -185,13 +213,20 @@ class ForecastEventIdentifierTool(Tool):
         """
         try:
             # Query question DB for events with matching characteristics
-            all_events = self.question_db.get_many(Event, filters={'domain': domain})
+            all_events = self.question_db.get_many(Event, filters={"domain": domain})
 
             # Simple fuzzy matching on title and date
             for event in all_events:
-                if event.occurred_date and abs((event.occurred_date - occurred_date).total_seconds()) < 86400:
+                if (
+                    event.occurred_date
+                    and abs((event.occurred_date - occurred_date).total_seconds())
+                    < 86400
+                ):
                     # Within 1 day
-                    if title.lower() in event.title.lower() or event.title.lower() in title.lower():
+                    if (
+                        title.lower() in event.title.lower()
+                        or event.title.lower() in title.lower()
+                    ):
                         return event
 
             return None

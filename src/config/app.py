@@ -6,15 +6,15 @@ from pydantic import BaseModel, Field
 
 class ServerConfig(BaseModel):
     """Server configuration for both FastAPI backend and MCP server."""
-    
+
     # Backend API server (FastAPI)
     host: str = Field(default="localhost", description="Backend API server host")
     port: int = Field(default=8018, description="Backend API server port")
-    
+
     # MCP forecasting server (used by agents)
     mcp_host: str = Field(default="localhost", description="MCP server host")
     mcp_port: int = Field(default=8110, description="MCP server port")
-    
+
     reload: bool = Field(default=False, description="Auto-reload on code changes")
     log_level: str = Field(default="info", description="Logging level")
 
@@ -23,24 +23,16 @@ class LLMConfig(BaseModel):
     """LLM configuration for agent interactions."""
 
     model: str = Field(
-        default="gemini/gemini-2.5-flash",
-        description="LiteLLM model identifier"
+        default="gemini/gemini-2.5-flash", description="LiteLLM model identifier"
     )
     embedding_model: str = Field(
         default="gemini/gemini-embedding-001",
-        description="LiteLLM embedding model identifier"
+        description="LiteLLM embedding model identifier",
     )
     temperature: float = Field(
-        default=1.0,
-        ge=0.0,
-        le=2.0,
-        description="Sampling temperature"
+        default=1.0, ge=0.0, le=2.0, description="Sampling temperature"
     )
     max_tokens: Optional[int] = Field(
-        default=None,
-        description="Maximum tokens to generate"
+        default=None, description="Maximum tokens to generate"
     )
-    timeout: int = Field(
-        default=60,
-        description="Request timeout in seconds"
-    )
+    timeout: int = Field(default=60, description="Request timeout in seconds")

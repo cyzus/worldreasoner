@@ -1,6 +1,5 @@
 """Causal reasoner tool - LLM proposes causal explanations with hindsight."""
 
-import json
 from datetime import datetime, timezone
 import uuid
 from typing import Optional
@@ -66,35 +65,32 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
     """
 
     inputs = {
-        "source_event_id": {
-            "type": "string",
-            "description": "Event ID of the cause"
-        },
+        "source_event_id": {"type": "string", "description": "Event ID of the cause"},
         "target_event_id": {
             "type": "string",
-            "description": "Event ID of the effect (can be intermediate or final outcome)"
+            "description": "Event ID of the effect (can be intermediate or final outcome)",
         },
         "relation_type": {
             "type": "string",
             "description": f"Type of relations: {', '.join(enum_to_list(CausalRelationType))}",
-            "enum": enum_to_list(CausalRelationType)
+            "enum": enum_to_list(CausalRelationType),
         },
         "strength": {
             "type": "number",
-            "description": "Causal strength 0.0-1.0 (how strong the effect)"
+            "description": "Causal strength 0.0-1.0 (how strong the effect)",
         },
         "confidence": {
             "type": "number",
-            "description": "Confidence 0.0-1.0 (how sure you are)"
+            "description": "Confidence 0.0-1.0 (how sure you are)",
         },
         "reasoning": {
             "type": "string",
-            "description": "Detailed explanation of the causal mechanism"
+            "description": "Detailed explanation of the causal mechanism",
         },
         "evidence_article_ids": {
             "type": "string",
             "description": "Comma-separated article IDs supporting this claim",
-            "nullable": True
+            "nullable": True,
         },
     }
     output_type = "string"  # JSON confirmation
@@ -120,6 +116,7 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
 
         # Initialize database using DatabaseAwareTool pattern
         from src.core.database import GenericDatabase
+
         self.db = GenericDatabase(db_path) if db_path else None
 
         # Ensure schema is initialized
@@ -163,7 +160,9 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
         # Parse evidence article IDs
         evidence_ids = []
         if evidence_article_ids:
-            evidence_ids = [aid.strip() for aid in evidence_article_ids.split(',') if aid.strip()]
+            evidence_ids = [
+                aid.strip() for aid in evidence_article_ids.split(",") if aid.strip()
+            ]
 
         # Clamp strength and confidence to [0, 1]
         strength = max(0.0, min(1.0, float(strength)))
@@ -175,7 +174,7 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
                 "Chronology validation failed: source event must occur before target event - also make sure you provide occurred_date for both events",
                 status="error",
                 source_event_id=source_event_id,
-                target_event_id=target_event_id
+                target_event_id=target_event_id,
             )
 
         # Generate unique hypothesis ID
@@ -210,6 +209,7 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
         if self.db is not None:
             self.db.save(CausalHypothesis, hypothesis)
             from src.utils.logging import logger
+
             logger.debug(f"Hypothesis {hypothesis_id} persisted to database")
 
         # Return confirmation (minimal to save tokens)
@@ -234,7 +234,7 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
             Unique hypothesis ID
         """
         self._counter += 1
-        timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         suffix = uuid.uuid4().hex[:8]
         return f"hyp_{question_id}_{timestamp}_{self._counter:03d}_{suffix}"
 
@@ -265,4 +265,3 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
 
         # Validate chronological order
         return source_event.occurred_date < target_event.occurred_date
-

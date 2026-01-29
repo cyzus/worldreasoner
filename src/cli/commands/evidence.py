@@ -8,8 +8,13 @@ import asyncio
 from typing import List, Optional
 import typer
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
-from rich.panel import Panel
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    BarColumn,
+    TimeElapsedColumn,
+)
 from rich.table import Table
 
 from src.core.database import GenericDatabase
@@ -164,13 +169,15 @@ def run(
             raise typer.Exit(0)
 
     # Confirm before running
-    console.print(f"\n[bold]Will process {len(questions_to_process)} question(s)[/bold]")
+    console.print(
+        f"\n[bold]Will process {len(questions_to_process)} question(s)[/bold]"
+    )
     if adaptive:
-        console.print(f"[bold cyan]Mode:[/bold cyan] Adaptive multi-agent pipeline")
+        console.print("[bold cyan]Mode:[/bold cyan] Adaptive multi-agent pipeline")
         console.print(f"  Max agent steps: {agent_max_steps}")
         console.print(f"  Min graph depth: {min_graph_depth}")
     else:
-        console.print(f"[bold cyan]Mode:[/bold cyan] Standard evidence pipeline")
+        console.print("[bold cyan]Mode:[/bold cyan] Standard evidence pipeline")
 
     if not typer.confirm("Continue?"):
         raise typer.Exit(0)
@@ -181,21 +188,23 @@ def run(
 
     try:
         # Use PipelineRunner to execute the pipeline
-        result = asyncio.run(_run_evidence_pipeline_async(
-            questions_to_process,
-            db_path,
-            force_reprocess,
-            adaptive,
-            agent_max_steps,
-            min_graph_depth,
-        ))
-        
+        result = asyncio.run(
+            _run_evidence_pipeline_async(
+                questions_to_process,
+                db_path,
+                force_reprocess,
+                adaptive,
+                agent_max_steps,
+                min_graph_depth,
+            )
+        )
+
         # Display results
         _display_pipeline_results(result)
-        
+
         if result.failure_count > 0:
             raise typer.Exit(1)
-            
+
     except Exception as e:
         logger.error(f"Evidence pipeline failed: {e}")
         console.print(f"\n[red]Evidence pipeline failed: {e}[/red]")
@@ -215,7 +224,9 @@ async def _run_evidence_pipeline_async(
     question_ids = [q.id for q in questions]
 
     # Select pipeline type based on adaptive flag
-    pipeline_type = PipelineType.ADAPTIVE_EVIDENCE if adaptive else PipelineType.EVIDENCE
+    pipeline_type = (
+        PipelineType.ADAPTIVE_EVIDENCE if adaptive else PipelineType.EVIDENCE
+    )
 
     # Create progress display
     with Progress(
@@ -243,10 +254,12 @@ async def _run_evidence_pipeline_async(
 
         if adaptive:
             # Adaptive pipeline parameters
-            pipeline_kwargs.update({
-                "agent_max_steps": agent_max_steps,
-                "min_graph_depth": min_graph_depth,
-            })
+            pipeline_kwargs.update(
+                {
+                    "agent_max_steps": agent_max_steps,
+                    "min_graph_depth": min_graph_depth,
+                }
+            )
         else:
             # Standard pipeline parameters
             pipeline_kwargs["force_reprocess"] = force_reprocess
@@ -263,7 +276,7 @@ async def _run_evidence_pipeline_async(
 
 def _display_pipeline_results(result):
     """Display formatted pipeline results."""
-    console.print(f"\n[bold]Pipeline Results:[/bold]")
+    console.print("\n[bold]Pipeline Results:[/bold]")
     console.print(f"  Duration: {result.duration_seconds:.1f}s")
     console.print(f"  [green]Succeeded: {result.success_count}[/green]")
     console.print(f"  [yellow]Skipped: {result.skip_count}[/yellow]")
@@ -344,21 +357,23 @@ def clear(
         raise typer.Exit(0)
 
     console.print("[cyan]Clearing evidence...[/cyan]\n")
-    
+
     total_stats = {
         "articles": 0,
         "events": 0,
         "hypotheses_delete": 0,
         "hypotheses_update": 0,
     }
-    
+
     failed = []
 
     for question_id in question_ids:
         result = manager.clear_evidence(question_id, cascade=cascade, dry_run=dry_run)
 
         if "error" in result:
-            console.print(f"[red]Error processing {question_id}: {result['error']}[/red]")
+            console.print(
+                f"[red]Error processing {question_id}: {result['error']}[/red]"
+            )
             failed.append({"id": question_id, "error": result["error"]})
             continue
 
@@ -369,7 +384,7 @@ def clear(
             console.print(f"  Events: {summary['events']}")
             console.print(f"  Hypotheses to delete: {summary['hypotheses_delete']}")
             console.print(f"  Hypotheses to update: {summary['hypotheses_update']}")
-            
+
             for key in total_stats:
                 total_stats[key] += summary.get(key, 0)
         else:
@@ -379,7 +394,7 @@ def clear(
             console.print(f"  Events: {summary['events']}")
             console.print(f"  Hypotheses deleted: {summary['hypotheses_delete']}")
             console.print(f"  Hypotheses updated: {summary['hypotheses_update']}")
-            
+
             for key in total_stats:
                 total_stats[key] += summary.get(key, 0)
 
@@ -388,13 +403,13 @@ def clear(
     console.print(f"  Events cleared: {total_stats['events']}")
     console.print(f"  Hypotheses deleted: {total_stats['hypotheses_delete']}")
     console.print(f"  Hypotheses updated: {total_stats['hypotheses_update']}")
-    
+
     if failed:
         console.print(f"\n[red]Failed to clear {len(failed)} question(s)[/red]")
         for item in failed:
             console.print(f"  {item['id']}: {item['error']}")
         raise typer.Exit(1)
-    
+
     if dry_run:
         console.print("\n[yellow]Dry run completed - no changes made[/yellow]")
     else:

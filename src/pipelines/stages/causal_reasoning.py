@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from src.pipelines.base import PipelineStage
 from src.domain.models import Question, Article, CausalHypothesis, Event
 from src.agents.factory import AgentFactory
-from src.tools import ArticleRetrievalTool, CausalReasonerTool, GraphInspectorTool
+from src.tools import ArticleRetrievalTool, CausalReasonerTool
 from src.core.collectors import ResultCollector
 from src.pipelines.prompts import HindsightAnalysisPrompts
 from src.utils.logging import logger
@@ -23,30 +23,27 @@ class CausalReasoningConfig(BaseModel):
         default=0.6,
         ge=0.0,
         le=1.0,
-        description="Minimum confidence to accept hypothesis"
+        description="Minimum confidence to accept hypothesis",
     )
     min_strength: float = Field(
-        default=0.3,
-        ge=0.0,
-        le=1.0,
-        description="Minimum causal strength"
+        default=0.3, ge=0.0, le=1.0, description="Minimum causal strength"
     )
     require_evidence: bool = Field(
-        default=True,
-        description="Must cite evidence articles"
+        default=True, description="Must cite evidence articles"
     )
     max_causal_depth: int = Field(
-        default=3,
-        description="Max depth of causal graph paths"
+        default=3, description="Max depth of causal graph paths"
     )
     max_related_events: int = Field(
         default=30,
         ge=1,
-        description="Maximum number of related events to provide as context"
+        description="Maximum number of related events to provide as context",
     )
 
 
-class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalHypothesis]):
+class CausalReasoningStage(
+    PipelineStage[Tuple[Question, List[Article]], CausalHypothesis]
+):
     """Identifies causal relationships using hindsight evidence.
 
     This stage:
@@ -57,9 +54,7 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
     """
 
     def __init__(
-        self,
-        config: CausalReasoningConfig,
-        db_path: str = "worldreasoner.db"
+        self, config: CausalReasoningConfig, db_path: str = "worldreasoner.db"
     ):
         """Initialize causal reasoning stage.
 
@@ -82,8 +77,7 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
         self.usage_tracker = UsageTracker()
 
     async def process(
-        self,
-        inputs: List[Tuple[Question, List[Article]]]
+        self, inputs: List[Tuple[Question, List[Article]]]
     ) -> List[CausalHypothesis]:
         """Identify causal relationships for question-evidence pairs.
 
@@ -106,21 +100,27 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
                 continue
 
             if not question.resolution_date or question.ground_truth is None:
-                logger.warning(f"Question {question.id} not properly resolved, skipping")
+                logger.warning(
+                    f"Question {question.id} not properly resolved, skipping"
+                )
                 continue
 
             # Analyze causal relationships
             try:
                 hypotheses = await self._analyze_causality(question, evidence_articles)
                 all_hypotheses.extend(hypotheses)
-                logger.info(f"Identified {len(hypotheses)} causal hypotheses for {question.id}")
+                logger.info(
+                    f"Identified {len(hypotheses)} causal hypotheses for {question.id}"
+                )
             except Exception as e:
                 logger.error(f"Failed to analyze {question.id}: {e}")
                 continue
 
         # Filter hypotheses by quality thresholds
         filtered = self._filter_hypotheses(all_hypotheses)
-        logger.info(f"Generated {len(all_hypotheses)} hypotheses, {len(filtered)} passed quality filters")
+        logger.info(
+            f"Generated {len(all_hypotheses)} hypotheses, {len(filtered)} passed quality filters"
+        )
 
         # Log usage summary for this stage
         if self.usage_tracker.total_calls > 0:
@@ -129,9 +129,7 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
         return filtered
 
     async def _analyze_causality(
-        self,
-        question: Question,
-        evidence_articles: List[Article]
+        self, question: Question, evidence_articles: List[Article]
     ) -> List[CausalHypothesis]:
         """Analyze causality for a single question with evidence.
 
@@ -145,9 +143,7 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
         # Create a per-analysis collector and agent to avoid cross-talk when running concurrently
         collector = ResultCollector[CausalHypothesis]()
         causal_tool = CausalReasonerTool(
-            collector=collector,
-            db_path=self.db.db_path,
-            question_id=question.id
+            collector=collector, db_path=self.db.db_path, question_id=question.id
         )
         agent = AgentFactory.create_base_agent(
             tools=[causal_tool, self.article_retrieval_tool], is_code=True
@@ -203,9 +199,7 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
         return validated_hypotheses
 
     def _validate_hypothesis(
-        self,
-        hypothesis: CausalHypothesis,
-        evidence_articles: List[Article]
+        self, hypothesis: CausalHypothesis, evidence_articles: List[Article]
     ) -> bool:
         """Validate a causal hypothesis.
 
@@ -219,7 +213,7 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
         # Check confidence and strength thresholds
         if not hypothesis.meets_thresholds(
             min_confidence=self.config.min_confidence,
-            min_strength=self.config.min_strength
+            min_strength=self.config.min_strength,
         ):
             logger.debug(
                 f"Hypothesis {hypothesis.id} below thresholds "
@@ -251,8 +245,7 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
         return True
 
     def _filter_hypotheses(
-        self,
-        hypotheses: List[CausalHypothesis]
+        self, hypotheses: List[CausalHypothesis]
     ) -> List[CausalHypothesis]:
         """Filter hypotheses by quality and deduplication.
 
@@ -270,7 +263,7 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
             key = (
                 hypothesis.source_event_id,
                 hypothesis.target_event_id,
-                hypothesis.relation_type
+                hypothesis.relation_type,
             )
 
             if key in seen:
@@ -285,7 +278,9 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
 
         return unique
 
-    def _load_related_events(self, question: Question, evidence_article_ids: List[str] = None) -> List[Event]:
+    def _load_related_events(
+        self, question: Question, evidence_article_ids: List[str] = None
+    ) -> List[Event]:
         """Load events that could be potential causal sources.
 
         Priority order:
@@ -311,7 +306,7 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
             if question.target_event_id:
                 explicit_event_ids.append(question.target_event_id)
             explicit_event_ids.extend(question.related_event_ids or [])
-            
+
             for event_id in explicit_event_ids:
                 event = self.db.get(Event, event_id)
                 if event:
@@ -320,37 +315,54 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
 
             # Priority 2 & 3: Events linked to this question via metadata or evidence articles
             all_events = self.db.get_many(Event, filters={})
-            
+
             for event in all_events:
                 # Skip if already added
                 if event.id in explicit_event_ids:
                     continue
 
                 # Check if event metadata references this question
-                if event.metadata and question.id in event.metadata.get('related_question_ids', []):
+                if event.metadata and question.id in event.metadata.get(
+                    "related_question_ids", []
+                ):
                     related_events.append(event)
                     logger.debug(f"Added question-linked event: {event.id}")
                     continue
 
                 # Check if event is linked to any of the evidence articles
                 event_article_ids = set(event.article_ids or [])
-                if evidence_article_ids_set and event_article_ids.intersection(evidence_article_ids_set):
+                if evidence_article_ids_set and event_article_ids.intersection(
+                    evidence_article_ids_set
+                ):
                     # Only include if event occurred before resolution
-                    if event.occurred_date and event.occurred_date < question.resolution_date:
+                    if (
+                        event.occurred_date
+                        and event.occurred_date < question.resolution_date
+                    ):
                         related_events.append(event)
                         logger.debug(f"Added evidence-linked event: {event.id}")
 
             # If we have no related events, fall back to same-domain (but still filter by evidence)
             if not related_events and question.domain:
-                logger.debug(f"No direct event links found, falling back to domain filter: {question.domain}")
-                domain_events = self.db.get_many(Event, filters={'domain': question.domain})
-                
+                logger.debug(
+                    f"No direct event links found, falling back to domain filter: {question.domain}"
+                )
+                domain_events = self.db.get_many(
+                    Event, filters={"domain": question.domain}
+                )
+
                 for event in domain_events:
                     # Only include if linked to evidence articles or occurred before resolution
                     event_article_ids = set(event.article_ids or [])
-                    has_evidence_link = bool(evidence_article_ids_set and event_article_ids.intersection(evidence_article_ids_set))
-                    
-                    if has_evidence_link or (event.occurred_date and event.occurred_date < question.resolution_date):
+                    has_evidence_link = bool(
+                        evidence_article_ids_set
+                        and event_article_ids.intersection(evidence_article_ids_set)
+                    )
+
+                    if has_evidence_link or (
+                        event.occurred_date
+                        and event.occurred_date < question.resolution_date
+                    ):
                         related_events.append(event)
 
             # Remove duplicates and sort by recency
@@ -361,10 +373,17 @@ class CausalReasoningStage(PipelineStage[Tuple[Question, List[Article]], CausalH
                     seen_ids.add(event.id)
                     unique_events.append(event)
 
-            unique_events.sort(key=lambda e: e.occurred_date or e.predicted_date or datetime.now(timezone.utc), reverse=True)
-            result = unique_events[:self.config.max_related_events]
-            
-            logger.info(f"Loaded {len(result)} related events for question {question.id}")
+            unique_events.sort(
+                key=lambda e: e.occurred_date
+                or e.predicted_date
+                or datetime.now(timezone.utc),
+                reverse=True,
+            )
+            result = unique_events[: self.config.max_related_events]
+
+            logger.info(
+                f"Loaded {len(result)} related events for question {question.id}"
+            )
             return result
 
         except Exception as e:

@@ -1,7 +1,6 @@
 """Causal graph building stage - validates and saves hypotheses to graph."""
 
-from typing import List, Optional
-from datetime import datetime, timezone
+from typing import List
 from pydantic import BaseModel, Field
 
 from src.pipelines.base import PipelineStage
@@ -14,16 +13,11 @@ class CausalGraphConfig(BaseModel):
     """Configuration for causal graph building."""
 
     allow_cycles: bool = Field(
-        default=False,
-        description="Whether to allow causal cycles"
+        default=False, description="Whether to allow causal cycles"
     )
-    max_links_per_event: int = Field(
-        default=10,
-        description="Prevent graph bloat"
-    )
+    max_links_per_event: int = Field(default=10, description="Prevent graph bloat")
     validate_temporal_ordering: bool = Field(
-        default=True,
-        description="Ensure cause precedes effect"
+        default=True, description="Ensure cause precedes effect"
     )
 
 
@@ -39,11 +33,7 @@ class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, CausalHypothesis]
     Returns the saved/updated CausalHypothesis objects.
     """
 
-    def __init__(
-        self,
-        config: CausalGraphConfig,
-        db_path: str = "worldreasoner.db"
-    ):
+    def __init__(self, config: CausalGraphConfig, db_path: str = "worldreasoner.db"):
         """Initialize causal graph building stage.
 
         Args:
@@ -66,12 +56,12 @@ class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, CausalHypothesis]
 
         saved_hypotheses: List[CausalHypothesis] = []
         link_stats = {
-            'added': 0,
-            'merged': 0,
-            'invalid_events': 0,
-            'temporal_violation': 0,
-            'max_links_exceeded': 0,
-            'cycle_prevented': 0,
+            "added": 0,
+            "merged": 0,
+            "invalid_events": 0,
+            "temporal_violation": 0,
+            "max_links_exceeded": 0,
+            "cycle_prevented": 0,
         }
 
         for idx, hypothesis in enumerate(inputs, 1):
@@ -101,9 +91,7 @@ class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, CausalHypothesis]
         return saved_hypotheses
 
     def _add_hypothesis(
-        self,
-        hypothesis: CausalHypothesis,
-        saved_hypotheses: List[CausalHypothesis]
+        self, hypothesis: CausalHypothesis, saved_hypotheses: List[CausalHypothesis]
     ) -> str:
         """Add a hypothesis to the graph or merge with existing.
 
@@ -120,7 +108,7 @@ class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, CausalHypothesis]
 
         if not source_event:
             logger.warning(f"Source event not found: {hypothesis.source_event_id}")
-            return 'invalid_events'
+            return "invalid_events"
 
         if not target_event:
             # Debug: List all events in database to help diagnose
@@ -132,15 +120,15 @@ class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, CausalHypothesis]
                 f"Check if target_event_identification stage saved the event to the database.\n"
                 f"Events in database ({len(all_events)} total): {event_ids[:10]}..."
             )
-            return 'invalid_events'
+            return "invalid_events"
 
         # Check if hypothesis already exists in database
         existing_hypotheses = self.db.get_many(
             CausalHypothesis,
             filters={
-                'source_event_id': hypothesis.source_event_id,
-                'target_event_id': hypothesis.target_event_id
-            }
+                "source_event_id": hypothesis.source_event_id,
+                "target_event_id": hypothesis.target_event_id,
+            },
         )
 
         if existing_hypotheses:
@@ -154,7 +142,7 @@ class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, CausalHypothesis]
             logger.debug(
                 f"Merged with existing: {source_event.id} -> {target_event.id}"
             )
-            return 'merged'
+            return "merged"
 
         # Validate temporal ordering
         if self.config.validate_temporal_ordering:
@@ -163,40 +151,38 @@ class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, CausalHypothesis]
                     f"Temporal violation: {source_event.id} ({source_event.occurred_date}) "
                     f"-> {target_event.id} ({target_event.occurred_date})"
                 )
-                return 'temporal_violation'
+                return "temporal_violation"
 
         # Check max links limit
         existing_outgoing = self.db.get_many(
-            CausalHypothesis,
-            filters={'source_event_id': hypothesis.source_event_id}
+            CausalHypothesis, filters={"source_event_id": hypothesis.source_event_id}
         )
         if len(existing_outgoing) >= self.config.max_links_per_event:
             logger.warning(
                 f"Max links exceeded for {source_event.id} "
                 f"({len(existing_outgoing)}/{self.config.max_links_per_event})"
             )
-            return 'max_links_exceeded'
+            return "max_links_exceeded"
 
         # Check for cycles (if not allowed)
         if not self.config.allow_cycles:
-            if self._creates_cycle(hypothesis.source_event_id, hypothesis.target_event_id):
+            if self._creates_cycle(
+                hypothesis.source_event_id, hypothesis.target_event_id
+            ):
                 logger.warning(
                     f"Cycle prevented: {source_event.id} -> {target_event.id}"
                 )
-                return 'cycle_prevented'
+                return "cycle_prevented"
 
         # Save new hypothesis directly to database
         self.db.save(CausalHypothesis, hypothesis)
         saved_hypotheses.append(hypothesis)
 
         logger.debug(f"Added hypothesis: {source_event.id} -> {target_event.id}")
-        return 'added'
-
+        return "added"
 
     def _validate_temporal_order(
-        self,
-        source_event: Event,
-        target_event: Event
+        self, source_event: Event, target_event: Event
     ) -> bool:
         """Validate that cause precedes effect temporally.
 
@@ -218,11 +204,7 @@ class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, CausalHypothesis]
         # Ensure source precedes target (or is simultaneous)
         return source_date <= target_date
 
-    def _creates_cycle(
-        self,
-        source_id: str,
-        target_id: str
-    ) -> bool:
+    def _creates_cycle(self, source_id: str, target_id: str) -> bool:
         """Check if adding this link would create a cycle.
 
         Uses depth-first search to check if target_id can reach source_id.
@@ -237,12 +219,7 @@ class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, CausalHypothesis]
         # If target can reach source, adding source->target creates a cycle
         return self._can_reach(target_id, source_id, visited=set())
 
-    def _can_reach(
-        self,
-        from_id: str,
-        to_id: str,
-        visited: set
-    ) -> bool:
+    def _can_reach(self, from_id: str, to_id: str, visited: set) -> bool:
         """Check if from_id can reach to_id via existing links.
 
         Args:
@@ -263,8 +240,7 @@ class CausalGraphBuildingStage(PipelineStage[CausalHypothesis, CausalHypothesis]
 
         # Get all outgoing hypotheses from database
         outgoing_links = self.db.get_many(
-            CausalHypothesis,
-            filters={'source_event_id': from_id}
+            CausalHypothesis, filters={"source_event_id": from_id}
         )
 
         # Check each outgoing link

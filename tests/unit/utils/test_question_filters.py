@@ -20,7 +20,7 @@ from src.utils.question_filters import (
 def sample_questions():
     """Create sample questions for testing."""
     now = datetime.now(timezone.utc)
-    
+
     return [
         Question(
             id="q_001",
@@ -65,7 +65,7 @@ def test_filter_questions_by_type(sample_questions):
         sample_questions,
         allowed_types=["boolean"],
     )
-    
+
     assert len(filtered) == 2
     assert all(q.question_type == QuestionType.BINARY for q in filtered)
 
@@ -76,7 +76,7 @@ def test_filter_questions_by_category_dict(sample_questions):
         sample_questions,
         category_filter={"technology": 1, "finance": 1},
     )
-    
+
     assert len(filtered) == 2
     categories = {q.metadata["category"] for q in filtered}
     assert categories == {"technology", "finance"}
@@ -88,7 +88,7 @@ def test_filter_questions_by_category_list(sample_questions):
         sample_questions,
         category_filter=["politics"],
     )
-    
+
     assert len(filtered) == 1
     assert filtered[0].metadata["category"] == "politics"
 
@@ -101,9 +101,9 @@ def test_apply_quality_requirements(sample_questions):
         min_resolution_days=50,
         max_resolution_days=100,
     )
-    
+
     filtered = apply_quality_requirements(sample_questions, requirements)
-    
+
     # Should filter out q_001 (difficulty 2, resolution 30 days)
     # Should keep q_002 (difficulty 4, resolution 60 days)
     # Should keep q_003 despite 90 days resolution (has ground_truth)
@@ -117,14 +117,14 @@ def test_filter_questions_combined(sample_questions):
         min_difficulty=2,
         max_difficulty=4,
     )
-    
+
     filtered = filter_questions(
         sample_questions,
         type_filter=["boolean"],
         category_filter=["technology", "politics"],
         quality_requirements=requirements,
     )
-    
+
     # Should keep q_001 (boolean, tech, difficulty 2)
     # Should keep q_003 (boolean, politics, difficulty 3)
     # Should filter q_002 (not boolean)
@@ -137,7 +137,7 @@ def test_filter_resolved_questions(sample_questions):
     resolved = filter_resolved_questions(sample_questions, resolved_only=True)
     assert len(resolved) == 1
     assert resolved[0].id == "q_003"
-    
+
     unresolved = filter_resolved_questions(sample_questions, resolved_only=False)
     assert len(unresolved) == 2
     assert all(q.ground_truth is None for q in unresolved)
@@ -149,9 +149,9 @@ def test_filter_by_quality_score(sample_questions):
     sample_questions[0].quality_score = 0.8
     sample_questions[1].quality_score = 0.6
     sample_questions[2].quality_score = 0.9
-    
+
     filtered = filter_by_quality_score(sample_questions, min_score=0.7)
-    
+
     assert len(filtered) == 2
     assert all(q.quality_score >= 0.7 for q in filtered)
 
@@ -162,9 +162,9 @@ def test_tag_questions_with_source(sample_questions):
     for q in sample_questions:
         q.source = None
         q.metadata = {}
-    
+
     tag_questions_with_source(sample_questions, "polymarket")
-    
+
     for q in sample_questions:
         assert q.source == "polymarket"
         assert q.metadata["source"] == "polymarket"

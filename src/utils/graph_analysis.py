@@ -12,7 +12,7 @@ from src.utils.graph_visualization import GraphVisualizer
 
 
 def build_graph_from_hypotheses(
-    hypotheses: List[CausalHypothesis]
+    hypotheses: List[CausalHypothesis],
 ) -> tuple[Dict[str, List[str]], set]:
     """Build adjacency list graph structure from causal hypotheses.
 
@@ -38,7 +38,7 @@ def build_graph_from_hypotheses(
 def calculate_graph_quality(
     hypotheses: List[CausalHypothesis],
     target_event_id: str = None,
-    min_depth_for_full_score: int = 3
+    min_depth_for_full_score: int = 3,
 ) -> Dict[str, Any]:
     """Calculate comprehensive quality metrics for a causal graph.
 
@@ -74,7 +74,7 @@ def calculate_graph_quality(
             "strength_score": 0.0,
             "evidence_score": 0.0,
             "event_count": 0,
-            "hypothesis_count": 0
+            "hypothesis_count": 0,
         }
 
     # Build graph structure
@@ -116,14 +116,16 @@ def calculate_graph_quality(
     avg_confidence = sum(h.confidence for h in hypotheses) / len(hypotheses)
     avg_strength = sum(h.strength for h in hypotheses) / len(hypotheses)
     depth_score = min(max_depth / min_depth_for_full_score, 1.0)
-    evidence_score = sum(1 for h in hypotheses if h.evidence_article_ids) / len(hypotheses)
+    evidence_score = sum(1 for h in hypotheses if h.evidence_article_ids) / len(
+        hypotheses
+    )
 
     # Overall quality (weighted average)
     quality_score = (
-        depth_score * 0.4 +
-        avg_confidence * 0.3 +
-        avg_strength * 0.2 +
-        evidence_score * 0.1
+        depth_score * 0.4
+        + avg_confidence * 0.3
+        + avg_strength * 0.2
+        + evidence_score * 0.1
     )
 
     return {
@@ -135,13 +137,12 @@ def calculate_graph_quality(
         "strength_score": round(avg_strength, 2),
         "evidence_score": round(evidence_score, 2),
         "event_count": len(event_ids),
-        "hypothesis_count": len(hypotheses)
+        "hypothesis_count": len(hypotheses),
     }
 
 
 def analyze_graph_structure(
-    hypotheses: List[CausalHypothesis],
-    target_event_id: str = None
+    hypotheses: List[CausalHypothesis], target_event_id: str = None
 ) -> Dict[str, Any]:
     """Analyze causal graph structure and compute detailed metrics.
 
@@ -178,35 +179,35 @@ def analyze_graph_structure(
         **quality_metrics,
         "leaf_events": len(leaf_nodes),
         "with_evidence": with_evidence,
-        "status": "analyzed"
+        "status": "analyzed",
     }
 
 
 def infer_target_event_id(hypotheses: List[CausalHypothesis]) -> Optional[str]:
     """Infer the target event ID (sink node) from a list of hypotheses.
-    
+
     The target event in a causal graph is the effect (sink), and roots are causes.
     So we look for events that are targets in hypotheses but never sources.
-    
+
     Args:
         hypotheses: List of causal hypotheses
-        
+
     Returns:
         Inferred target event ID, or None if ambiguous/circular/empty
     """
     if not hypotheses:
         return None
-        
+
     all_targets = set(h.target_event_id for h in hypotheses)
     all_sources = set(h.source_event_id for h in hypotheses)
-    
+
     # Candidates are targets that are never sources
     candidates = list(all_targets - all_sources)
-    
+
     if candidates:
         # Pick the first candidate (usually there should only be one sink)
         return candidates[0]
-        
+
     # If no sink found (e.g. cycles), we might want to return None or fallback
     # For now, return None and let caller decide fallback strategy
     return None

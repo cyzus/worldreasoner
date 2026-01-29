@@ -9,9 +9,9 @@ from .evaluator import ForecastEvaluator, EvaluationResult
 from .metrics import calculate_brier_score, calculate_log_score, calculate_accuracy
 
 __all__ = [
-    'ForecastEvaluator',
-    'EvaluationResult',
-    'calculate_brier_score',
-    'calculate_log_score',
-    'calculate_accuracy',
+    "ForecastEvaluator",
+    "EvaluationResult",
+    "calculate_brier_score",
+    "calculate_log_score",
+    "calculate_accuracy",
 ]

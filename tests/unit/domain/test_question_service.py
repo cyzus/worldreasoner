@@ -6,7 +6,13 @@ from datetime import datetime, timezone
 from src.core.database import GenericDatabase
 from src.domain.question_service import QuestionService
 from src.domain.models import Question, Article, Event, CausalHypothesis
-from src.domain.models import QuestionType, Domain, EventStatus, EventType, CausalRelationType
+from src.domain.models import (
+    QuestionType,
+    Domain,
+    EventStatus,
+    EventType,
+    CausalRelationType,
+)
 
 
 @pytest.fixture
@@ -50,7 +56,8 @@ def sample_article(test_db, sample_question):
         id="art_001",
         url="https://example.com/ai-article",
         title="AI Progress Report on Deep Learning Advances",
-        content="This is a detailed article about AI development and progress in the field of artificial intelligence. " * 3,  # Make it >100 chars
+        content="This is a detailed article about AI development and progress in the field of artificial intelligence. "
+        * 3,  # Make it >100 chars
         source="TechNews",
         published_date=datetime(2024, 1, 1, tzinfo=timezone.utc),
         domain=Domain.TECH,
@@ -128,7 +135,9 @@ class TestHasEvidence:
 class TestGetEvidenceStatus:
     """Test get_evidence_status bulk check."""
 
-    def test_bulk_check_mixed(self, service, test_db, sample_question, sample_hypothesis):
+    def test_bulk_check_mixed(
+        self, service, test_db, sample_question, sample_hypothesis
+    ):
         """Check multiple questions with mixed evidence status."""
         # Create another question without evidence
         q2 = Question(
@@ -235,10 +244,18 @@ class TestDeleteQuestion:
     """Test delete_question method."""
 
     def test_delete_question_with_cascade(
-        self, service, test_db, sample_question, sample_article, sample_event, sample_hypothesis
+        self,
+        service,
+        test_db,
+        sample_question,
+        sample_article,
+        sample_event,
+        sample_hypothesis,
     ):
         """Delete question with cascade removes all related items."""
-        result = service.delete_question(sample_question.id, cascade=True, dry_run=False)
+        result = service.delete_question(
+            sample_question.id, cascade=True, dry_run=False
+        )
 
         assert result["success"] is True
         assert result["summary"]["questions"] == 1
@@ -250,7 +267,9 @@ class TestDeleteQuestion:
 
     def test_delete_question_without_cascade(self, service, test_db, sample_question):
         """Delete question without cascade only removes the question."""
-        result = service.delete_question(sample_question.id, cascade=False, dry_run=False)
+        result = service.delete_question(
+            sample_question.id, cascade=False, dry_run=False
+        )
 
         assert result["success"] is True
         assert test_db.get(Question, sample_question.id) is None
@@ -271,7 +290,9 @@ class TestDeleteQuestion:
 class TestDeleteEvent:
     """Test delete_event method."""
 
-    def test_delete_event_with_cascade(self, service, test_db, sample_event, sample_hypothesis):
+    def test_delete_event_with_cascade(
+        self, service, test_db, sample_event, sample_hypothesis
+    ):
         """Delete event with cascade removes hypotheses."""
         result = service.delete_event(sample_event.id, cascade=True, dry_run=False)
 
@@ -285,7 +306,9 @@ class TestDeleteEvent:
         assert result["dry_run"] is True
         assert test_db.get(Event, sample_event.id) is not None
 
-    def test_delete_event_referenced_by_question(self, service, test_db, sample_question):
+    def test_delete_event_referenced_by_question(
+        self, service, test_db, sample_question
+    ):
         """Cannot delete event referenced by a question."""
         # Create event referenced by question
         event = Event(
@@ -313,8 +336,7 @@ class TestUpdateQuestion:
     def test_update_question_success(self, service, test_db, sample_question):
         """Update question fields successfully."""
         result = service.update_question(
-            sample_question.id,
-            {"difficulty": 5, "quality_score": 0.9}
+            sample_question.id, {"difficulty": 5, "quality_score": 0.9}
         )
 
         assert result["success"] is True

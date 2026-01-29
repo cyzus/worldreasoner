@@ -17,7 +17,7 @@ def test_article_creation():
         published_date=datetime(2024, 9, 28, 14, 30, 0),
         domain="politics",
     )
-    
+
     assert article.id == "test_001"
     assert article.title == "Test Article Title"
     assert article.domain == "politics"
@@ -36,14 +36,17 @@ def test_article_with_tags():
         domain="finance",
         tags=["stocks", "trading", "market"],
     )
-    
+
     assert len(article.tags) == 3
     assert "stocks" in article.tags
 
 
 def test_article_compute_word_count():
     """Test word count computation."""
-    content = "This is a test article with enough content to pass the minimum length requirement. " * 2
+    content = (
+        "This is a test article with enough content to pass the minimum length requirement. "
+        * 2
+    )
     article = Article(
         id="test_003",
         title="Test Word Count",
@@ -52,7 +55,7 @@ def test_article_compute_word_count():
         published_date=datetime.now(),
         domain="tech",
     )
-    
+
     word_count = article.compute_word_count()
     assert word_count > 0
 
@@ -70,7 +73,7 @@ def test_article_compute_reading_time():
         domain="health",
         word_count=200,
     )
-    
+
     reading_time = article.compute_reading_time()
     assert reading_time == 1
 
@@ -80,13 +83,14 @@ def test_article_event_ids():
     article = Article(
         id="test_005",
         title="Article with Event References",
-        content="This article references previous events and discusses their outcomes. " * 10,
+        content="This article references previous events and discusses their outcomes. "
+        * 10,
         source="Test Source",
         published_date=datetime.now(),
         domain="politics",
         event_ids=["evt_pol_001", "evt_pol_002"],
     )
-    
+
     assert len(article.event_ids) == 2
     assert "evt_pol_001" in article.event_ids
 
@@ -150,13 +154,13 @@ def test_article_metadata():
     assert article.metadata == {}
 
     # Can add metadata
-    article.metadata['evidence_type'] = 'hindsight'
-    article.metadata['related_question_ids'] = ['q_001', 'q_002']
-    article.metadata['custom_field'] = 'custom_value'
+    article.metadata["evidence_type"] = "hindsight"
+    article.metadata["related_question_ids"] = ["q_001", "q_002"]
+    article.metadata["custom_field"] = "custom_value"
 
-    assert article.metadata['evidence_type'] == 'hindsight'
-    assert len(article.metadata['related_question_ids']) == 2
-    assert article.metadata['custom_field'] == 'custom_value'
+    assert article.metadata["evidence_type"] == "hindsight"
+    assert len(article.metadata["related_question_ids"]) == 2
+    assert article.metadata["custom_field"] == "custom_value"
 
 
 def test_article_metadata_at_creation():
@@ -171,10 +175,10 @@ def test_article_metadata_at_creation():
         metadata={
             "evidence_type": "hindsight",
             "confidence": 0.8,
-            "source_pipeline": "evidence"
-        }
+            "source_pipeline": "evidence",
+        },
     )
 
-    assert article.metadata['evidence_type'] == 'hindsight'
-    assert article.metadata['confidence'] == 0.8
-    assert article.metadata['source_pipeline'] == 'evidence'
+    assert article.metadata["evidence_type"] == "hindsight"
+    assert article.metadata["confidence"] == 0.8
+    assert article.metadata["source_pipeline"] == "evidence"

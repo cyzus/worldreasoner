@@ -3,12 +3,22 @@ from typing import Optional
 from src.agents.base import BaseAgent
 from src.config import Config, get_config
 from smolagents import CodeAgent, LiteLLMModel
-from src.tools import (ArticleRetrievalTool, ArticleCollectorTool,
-                       WebFetchTool, WebSearchTool,
-                       EventDetailsTool, EventIdentifierTool,
-                       CausalReasonerTool, GraphInspectorTool,
-                       ArticleInspectorTool, QuestionArticlesTool)
-from src.pipelines.prompts.hindsight_causal_analysis import EVIDENCE_AGENT_DESCRIPTION, GRAPH_AGENT_DESCRIPTION
+from src.tools import (
+    ArticleRetrievalTool,
+    ArticleCollectorTool,
+    WebFetchTool,
+    WebSearchTool,
+    EventDetailsTool,
+    EventIdentifierTool,
+    CausalReasonerTool,
+    GraphInspectorTool,
+    ArticleInspectorTool,
+    QuestionArticlesTool,
+)
+from src.pipelines.prompts.hindsight_causal_analysis import (
+    EVIDENCE_AGENT_DESCRIPTION,
+    GRAPH_AGENT_DESCRIPTION,
+)
 
 
 class HindsightAgent(BaseAgent):
@@ -50,7 +60,7 @@ class HindsightAgent(BaseAgent):
 
         llm_model = LiteLLMModel(
             model_id=config.llm.model,
-            **config.llm.model_dump(exclude={"model", "embedding_model"})
+            **config.llm.model_dump(exclude={"model", "embedding_model"}),
         )
 
         # Evidence gathering specialist (web search, article collection)
@@ -58,16 +68,22 @@ class HindsightAgent(BaseAgent):
         evidence_agent = CodeAgent(
             model=llm_model,
             tools=[
-                ArticleCollectorTool(db_path=db_path, question_id=question_id),  # Provenance-aware
-                ArticleInspectorTool(db_path=db_path, question_id=question_id),  # Check coverage
+                ArticleCollectorTool(
+                    db_path=db_path, question_id=question_id
+                ),  # Provenance-aware
+                ArticleInspectorTool(
+                    db_path=db_path, question_id=question_id
+                ),  # Check coverage
                 WebFetchTool(),
-                WebSearchTool(db_path=db_path, question_id=question_id),  # Provenance-aware
+                WebSearchTool(
+                    db_path=db_path, question_id=question_id
+                ),  # Provenance-aware
             ],
             max_steps=15,
             stream_outputs=False,
-            additional_authorized_imports=["json"], # Allow json imports in code agent
+            additional_authorized_imports=["json"],  # Allow json imports in code agent
             name="evidence_collector",
-            description=EVIDENCE_AGENT_DESCRIPTION
+            description=EVIDENCE_AGENT_DESCRIPTION,
         )
 
         # Causal analysis specialist (event creation, graph building, depth evaluation)
@@ -75,19 +91,29 @@ class HindsightAgent(BaseAgent):
         causal_agent = CodeAgent(
             model=llm_model,
             tools=[
-                QuestionArticlesTool(db_path=db_path, question_id=question_id),  # Get articles for this question
-                EventIdentifierTool(db_path=db_path, question_id=question_id),  # Provenance-aware
+                QuestionArticlesTool(
+                    db_path=db_path, question_id=question_id
+                ),  # Get articles for this question
+                EventIdentifierTool(
+                    db_path=db_path, question_id=question_id
+                ),  # Provenance-aware
                 EventDetailsTool(db_path=db_path),
-                CausalReasonerTool(db_path=db_path, question_id=question_id),  # Provenance-aware
-                GraphInspectorTool(db_path=db_path, question_id=question_id),  # Provenance-aware
+                CausalReasonerTool(
+                    db_path=db_path, question_id=question_id
+                ),  # Provenance-aware
+                GraphInspectorTool(
+                    db_path=db_path, question_id=question_id
+                ),  # Provenance-aware
                 ArticleRetrievalTool(db_path=db_path),
-                ArticleInspectorTool(db_path=db_path, question_id=question_id),  # Check coverage
+                ArticleInspectorTool(
+                    db_path=db_path, question_id=question_id
+                ),  # Check coverage
             ],
             max_steps=30,  # More steps for iterative graph building
             stream_outputs=False,
-            additional_authorized_imports=["json"], # Allow json imports in code agent
+            additional_authorized_imports=["json"],  # Allow json imports in code agent
             name="causal_analyzer",
-            description=GRAPH_AGENT_DESCRIPTION
+            description=GRAPH_AGENT_DESCRIPTION,
         )
 
         managed_agents = [evidence_agent, causal_agent]
@@ -103,6 +129,5 @@ class HindsightAgent(BaseAgent):
             tools=tools,
             max_steps=max_steps,
             is_code=is_code,
-            managed_agents=managed_agents
+            managed_agents=managed_agents,
         )
-        

@@ -28,7 +28,9 @@ def parse_json_response(response_str: str) -> Dict[str, Any]:
 
     # Try to extract JSON from markdown code blocks
     # Pattern matches: ```json\n{...}\n``` or ```\n{...}\n```
-    json_match = re.search(r'```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```', response_str, re.DOTALL)
+    json_match = re.search(
+        r"```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```", response_str, re.DOTALL
+    )
     if json_match:
         try:
             return json.loads(json_match.group(1))
@@ -37,7 +39,7 @@ def parse_json_response(response_str: str) -> Dict[str, Any]:
 
     # Try to find any JSON object or array in the response
     # Look for the first { or [ and try to parse from there
-    for start_char in ['{', '[']:
+    for start_char in ["{", "["]:
         start_idx = response_str.find(start_char)
         if start_idx != -1:
             try:
@@ -46,17 +48,17 @@ def parse_json_response(response_str: str) -> Dict[str, Any]:
                 pass
 
     # If all else fails, raise with helpful error
-    logger.error(f"Failed to parse JSON from LLM response")
+    logger.error("Failed to parse JSON from LLM response")
     logger.debug(f"Raw response (first 500 chars): {response_str[:500]}")
     raise json.JSONDecodeError(
-        "Could not extract valid JSON from response",
-        response_str[:100],
-        0
+        "Could not extract valid JSON from response", response_str[:100], 0
     )
+
 
 def get_knowledge_cutoff_date(model_id: str) -> str:
     from src.config.constants import PROJECT_ROOT
     import json
+
     cutoff_file = PROJECT_ROOT / "config" / "llm_cutoff_dates.json"
     model_id = model_id.split("/")[-1]  # Get the last part of the model ID
     with open(cutoff_file, "r", encoding="utf-8") as f:

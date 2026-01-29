@@ -90,11 +90,12 @@ async def run_goal_collection(
 
         # Load article sources from config
         import yaml
-        with open(sources_config, 'r') as f:
+
+        with open(sources_config, "r") as f:
             sources_data = yaml.safe_load(f)
 
         article_sources = []
-        for source_data in sources_data.get('sources', []):
+        for source_data in sources_data.get("sources", []):
             article_sources.append(ArticleSource(**source_data))
 
         # Configure news pipeline stages
@@ -105,12 +106,11 @@ async def run_goal_collection(
 
         article_config = ArticleCollectionConfig(
             sources=article_sources,
-            start_date=datetime.now(timezone.utc) - timedelta(days=abs(goal.quality.min_resolution_days)),
+            start_date=datetime.now(timezone.utc)
+            - timedelta(days=abs(goal.quality.min_resolution_days)),
             end_date=datetime.now(timezone.utc),
             domains=domains,
         )
-
-
 
         # Derive question config from collection goal for consistency
         question_config = QuestionPipelineConfig(
@@ -208,7 +208,7 @@ async def run_goal_collection(
         logger.info("-" * 30)
 
         # Missing types
-        if hasattr(result, 'missing_types') and result.missing_types:
+        if hasattr(result, "missing_types") and result.missing_types:
             logger.info("Missing question types:")
             for qtype, needed in result.missing_types.items():
                 target = goal.type_distribution.get(qtype, 0)
@@ -217,7 +217,7 @@ async def run_goal_collection(
             logger.info("")
 
         # Missing categories
-        if hasattr(result, 'missing_categories') and result.missing_categories:
+        if hasattr(result, "missing_categories") and result.missing_categories:
             logger.info("Missing categories:")
             for category, needed in result.missing_categories.items():
                 target = goal.category_distribution.get(category, 0)
@@ -232,9 +232,9 @@ async def run_goal_collection(
         logger.info("-" * 30)
         for i, q in enumerate(result.questions[:3], 1):
             # Format question type nicely
-            qtype_str = str(q.question_type).replace('QuestionType.', '')
+            qtype_str = str(q.question_type).replace("QuestionType.", "")
             source_str = q.source or "unknown"
-            domain_str = str(q.domain).replace('Domain.', '')
+            domain_str = str(q.domain).replace("Domain.", "")
 
             logger.info(f"{i}. {q.question_text}")
             logger.info(f"   ├─ Type: {qtype_str}")
@@ -249,7 +249,9 @@ async def run_goal_collection(
         logger.info("")
         logger.info("⭐ QUALITY SCORE STATS")
         logger.info("-" * 30)
-        scores = [q.quality_score for q in result.questions if q.quality_score is not None]
+        scores = [
+            q.quality_score for q in result.questions if q.quality_score is not None
+        ]
         if scores:
             avg_score = sum(scores) / len(scores)
             min_score = min(scores)
@@ -257,12 +259,16 @@ async def run_goal_collection(
             logger.info(f"   - Average: {avg_score:.2f}")
             logger.info(f"   - Min:     {min_score:.2f}")
             logger.info(f"   - Max:     {max_score:.2f}")
-            
+
             # Show top 3 best questions
             logger.info("   Top 3 Questions:")
-            sorted_questions = sorted(result.questions, key=lambda q: q.quality_score or 0.0, reverse=True)
+            sorted_questions = sorted(
+                result.questions, key=lambda q: q.quality_score or 0.0, reverse=True
+            )
             for i, q in enumerate(sorted_questions[:3], 1):
-                logger.info(f"     {i}. (Score: {q.quality_score:.2f}) {q.question_text[:80]}...")
+                logger.info(
+                    f"     {i}. (Score: {q.quality_score:.2f}) {q.question_text[:80]}..."
+                )
 
     logger.info("")
 
@@ -271,15 +277,17 @@ async def run_goal_collection(
         logger.info("🔍 INDEXING ARTICLES")
         logger.info("-" * 30)
         index_stats = await auto_index_articles(db_path=db_path)
-        if index_stats['status'] == 'success':
+        if index_stats["status"] == "success":
             logger.info(f"✅ Indexed {index_stats['newly_indexed']} new articles")
             logger.info(f"   Total indexed: {index_stats['final_indexed']}")
-        elif index_stats['status'] == 'up_to_date':
+        elif index_stats["status"] == "up_to_date":
             logger.info("✅ Search index is up to date")
-        elif index_stats['status'] == 'no_articles':
+        elif index_stats["status"] == "no_articles":
             logger.info("⚠️  No articles to index")
         else:
-            logger.info(f"❌ Indexing failed: {index_stats.get('error', 'Unknown error')}")
+            logger.info(
+                f"❌ Indexing failed: {index_stats.get('error', 'Unknown error')}"
+            )
 
     logger.success("🎉 Collection complete!")
 
@@ -341,7 +349,9 @@ def main():
     if not Path(args.goal).exists():
         logger.error(f"Goal config not found: {args.goal}")
         logger.info("Create one from the example:")
-        logger.info("  cp config/collection_goal.example.yaml config/collection_goal.yaml")
+        logger.info(
+            "  cp config/collection_goal.example.yaml config/collection_goal.yaml"
+        )
         return
 
     # Run collection

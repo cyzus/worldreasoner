@@ -2,7 +2,14 @@
 
 Provides endpoints for running pipelines in the background with progress tracking.
 """
-from fastapi import APIRouter, BackgroundTasks, WebSocket, HTTPException, WebSocketDisconnect
+
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    WebSocket,
+    HTTPException,
+    WebSocketDisconnect,
+)
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from enum import Enum
@@ -23,22 +30,28 @@ from src.pipelines.types import PipelineType
 # Models
 # ============================================================================
 
+
 class JobStatus(str, Enum):
     """Pipeline job status."""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
 
+
 class PipelineJobRequest(BaseModel):
     """Request to start a pipeline job."""
+
     question_ids: List[str]
     pipeline_type: PipelineType
     config: Dict[str, Any] = {}
 
+
 class PipelineJobResponse(BaseModel):
     """Pipeline job status response."""
+
     job_id: str
     status: JobStatus
     pipeline_type: PipelineType
@@ -52,10 +65,13 @@ class PipelineJobResponse(BaseModel):
     created_at: str
     updated_at: str
 
+
 class ClearEvidenceRequest(BaseModel):
     """Request to clear evidence for questions."""
+
     question_ids: List[str]
     cascade: bool = True
+
 
 # ============================================================================
 # In-Memory Job Store (use Redis for production)
@@ -66,6 +82,7 @@ jobs: Dict[str, PipelineJobResponse] = {}
 # ============================================================================
 # Endpoints
 # ============================================================================
+
 
 @router.post("/jobs", response_model=PipelineJobResponse)
 async def create_pipeline_job(
@@ -84,10 +101,12 @@ async def create_pipeline_job(
             if existing_job.pipeline_type == request.pipeline_type:
                 # Check for same set of questions
                 if set(existing_job.question_ids) == request_qids_set:
-                    logger.warning(f"Duplicate job attempt blocked: {existing_job.job_id} already processing these questions")
+                    logger.warning(
+                        f"Duplicate job attempt blocked: {existing_job.job_id} already processing these questions"
+                    )
                     raise HTTPException(
                         status_code=409,
-                        detail=f"Similar job {existing_job.job_id} is already {existing_job.status.value}"
+                        detail=f"Similar job {existing_job.job_id} is already {existing_job.status.value}",
                     )
 
     job_id = f"job_{uuid.uuid4().hex[:8]}"
@@ -115,8 +134,11 @@ async def create_pipeline_job(
         request.config,
     )
 
-    logger.info(f"Created pipeline job {job_id} for {len(request.question_ids)} questions")
+    logger.info(
+        f"Created pipeline job {job_id} for {len(request.question_ids)} questions"
+    )
     return job
+
 
 @router.get("/jobs/{job_id}", response_model=PipelineJobResponse)
 async def get_job_status(job_id: str):
@@ -125,10 +147,11 @@ async def get_job_status(job_id: str):
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
     return jobs[job_id]
 
+
 @router.get("/jobs/{job_id}/results")
 async def get_job_results(job_id: str):
     """Get the results of a completed pipeline job.
-    
+
     Returns the results field from the job, which includes:
     - processed: list of successfully processed question IDs
     - failed: list of failed questions with error details
@@ -137,15 +160,16 @@ async def get_job_results(job_id: str):
     """
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-    
+
     job = jobs[job_id]
     if job.status == JobStatus.PENDING or job.status == JobStatus.RUNNING:
         raise HTTPException(
-            status_code=400, 
-            detail=f"Job {job_id} is still {job.status.value}. Wait for completion."
+            status_code=400,
+            detail=f"Job {job_id} is still {job.status.value}. Wait for completion.",
         )
-    
+
     return job.results
+
 
 @router.get("/jobs", response_model=List[PipelineJobResponse])
 async def list_jobs(
@@ -163,6 +187,7 @@ async def list_jobs(
 
     return job_list[:limit]
 
+
 @router.delete("/jobs/{job_id}")
 async def cancel_job(job_id: str):
     """Cancel a running job."""
@@ -176,6 +201,7 @@ async def cancel_job(job_id: str):
         job.updated_at = datetime.utcnow().isoformat()
 
     return {"status": "cancelled", "job_id": job_id}
+
 
 @router.websocket("/jobs/{job_id}/ws")
 async def job_progress_websocket(websocket: WebSocket, job_id: str):
@@ -195,7 +221,11 @@ async def job_progress_websocket(websocket: WebSocket, job_id: str):
             job = jobs[job_id]
             await websocket.send_json(job.dict())
 
-            if job.status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
+            if job.status in [
+                JobStatus.COMPLETED,
+                JobStatus.FAILED,
+                JobStatus.CANCELLED,
+            ]:
                 break
 
             await asyncio.sleep(0.5)
@@ -208,6 +238,7 @@ async def job_progress_websocket(websocket: WebSocket, job_id: str):
             await websocket.close()
         except:
             pass
+
 
 @router.post("/questions/clear-evidence")
 async def clear_questions_evidence(request: ClearEvidenceRequest):
@@ -234,9 +265,11 @@ async def clear_questions_evidence(request: ClearEvidenceRequest):
 
     return results
 
+
 # ============================================================================
 # Background Task Runner
 # ============================================================================
+
 
 async def run_pipeline_job(
     job_id: str,
@@ -263,7 +296,9 @@ async def run_pipeline_job(
             # Update total_count if provided in progress (crucial for collection jobs where initial count is 0)
             if progress.total > 0:
                 job.total_count = progress.total
-            job.progress = progress.current / progress.total if progress.total > 0 else 0.0
+            job.progress = (
+                progress.current / progress.total if progress.total > 0 else 0.0
+            )
             job.message = progress.message
             job.updated_at = datetime.utcnow().isoformat()
 

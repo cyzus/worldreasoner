@@ -4,10 +4,8 @@ Wraps the existing article → event → question pipeline as a question source.
 """
 
 from typing import List, Optional, Dict, Union
-from datetime import datetime, timezone
 
 from .base import QuestionSourceRunner, CollectionResult
-from src.domain.models import Question
 from src.config.collection_goal import QualityRequirements
 from src.pipelines.stages import (
     ArticleCollectionStage,
@@ -50,11 +48,9 @@ class NewsBasedRunner(QuestionSourceRunner):
         # Event stage removed.
         # Use NewsQuestionGenerationStage for direct Article -> Question generation
         self.question_stage = NewsQuestionGenerationStage(
-            question_config,
-            article_config=article_config,
-            db_path=db_path
+            question_config, article_config=article_config, db_path=db_path
         )
-    
+
     async def collect(
         self,
         count: int,
@@ -82,7 +78,9 @@ class NewsBasedRunner(QuestionSourceRunner):
                 f"NewsBasedRunner: Collecting {count} questions "
                 f"(types: {type_filter}, categories: {category_filter})"
             )
-            logger.debug(f"NewsBasedRunner received category_filter: type={type(category_filter)}, value={category_filter}")
+            logger.debug(
+                f"NewsBasedRunner received category_filter: type={type(category_filter)}, value={category_filter}"
+            )
 
             # Stage 1: Collect articles (filter sources by needed categories)
             logger.info("Stage 1: Collecting articles from news sources...")
@@ -99,22 +97,31 @@ class NewsBasedRunner(QuestionSourceRunner):
                 # Only filter sources if we have specific categories to target
                 if filter_keys:
                     filtered_sources = [
-                        source for source in self.article_config.sources
+                        source
+                        for source in self.article_config.sources
                         if source.domain in filter_keys
                     ]
                     if filtered_sources:
                         sources_to_use = filtered_sources
                         # Update the article stage config to focus on missing domains
                         self.article_stage.config.domains = filter_keys
-                        logger.info(f"Filtering to {len(sources_to_use)} sources matching categories: {filter_keys}")
+                        logger.info(
+                            f"Filtering to {len(sources_to_use)} sources matching categories: {filter_keys}"
+                        )
                     else:
-                        logger.warning(f"No sources match categories {filter_keys}, using all sources")
+                        logger.warning(
+                            f"No sources match categories {filter_keys}, using all sources"
+                        )
                 else:
                     # Empty dict/list means no gaps - don't filter sources but clear domains
-                    logger.debug("Empty category_filter - no specific categories needed")
+                    logger.debug(
+                        "Empty category_filter - no specific categories needed"
+                    )
                     self.article_stage.config.domains = []
-            
-            article_result = await self.article_stage.execute(sources_to_use, category_filter=category_filter)
+
+            article_result = await self.article_stage.execute(
+                sources_to_use, category_filter=category_filter
+            )
 
             if not article_result.outputs:
                 logger.warning("No articles collected")
@@ -139,14 +146,17 @@ class NewsBasedRunner(QuestionSourceRunner):
                 # Only filter if we have specific categories
                 if filter_keys:
                     filtered_articles = [
-                        article for article in articles
-                        if article.domain in filter_keys
+                        article for article in articles if article.domain in filter_keys
                     ]
                     if filtered_articles:
-                        logger.info(f"Filtered to {len(filtered_articles)} articles matching categories: {filter_keys}")
+                        logger.info(
+                            f"Filtered to {len(filtered_articles)} articles matching categories: {filter_keys}"
+                        )
                         articles = filtered_articles
                     else:
-                        logger.warning(f"No articles match categories {filter_keys}, keeping all {len(articles)} articles")
+                        logger.warning(
+                            f"No articles match categories {filter_keys}, keeping all {len(articles)} articles"
+                        )
 
             # Stage 2: Generate questions directly from articles
             logger.info("Stage 2: Generating questions from articles...")
@@ -160,13 +170,12 @@ class NewsBasedRunner(QuestionSourceRunner):
                 type_hints=type_filter,  # Tell agent which types we need
                 category_hints=category_filter,  # Tell agent which categories we need
                 existing_question_ids=existing_question_ids,  # Skip duplicates early
-                target_count=count  # Tell stage exactly how many questions we need
+                target_count=count,  # Tell stage exactly how many questions we need
             )
-            
+
             # Use article_batch_size for processing articles
             question_result = await question_stage_with_hints.execute_batched(
-                articles,
-                batch_size=self.question_config.article_batch_size or 10
+                articles, batch_size=self.question_config.article_batch_size or 10
             )
 
             if not question_result.outputs:

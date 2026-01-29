@@ -1,12 +1,10 @@
 """Prompts for article collection stage."""
 
 from datetime import datetime
-from typing import Optional
 from .base import ContextualPromptGenerator, PromptTemplate
 
 
-COLLECTION_TEMPLATE = \
-"""
+COLLECTION_TEMPLATE = """
 Search for news articles through "{source_name}" from the past {days_back} days.
 Find up to {max_articles} relevant articles.{domain_context}
 
@@ -18,20 +16,21 @@ For each article you find:
 Return a summary when done.
 """
 
+
 class ArticleCollectionPrompts(ContextualPromptGenerator[None]):
     """Prompts for the article collection stage."""
-    
+
     # Template for the main collection instruction
     COLLECTION_TEMPLATE = PromptTemplate(
         template=COLLECTION_TEMPLATE,
         required_vars=["source_name", "days_back", "max_articles"],
-        optional_vars={"domain_context": "", "tool_name": "article_collector"}
+        optional_vars={"domain_context": "", "tool_name": "article_collector"},
     )
-    
+
     def format_item(self, item: None, idx: int, **context) -> str:
         """Not used for article collection (no items to format)."""
         return ""
-    
+
     def get_instruction(
         self,
         current_date: datetime,
@@ -39,10 +38,10 @@ class ArticleCollectionPrompts(ContextualPromptGenerator[None]):
         days_back: int,
         max_articles: int,
         domain_context: str = "",
-        tool_name: str = "article_collector"
+        tool_name: str = "article_collector",
     ) -> str:
         """Generate instruction for article collection.
-        
+
         Args:
             current_date: Current datetime
             source_name: Name of the source to search
@@ -50,7 +49,7 @@ class ArticleCollectionPrompts(ContextualPromptGenerator[None]):
             max_articles: Maximum number of articles to collect
             domain_context: Optional domain context string
             tool_name: Name of the tool to call (default: article_collector)
-            
+
         Returns:
             Formatted instruction string
         """
@@ -60,7 +59,7 @@ class ArticleCollectionPrompts(ContextualPromptGenerator[None]):
             days_back=days_back,
             max_articles=max_articles,
             domain_context=domain_context,
-            tool_name=tool_name
+            tool_name=tool_name,
         )
 
         return self.build_instruction(current_date, instruction_body)

@@ -21,7 +21,9 @@ def format_inspector_header(title: str, width: int = 64) -> str:
     """
     # Calculate padding for centered title
     padding = (width - len(title) - 2) // 2
-    title_line = "║" + " " * padding + title + " " * (width - len(title) - padding - 2) + "║"
+    title_line = (
+        "║" + " " * padding + title + " " * (width - len(title) - padding - 2) + "║"
+    )
 
     return f"""
 ╔{"=" * (width - 2)}╗
@@ -40,18 +42,13 @@ def format_section_header(title: str, width: int = 64) -> List[str]:
     Returns:
         List of formatted lines
     """
-    return [
-        "",
-        title,
-        "━" * width,
-        ""
-    ]
+    return ["", title, "━" * width, ""]
 
 
 def format_time_window(
     resolution_date: datetime,
     estimated_start_time: Optional[datetime] = None,
-    indent: str = "  "
+    indent: str = "  ",
 ) -> List[str]:
     """Format time window display for question context.
 
@@ -64,7 +61,9 @@ def format_time_window(
         List of formatted lines showing time window
     """
     q_resolution = ensure_timezone_aware(resolution_date)
-    q_start = ensure_timezone_aware(estimated_start_time) if estimated_start_time else None
+    q_start = (
+        ensure_timezone_aware(estimated_start_time) if estimated_start_time else None
+    )
 
     lines = []
     if q_start:
@@ -87,7 +86,7 @@ def format_coverage_range(
     estimated_start_time: Optional[datetime],
     span_days: int,
     item_type: str = "Item",
-    indent: str = "  "
+    indent: str = "  ",
 ) -> List[str]:
     """Format coverage range display with early gap detection.
 
@@ -104,7 +103,9 @@ def format_coverage_range(
         List of formatted lines showing coverage range
     """
     q_resolution = ensure_timezone_aware(resolution_date)
-    q_start = ensure_timezone_aware(estimated_start_time) if estimated_start_time else None
+    q_start = (
+        ensure_timezone_aware(estimated_start_time) if estimated_start_time else None
+    )
     earliest = ensure_timezone_aware(earliest)
     latest = ensure_timezone_aware(latest)
 
@@ -118,7 +119,9 @@ def format_coverage_range(
     # Note if items don't cover the full window
     if q_start and earliest > q_start:
         gap_days = (earliest - q_start).days
-        lines.append(f"{indent}⚠ Missing early coverage: {gap_days} days gap from start")
+        lines.append(
+            f"{indent}⚠ Missing early coverage: {gap_days} days gap from start"
+        )
 
     return lines
 
@@ -127,7 +130,7 @@ def render_monthly_bar_chart(
     monthly_data: Dict[str, int],
     item_type: str = "items",
     indent: str = "  ",
-    bar_width: int = 30
+    bar_width: int = 30,
 ) -> List[str]:
     """Render a monthly bar chart showing item distribution.
 
@@ -161,7 +164,7 @@ def format_timeline_gaps(
     min_gap_label: str,
     max_display: int = 5,
     indent: str = "  ",
-    compact: bool = False
+    compact: bool = False,
 ) -> List[str]:
     """Format timeline gaps display.
 
@@ -180,12 +183,7 @@ def format_timeline_gaps(
 
     lines = []
     if not compact:
-        lines.extend([
-            "",
-            f"TIMELINE GAPS ({min_gap_label})",
-            "━" * 64,
-            ""
-        ])
+        lines.extend(["", f"TIMELINE GAPS ({min_gap_label})", "━" * 64, ""])
     else:
         lines.append(f"{indent}Timeline Gaps ({min_gap_label}):")
 
@@ -196,7 +194,9 @@ def format_timeline_gaps(
                 f"{gap['end'].strftime('%Y-%m-%d')} ({gap['days']} days)"
             )
         else:
-            lines.append(f"{indent}⚠ {gap['start'].strftime('%Y-%m-%d')} → {gap['end'].strftime('%Y-%m-%d')}")
+            lines.append(
+                f"{indent}⚠ {gap['start'].strftime('%Y-%m-%d')} → {gap['end'].strftime('%Y-%m-%d')}"
+            )
             lines.append(f"{indent}   Gap: {gap['days']} days")
 
     lines.append("")
@@ -207,7 +207,7 @@ def format_quality_metrics(
     metrics: Dict[str, float],
     labels: Dict[str, str],
     indent: str = "  ",
-    precision: int = 2
+    precision: int = 2,
 ) -> List[str]:
     """Format quality metrics with aligned labels.
 
@@ -230,7 +230,9 @@ def format_quality_metrics(
     for key, value in metrics.items():
         label = labels.get(key, key)
         # Align labels and format values
-        lines.append(f"{indent}{label + ':':<{max_label_width + 1}} {value:.{precision}f}")
+        lines.append(
+            f"{indent}{label + ':':<{max_label_width + 1}} {value:.{precision}f}"
+        )
 
     return lines
 
@@ -241,7 +243,7 @@ def format_metric_line(
     suffix: str = "",
     indent: str = "  ",
     precision: int = 2,
-    label_width: int = 18
+    label_width: int = 18,
 ) -> str:
     """Format a single metric line with aligned label and value.
 

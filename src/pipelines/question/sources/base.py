@@ -154,18 +154,19 @@ class QuestionSourceRunner(ABC):
             batch_size = 10
 
             for batch_idx in range(0, len(questions), batch_size):
-                batch = questions[batch_idx:batch_idx + batch_size]
+                batch = questions[batch_idx : batch_idx + batch_size]
 
                 # Generate prompt using the prompt generator
                 prompt = prompt_generator.get_instruction(questions=batch)
 
-                logger.info(f"Categorizing batch {batch_idx//batch_size + 1} ({len(batch)} questions)...")
+                logger.info(
+                    f"Categorizing batch {batch_idx // batch_size + 1} ({len(batch)} questions)..."
+                )
 
                 # Call LLM with structured JSON output
                 messages = [{"role": "user", "content": prompt}]
                 response_text = await llm_client.acomplete(
-                    messages=messages,
-                    response_format={"type": "json_object"}
+                    messages=messages, response_format={"type": "json_object"}
                 )
 
                 # Parse JSON response using utility
@@ -174,24 +175,29 @@ class QuestionSourceRunner(ABC):
                 # Handle both array and object formats
                 if isinstance(response_json, list):
                     categorizations = response_json
-                elif isinstance(response_json, dict) and "categorizations" in response_json:
+                elif (
+                    isinstance(response_json, dict)
+                    and "categorizations" in response_json
+                ):
                     categorizations = response_json["categorizations"]
                 else:
                     categorizations = response_json
 
                 # Apply categorizations
-                cat_dict = {c['id']: c['domain'] for c in categorizations}
+                cat_dict = {c["id"]: c["domain"] for c in categorizations}
 
                 for q in batch:
                     if q.id in cat_dict:
                         domain_str = cat_dict[q.id]
                         try:
                             q.domain = Domain(domain_str)
-                            if not hasattr(q, 'metadata') or q.metadata is None:
+                            if not hasattr(q, "metadata") or q.metadata is None:
                                 q.metadata = {}
                             q.metadata["category"] = domain_str
                         except ValueError:
-                            logger.warning(f"Invalid domain '{domain_str}' for {q.id}, using general")
+                            logger.warning(
+                                f"Invalid domain '{domain_str}' for {q.id}, using general"
+                            )
                             q.domain = Domain.GENERAL
                             q.metadata["category"] = "general"
 
@@ -202,9 +208,9 @@ class QuestionSourceRunner(ABC):
             logger.exception(f"Categorization error: {e}")
             # Return questions with default domain
             for question in questions:
-                if not hasattr(question, 'domain') or question.domain is None:
+                if not hasattr(question, "domain") or question.domain is None:
                     question.domain = Domain.GENERAL
-                if not hasattr(question, 'metadata') or question.metadata is None:
+                if not hasattr(question, "metadata") or question.metadata is None:
                     question.metadata = {}
                 if "category" not in question.metadata:
                     question.metadata["category"] = "general"

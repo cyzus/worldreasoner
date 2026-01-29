@@ -1,16 +1,20 @@
 import React, { useState, useEffect, memo } from 'react'
-import { fetchEventArticles, fetchEventQuestions } from '../api/graphApi'
+import { fetchEventArticles, fetchEventQuestions, fetchEventImpacts } from '../api/graphApi'
 import './EventDetails.css'
 
 const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborhood }) {
   const [articles, setArticles] = useState([])
   const [questions, setQuestions] = useState([])
+  const [impacts, setImpacts] = useState([])
   const [loadingArticles, setLoadingArticles] = useState(false)
   const [loadingQuestions, setLoadingQuestions] = useState(false)
+  const [loadingImpacts, setLoadingImpacts] = useState(false)
   const [showArticles, setShowArticles] = useState(false)
   const [showQuestions, setShowQuestions] = useState(false)
+  const [showImpacts, setShowImpacts] = useState(false)
   const [articlesLoaded, setArticlesLoaded] = useState(false)
   const [questionsLoaded, setQuestionsLoaded] = useState(false)
+  const [impactsLoaded, setImpactsLoaded] = useState(false)
 
   if (!node) return null
 
@@ -29,10 +33,13 @@ const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborh
   useEffect(() => {
     setArticles([])
     setQuestions([])
+    setImpacts([])
     setShowArticles(false)
     setShowQuestions(false)
+    setShowImpacts(false)
     setArticlesLoaded(false)
     setQuestionsLoaded(false)
+    setImpactsLoaded(false)
   }, [node.id])
 
   // Load articles when expanded
@@ -74,6 +81,26 @@ const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborh
         })
     }
   }, [showQuestions, questionsLoaded, loadingQuestions, node.id])
+
+  // Load impacts when expanded (only for outcome nodes)
+  useEffect(() => {
+    if (showImpacts && !impactsLoaded && !loadingImpacts && node.isOutcome) {
+      setLoadingImpacts(true)
+      fetchEventImpacts(node.id)
+        .then(data => {
+          console.log('Fetched impacts for event:', node.id, data)
+          setImpacts(data || [])
+          setImpactsLoaded(true)
+        })
+        .catch(error => {
+          console.error('Failed to load impacts:', error)
+          setImpactsLoaded(true)
+        })
+        .finally(() => {
+          setLoadingImpacts(false)
+        })
+    }
+  }, [showImpacts, impactsLoaded, loadingImpacts, node.id, node.isOutcome])
 
   return (
     <div className="event-details">
@@ -230,6 +257,106 @@ const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborh
             </div>
           )}
         </div>
+
+        {/* Outcome Impacts - only shown for outcome nodes */}
+        {node.isOutcome && (
+          <div className="expandable-section">
+            <button
+              className={`section-toggle ${showImpacts ? 'active' : ''}`}
+              onClick={() => setShowImpacts(!showImpacts)}
+            >
+              <span className="toggle-text">⭐ Outcome Impacts</span>
+              <span className="toggle-meta">
+                {impactsLoaded ? impacts.length : ''}
+                <span className="toggle-icon">{showImpacts ? '−' : '+'}</span>
+              </span>
+            </button>
+
+            {showImpacts && (
+              <div className="section-content">
+                {loadingImpacts ? (
+                  <div className="loading-message">Loading impacts...</div>
+                ) : impacts.length === 0 ? (
+                  <div className="empty-message">No impacts recorded</div>
+                ) : (
+                  <div className="impacts-list">
+                    {impacts.map((impact, index) => {
+                      const getDirectionInfo = (direction) => {
+                        switch (direction) {
+                          case 'positive':
+                            return { icon: '↗', color: '#22c55e', label: 'Positive' }
+                          case 'negative':
+                            return { icon: '↘', color: '#ef4444', label: 'Negative' }
+                          case 'mixed':
+                            return { icon: '↔', color: '#a855f7', label: 'Mixed' }
+                          case 'neutral':
+                            return { icon: '→', color: '#94a3b8', label: 'Neutral' }
+                          default:
+                            return { icon: '?', color: '#6c757d', label: 'Unknown' }
+                        }
+                      }
+
+                      const dirInfo = getDirectionInfo(impact.properties?.impact_direction)
+                      const magnitude = impact.properties?.impact_magnitude || 0
+                      const confidence = impact.properties?.confidence || 0
+                      const reasoning = impact.properties?.reasoning || 'No reasoning provided'
+
+                      return (
+                        <div key={index} className="impact-item" style={{
+                          padding: '12px',
+                          marginBottom: '8px',
+                          border: '1px solid #e0e0e0',
+                          borderRadius: '6px',
+                          backgroundColor: '#fff'
+                        }}>
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            marginBottom: '8px'
+                          }}>
+                            <div style={{
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '50%',
+                              backgroundColor: dirInfo.color,
+                              color: '#fff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '14px',
+                              fontWeight: '600'
+                            }}>
+                              {dirInfo.icon}
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: '13px', fontWeight: '600', color: '#333' }}>
+                                {dirInfo.label} Impact
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#6c757d' }}>
+                                Magnitude: {(magnitude * 100).toFixed(0)}% • Confidence: {(confidence * 100).toFixed(0)}%
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{
+                            fontSize: '12px',
+                            color: '#495057',
+                            lineHeight: '1.5',
+                            padding: '8px',
+                            backgroundColor: '#f8f9fa',
+                            borderRadius: '4px'
+                          }}>
+                            {reasoning}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="actions-footer">
           <h4>Explore Neighborhood</h4>

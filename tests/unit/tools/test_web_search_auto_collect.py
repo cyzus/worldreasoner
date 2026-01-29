@@ -1,7 +1,8 @@
 """Test auto-collection feature in WebSearchTool."""
+
 import pytest
 from datetime import datetime
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
 from src.tools.web_search import WebSearchTool
 
 
@@ -30,45 +31,48 @@ def sample_search_results():
             "url": "https://www.msn.com/en-us/weather/topstories/these-are-the-biggest-weather-stories-of-2025/ar-AA1Tm5zH",
             "content": "Devastating wildfire, flooding and extreme heat events took place over the past year, several resulting in mass fatalities.",
             "engines": ["startpage news", "bing news"],
-            "publishedDate": "2025-12-31T15:49:00"  # Has date
+            "publishedDate": "2025-12-31T15:49:00",  # Has date
         },
         {
             "title": "Five Things to Know About Climate Change in 2025",
             "url": "https://www.climatecentral.org/climate-matters/five-things-to-know-about-climate-change-in-2025",
             "content": "In 2025, carbon pollution made 89% of record high daily temperatures set across 247 major U.S. cities more likely",
             "engines": ["bing news"],
-            "publishedDate": None  # No date
+            "publishedDate": None,  # No date
         },
         {
             "title": "Oceans are supercharging hurricanes past Category 5 | ScienceDaily",
             "url": "https://sciencedaily.com/releases/2025/12/251225080725.htm",
             "content": "Deep ocean hot spots packed with heat are making the strongest hurricanes and typhoons more likely",
             "engines": ["brave.news"],
-            "publishedDate": None  # No date
+            "publishedDate": None,  # No date
         },
         {
             "title": "2025 was so hot it pushed Earth past critical climate change mark",
             "url": "https://www.cbsnews.com/news/climate-change-2025-critical-mark-eclipsed/",
             "content": "2025 was the third hottest year on record and pushed Earth past a critical climate change mark",
             "engines": ["brave.news"],
-            "publishedDate": None  # No date
+            "publishedDate": None,  # No date
         },
     ]
 
 
-def test_auto_collect_with_missing_dates(mock_db, mock_question, sample_search_results, caplog):
+def test_auto_collect_with_missing_dates(
+    mock_db, mock_question, sample_search_results, caplog
+):
     """Test that articles without publishedDate are properly skipped."""
     import logging
+
     caplog.set_level(logging.DEBUG)
-    
+
     # Mock the database get method to return our question
     mock_db.get.return_value = mock_question
-    
+
     # Create a mock article collector (patch at import location)
-    with patch('src.tools.article_collector.ArticleCollectorTool') as MockCollector:
+    with patch("src.tools.article_collector.ArticleCollectorTool") as MockCollector:
         mock_collector_instance = Mock()
         MockCollector.return_value = mock_collector_instance
-        
+
         # Initialize WebSearchTool with auto-collect enabled
         tool = WebSearchTool(
             db_path=None,
@@ -76,9 +80,9 @@ def test_auto_collect_with_missing_dates(mock_db, mock_question, sample_search_r
             question_id="test_question_123",
             auto_collect_enabled=False,  # We'll manually enable for testing
             max_auto_collect=5,
-            domain="general"
+            domain="general",
         )
-        
+
         # Manually set up for testing
         tool.db = mock_db
         tool.question_id = mock_question.id
@@ -86,39 +90,40 @@ def test_auto_collect_with_missing_dates(mock_db, mock_question, sample_search_r
         tool.auto_collect_enabled = True
         tool.question_resolution_date = mock_question.resolution_date
         tool.article_collector = mock_collector_instance
-        
+
         # Run auto-collection
         summary = tool._auto_collect_articles(sample_search_results)
-        
+
         # Print the summary and logs for debugging
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("Auto-collection summary:")
         print(summary)
-        print("="*60)
-        
+        print("=" * 60)
+
         # Check logs for errors
         if caplog.text:
             print("\nCaptured logs:")
             print(caplog.text)
-        
+
         # Verify the summary shows skipped articles
         assert "skipped" in summary.lower()
         assert "no date" in summary.lower()
-        
+
         # Only 1 article has a date, so only 1 should be collected
         assert mock_collector_instance.forward.call_count == 1
-        
+
         # Verify the call was made with the correct article
         call_args = mock_collector_instance.forward.call_args
-        assert call_args.kwargs['url'] == sample_search_results[0]['url']
-        assert call_args.kwargs['title'] == sample_search_results[0]['title']
+        assert call_args.kwargs["url"] == sample_search_results[0]["url"]
+        assert call_args.kwargs["title"] == sample_search_results[0]["title"]
 
 
 def test_auto_collect_with_invalid_date_format(mock_db, mock_question, caplog):
     """Test error handling when publishedDate has an invalid format."""
     import logging
+
     caplog.set_level(logging.DEBUG)
-    
+
     # Create a result with a malformed date
     results_with_bad_date = [
         {
@@ -126,44 +131,44 @@ def test_auto_collect_with_invalid_date_format(mock_db, mock_question, caplog):
             "url": "https://example.com/article",
             "content": "Test content",
             "engines": ["test"],
-            "publishedDate": "invalid-date-format"  # Bad date format
+            "publishedDate": "invalid-date-format",  # Bad date format
         }
     ]
-    
+
     mock_db.get.return_value = mock_question
-    
-    with patch('src.tools.article_collector.ArticleCollectorTool') as MockCollector:
+
+    with patch("src.tools.article_collector.ArticleCollectorTool") as MockCollector:
         mock_collector_instance = Mock()
         MockCollector.return_value = mock_collector_instance
-        
+
         tool = WebSearchTool(
             db_path=None,
             collector=None,
             question_id="test_question_123",
             auto_collect_enabled=False,
             max_auto_collect=5,
-            domain="general"
+            domain="general",
         )
-        
+
         tool.db = mock_db
         tool.question_id = mock_question.id
         tool.question = mock_question
         tool.auto_collect_enabled = True
         tool.question_resolution_date = mock_question.resolution_date
         tool.article_collector = mock_collector_instance
-        
+
         # Run auto-collection
         summary = tool._auto_collect_articles(results_with_bad_date)
-        
-        print("\n" + "="*60)
+
+        print("\n" + "=" * 60)
         print("Auto-collection summary (bad date):")
         print(summary)
-        print("="*60)
-        
+        print("=" * 60)
+
         if caplog.text:
             print("\nCaptured logs (should show error):")
             print(caplog.text)
-        
+
         # Invalid dates fall back to current time (datetime.now(timezone.utc))
         # which is after the resolution date (2026-01-01), so skipped as "after_resolution"
         assert "after resolution" in summary.lower()
@@ -173,8 +178,9 @@ def test_auto_collect_with_invalid_date_format(mock_db, mock_question, caplog):
 def test_auto_collect_with_date_after_resolution(mock_db, mock_question, caplog):
     """Test that articles published after resolution date are skipped."""
     import logging
+
     caplog.set_level(logging.DEBUG)
-    
+
     # Create a result with date after resolution
     results_future = [
         {
@@ -182,40 +188,40 @@ def test_auto_collect_with_date_after_resolution(mock_db, mock_question, caplog)
             "url": "https://example.com/future",
             "content": "Future content",
             "engines": ["test"],
-            "publishedDate": "2026-06-01T00:00:00"  # After resolution date (2026-01-01)
+            "publishedDate": "2026-06-01T00:00:00",  # After resolution date (2026-01-01)
         }
     ]
-    
+
     mock_db.get.return_value = mock_question
-    
-    with patch('src.tools.article_collector.ArticleCollectorTool') as MockCollector:
+
+    with patch("src.tools.article_collector.ArticleCollectorTool") as MockCollector:
         mock_collector_instance = Mock()
         MockCollector.return_value = mock_collector_instance
-        
+
         tool = WebSearchTool(
             db_path=None,
             collector=None,
             question_id="test_question_123",
             auto_collect_enabled=False,
             max_auto_collect=5,
-            domain="general"
+            domain="general",
         )
-        
+
         tool.db = mock_db
         tool.question_id = mock_question.id
         tool.question = mock_question
         tool.auto_collect_enabled = True
         tool.question_resolution_date = mock_question.resolution_date
         tool.article_collector = mock_collector_instance
-        
+
         # Run auto-collection
         summary = tool._auto_collect_articles(results_future)
-        
-        print("\n" + "="*60)
+
+        print("\n" + "=" * 60)
         print("Auto-collection summary (future date):")
         print(summary)
-        print("="*60)
-        
+        print("=" * 60)
+
         # Should be skipped as "after_resolution"
         assert "after resolution" in summary.lower()
         assert mock_collector_instance.forward.call_count == 0

@@ -8,7 +8,7 @@ when using LiteLLM through smolagents. It enables:
 """
 
 from typing import Dict, Optional, List
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import litellm
 from src.utils.logging import logger
@@ -166,7 +166,7 @@ def extract_usage_from_agent(agent, model_name: Optional[str] = None) -> UsageMe
                 prompt_cost, completion_cost = litellm.cost_per_token(
                     model=lookup_model,
                     prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens
+                    completion_tokens=completion_tokens,
                 )
                 estimated_cost = prompt_cost + completion_cost
             except Exception as cost_err:

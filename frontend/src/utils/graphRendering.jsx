@@ -249,16 +249,29 @@ export const paintLink = (link, ctx, globalScale, options = {}) => {
         return
     }
 
-    const isSynthetic = link.isSynthetic || link.type === 'potentially_relevant'
-    const alpha = isSynthetic ? 0.4 : Math.min(0.7, Math.max(0.4, link.weight || link.strength || 0.5))
+    // Check if this is an impact edge
+    const isImpact = link.edge_type?.startsWith('impact_') || link.type?.startsWith('impact_')
+    const edgeType = link.edge_type || link.type
 
-    const baseColor = GraphStyles.linkColors[link.type] || GraphStyles.linkColors[link.relation_type] || GraphStyles.linkColors.default || '#6c757d'
+    const isSynthetic = link.isSynthetic || link.type === 'potentially_relevant'
+
+    // For impact edges, use impact_magnitude for alpha and width
+    let alpha, lineWidth
+    if (isImpact) {
+        const magnitude = link.properties?.impact_magnitude || link.weight || 0.5
+        alpha = magnitude
+        lineWidth = Math.max(2, magnitude * 3.5) / globalScale
+    } else {
+        alpha = isSynthetic ? 0.4 : Math.min(0.7, Math.max(0.4, link.weight || link.strength || 0.5))
+        lineWidth = isSynthetic
+            ? 1 / globalScale
+            : Math.max(1.5, (link.weight || link.strength || 1) * 2.5) / globalScale
+    }
+
+    const baseColor = GraphStyles.linkColors[edgeType] || GraphStyles.linkColors[link.relation_type] || GraphStyles.linkColors.default || '#6c757d'
     const color = isSynthetic
         ? `rgba(156, 39, 176, ${alpha})`
         : hexToRgba(baseColor, alpha)
-    const lineWidth = isSynthetic
-        ? 1 / globalScale
-        : Math.max(1.5, (link.weight || link.strength || 1) * 2.5) / globalScale
 
     const dx = end.x - start.x
     const dy = end.y - start.y
@@ -287,7 +300,10 @@ export const paintLink = (link, ctx, globalScale, options = {}) => {
     ctx.strokeStyle = color
     ctx.lineWidth = lineWidth
 
-    if (isSynthetic) {
+    // Impact edges use dashed lines, synthetic edges also use dashes
+    if (isImpact) {
+        ctx.setLineDash([8 / globalScale, 4 / globalScale])
+    } else if (isSynthetic) {
         ctx.setLineDash([5 / globalScale, 5 / globalScale])
     } else {
         ctx.setLineDash([])
@@ -429,6 +445,34 @@ export const GraphLegend = () => (
                     <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: GraphStyles.linkColors.conditional, display: 'inline-block', marginRight: 6 }}></span>
                     <span style={{ fontSize: '10px' }}>Conditional</span>
                 </div>
+            </div>
+        </div>
+
+        {/* Impact relations section */}
+        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '8px', marginTop: '8px' }}>
+            <div style={{ fontWeight: '600', marginBottom: '6px', fontSize: '12px', color: '#374151' }}>
+                Outcome Impacts
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '3px' }}>
+                <svg width="24" height="2" style={{ marginRight: 6 }}>
+                    <line x1="0" y1="1" x2="24" y2="1" stroke={GraphStyles.linkColors.impact_positive} strokeWidth="2" strokeDasharray="4,2" />
+                </svg>
+                <span style={{ fontSize: '10px' }}>Positive Impact</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '3px' }}>
+                <svg width="24" height="2" style={{ marginRight: 6 }}>
+                    <line x1="0" y1="1" x2="24" y2="1" stroke={GraphStyles.linkColors.impact_negative} strokeWidth="2" strokeDasharray="4,2" />
+                </svg>
+                <span style={{ fontSize: '10px' }}>Negative Impact</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '3px' }}>
+                <svg width="24" height="2" style={{ marginRight: 6 }}>
+                    <line x1="0" y1="1" x2="24" y2="1" stroke={GraphStyles.linkColors.impact_mixed} strokeWidth="2" strokeDasharray="4,2" />
+                </svg>
+                <span style={{ fontSize: '10px' }}>Mixed Impact</span>
+            </div>
+            <div style={{ fontSize: '9px', color: '#9ca3af', marginTop: '4px', fontStyle: 'italic' }}>
+                Dashed = Impact, Solid = Causal
             </div>
         </div>
     </div>

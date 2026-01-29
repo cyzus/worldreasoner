@@ -25,7 +25,9 @@ def enum_to_list(enum_class: type[Enum]) -> List[str]:
     return [e.value for e in enum_class]
 
 
-def parse_domain(domain_str: Optional[str], default: Optional[Domain] = None) -> Optional[Domain]:
+def parse_domain(
+    domain_str: Optional[str], default: Optional[Domain] = None
+) -> Optional[Domain]:
     """
     Parse domain string with fallback to default.
 
@@ -47,8 +49,7 @@ def parse_domain(domain_str: Optional[str], default: Optional[Domain] = None) ->
 
 
 def parse_event_type(
-    event_type_str: Optional[str],
-    default: EventType = EventType.INDICATOR
+    event_type_str: Optional[str], default: EventType = EventType.INDICATOR
 ) -> EventType:
     """
     Parse event type string with fallback to default.

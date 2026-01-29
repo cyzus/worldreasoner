@@ -11,7 +11,9 @@ from typing import Any, Dict, Optional
 from src.domain.models.question import QuestionType
 
 
-def calculate_accuracy(prediction: Any, ground_truth: Any, question_type: QuestionType) -> float:
+def calculate_accuracy(
+    prediction: Any, ground_truth: Any, question_type: QuestionType
+) -> float:
     """Calculate simple accuracy (1.0 for correct, 0.0 for incorrect).
 
     Args:
@@ -40,8 +42,16 @@ def calculate_accuracy(prediction: Any, ground_truth: Any, question_type: Questi
         # Better approach: within tolerance or range
         if isinstance(prediction, dict) and isinstance(ground_truth, (int, float)):
             # Prediction is a range, ground truth is a value
-            return 1.0 if prediction.get('lower', 0) <= ground_truth <= prediction.get('upper', float('inf')) else 0.0
-        elif isinstance(prediction, (int, float)) and isinstance(ground_truth, (int, float)):
+            return (
+                1.0
+                if prediction.get("lower", 0)
+                <= ground_truth
+                <= prediction.get("upper", float("inf"))
+                else 0.0
+            )
+        elif isinstance(prediction, (int, float)) and isinstance(
+            ground_truth, (int, float)
+        ):
             # Both are point estimates - check if within 10% tolerance
             tolerance = abs(ground_truth) * 0.1
             return 1.0 if abs(prediction - ground_truth) <= tolerance else 0.0
@@ -56,10 +66,7 @@ def calculate_accuracy(prediction: Any, ground_truth: Any, question_type: Questi
 
 
 def calculate_brier_score(
-    prediction: Any,
-    ground_truth: Any,
-    confidence: float,
-    question_type: QuestionType
+    prediction: Any, ground_truth: Any, confidence: float, question_type: QuestionType
 ) -> Optional[float]:
     """Calculate Brier score for probabilistic forecasts.
 
@@ -104,7 +111,7 @@ def calculate_brier_score(
             return (1 - confidence) ** 2
         else:
             # Predicted wrong option
-            return confidence ** 2
+            return confidence**2
 
     elif question_type == QuestionType.QUANTITY:
         # Brier score doesn't apply directly to continuous quantities
@@ -115,10 +122,7 @@ def calculate_brier_score(
 
 
 def calculate_log_score(
-    prediction: Any,
-    ground_truth: Any,
-    confidence: float,
-    question_type: QuestionType
+    prediction: Any, ground_truth: Any, confidence: float, question_type: QuestionType
 ) -> Optional[float]:
     """Calculate logarithmic scoring rule.
 
@@ -174,7 +178,9 @@ def calculate_log_score(
     return None
 
 
-def calculate_calibration_metrics(predictions: list, ground_truths: list, confidences: list) -> Dict[str, float]:
+def calculate_calibration_metrics(
+    predictions: list, ground_truths: list, confidences: list
+) -> Dict[str, float]:
     """Calculate calibration metrics across multiple forecasts.
 
     Calibration measures whether confidence levels match actual accuracy.
@@ -191,7 +197,9 @@ def calculate_calibration_metrics(predictions: list, ground_truths: list, confid
         - reliability_curve: Binned confidence vs accuracy data
     """
     # Bin predictions by confidence level
-    bins = [(i/10, (i+1)/10) for i in range(10)]  # 10 bins: 0-0.1, 0.1-0.2, ..., 0.9-1.0
+    bins = [
+        (i / 10, (i + 1) / 10) for i in range(10)
+    ]  # 10 bins: 0-0.1, 0.1-0.2, ..., 0.9-1.0
 
     bin_stats = []
     total_calibration_error = 0.0
@@ -218,16 +226,15 @@ def calculate_calibration_metrics(predictions: list, ground_truths: list, confid
             total_calibration_error += calibration_error * len(bin_predictions)
             count += len(bin_predictions)
 
-            bin_stats.append({
-                'confidence_range': (bin_lower, bin_upper),
-                'count': len(bin_predictions),
-                'accuracy': accuracy,
-                'calibration_error': calibration_error
-            })
+            bin_stats.append(
+                {
+                    "confidence_range": (bin_lower, bin_upper),
+                    "count": len(bin_predictions),
+                    "accuracy": accuracy,
+                    "calibration_error": calibration_error,
+                }
+            )
 
     mean_calibration_error = total_calibration_error / count if count > 0 else 0.0
 
-    return {
-        'mean_calibration_error': mean_calibration_error,
-        'bins': bin_stats
-    }
+    return {"mean_calibration_error": mean_calibration_error, "bins": bin_stats}

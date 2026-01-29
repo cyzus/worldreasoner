@@ -6,8 +6,6 @@ and graph updates to the frontend.
 
 from typing import Set
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-import asyncio
-import json
 
 from src.utils.logging import logger
 
@@ -42,11 +40,13 @@ async def graph_updates_websocket(websocket: WebSocket):
 
     try:
         # Send initial connection message
-        await websocket.send_json({
-            "type": "connection",
-            "status": "connected",
-            "message": "Connected to WorldReasoner graph updates"
-        })
+        await websocket.send_json(
+            {
+                "type": "connection",
+                "status": "connected",
+                "message": "Connected to WorldReasoner graph updates",
+            }
+        )
 
         # Keep connection alive
         while True:
@@ -124,11 +124,13 @@ async def pipeline_progress_websocket(websocket: WebSocket):
 
     try:
         # Send initial message
-        await websocket.send_json({
-            "type": "connection",
-            "status": "connected",
-            "message": "Connected to pipeline progress updates"
-        })
+        await websocket.send_json(
+            {
+                "type": "connection",
+                "status": "connected",
+                "message": "Connected to pipeline progress updates",
+            }
+        )
 
         # Keep connection alive
         while True:

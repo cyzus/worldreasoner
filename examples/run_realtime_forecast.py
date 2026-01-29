@@ -32,16 +32,26 @@ from src.utils.logging import logger
 
 def main():
     """Main entry point for real-time forecasting."""
-    parser = argparse.ArgumentParser(description="Real-time forecasting with live information")
+    parser = argparse.ArgumentParser(
+        description="Real-time forecasting with live information"
+    )
 
     # Question selection (mutually exclusive)
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--question-id", help="Existing question ID from database")
-    group.add_argument("--question-text", help="Ad-hoc question text for real-time forecast")
+    group.add_argument(
+        "--question-text", help="Ad-hoc question text for real-time forecast"
+    )
 
     # Configuration
-    parser.add_argument("--max-steps", type=int, default=15, help="Maximum agent steps (default: 15)")
-    parser.add_argument("--db", default="worldreasoner.db", help="Database path (default: worldreasoner.db)")
+    parser.add_argument(
+        "--max-steps", type=int, default=15, help="Maximum agent steps (default: 15)"
+    )
+    parser.add_argument(
+        "--db",
+        default="worldreasoner.db",
+        help="Database path (default: worldreasoner.db)",
+    )
 
     args = parser.parse_args()
 
@@ -64,7 +74,7 @@ def main():
             question_type=QuestionType.BOOLEAN,
             domain=Domain.GENERAL,
             resolution_date=datetime.now(timezone.utc),  # Will resolve "now"
-            created_at=datetime.now(timezone.utc)
+            created_at=datetime.now(timezone.utc),
         )
         logger.info(f"Created ad-hoc question: {question.id}")
 
@@ -74,7 +84,7 @@ def main():
     print("=" * 80)
     print(f"\nQuestion: {question.question_text}")
     print(f"Question ID: {question.id}")
-    print(f"Mode: real_time (web search and fetch enabled)")
+    print("Mode: real_time (web search and fetch enabled)")
     print(f"Simulated date: {datetime.now(timezone.utc).date()} (today)")
     print("\n" + "=" * 80)
 
@@ -85,7 +95,7 @@ def main():
         knowledge_cutoff=config.llm.knowledge_cutoff,
         config=config,
         mode="real_time",
-        max_steps=args.max_steps
+        max_steps=args.max_steps,
     )
 
     logger.info("Starting real-time forecast agent...")

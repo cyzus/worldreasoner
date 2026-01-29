@@ -59,11 +59,9 @@ Configuration:
 import os
 import json
 import argparse
-from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
+from typing import Optional
 from contextvars import ContextVar
 
-from pydantic import BaseModel, Field
 from fastmcp import FastMCP
 from fastmcp.server import Context
 from fastmcp.server.middleware import Middleware, MiddlewareContext
@@ -71,7 +69,7 @@ from fastmcp.server.middleware import Middleware, MiddlewareContext
 # Import WorldReasoner components
 from src.core.database import GenericDatabase
 from src.core.hybrid_search import HybridSearch
-from src.domain.models import Article, Question, Forecast
+from src.domain.models import Forecast
 from src.utils.logging import logger
 from src.utils.serialization import serialize_domain
 
@@ -94,12 +92,15 @@ article_service: ArticleOperationsService = None
 forecast_service: ForecastSubmissionService = None
 
 # Context variable for storing forecast context (replaces global dict)
-_current_context: ContextVar[Optional[ForecastContext]] = ContextVar('forecast_context', default=None)
+_current_context: ContextVar[Optional[ForecastContext]] = ContextVar(
+    "forecast_context", default=None
+)
 
 
 # ============================================================================
 # Middleware to capture connection headers
 # ============================================================================
+
 
 class ForecastContextMiddleware(Middleware):
     """Middleware to capture and store forecasting context from request headers.
@@ -117,13 +118,21 @@ class ForecastContextMiddleware(Middleware):
             try:
                 request = context.fastmcp_context.get_http_request()
 
-                if request and hasattr(request, 'headers'):
-                    headers = {k: v for k, v in request.headers.items() if k.lower().startswith('x-')}
-                    logger.debug(f"Request headers available: {list(headers.keys())[:5]}...")
+                if request and hasattr(request, "headers"):
+                    headers = {
+                        k: v
+                        for k, v in request.headers.items()
+                        if k.lower().startswith("x-")
+                    }
+                    logger.debug(
+                        f"Request headers available: {list(headers.keys())[:5]}..."
+                    )
 
                     # Try to parse and validate context
                     try:
-                        forecast_context = context_service.parse_context_from_headers(headers)
+                        forecast_context = context_service.parse_context_from_headers(
+                            headers
+                        )
                         context_service.validate_context(forecast_context)
                         _current_context.set(forecast_context)
 
@@ -150,6 +159,7 @@ mcp.add_middleware(ForecastContextMiddleware())
 # Helper Functions
 # ============================================================================
 
+
 def _get_context_from_mcp(ctx: Context) -> ForecastContext:
     """Extract forecasting context from MCP request metadata/headers.
 
@@ -173,10 +183,14 @@ def _get_context_from_mcp(ctx: Context) -> ForecastContext:
 
     # If not cached, try to extract directly from request headers
     try:
-        if hasattr(ctx, 'fastmcp_context') and ctx.fastmcp_context:
+        if hasattr(ctx, "fastmcp_context") and ctx.fastmcp_context:
             request = ctx.fastmcp_context.get_http_request()
-            if request and hasattr(request, 'headers'):
-                headers = {k: v for k, v in request.headers.items() if k.lower().startswith('x-')}
+            if request and hasattr(request, "headers"):
+                headers = {
+                    k: v
+                    for k, v in request.headers.items()
+                    if k.lower().startswith("x-")
+                }
                 forecast_context = context_service.parse_context_from_headers(headers)
                 context_service.validate_context(forecast_context)
                 _current_context.set(forecast_context)
@@ -206,7 +220,6 @@ def _get_hybrid_search(db_path: Optional[str] = None) -> HybridSearch:
     else:
         # Use global hybrid_search instance
         return hybrid_search
-
 
 
 # ============================================================================
@@ -241,22 +254,32 @@ def get_question(ctx: Context) -> str:
                 "quantity_unit": question.quantity_unit,
             },
             "temporal_context": {
-                "knowledge_cutoff_date": forecast_context.knowledge_cutoff.isoformat() if forecast_context.knowledge_cutoff else None,
+                "knowledge_cutoff_date": forecast_context.knowledge_cutoff.isoformat()
+                if forecast_context.knowledge_cutoff
+                else None,
                 "today's date": forecast_context.simulated_date.isoformat(),
                 "explanation": (
                     f"'today' is {forecast_context.simulated_date.date()}. "
-                    + (f"Your training data cutoff is {forecast_context.knowledge_cutoff.date()}. " if forecast_context.knowledge_cutoff else "")
-                )
+                    + (
+                        f"Your training data cutoff is {forecast_context.knowledge_cutoff.date()}. "
+                        if forecast_context.knowledge_cutoff
+                        else ""
+                    )
+                ),
             },
             "instructions": (
-                f"FORECASTING SCENARIO:\n"
-                + (f"- Your training data includes information up to: {forecast_context.knowledge_cutoff.date()}\n" if forecast_context.knowledge_cutoff else "")
+                "FORECASTING SCENARIO:\n"
+                + (
+                    f"- Your training data includes information up to: {forecast_context.knowledge_cutoff.date()}\n"
+                    if forecast_context.knowledge_cutoff
+                    else ""
+                )
                 + f"- 'today' date: {forecast_context.simulated_date.date()}\n"
                 f"- Approximate event resolution date: {question.resolution_date.date()}\n"
                 f"- You must forecast: around {(question.resolution_date - forecast_context.simulated_date).days} days into the future\n"
                 f"- All article searches will only return information from BEFORE today\n"
                 f"- This tests your ability to make genuine predictions about future events"
-            )
+            ),
         }
 
         return json.dumps(result, indent=2)
@@ -271,10 +294,7 @@ def get_question(ctx: Context) -> str:
 
 @mcp.tool()
 async def temporal_search_articles(
-    ctx: Context,
-    query: str,
-    domain: str = None,
-    max_results: int = 10
+    ctx: Context, query: str, domain: str = None, max_results: int = 10
 ) -> str:
     """Search for articles with temporal filtering using hybrid search.
 
@@ -299,7 +319,7 @@ async def temporal_search_articles(
             simulated_date=forecast_context.simulated_date,
             domain=domain,
             max_results=max_results,
-            search_method="fts"
+            search_method="fts",
         )
 
         # Format response
@@ -317,10 +337,12 @@ async def temporal_search_articles(
                     "domain": serialize_domain(article.domain),
                     "published_date": article.published_date.isoformat(),
                     "word_count": article.word_count,
-                    "excerpt": article.content[:300] + "..." if len(article.content) > 300 else article.content
+                    "excerpt": article.content[:300] + "..."
+                    if len(article.content) > 300
+                    else article.content,
                 }
                 for article in articles
-            ]
+            ],
         }
 
         return json.dumps(result, indent=2)
@@ -334,10 +356,7 @@ async def temporal_search_articles(
 
 
 @mcp.tool()
-def fetch_article(
-    ctx: Context,
-    article_id: str
-) -> str:
+def fetch_article(ctx: Context, article_id: str) -> str:
     """Fetch full article content with temporal validation.
 
     Only returns the article if it was published before the simulated date.
@@ -351,14 +370,18 @@ def fetch_article(
 
         # Fetch article using service
         try:
-            article = article_service.fetch_article(article_id, forecast_context.simulated_date)
+            article = article_service.fetch_article(
+                article_id, forecast_context.simulated_date
+            )
         except ValueError as e:
             return json.dumps({"error": str(e)})
 
         if not article:
-            return json.dumps({
-                "error": f"Article {article_id} not found or published after simulated date"
-            })
+            return json.dumps(
+                {
+                    "error": f"Article {article_id} not found or published after simulated date"
+                }
+            )
 
         # Return full article
         result = {
@@ -371,8 +394,10 @@ def fetch_article(
             "author": article.author,
             "word_count": article.word_count,
             "tags": article.tags,
-            "content": article.content[:2000] + "..." if len(article.content) > 2000 else article.content,
-            "event_ids": article.event_ids
+            "content": article.content[:2000] + "..."
+            if len(article.content) > 2000
+            else article.content,
+            "event_ids": article.event_ids,
         }
 
         return json.dumps(result, indent=2)
@@ -386,9 +411,15 @@ def fetch_article(
 
 
 @mcp.tool()
-def identify_forecast_event(ctx: Context, title: str, description: str, domain: str,
-                           occurred_date: str, event_type: str = None,
-                           source_article_ids: str = None) -> str:
+def identify_forecast_event(
+    ctx: Context,
+    title: str,
+    description: str,
+    domain: str,
+    occurred_date: str,
+    event_type: str = None,
+    source_article_ids: str = None,
+) -> str:
     """Identify event for forecast reasoning.
 
     Use this tool to identify and record events that are relevant to your forecast.
@@ -412,19 +443,28 @@ def identify_forecast_event(ctx: Context, title: str, description: str, domain: 
         tool = ForecastEventIdentifierTool(
             question_db_path=db.db_path,
             forecast_db_path=forecast_context.db_path or db.db_path,
-            session_id=forecast_context.session_id
+            session_id=forecast_context.session_id,
         )
 
-        return tool.forward(title, description, domain, occurred_date, event_type, source_article_ids)
+        return tool.forward(
+            title, description, domain, occurred_date, event_type, source_article_ids
+        )
     except Exception as e:
         logger.error(f"Error identifying forecast event: {e}")
         return json.dumps({"error": str(e)})
 
 
 @mcp.tool()
-def create_forecast_causal_link(ctx: Context, source_event_id: str, target_event_id: str,
-                               relation_type: str, strength: float, confidence: float,
-                               reasoning: str, evidence_article_ids: str = "") -> str:
+def create_forecast_causal_link(
+    ctx: Context,
+    source_event_id: str,
+    target_event_id: str,
+    relation_type: str,
+    strength: float,
+    confidence: float,
+    reasoning: str,
+    evidence_article_ids: str = "",
+) -> str:
     """Create causal link for forecast reasoning.
 
     Use this tool to record causal relationships between events during forecasting.
@@ -448,11 +488,18 @@ def create_forecast_causal_link(ctx: Context, source_event_id: str, target_event
 
         tool = ForecastCausalReasonerTool(
             forecast_db_path=forecast_context.db_path or db.db_path,
-            session_id=forecast_context.session_id
+            session_id=forecast_context.session_id,
         )
 
-        return tool.forward(source_event_id, target_event_id, relation_type,
-                          strength, confidence, reasoning, evidence_article_ids)
+        return tool.forward(
+            source_event_id,
+            target_event_id,
+            relation_type,
+            strength,
+            confidence,
+            reasoning,
+            evidence_article_ids,
+        )
     except Exception as e:
         logger.error(f"Error creating forecast causal link: {e}")
         return json.dumps({"error": str(e)})
@@ -474,7 +521,7 @@ def inspect_forecast_graph(ctx: Context) -> str:
 
         tool = ForecastGraphInspectorTool(
             forecast_db_path=forecast_context.db_path or db.db_path,
-            session_id=forecast_context.session_id
+            session_id=forecast_context.session_id,
         )
 
         return tool.forward()
@@ -489,7 +536,7 @@ def submit_forecast(
     prediction: str,
     confidence: float,
     reasoning: str,
-    articles_accessed: list[str]
+    articles_accessed: list[str],
 ) -> str:
     """Submit a forecast for the current question.
 
@@ -507,7 +554,9 @@ def submit_forecast(
         logger.info(f"Submitting forecast for question {forecast_context.question_id}")
 
         # Validate prediction
-        valid, parsed_prediction, error = forecast_service.validate_prediction(question, prediction)
+        valid, parsed_prediction, error = forecast_service.validate_prediction(
+            question, prediction
+        )
         if not valid:
             return json.dumps({"error": error})
 
@@ -523,14 +572,12 @@ def submit_forecast(
             target_event_id=question.target_event_id,
             model_name=forecast_context.model_name,
             mode=forecast_context.forecast_mode,
-            db_path=forecast_context.db_path
+            db_path=forecast_context.db_path,
         )
 
         # Link graph elements
         graph_counts = forecast_service.link_forecast_graph(
-            forecast.id,
-            forecast_context.session_id,
-            forecast_context.db_path
+            forecast.id, forecast_context.session_id, forecast_context.db_path
         )
 
         result = {
@@ -545,7 +592,7 @@ def submit_forecast(
             "note": (
                 f"Forecast submitted! You predicted based on information from before the simulated date ({forecast_context.simulated_date.date()}). "
                 f"The actual outcome will be known on {question.resolution_date.date()}."
-            )
+            ),
         }
 
         return json.dumps(result, indent=2)
@@ -558,11 +605,10 @@ def submit_forecast(
         return json.dumps({"error": str(e)})
 
 
-
-
 # ============================================================================
 # CLI Entry Point
 # ============================================================================
+
 
 def main():
     """CLI entry point for streamable HTTP MCP server.
@@ -601,28 +647,21 @@ Connection Metadata (provided by MCP client):
   X-Knowledge-Cutoff: LLM's training data cutoff date (ISO format, optional)
   X-Simulated-Date: Simulated "today" date (ISO format, required)
                     Must be AFTER knowledge cutoff and BEFORE resolution date
-        """
+        """,
     )
     parser.add_argument(
         "--db",
         default=DB_PATH,
-        help="Path to WorldReasoner database (default: worldreasoner.db)"
+        help="Path to WorldReasoner database (default: worldreasoner.db)",
     )
     parser.add_argument(
-        "--host",
-        default="0.0.0.0",
-        help="Bind host (default: 0.0.0.0)"
+        "--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)"
     )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=8110,
-        help="Port (default: 8110)"
-    )
+    parser.add_argument("--port", type=int, default=8110, help="Port (default: 8110)")
     parser.add_argument(
         "--log-level",
         default="debug",
-        help="Logging level: debug|info|warning|error (default: debug)"
+        help="Logging level: debug|info|warning|error (default: debug)",
     )
     global db, hybrid_search, context_service, article_service, forecast_service
 
@@ -646,9 +685,13 @@ Connection Metadata (provided by MCP client):
     logger.info("  - X-Knowledge-Cutoff (optional)")
     logger.info("  - X-Simulated-Date (required)")
 
-    logger.info(f"Starting MCP STREAMABLE HTTP server on http://{args.host}:{args.port}")
+    logger.info(
+        f"Starting MCP STREAMABLE HTTP server on http://{args.host}:{args.port}"
+    )
     logger.info("Endpoints: /mcp/tools, /mcp/prompts, SSE streaming available")
-    logger.info("Context headers: X-Question-ID, X-Knowledge-Cutoff (optional), X-Simulated-Date (required)")
+    logger.info(
+        "Context headers: X-Question-ID, X-Knowledge-Cutoff (optional), X-Simulated-Date (required)"
+    )
 
     # Add health check endpoint
     from fastapi.responses import JSONResponse
@@ -663,8 +706,8 @@ Connection Metadata (provided by MCP client):
                 "status": "healthy",
                 "database": args.db,
                 "server_type": "mcp_forecasting",
-                "mode": "streamable_http"
-            }
+                "mode": "streamable_http",
+            },
         )
 
     # Get the app instance using http_app() with streamable-http transport
@@ -683,9 +726,10 @@ Connection Metadata (provided by MCP client):
 
     logger.info(f"Starting uvicorn server on {args.host}:{args.port}")
     import uvicorn
+
     uvicorn.run(app, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":
-    import sys
+
     main()

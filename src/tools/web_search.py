@@ -2,7 +2,6 @@ from dotenv import load_dotenv
 import os
 import json
 from typing import Optional, List, Dict, Any
-from datetime import datetime
 import httpx
 from smolagents.tools import Tool
 from smolagents import WebSearchTool as SmolWebSearchTool
@@ -15,10 +14,11 @@ load_dotenv()
 class WebSearchTool(Tool):
     """
     A unified web search tool that uses SearXNG if configured, otherwise falls back to default web search.
-    
+
     If SEARXNG_BASE_URL is set in environment variables, this tool will use a SearXNG instance
     for privacy-focused meta-search. Otherwise, it uses the default smolagents WebSearchTool.
     """
+
     name: str = "WebSearchTool"
     description: str = (
         "Performs a web search using either SearXNG or default search. "
@@ -33,24 +33,21 @@ class WebSearchTool(Tool):
     is_initialized: bool = False
 
     inputs = {
-        "query": {
-            "type": "string",
-            "description": "The search query string."
-        },
+        "query": {"type": "string", "description": "The search query string."},
         "categories": {
             "type": "string",
             "description": "Optional categories to search (e.g., 'general', 'news', 'images')",
-            "nullable": True
+            "nullable": True,
         },
         "language": {
             "type": "string",
             "description": "Optional language code (e.g., 'en', 'fr')",
-            "nullable": True
+            "nullable": True,
         },
         "page": {
             "type": "integer",
             "description": "Optional page number for results (default: 1)",
-            "nullable": True
+            "nullable": True,
         },
     }
     output_type = "string"
@@ -76,25 +73,37 @@ class WebSearchTool(Tool):
         self.question_id = question_id
         self.question = None
         self.question_resolution_date = None
-        
+
         self.db = None
         if db_path:
             from src.core.database import GenericDatabase
+
             self.db = GenericDatabase(db_path)
         if self.db and question_id:
             from src.domain.models.question import Question
+
             self.question = self.db.get(Question, question_id)
             self.auto_collect_enabled = self.question is not None
-            self.question_resolution_date = self.question.resolution_date if self.question else None
-            
+            self.question_resolution_date = (
+                self.question.resolution_date if self.question else None
+            )
+
         self.max_auto_collect = max_auto_collect
         self.domain = domain
 
         # Initialize article collector if enabled
         if self.auto_collect_enabled:
             from src.tools.article_collector import ArticleCollectorTool
-            self.article_collector = ArticleCollectorTool(db=self.db, db_path=db_path, collector=collector, question_id=self.question_id)
-            logger.info(f"Auto-collect enabled (question_id={question_id}, max={max_auto_collect})")
+
+            self.article_collector = ArticleCollectorTool(
+                db=self.db,
+                db_path=db_path,
+                collector=collector,
+                question_id=self.question_id,
+            )
+            logger.info(
+                f"Auto-collect enabled (question_id={question_id}, max={max_auto_collect})"
+            )
         else:
             self.article_collector = None
 
@@ -105,10 +114,14 @@ class WebSearchTool(Tool):
         if self.use_searxng:
             logger.info(f"Using SearXNG at {self.searxng_base_url}")
             self.client = httpx.Client(
-                base_url=self.searxng_base_url, timeout=30.0,
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                        "Accept": "application/json", "Accept-Language": "en-US,en;q=0.9"},
-                follow_redirects=True
+                base_url=self.searxng_base_url,
+                timeout=30.0,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Accept": "application/json",
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
+                follow_redirects=True,
             )
         else:
             logger.info("Using default smolagents WebSearchTool")
@@ -186,7 +199,9 @@ class WebSearchTool(Tool):
 
             # If JSON format is forbidden (403), fall back
             if response.status_code == 403:
-                logger.warning("SearXNG JSON format restricted, no structured results available")
+                logger.warning(
+                    "SearXNG JSON format restricted, no structured results available"
+                )
                 return []
 
             response.raise_for_status()
@@ -199,13 +214,17 @@ class WebSearchTool(Tool):
                 # Build structured result list
                 structured = []
                 for result in results:
-                    structured.append({
-                        "title": result.get("title", "No title"),
-                        "url": result.get("url", ""),
-                        "content": result.get("content", "No description available"),
-                        "engines": result.get("engines", []),
-                        "publishedDate": result.get("publishedDate", None),
-                    })
+                    structured.append(
+                        {
+                            "title": result.get("title", "No title"),
+                            "url": result.get("url", ""),
+                            "content": result.get(
+                                "content", "No description available"
+                            ),
+                            "engines": result.get("engines", []),
+                            "publishedDate": result.get("publishedDate", None),
+                        }
+                    )
                 return structured
             except json.JSONDecodeError:
                 logger.error("Failed to parse SearXNG JSON response")
@@ -215,7 +234,9 @@ class WebSearchTool(Tool):
             logger.error(f"SearXNG returned status {e.response.status_code}")
             return []
         except httpx.RequestError as e:
-            logger.error(f"Failed to connect to SearXNG at {self.searxng_base_url}: {str(e)}")
+            logger.error(
+                f"Failed to connect to SearXNG at {self.searxng_base_url}: {str(e)}"
+            )
             return []
         except Exception as e:
             logger.error(f"Error querying SearXNG: {str(e)}")
@@ -241,18 +262,22 @@ class WebSearchTool(Tool):
             Formatted markdown string with search results (+ collection summary if auto-collect enabled)
         """
         # Get structured results (DRY: reuse query logic)
-        structured_results = self._get_structured_results(query, categories, language, page)
+        structured_results = self._get_structured_results(
+            query, categories, language, page
+        )
 
         # If no results (error or fallback), use fallback tool
         if not structured_results:
-            if hasattr(self, 'fallback_tool'):
+            if hasattr(self, "fallback_tool"):
                 return self.fallback_tool.forward(query=query)
             else:
                 self.fallback_tool = SmolWebSearchTool()
                 return self.fallback_tool.forward(query=query)
 
         # Format structured results as markdown
-        search_results = self._format_search_results_from_list(query, structured_results)
+        search_results = self._format_search_results_from_list(
+            query, structured_results
+        )
 
         # If auto-collect disabled, return search results only
         if not self.auto_collect_enabled:
@@ -264,7 +289,9 @@ class WebSearchTool(Tool):
         # Append collection summary to search results
         return f"{search_results}\n\n{collection_summary}"
 
-    def _format_search_results_from_list(self, query: str, results: List[Dict[str, Any]]) -> str:
+    def _format_search_results_from_list(
+        self, query: str, results: List[Dict[str, Any]]
+    ) -> str:
         """
         Format structured search results into a readable markdown string.
 
@@ -322,13 +349,15 @@ class WebSearchTool(Tool):
         # Convert to structured list format and reuse formatting logic (DRY)
         structured_results = []
         for result in results:
-            structured_results.append({
-                "title": result.get("title", "No title"),
-                "url": result.get("url", ""),
-                "content": result.get("content", "No description available"),
-                "engines": result.get("engines", []),
-                "publishedDate": result.get("publishedDate", None),
-            })
+            structured_results.append(
+                {
+                    "title": result.get("title", "No title"),
+                    "url": result.get("url", ""),
+                    "content": result.get("content", "No description available"),
+                    "engines": result.get("engines", []),
+                    "publishedDate": result.get("publishedDate", None),
+                }
+            )
 
         return self._format_search_results_from_list(query, structured_results)
 
@@ -345,17 +374,23 @@ class WebSearchTool(Tool):
         if not self.question_resolution_date:
             logger.warning("Auto-collect skipped: question_resolution_date is not set")
             return "\n---\n**Auto-collected 0 article(s)** (auto-collect disabled: no resolution date)"
-        
+
         from src.utils.date_utils import parse_flexible_datetime
 
         collected = []
         skipped = {"no_date": 0, "after_resolution": 0, "error": 0}
 
-        for result in structured_results[:self.max_auto_collect * 2]:  # Check extra results in case some are skipped
+        for result in structured_results[
+            : self.max_auto_collect * 2
+        ]:  # Check extra results in case some are skipped
             if len(collected) >= self.max_auto_collect:
                 break
 
-            url, title, published_date_str = result.get("url"), result.get("title", ""), result.get("publishedDate")
+            url, title, published_date_str = (
+                result.get("url"),
+                result.get("title", ""),
+                result.get("publishedDate"),
+            )
 
             if not url or not published_date_str:
                 if not published_date_str:
@@ -364,24 +399,41 @@ class WebSearchTool(Tool):
 
             try:
                 published_date = parse_flexible_datetime(published_date_str)
-                
+
                 # Normalize both datetimes for comparison (handle timezone-aware vs naive)
                 # Convert both to naive UTC to avoid TypeError
-                pub_dt = published_date.replace(tzinfo=None) if published_date.tzinfo else published_date
-                res_dt = self.question_resolution_date.replace(tzinfo=None) if self.question_resolution_date.tzinfo else self.question_resolution_date
-                
+                pub_dt = (
+                    published_date.replace(tzinfo=None)
+                    if published_date.tzinfo
+                    else published_date
+                )
+                res_dt = (
+                    self.question_resolution_date.replace(tzinfo=None)
+                    if self.question_resolution_date.tzinfo
+                    else self.question_resolution_date
+                )
+
                 if pub_dt >= res_dt:
                     skipped["after_resolution"] += 1
                     continue
 
                 # Collect article
                 engines = result.get("engines", [])
-                source = engines[0] if engines else url.split("/")[2] if "/" in url else "Unknown"
+                source = (
+                    engines[0]
+                    if engines
+                    else url.split("/")[2]
+                    if "/" in url
+                    else "Unknown"
+                )
 
                 self.article_collector.forward(
-                    url=url, title=title, source=source,
+                    url=url,
+                    title=title,
+                    source=source,
                     published_date=published_date.isoformat(),
-                    domain=self.domain, author=None
+                    domain=self.domain,
+                    author=None,
                 )
                 collected.append(title[:30] + "..." if len(title) > 30 else title)
 
@@ -396,17 +448,17 @@ class WebSearchTool(Tool):
             summary += "\n" + "\n".join([f"- {t}" for t in collected])
 
         if total_skipped > 0:
-            details = [f"{v} {k.replace('_', ' ')}" for k, v in skipped.items() if v > 0]
+            details = [
+                f"{v} {k.replace('_', ' ')}" for k, v in skipped.items() if v > 0
+            ]
             summary += f"\n\n(Skipped {total_skipped}: {', '.join(details)}. **Please manually collect relevant articles if they were skipped.**)"
 
         return summary
 
     def __del__(self):
         """Clean up HTTP client when tool is destroyed."""
-        if hasattr(self, 'client') and self.client:
+        if hasattr(self, "client") and self.client:
             try:
                 self.client.close()
             except Exception:
                 pass
-
-

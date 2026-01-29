@@ -46,7 +46,11 @@ class CollectionProgress(BaseModel):
 
         # Update category distribution
         # Use domain as category (since Question model doesn't have metadata/category field)
-        category = question.domain.value if hasattr(question.domain, 'value') else str(question.domain)
+        category = (
+            question.domain.value
+            if hasattr(question.domain, "value")
+            else str(question.domain)
+        )
         self.by_category[category] += 1
 
         # Update source distribution
@@ -92,9 +96,9 @@ class CollectionProgress(BaseModel):
             questions = self.questions_list
         else:
             questions = [q for q in self.questions_list if not q.skip_evidence]
-        
+
         total = len(questions)
-        
+
         # Check total
         if total < goal.total_questions:
             logger.debug(f"Total not met: {total}/{goal.total_questions}")
@@ -172,7 +176,7 @@ class CollectionProgress(BaseModel):
         """
         return {
             "types": self.get_type_gaps(goal),
-            "categories": self.get_category_gaps(goal)
+            "categories": self.get_category_gaps(goal),
         }
 
     def get_completion_percentage(self, goal: CollectionGoal) -> float:
@@ -223,24 +227,28 @@ class CollectionProgress(BaseModel):
         summary = self.get_summary(goal)
 
         logger.info("Collection progress summary:")
-        logger.info(f"Total: {summary['total']}/{summary['target']} "
-                   f"({summary['completion_pct']:.1f}%) - Goal met: {summary['goal_met']}")
+        logger.info(
+            f"Total: {summary['total']}/{summary['target']} "
+            f"({summary['completion_pct']:.1f}%) - Goal met: {summary['goal_met']}"
+        )
 
         logger.info("By Type:")
-        for qtype, count in summary['by_type'].items():
-            target = summary['type_targets'].get(qtype, 0)
+        for qtype, count in summary["by_type"].items():
+            target = summary["type_targets"].get(qtype, 0)
             logger.info(f"  {qtype:15} {count:3}/{target:3}")
 
         logger.info("By Category:")
-        for category, count in summary['by_category'].items():
-            target = summary['category_targets'].get(category, 0)
+        for category, count in summary["by_category"].items():
+            target = summary["category_targets"].get(category, 0)
             logger.info(f"  {category:15} {count:3}/{target:3}")
 
         logger.info("By Source:")
-        for source, count in summary['by_source'].items():
+        for source, count in summary["by_source"].items():
             logger.info(f"  {source:15} {count:3}")
 
-        logger.info(f"Avg Difficulty: {summary['avg_difficulty']:.2f}, With Criteria: {summary['questions_with_criteria']}/{summary['total']}")
+        logger.info(
+            f"Avg Difficulty: {summary['avg_difficulty']:.2f}, With Criteria: {summary['questions_with_criteria']}/{summary['total']}"
+        )
 
     def get_questions(self) -> List[Question]:
         """Get all collected questions.

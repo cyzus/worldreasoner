@@ -40,7 +40,7 @@ class MarketQuestion(BaseModel):
 
 class PolymarketRunner(QuestionSourceRunner):
     """Question source from Polymarket prediction market.
-    
+
     Refactored to use modular utilities:
     - PolymarketClient: HTTP API wrapper
     - MarketParser: Data parsing and validation
@@ -59,11 +59,11 @@ class PolymarketRunner(QuestionSourceRunner):
         Domain.FINANCE: ["finance", "economy"],
         Domain.SPORTS: ["sports"],
         Domain.TECH: ["tech", "ai"],
-        Domain.CULTURE: ["entertainment","music","movies"],
+        Domain.CULTURE: ["entertainment", "music", "movies"],
         Domain.HEALTH: ["health", "pandemic"],
         Domain.SCIENCE: ["science"],
         Domain.BUSINESS: ["business"],
-        Domain.CLIMATE: ["climate","weather"],
+        Domain.CLIMATE: ["climate", "weather"],
         Domain.GENERAL: ["all"],
     }
 
@@ -84,20 +84,22 @@ class PolymarketRunner(QuestionSourceRunner):
         self.min_volume_usd = min_volume_usd
         self.require_ground_truth = require_ground_truth
         self.type_map = type_map or self.DEFAULT_TYPE_MAP
-        
+
         # Initialize utilities
         self.client = PolymarketClient()
         self.parser = MarketParser(require_ground_truth=require_ground_truth)
-    
+
     async def _fetch_markets_by_category(
         self,
         category_filter: Optional[Union[Dict[str, int], List[str]]],
         limit: int,
-        quality_requirements: Optional[QualityRequirements] = None
+        quality_requirements: Optional[QualityRequirements] = None,
     ) -> List[MarketQuestion]:
         """Fetch and parse events by category, with client-side filtering and aggregation."""
         if not category_filter:
-            return await self._fetch_markets(limit=limit, quality_requirements=quality_requirements)
+            return await self._fetch_markets(
+                limit=limit, quality_requirements=quality_requirements
+            )
 
         # Determine which domains are being requested.
         if isinstance(category_filter, dict):
@@ -110,29 +112,41 @@ class PolymarketRunner(QuestionSourceRunner):
         # The limit is adjusted to ensure enough data is available after filtering.
         fetch_limit = limit * 5
         all_events = await self.client.fetch_events(
-            limit=fetch_limit,
-            closed=self.require_ground_truth
+            limit=fetch_limit, closed=self.require_ground_truth
         )
 
         all_market_questions = []
-        domain_tags = {domain: self.DOMAIN_TO_TAG_SLUGS.get(domain, []) for domain in requested_domains}
+        domain_tags = {
+            domain: self.DOMAIN_TO_TAG_SLUGS.get(domain, [])
+            for domain in requested_domains
+        }
 
         # Perform client-side filtering to find events matching the requested domains.
         for event in all_events:
-            event_tags = {tag.get('slug') for tag in event.get('tags', [])}
+            event_tags = {tag.get("slug") for tag in event.get("tags", [])}
             for domain, tags in domain_tags.items():
                 if any(tag in event_tags for tag in tags):
                     # If an event matches, parse it using the aggregation-aware helper.
-                    parsed_questions = self._parse_event_structure(event, quality_requirements)
+                    parsed_questions = self._parse_event_structure(
+                        event, quality_requirements
+                    )
                     for mq in parsed_questions:
                         # Assign the matched domain, as this is known from the filter.
                         mq.metadata["known_domain"] = domain.value
                         all_market_questions.append(mq)
-                    break # Avoid parsing the same event for multiple domains.
+                    break  # Avoid parsing the same event for multiple domains.
 
-        logger.info(f"Parsed {len(all_market_questions)} questions after filtering {len(all_events)} events by domain.")
+        logger.info(
+            f"Parsed {len(all_market_questions)} questions after filtering {len(all_events)} events by domain."
+        )
         return all_market_questions
-    def _parse_single_market(self, market: Dict[str, Any], end_date: datetime, closed_time: Optional[datetime]) -> Optional[MarketQuestion]:
+
+    def _parse_single_market(
+        self,
+        market: Dict[str, Any],
+        end_date: datetime,
+        closed_time: Optional[datetime],
+    ) -> Optional[MarketQuestion]:
         """Parse a single market into MarketQuestion.
 
         Args:
@@ -159,8 +173,12 @@ class PolymarketRunner(QuestionSourceRunner):
                 liquidity = market.get("liquidityNum")
 
             # Filter out markets with no volume AND no liquidity (likely templates)
-            if (volume is None or volume == 0 or volume == "0") and (liquidity is None or liquidity == 0 or liquidity == "0"):
-                logger.info(f"Filtering template market (vol={volume}, liq={liquidity}): {question_text[:80]}")
+            if (volume is None or volume == 0 or volume == "0") and (
+                liquidity is None or liquidity == 0 or liquidity == "0"
+            ):
+                logger.info(
+                    f"Filtering template market (vol={volume}, liq={liquidity}): {question_text[:80]}"
+                )
                 return None
 
             # Get description (resolution criteria)
@@ -172,7 +190,11 @@ class PolymarketRunner(QuestionSourceRunner):
                     description = events[0].get("description", "")
 
             # Use description as resolution criteria, with fallback
-            resolution_criteria = description if description else f"See https://polymarket.com/event/{market.get('slug', '')}"
+            resolution_criteria = (
+                description
+                if description
+                else f"See https://polymarket.com/event/{market.get('slug', '')}"
+            )
 
             # Parse actual outcomes from the API
             outcomes = self.parser.parse_outcomes(market)
@@ -196,14 +218,20 @@ class PolymarketRunner(QuestionSourceRunner):
                     question_type = "mcq"
 
             # Extract ground truth for resolved markets
-            ground_truth, resolution_reasoning = self.parser.extract_ground_truth(market, outcomes)
+            ground_truth, resolution_reasoning = self.parser.extract_ground_truth(
+                market, outcomes
+            )
 
             # Get volume
             volume = market.get("volumeNum", 0.0) or 0.0
 
             # Parse CLOB token IDs for price history
-            clob_ids_raw = market.get('clobTokenIds', '[]')
-            clob_ids = json.loads(clob_ids_raw) if isinstance(clob_ids_raw, str) else clob_ids_raw
+            clob_ids_raw = market.get("clobTokenIds", "[]")
+            clob_ids = (
+                json.loads(clob_ids_raw)
+                if isinstance(clob_ids_raw, str)
+                else clob_ids_raw
+            )
 
             # Extract estimated start time from startDate
             start_date_str = market.get("startDate")
@@ -211,7 +239,9 @@ class PolymarketRunner(QuestionSourceRunner):
             if start_date_str:
                 try:
                     estimated_start = parse_iso_datetime(start_date_str)
-                    logger.debug(f"Market {market.get('id')}: startDate={estimated_start}")
+                    logger.debug(
+                        f"Market {market.get('id')}: startDate={estimated_start}"
+                    )
                 except Exception as e:
                     logger.debug(f"Failed to parse startDate: {e}")
 
@@ -237,12 +267,16 @@ class PolymarketRunner(QuestionSourceRunner):
                     "categories": market.get("categories", []),
                     "ground_truth": ground_truth,
                     "resolution_reasoning": resolution_reasoning,
-                    "start_date": estimated_start.isoformat() if estimated_start else None,  # Store for estimated_start_time
+                    "start_date": estimated_start.isoformat()
+                    if estimated_start
+                    else None,  # Store for estimated_start_time
                     "closed": market.get("closed", False),
                 },
             )
         except Exception as e:
-            logger.debug(f"Failed to parse market {market.get('question', 'unknown')}: {e}")
+            logger.debug(
+                f"Failed to parse market {market.get('question', 'unknown')}: {e}"
+            )
             return None
 
     async def collect_from_search(
@@ -274,10 +308,10 @@ class PolymarketRunner(QuestionSourceRunner):
             search_results = await self.client.search_markets(
                 query=search_query,
                 limit_per_type=count * 2,  # Fetch more to account for filtering
-                events_status='resolved' if self.require_ground_truth else 'active',
-                result_type='events',  # Filter to events only
-                sort='closed_time',  # Sort by most recently closed
-                presets=['EventsTitle', 'Events'],  # Get full event data
+                events_status="resolved" if self.require_ground_truth else "active",
+                result_type="events",  # Filter to events only
+                sort="closed_time",  # Sort by most recently closed
+                presets=["EventsTitle", "Events"],  # Get full event data
             )
 
             # Use quality_requirements lookback window if provided
@@ -330,6 +364,7 @@ class PolymarketRunner(QuestionSourceRunner):
         except Exception as e:
             logger.error(f"Failed to collect from Polymarket search: {e}")
             import traceback
+
             logger.error(f"Traceback: {traceback.format_exc()}")
             return CollectionResult(
                 source_name=self.source_name,
@@ -361,25 +396,28 @@ class PolymarketRunner(QuestionSourceRunner):
             CollectionResult with Polymarket questions
         """
         try:
-            logger.info(f"PolymarketRunner: Fetching up to {count} questions (require_ground_truth={self.require_ground_truth})")
+            logger.info(
+                f"PolymarketRunner: Fetching up to {count} questions (require_ground_truth={self.require_ground_truth})"
+            )
 
             # Use tag-based fetching if category filter is provided
             # This eliminates the need for LLM categorization!
             if category_filter:
-                logger.info(f"Using tag-based fetching for categories: {category_filter}")
+                logger.info(
+                    f"Using tag-based fetching for categories: {category_filter}"
+                )
                 # Use same multiplier as non-category fetch (count * 20 for ground truth mode)
                 fetch_limit = count * 20 if self.require_ground_truth else count * 5
                 market_questions = await self._fetch_markets_by_category(
                     category_filter=category_filter,
                     limit=fetch_limit,
-                    quality_requirements=quality_requirements
+                    quality_requirements=quality_requirements,
                 )
             else:
                 # Fetch market questions - fetch many to have options
                 fetch_limit = count * 20 if self.require_ground_truth else count * 5
                 market_questions = await self._fetch_markets(
-                    limit=fetch_limit,
-                    quality_requirements=quality_requirements
+                    limit=fetch_limit, quality_requirements=quality_requirements
                 )
 
             # Map to Question model
@@ -401,7 +439,9 @@ class PolymarketRunner(QuestionSourceRunner):
                 questions = [q for q in questions if q.id not in existing_question_ids]
 
                 if before_dedup != len(questions):
-                    logger.info(f"Early duplicate filter: removed {before_dedup - len(questions)} duplicates before processing")
+                    logger.info(
+                        f"Early duplicate filter: removed {before_dedup - len(questions)} duplicates before processing"
+                    )
 
             if not questions:
                 logger.warning("No questions remaining after early deduplication")
@@ -421,7 +461,9 @@ class PolymarketRunner(QuestionSourceRunner):
                 category_filter=category_filter,
                 quality_requirements=quality_requirements,
             )
-            logger.info(f"Filtered from {len(questions)} down to {len(filtered)} questions after applying type/category/quality filters")
+            logger.info(
+                f"Filtered from {len(questions)} down to {len(filtered)} questions after applying type/category/quality filters"
+            )
 
             # Smart sampling by type and/or category if filters specified
             if (type_filter or category_filter) and len(filtered) > count:
@@ -432,7 +474,11 @@ class PolymarketRunner(QuestionSourceRunner):
                 if category_filter:
                     by_category = {}
                     for q in filtered:
-                        cat = q.domain.value if hasattr(q.domain, 'value') else str(q.domain)
+                        cat = (
+                            q.domain.value
+                            if hasattr(q.domain, "value")
+                            else str(q.domain)
+                        )
                         if cat not in by_category:
                             by_category[cat] = []
                         by_category[cat].append(q)
@@ -500,7 +546,7 @@ class PolymarketRunner(QuestionSourceRunner):
     async def _fetch_markets(
         self,
         limit: int = 1000,
-        quality_requirements: Optional[QualityRequirements] = None
+        quality_requirements: Optional[QualityRequirements] = None,
     ) -> List[MarketQuestion]:
         """Fetch markets (grouped by event) from Polymarket API.
 
@@ -533,14 +579,18 @@ class PolymarketRunner(QuestionSourceRunner):
                 mqs = self._parse_event_structure(event, quality_requirements)
                 questions.extend(mqs)
 
-            logger.info(f"Parsed {len(questions)} questions from {len(events_list)} events")
+            logger.info(
+                f"Parsed {len(questions)} questions from {len(events_list)} events"
+            )
 
         except Exception as e:
             logger.error(f"Error fetching Polymarket events: {e}")
 
         return questions
 
-    def _parse_event_structure(self, event: Dict[str, Any], quality_requirements: Optional[QualityRequirements]) -> List[MarketQuestion]:
+    def _parse_event_structure(
+        self, event: Dict[str, Any], quality_requirements: Optional[QualityRequirements]
+    ) -> List[MarketQuestion]:
         """Parse an event dictionary into a list of MarketQuestions (aggregating if possible)."""
         markets = event.get("markets", [])
         if not markets:
@@ -557,74 +607,81 @@ class PolymarketRunner(QuestionSourceRunner):
             for m in markets:
                 # Basic validation logic
                 end_date_str = m.get("endDate")
-                if not end_date_str: continue
+                if not end_date_str:
+                    continue
                 try:
                     end_date = parse_iso_datetime(end_date_str)
-                except: continue
-                
+                except:
+                    continue
+
                 closed_time = self.parser.parse_close_time(m)
-                should_skip, _ = self.parser.should_skip_market(m, end_date, closed_time, quality_requirements)
-                if should_skip: continue
+                should_skip, _ = self.parser.should_skip_market(
+                    m, end_date, closed_time, quality_requirements
+                )
+                if should_skip:
+                    continue
 
                 # Volume/Liquidity Check (filter placeholders)
                 volume = m.get("volumeNum", 0.0) or 0.0
                 liquidity = m.get("liquidityNum", 0.0) or 0.0
-                
+
                 # Check for "template" markets (no activity)
                 if volume <= 0 and liquidity <= 0:
                     continue
-                    
+
                 # Apply configured minimum volume filter
                 if volume < self.min_volume_usd:
                     continue
-                
+
                 # Use groupItemTitle if available, else question text
                 label = m.get("groupItemTitle", m.get("question"))
-                
+
                 # Deduplicate options (sometimes multiple markets map to same label?)
                 if label in option_map:
                     continue
-                    
+
                 options.append(label)
                 option_map[label] = m
                 valid_markets.append(m)
 
             if not valid_markets:
                 return []
-            
+
             # Use primary market for metadata
             primary = valid_markets[0]
-            
+
             # Ground Truth Logic for MCQ
             ground_truth = None
             resolution_reasoning = None
-            
+
             for label, m in option_map.items():
-                outcomes = self.parser.parse_outcomes(m) 
+                outcomes = self.parser.parse_outcomes(m)
                 gt, reason = self.parser.extract_ground_truth(m, outcomes)
                 if gt == "Yes":
                     ground_truth = label
                     resolution_reasoning = reason
                     break
-            
+
             # Total volume
             total_volume = sum(m.get("volumeNum", 0) or 0 for m in valid_markets)
             total_liquidity = sum(m.get("liquidityNum", 0) or 0 for m in valid_markets)
 
             # Metadata
-            
+
             mq = MarketQuestion(
                 market_id=f"event_{event.get('id')}",
                 market_source="polymarket",
                 question_text=question_text,
                 question_type="mcq",
-                resolution_criteria=primary.get("description", f"See event {event.get('slug')}"),
+                resolution_criteria=primary.get(
+                    "description", f"See event {event.get('slug')}"
+                ),
                 close_time=parse_iso_datetime(primary.get("endDate")),
                 resolution_time=self.parser.parse_close_time(primary),
-                current_probability=None, 
+                current_probability=None,
                 volume_usd=total_volume,
                 liquidity_usd=total_liquidity,
-                category=event.get("category"), # Or primary.get("category")
+                category=event.get("category"),  # Or primary.get("category")
                 options=options,
                 metadata={
                     "market_slug": event.get("slug"),
@@ -636,7 +693,7 @@ class PolymarketRunner(QuestionSourceRunner):
                     "tags": event.get("tags", []),
                     "active": primary.get("active"),
                     "closed": primary.get("closed"),
-                }
+                },
             )
             return [mq]
 
@@ -644,19 +701,23 @@ class PolymarketRunner(QuestionSourceRunner):
             # Single market
             m = markets[0]
             end_date_str = m.get("endDate")
-            if not end_date_str: return []
+            if not end_date_str:
+                return []
             try:
                 end_date = parse_iso_datetime(end_date_str)
-            except: return []
+            except:
+                return []
             closed_time = self.parser.parse_close_time(m)
-            should_skip, _ = self.parser.should_skip_market(m, end_date, closed_time, quality_requirements)
-            if should_skip: return []
-            
+            should_skip, _ = self.parser.should_skip_market(
+                m, end_date, closed_time, quality_requirements
+            )
+            if should_skip:
+                return []
+
             mq = self._parse_single_market(m, end_date, closed_time)
             return [mq] if mq else []
-            
-        return []
 
+        return []
 
     def _map_to_question(self, mq: MarketQuestion) -> Question:
         """Map MarketQuestion to WorldReasoner Question model.
@@ -684,7 +745,9 @@ class PolymarketRunner(QuestionSourceRunner):
 
         # Extract ground truth from metadata if available
         ground_truth = mq.metadata.get("ground_truth") if mq.metadata else None
-        resolution_reasoning = mq.metadata.get("resolution_reasoning") if mq.metadata else None
+        resolution_reasoning = (
+            mq.metadata.get("resolution_reasoning") if mq.metadata else None
+        )
 
         # Extract estimated start time from metadata
         estimated_start = None
@@ -696,8 +759,11 @@ class PolymarketRunner(QuestionSourceRunner):
 
         # Prepare metadata dict with all Polymarket-specific data
         # Remove fields that are already direct Question parameters to avoid conflicts
-        extra_metadata = {k: v for k, v in mq.metadata.items()
-                         if k not in ('ground_truth', 'resolution_reasoning')}
+        extra_metadata = {
+            k: v
+            for k, v in mq.metadata.items()
+            if k not in ("ground_truth", "resolution_reasoning")
+        }
 
         metadata_dict = {
             "source": "polymarket",
@@ -754,7 +820,6 @@ class PolymarketRunner(QuestionSourceRunner):
                 difficulty -= 1
 
         return max(1, min(5, difficulty))
-
 
     async def can_provide(
         self,

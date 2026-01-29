@@ -7,7 +7,6 @@ validation, forecast creation, and graph linking.
 from typing import Tuple, Any, Optional, Dict, List
 from datetime import datetime, timezone
 
-from src.core.database import GenericDatabase
 from src.domain.models import Question, Forecast
 from src.domain.models.question import QuestionType
 from src.domain.models.forecast import ForecastMode
@@ -25,9 +24,7 @@ class ForecastSubmissionService(ServiceBase):
     """
 
     def validate_prediction(
-        self,
-        question: Question,
-        prediction: str
+        self, question: Question, prediction: str
     ) -> Tuple[bool, Any, Optional[str]]:
         """Validate and parse prediction based on question type.
 
@@ -44,7 +41,7 @@ class ForecastSubmissionService(ServiceBase):
         try:
             # Parse prediction based on question type
             if question.question_type == QuestionType.BINARY:
-                parsed_prediction = prediction.lower() in ['true', 'yes', '1']
+                parsed_prediction = prediction.lower() in ["true", "yes", "1"]
             elif question.question_type == QuestionType.MCQ:
                 parsed_prediction = prediction
             elif question.question_type == QuestionType.QUANTITY:
@@ -52,13 +49,21 @@ class ForecastSubmissionService(ServiceBase):
             else:
                 parsed_prediction = prediction
         except ValueError as e:
-            return False, None, f"Invalid prediction format for {question.question_type.value}: {e}"
+            return (
+                False,
+                None,
+                f"Invalid prediction format for {question.question_type.value}: {e}",
+            )
 
         # Validate prediction using question's validation method
         if not question.validate_prediction(parsed_prediction):
-            return False, None, (
-                f"Invalid prediction format for question type {question.question_type.value}. "
-                f"Expected format: {question.question_type.value}"
+            return (
+                False,
+                None,
+                (
+                    f"Invalid prediction format for question type {question.question_type.value}. "
+                    f"Expected format: {question.question_type.value}"
+                ),
             )
 
         return True, parsed_prediction, None
@@ -75,7 +80,7 @@ class ForecastSubmissionService(ServiceBase):
         target_event_id: Optional[str] = None,
         model_name: str = "unknown",
         mode: str = "container",
-        db_path: Optional[str] = None
+        db_path: Optional[str] = None,
     ) -> Forecast:
         """Create and save a forecast.
 
@@ -96,7 +101,9 @@ class ForecastSubmissionService(ServiceBase):
             Created Forecast object
         """
         # Generate forecast ID
-        forecast_id = f"fcst_{question_id}_{int(datetime.now(timezone.utc).timestamp())}"
+        forecast_id = (
+            f"fcst_{question_id}_{int(datetime.now(timezone.utc).timestamp())}"
+        )
 
         # Create forecast object
         forecast = Forecast(
@@ -113,7 +120,7 @@ class ForecastSubmissionService(ServiceBase):
             searches_performed=[],  # Could track this if needed
             model_name=model_name,
             mode=ForecastMode(mode),
-            db=db_path
+            db=db_path,
         )
 
         # Save forecast to appropriate database
@@ -124,10 +131,7 @@ class ForecastSubmissionService(ServiceBase):
         return forecast
 
     def link_forecast_graph(
-        self,
-        forecast_id: str,
-        session_id: str,
-        db_path: Optional[str] = None
+        self, forecast_id: str, session_id: str, db_path: Optional[str] = None
     ) -> Dict[str, int]:
         """Link forecast graph elements (events and hypotheses) to forecast.
 
@@ -150,26 +154,26 @@ class ForecastSubmissionService(ServiceBase):
 
         try:
             # Get all forecast events for this session
-            events = forecast_db.get_many(ForecastEvent, filters={'session_id': session_id})
+            events = forecast_db.get_many(
+                ForecastEvent, filters={"session_id": session_id}
+            )
             for event in events:
                 event.forecast_id = forecast_id
                 forecast_db.save(ForecastEvent, event)
 
             # Get all forecast hypotheses for this session
-            hypotheses = forecast_db.get_many(ForecastHypothesis, filters={'session_id': session_id})
+            hypotheses = forecast_db.get_many(
+                ForecastHypothesis, filters={"session_id": session_id}
+            )
             for hyp in hypotheses:
                 hyp.forecast_id = forecast_id
                 forecast_db.save(ForecastHypothesis, hyp)
 
-            logger.info(f"Linked {len(events)} events and {len(hypotheses)} hypotheses to forecast {forecast_id}")
+            logger.info(
+                f"Linked {len(events)} events and {len(hypotheses)} hypotheses to forecast {forecast_id}"
+            )
 
-            return {
-                "events": len(events),
-                "hypotheses": len(hypotheses)
-            }
+            return {"events": len(events), "hypotheses": len(hypotheses)}
         except Exception as e:
             logger.warning(f"Could not link forecast graph to forecast_id: {e}")
-            return {
-                "events": 0,
-                "hypotheses": 0
-            }
+            return {"events": 0, "hypotheses": 0}

@@ -3,6 +3,7 @@
 Single source of truth for pipeline types, progress tracking, and results.
 Eliminates duplicate definitions across CLI and backend API.
 """
+
 from enum import Enum
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
@@ -10,6 +11,7 @@ from typing import List, Dict, Any, Optional
 
 class PipelineType(str, Enum):
     """Available pipeline types."""
+
     COLLECTION = "collection"
     NEWS_COLLECTION = "news_collection"
     EVIDENCE = "evidence"
@@ -22,6 +24,7 @@ class PipelineType(str, Enum):
 @dataclass
 class PipelineProgress:
     """Progress update from pipeline execution."""
+
     current: int
     total: int
     question_id: Optional[str]
@@ -32,6 +35,7 @@ class PipelineProgress:
 @dataclass
 class PipelineResult:
     """Result of pipeline execution."""
+
     processed: List[Dict[str, Any]]
     failed: List[Dict[str, Any]]
     skipped: List[Dict[str, Any]]

@@ -51,78 +51,71 @@ def parse_args():
 
     # Question selection
     parser.add_argument(
-        '--question-id',
+        "--question-id",
         type=str,
         default=None,
-        help='Question ID to forecast (optional, randomly selects one if not provided)'
+        help="Question ID to forecast (optional, randomly selects one if not provided)",
     )
 
     # Database configuration
     parser.add_argument(
-        '--db',
+        "--db",
         type=str,
-        default='worldreasoner.db',
-        help='Path to database file (default: worldreasoner.db)'
+        default="worldreasoner.db",
+        help="Path to database file (default: worldreasoner.db)",
     )
 
     # Temporal configuration
     parser.add_argument(
-        '--knowledge-cutoff',
+        "--knowledge-cutoff",
         type=str,
-        default='2024-05-01',
-        help='LLM training cutoff date (YYYY-MM-DD, default: 2024-05-01)'
+        default="2024-05-01",
+        help="LLM training cutoff date (YYYY-MM-DD, default: 2024-05-01)",
     )
 
     # Context window configuration
     parser.add_argument(
-        '--min-context-items',
+        "--min-context-items",
         type=int,
         default=3,
-        help='Minimum context items needed before forecasting (default: 3)'
+        help="Minimum context items needed before forecasting (default: 3)",
     )
 
     parser.add_argument(
-        '--offset-days',
+        "--offset-days",
         type=int,
         default=0,
-        help='Days before resolution to simulate forecast (default: 0)'
+        help="Days before resolution to simulate forecast (default: 0)",
     )
 
     # Agent configuration
     parser.add_argument(
-        '--max-steps',
-        type=int,
-        default=15,
-        help='Maximum agent steps (default: 15)'
+        "--max-steps", type=int, default=15, help="Maximum agent steps (default: 15)"
     )
 
     parser.add_argument(
-        '--mode',
+        "--mode",
         type=str,
-        choices=['knowledge_only', 'container', 'real_time'],
-        default='container',
-        help='Forecasting mode (default: container). knowledge_only=no research tools, container=temporal research, real_time=live information'
+        choices=["knowledge_only", "container", "real_time"],
+        default="container",
+        help="Forecasting mode (default: container). knowledge_only=no research tools, container=temporal research, real_time=live information",
     )
 
     parser.add_argument(
-        '--test-db',
+        "--test-db",
         type=str,
         default=None,
-        help='Path to test database for storing forecasts (optional)'
+        help="Path to test database for storing forecasts (optional)",
     )
 
     # Output control
-    parser.add_argument(
-        '--verbose',
-        action='store_true',
-        help='Show detailed output'
-    )
+    parser.add_argument("--verbose", action="store_true", help="Show detailed output")
 
     # Evaluation control
     parser.add_argument(
-        '--no-evaluate',
-        action='store_true',
-        help='Skip immediate evaluation even if question is resolved'
+        "--no-evaluate",
+        action="store_true",
+        help="Skip immediate evaluation even if question is resolved",
     )
 
     return parser.parse_args()
@@ -155,8 +148,7 @@ def select_random_question(db: GenericDatabase, min_context_items: int = 3) -> Q
         try:
             # Try to get forecast window - will fail if insufficient context
             window_start, window_end = question.get_forecast_context_window(
-                db=db,
-                min_context_items=min_context_items
+                db=db, min_context_items=min_context_items
             )
             # If we got here, question has enough context
             suitable_questions.append(question)
@@ -172,7 +164,9 @@ def select_random_question(db: GenericDatabase, min_context_items: int = 3) -> Q
 
     selected = random.choice(suitable_questions)
     print(f"\n📋 Randomly selected question: {selected.id}")
-    print(f"   Found {len(suitable_questions)} suitable questions out of {len(all_questions)} total\n")
+    print(
+        f"   Found {len(suitable_questions)} suitable questions out of {len(all_questions)} total\n"
+    )
 
     return selected
 
@@ -184,7 +178,9 @@ def print_header(title: str, width: int = 80):
     print("=" * width)
 
 
-def print_forecast_setup(question: Question, window_start, window_end, simulated_date, args):
+def print_forecast_setup(
+    question: Question, window_start, window_end, simulated_date, args
+):
     """Print forecast setup information."""
     print_header("FORECAST SETUP - AUTOMATIC CONTEXT WINDOW CALCULATION")
 
@@ -193,15 +189,17 @@ def print_forecast_setup(question: Question, window_start, window_end, simulated
 
     days_available = (window_end - window_start).days
 
-    print(f"\nValid Forecast Window:")
-    print(f"  Opens:      {window_start.date()} (after {args.min_context_items} context items)")
+    print("\nValid Forecast Window:")
+    print(
+        f"  Opens:      {window_start.date()} (after {args.min_context_items} context items)"
+    )
     print(f"  Closes:     {window_end.date()} (before resolution)")
     print(f"  Duration:   {days_available} days")
 
-    print(f"\nSimulated Date (auto-calculated):")
+    print("\nSimulated Date (auto-calculated):")
     print(f"  Using:      {simulated_date.date()}")
     print(f"  Strategy:   {args.offset_days} days before resolution")
-    print(f"  Status:     VALID")
+    print("  Status:     VALID")
 
 
 def print_ground_truth(question: Question):
@@ -215,7 +213,9 @@ def print_ground_truth(question: Question):
     print("=" * 80)
 
     if question.ground_truth is None:
-        print("\nWARNING: Ground truth not available (question may not be resolved yet)")
+        print(
+            "\nWARNING: Ground truth not available (question may not be resolved yet)"
+        )
         print(f"Resolution date: {question.resolution_date.date()}")
         return
 
@@ -224,14 +224,12 @@ def print_ground_truth(question: Question):
     print(f"\nActual Outcome: {outcome}")
 
     if question.context:
-        print(f"\nReason:")
+        print("\nReason:")
         # Word wrap the reason for better readability
         import textwrap
+
         wrapped_reason = textwrap.fill(
-            question.context,
-            width=78,
-            initial_indent="  ",
-            subsequent_indent="  "
+            question.context, width=78, initial_indent="  ", subsequent_indent="  "
         )
         print(wrapped_reason)
     else:
@@ -250,7 +248,7 @@ def get_latest_forecast(db: GenericDatabase, question_id: str) -> Forecast | Non
     Returns:
         Most recent Forecast or None if not found
     """
-    all_forecasts = db.get_many(Forecast, filters={'question_id': question_id})
+    all_forecasts = db.get_many(Forecast, filters={"question_id": question_id})
     if not all_forecasts:
         return None
 
@@ -263,7 +261,7 @@ def evaluate_and_display_forecast(
     forecast: Forecast,
     question: Question,
     evaluator: ForecastEvaluator,
-    update_db: bool = True
+    update_db: bool = True,
 ):
     """Evaluate a forecast and display the results.
 
@@ -284,7 +282,9 @@ def evaluate_and_display_forecast(
         # Display results
         status = "CORRECT" if evaluation.is_correct else "INCORRECT"
         print(f"\n{status}")
-        print(f"\nYour Prediction: {evaluation.prediction} (confidence: {evaluation.confidence:.1%})")
+        print(
+            f"\nYour Prediction: {evaluation.prediction} (confidence: {evaluation.confidence:.1%})"
+        )
         print(f"Actual Outcome:  {evaluation.ground_truth}")
         print(f"\nAccuracy: {evaluation.accuracy:.1%}")
 
@@ -295,20 +295,21 @@ def evaluate_and_display_forecast(
             print(f"Log Score:   {evaluation.log_score:.4f} (higher is better)")
 
         # Show forecast horizon
-        if evaluation.evaluation_metadata.get('forecast_horizon_days'):
-            horizon = evaluation.evaluation_metadata['forecast_horizon_days']
+        if evaluation.evaluation_metadata.get("forecast_horizon_days"):
+            horizon = evaluation.evaluation_metadata["forecast_horizon_days"]
             print(f"\nForecast Horizon: {horizon} days ahead")
 
         # Update database if requested
         if update_db:
             evaluator.update_forecast_with_evaluation(forecast, evaluation)
-            print(f"\nEvaluation saved to database")
+            print("\nEvaluation saved to database")
 
         print("\n" + "=" * 80)
 
     except Exception as e:
         print(f"\nERROR: Error evaluating forecast: {e}")
         import traceback
+
         traceback.print_exc()
 
 
@@ -337,17 +338,17 @@ def run_forecast(args):
         forecast_setup = question.prepare_forecast(
             db=db,
             offset_days_before_resolution=args.offset_days,
-            min_context_items=args.min_context_items
+            min_context_items=args.min_context_items,
         )
 
         # Print setup information
         if args.verbose:
             print_forecast_setup(
-                question, 
-                forecast_setup['window_start'], 
-                forecast_setup['window_end'], 
-                forecast_setup['simulated_date'], 
-                args
+                question,
+                forecast_setup["window_start"],
+                forecast_setup["window_end"],
+                forecast_setup["simulated_date"],
+                args,
             )
 
     except ValueError as e:
@@ -364,12 +365,12 @@ def run_forecast(args):
     # Create agent using factory
     agent = AgentFactory.create_forecast_agent(
         question=question,
-        simulated_date=forecast_setup['simulated_date'].isoformat(),
+        simulated_date=forecast_setup["simulated_date"].isoformat(),
         knowledge_cutoff=args.knowledge_cutoff,
         config=config,
         db_path=args.test_db,
         mode=args.mode,
-        max_steps=args.max_steps
+        max_steps=args.max_steps,
     )
 
     # The agent now works in a temporally-constrained environment
@@ -408,7 +409,7 @@ def run_forecast(args):
                 forecast=forecast,
                 question=question,
                 evaluator=evaluator,
-                update_db=True
+                update_db=True,
             )
         else:
             print("WARNING: Could not find submitted forecast for evaluation")

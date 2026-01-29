@@ -1,7 +1,10 @@
 """Integration tests for the QuestionCollectionOrchestrator."""
 
 import pytest
-from src.pipelines.question.orchestrator import QuestionCollectionOrchestrator, OrchestratorConfig
+from src.pipelines.question.orchestrator import (
+    QuestionCollectionOrchestrator,
+    OrchestratorConfig,
+)
 from src.config.collection_goal import CollectionGoal
 from src.domain.models.question import Question
 from src.core.database import GenericDatabase
@@ -10,15 +13,17 @@ from src.domain.models import Question, QuestionType, Domain
 from datetime import datetime, timezone
 from src.config.pipeline import QuestionQualityConfig
 
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_orchestrator_with_quality_ranking(persistent_test_db_path):
     """Test that the orchestrator runs the quality ranking stage and saves scores."""
     # Setup - use a fresh database
     import os
+
     if os.path.exists(persistent_test_db_path):
         os.remove(persistent_test_db_path)
-    
+
     db = GenericDatabase(persistent_test_db_path)
     db.create_table(Question)
 
@@ -40,14 +45,15 @@ async def test_orchestrator_with_quality_ranking(persistent_test_db_path):
                     source="mock",
                     difficulty=1,
                     resolution_date=datetime.now(timezone.utc),
-                ) for i in range(count)
+                )
+                for i in range(count)
             ]
             return CollectionResult(
                 success=True,
                 questions=questions,
                 source_name="mock",
                 requested_count=count,
-                actual_count=len(questions)
+                actual_count=len(questions),
             )
 
     mock_source = MockSourceRunner(source_name="mock")
@@ -65,23 +71,25 @@ async def test_orchestrator_with_quality_ranking(persistent_test_db_path):
 
     # Mock the quality scorer to avoid actual LLM calls
     from src.tools.question_quality_scorer import QualityAssessment
+
     async def mock_forward(questions):
         for q in questions:
             # Provide high scores that won't trigger skip_evidence
             orchestrator.quality_stage.scorer.collector.add(
                 QualityAssessment(
-                    question_id=q.id, 
-                    composite_score=0.88, 
+                    question_id=q.id,
+                    composite_score=0.88,
                     dimensions={
                         "verifiability": 0.9,
                         "interestingness": 0.85,
                         "clarity": 0.9,
                         "temporal_validity": 0.85,
-                    }, 
-                    reasoning="mocked"
+                    },
+                    reasoning="mocked",
                 )
             )
         return "{}"
+
     orchestrator.quality_stage.scorer.forward = mock_forward
 
     # Run orchestrator
@@ -90,7 +98,7 @@ async def test_orchestrator_with_quality_ranking(persistent_test_db_path):
     # Assertions
     assert result.goal_met
     assert len(result.questions) == 2
-    
+
     # Check that questions in the DB have scores
     questions_from_db = db.get_many(Question)
     assert len(questions_from_db) == 2

@@ -2,12 +2,9 @@
 
 import hashlib
 import json
-from datetime import datetime, timezone
-import uuid
-from typing import List, Optional
+from typing import Optional
 from urllib.parse import urlparse
 
-from smolagents import Tool
 from src.config import get_config
 from src.domain.models import Article, Domain
 from src.utils.logging import logger
@@ -20,20 +17,20 @@ from src.tools.base import CollectorAwareTool
 
 class ArticleCollectorTool(CollectorAwareTool[Article]):
     """Fetches and stores article data from URLs into Article objects.
-    
+
     This tool helps the agent:
     1. Internally fetch full article content from a URL (using WebFetchTool)
     2. Convert content into structured Article format
     3. Generate unique article IDs
     4. Handle deduplication via content hashing
     5. Calculate metadata (word count, reading time, etc.)
-    
+
     IMPORTANT: This tool ONLY needs the URL and metadata.
     The agent should use web_search to find article URLs, then pass ONLY the URL
     to this tool. This tool will internally fetch the full content, avoiding
     expensive token usage from passing large article text through the LLM.
     """
-    
+
     name = "article_collector"
     description = f"""Fetches and stores article data from a URL.
     
@@ -46,30 +43,39 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         url (str): Source URL to fetch the article from
         title (str): Article headline/title from search results
         source (str): Publication name (e.g., "TechCrunch", "BBC News")
-        domain (str): Article domain category - one of: {', '.join(enum_to_list(Domain))}
+        domain (str): Article domain category - one of: {", ".join(enum_to_list(Domain))}
         published_date: Publication date in ISO format with time zone
         author (str, optional): Author name if available
     
     Returns:
         str: JSON string with the created Article object including generated ID and metadata
     """
-    
+
     # Auto-generate inputs from Enum classes (single source of truth)
     inputs = {
-        "url": {"type": "string", "description": "Source URL to fetch the article from"},
-        "title": {"type": "string", "description": "Article headline/title from search results"},
+        "url": {
+            "type": "string",
+            "description": "Source URL to fetch the article from",
+        },
+        "title": {
+            "type": "string",
+            "description": "Article headline/title from search results",
+        },
         "source": {"type": "string", "description": "Publication name"},
         "domain": {
             "type": "string",
             "description": f"Domain category - one of: {', '.join(enum_to_list(Domain))}",
             "enum": enum_to_list(Domain),
-            "nullable": True
+            "nullable": True,
         },
-        "published_date": {"type": "string", "description": "Publication date (ISO format with time zone)"},
+        "published_date": {
+            "type": "string",
+            "description": "Publication date (ISO format with time zone)",
+        },
         "author": {"type": "string", "description": "Author name", "nullable": True},
     }
     output_type = "string"  # JSON string
-    
+
     def __init__(
         self,
         db=None,
@@ -92,7 +98,9 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         self.web_visitor = WebFetchTool()  # Internal tool for fetching content
         self.question_id = question_id  # Provenance context
 
-        logger.info(f"ArticleCollectorTool initialized with collector: {collector is not None}, question_id: {question_id}")
+        logger.info(
+            f"ArticleCollectorTool initialized with collector: {collector is not None}, question_id: {question_id}"
+        )
 
         # Database for cross-run deduplication (optional)
         self.db = None
@@ -101,15 +109,16 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         elif db_path:
             # Lazy import to avoid circular dependency
             from src.core.database import GenericDatabase
+
             self.db = GenericDatabase(db_path)
             # Ensure schema is initialized
             self.db.create_table(Article)
-    
+
     def setup(self):
         """Load configuration (called on first use)."""
         if self.config is None:
             self.config = get_config()
-    
+
     def forward(
         self,
         url: str,
@@ -117,7 +126,7 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         source: str,
         published_date: str,
         domain: str = "general",
-        author: Optional[str] = None
+        author: Optional[str] = None,
     ) -> str:
         """Fetch article content from URL and store as structured JSON.
 
@@ -137,48 +146,57 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         if self.db:
             # Normalize URL for better matching (remove trailing slash, fragments)
             normalized_url = self._normalize_url(url)
-            
+
             # Use GenericDatabase's get_many with filter
             existing_articles = self.db.get_many(
-                Article,
-                filters={'url': normalized_url}
+                Article, filters={"url": normalized_url}
             )
             if existing_articles:
                 existing = existing_articles[0]
-                
+
                 # Add to collector even if duplicate (for current pipeline run)
                 # Note: Check 'is not None' because ResultCollector.__bool__ returns False when empty
                 if self.collector is not None:
                     self.collector.add(existing)
-                    logger.debug(f"Added existing article {existing.id} to collector (duplicate URL, total: {self.collector.count()})")
+                    logger.debug(
+                        f"Added existing article {existing.id} to collector (duplicate URL, total: {self.collector.count()})"
+                    )
                 else:
                     self._fallback_items.append(existing)
-                    logger.debug(f"Added existing article {existing.id} to internal list (duplicate URL, total: {len(self._fallback_items)})")
-                
-                return json.dumps({
-                    "id": existing.id,
-                    "title": existing.title,
-                    "url": existing.url,
-                    "source": existing.source,
-                    "author": existing.author,
-                    "published_date": existing.published_date.isoformat(),
-                    "domain": existing.domain,
-                    "word_count": existing.word_count,
-                    "reading_time_minutes": existing.reading_time_minutes,
-                    "content_preview": existing.content[:200] + "..." if len(existing.content) > 200 else existing.content,
-                    "status": "already_exists",
-                    "message": f"Article already in database (duplicate URL: {normalized_url})"
-                })
-        
+                    logger.debug(
+                        f"Added existing article {existing.id} to internal list (duplicate URL, total: {len(self._fallback_items)})"
+                    )
+
+                return json.dumps(
+                    {
+                        "id": existing.id,
+                        "title": existing.title,
+                        "url": existing.url,
+                        "source": existing.source,
+                        "author": existing.author,
+                        "published_date": existing.published_date.isoformat(),
+                        "domain": existing.domain,
+                        "word_count": existing.word_count,
+                        "reading_time_minutes": existing.reading_time_minutes,
+                        "content_preview": existing.content[:200] + "..."
+                        if len(existing.content) > 200
+                        else existing.content,
+                        "status": "already_exists",
+                        "message": f"Article already in database (duplicate URL: {normalized_url})",
+                    }
+                )
+
         # STAGE 2: Fetch content (only if URL not found)
         # This avoids passing large content through the LLM
         try:
             content = self.web_visitor.forward(url)
             if not content or len(content.strip()) < 100:
-                return json.dumps({"error": f"Failed to fetch content from {url}", "url": url})
+                return json.dumps(
+                    {"error": f"Failed to fetch content from {url}", "url": url}
+                )
         except Exception as e:
             return json.dumps({"error": f"Error fetching URL: {str(e)}", "url": url})
-        
+
         # Parse published date or use current time
         pub_date = parse_iso_datetime(published_date)
 
@@ -195,28 +213,32 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
                     date=pub_date,
                     question_start_time=question.estimated_start_time,
                     question_resolution_date=question.resolution_date,
-                    entity_type="Article"
+                    entity_type="Article",
                 )
 
         # STAGE 3: Content hash deduplication (catches syndicated/republished articles)
         # Check if we've already seen this content (in-memory for current run)
         content_hash = self._compute_content_hash(content)
         if content_hash in self.seen_hashes:
-            logger.debug(f"Skipping duplicate content hash: {content_hash} for URL: {url}")
-            return json.dumps({
-                "error": "Duplicate article detected (same content, different URL)",
-                "hash": content_hash,
-                "url": url,
-                "message": "This article content already exists in the current collection"
-            })
-        
+            logger.debug(
+                f"Skipping duplicate content hash: {content_hash} for URL: {url}"
+            )
+            return json.dumps(
+                {
+                    "error": "Duplicate article detected (same content, different URL)",
+                    "hash": content_hash,
+                    "url": url,
+                    "message": "This article content already exists in the current collection",
+                }
+            )
+
         # Also check database for content hash (cross-run syndication detection)
         if self.db:
             # Query by content_hash if your Article model has this field
             # For now, we'll skip this to avoid performance issues
             # In production, you might want to add a content_hash field and index
             pass
-        
+
         self.seen_hashes.add(content_hash)
 
         # Validate and convert domain
@@ -235,8 +257,8 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         # Build metadata with provenance info
         metadata = {}
         if self.question_id:
-            metadata['evidence_type'] = 'hindsight'
-            metadata['related_question_ids'] = [self.question_id]
+            metadata["evidence_type"] = "hindsight"
+            metadata["related_question_ids"] = [self.question_id]
 
         # Create Article object
         article = Article(
@@ -251,15 +273,15 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             tags=[domain_enum.value, source_domain],
             event_ids=[],  # Initialize with empty list (will be populated later in pipeline)
             is_synthetic=False,
-            language='en',
+            language="en",
             collected_for_question_id=self.question_id,  # Provenance tracking
             metadata=metadata,
         )
-        
+
         # Calculate metadata
         article.word_count = len(article.content.split())
         article.reading_time_minutes = max(1, article.word_count // 200)
-        
+
         # Store article using unified collector interface
         self.store_result(article, context=f"Article {article.id}")
 
@@ -280,8 +302,10 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             "domain": article.domain,
             "word_count": article.word_count,
             "reading_time_minutes": article.reading_time_minutes,
-            "content_preview": article.content[:200] + "..." if len(article.content) > 200 else article.content,
-            "status": "stored"
+            "content_preview": article.content[:200] + "..."
+            if len(article.content) > 200
+            else article.content,
+            "status": "stored",
         }
 
         # Add time window validation warnings if present
@@ -289,63 +313,76 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             summary["status"] = "stored_with_warnings"
             summary["warnings"] = time_window_validation["warnings"]
             summary["recommendation"] = time_window_validation["recommendation"]
-            summary["suggestion"] = "Consider searching for articles published within the valid time window for better evidence quality."
+            summary["suggestion"] = (
+                "Consider searching for articles published within the valid time window for better evidence quality."
+            )
 
         return json.dumps(summary, indent=2, default=str)
-    
+
     def _normalize_url(self, url: str) -> str:
         """Normalize URL for consistent duplicate detection.
-        
+
         Removes:
         - Trailing slashes
         - URL fragments (#section)
         - Common tracking parameters
         - Converts http to https
-        
+
         Args:
             url: Raw URL
-            
+
         Returns:
             Normalized URL
         """
         from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
-        
+
         parsed = urlparse(url)
-        
+
         # Convert http to https
-        scheme = 'https' if parsed.scheme == 'http' else parsed.scheme
-        
+        scheme = "https" if parsed.scheme == "http" else parsed.scheme
+
         # Remove trailing slash from path
-        path = parsed.path.rstrip('/')
-        
+        path = parsed.path.rstrip("/")
+
         # Remove common tracking parameters
         if parsed.query:
             params = parse_qs(parsed.query)
             # Remove common tracking params
-            tracking_params = {'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 
-                              'fbclid', 'gclid', 'ref', 'source'}
-            cleaned_params = {k: v for k, v in params.items() if k not in tracking_params}
-            query = urlencode(cleaned_params, doseq=True) if cleaned_params else ''
+            tracking_params = {
+                "utm_source",
+                "utm_medium",
+                "utm_campaign",
+                "utm_content",
+                "utm_term",
+                "fbclid",
+                "gclid",
+                "ref",
+                "source",
+            }
+            cleaned_params = {
+                k: v for k, v in params.items() if k not in tracking_params
+            }
+            query = urlencode(cleaned_params, doseq=True) if cleaned_params else ""
         else:
-            query = ''
-        
+            query = ""
+
         # Reconstruct URL without fragment
-        normalized = urlunparse((scheme, parsed.netloc, path, parsed.params, query, ''))
-        
+        normalized = urlunparse((scheme, parsed.netloc, path, parsed.params, query, ""))
+
         return normalized
-    
+
     def _compute_content_hash(self, content: str) -> str:
         """Compute SHA-256 hash of normalized content for deduplication.
-        
+
         Args:
             content: Article content to hash
-            
+
         Returns:
             Hexadecimal hash string
         """
-        normalized = ' '.join(content.lower().split())
+        normalized = " ".join(content.lower().split())
         return hashlib.sha256(normalized.encode()).hexdigest()
-    
+
     def reset_deduplication(self):
         """Reset the deduplication cache."""
         self.seen_hashes.clear()

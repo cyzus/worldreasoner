@@ -9,8 +9,6 @@ from .article_collection import (
 from .news_question_generation import NewsQuestionGenerationStage
 
 
-
-
 # Evidence Pipeline Stages
 from .target_event_identification import (
     TargetEventIdentificationStage,
@@ -35,7 +33,6 @@ __all__ = [
     "ArticleCollectionConfig",
     "ArticleCollectionStage",
     "NewsQuestionGenerationStage",
-
     # Evidence Pipeline Stages
     "TargetEventIdentificationStage",
     "TargetEventIdentificationConfig",

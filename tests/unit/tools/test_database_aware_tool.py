@@ -3,7 +3,6 @@
 import pytest
 import tempfile
 import os
-from pathlib import Path
 
 from src.tools.database_mixin import DatabaseAwareTool
 from src.core.database import GenericDatabase
@@ -55,7 +54,7 @@ class TestDatabaseInitialization:
                 content="This is test content that must be at least 100 characters long to satisfy validation. More text here to meet requirement.",
                 source="Test Source",
                 domain=Domain.GENERAL,
-                published_date="2024-01-01T00:00:00Z"
+                published_date="2024-01-01T00:00:00Z",
             )
 
             # Should not raise an error
@@ -86,7 +85,7 @@ class TestNotFoundResponse:
                     content="This is test content that must be at least 100 characters long to satisfy validation. Additional text here.",
                     source="Test Source",
                     domain=Domain.GENERAL,
-                    published_date="2024-01-01T00:00:00Z"
+                    published_date="2024-01-01T00:00:00Z",
                 )
                 tool.db.save(Article, article)
 
@@ -97,9 +96,7 @@ class TestNotFoundResponse:
         import json
 
         response_str = tool_with_articles.not_found_response(
-            "Article",
-            "nonexistent_id",
-            Article
+            "Article", "nonexistent_id", Article
         )
 
         # Should be valid JSON
@@ -119,10 +116,7 @@ class TestNotFoundResponse:
         import json
 
         response_str = tool_with_articles.not_found_response(
-            "Article",
-            "nonexistent_id",
-            Article,
-            limit=3
+            "Article", "nonexistent_id", Article, limit=3
         )
 
         response = json.loads(response_str)
@@ -138,10 +132,7 @@ class TestNotFoundResponse:
 
         # Request only 2 items
         response_str = tool_with_articles.not_found_response(
-            "Article",
-            "missing",
-            Article,
-            limit=2
+            "Article", "missing", Article, limit=2
         )
 
         response = json.loads(response_str)
@@ -158,11 +149,7 @@ class TestNotFoundResponse:
             db = GenericDatabase(db_path)
             tool = DatabaseAwareTool(db=db, ensure_tables=[Article])
 
-            response_str = tool.not_found_response(
-                "Article",
-                "any_id",
-                Article
-            )
+            response_str = tool.not_found_response("Article", "any_id", Article)
 
             response = json.loads(response_str)
 
@@ -212,17 +199,18 @@ class TestIntegrationWithTools:
                 content="Content with minimum 100 characters required for validation. Additional text to meet requirement here.",
                 source="Test",
                 domain=Domain.GENERAL,
-                published_date="2024-01-01T00:00:00Z"
+                published_date="2024-01-01T00:00:00Z",
             )
             tool.db.save(Article, article)
 
             from src.domain.models.event import EventType
+
             event = Event(
                 id="e1",
                 title="Test Event",
                 description="Test event description with minimum length requirement",
                 domain=Domain.GENERAL,
-                event_type=EventType.MILESTONE
+                event_type=EventType.MILESTONE,
             )
             tool.db.save(Event, event)
 

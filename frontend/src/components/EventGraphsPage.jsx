@@ -3,6 +3,7 @@ import ControlPanel from './ControlPanel'
 import QuestionList from './QuestionList'
 import CanvasTimelineGraph from './CanvasTimelineGraph'
 import EventDetails from './EventDetails'
+import OutcomeImpactPanel from './OutcomeImpactPanel'
 
 import TimeSeriesChart from './TimeSeriesChart'
 import ForecastGraph from './ForecastGraph'
@@ -10,6 +11,7 @@ import QuestionStatistics from './QuestionStatistics'
 import ArticleCoverage from './ArticleCoverage'
 import CausalPathProgress from './CausalPathProgress'
 import { useForecasts } from '../hooks/useForecasts'
+import { useGraphStore } from '../stores/graphStore'
 import './EventGraphsPage.css'
 
 /**
@@ -40,6 +42,10 @@ function EventGraphsPage({
   timeFilter,
 }) {
   const [nestedTab, setNestedTab] = useState('questions') // 'questions', 'statistics', 'controls'
+
+  // Outcome impacts toggle (from graph store)
+  const includeOutcomes = useGraphStore(state => state.includeOutcomes)
+  const setIncludeOutcomes = useGraphStore(state => state.setIncludeOutcomes)
 
   // Graph force settings (MOVED TO LEGACY - kept for compatibility if needed elsewhere but not used here)
   const [forceSettings, setForceSettings] = useState({
@@ -306,14 +312,48 @@ function EventGraphsPage({
                       {loading && <div className="loading">Loading graph...</div>}
                       {error && <div className="error">{error}</div>}
                       {!loading && !error && (
-                        <CanvasTimelineGraph
-                          key={`evidence-${graphView}-${selectedQuestionId || 'none'}`}
-                          graphData={graphData}
-                          onNodeClick={onNodeClick}
-                          selectedNode={selectedNode}
-                          targetEventId={selectedQuestionId ? questions.find(q => q.id === selectedQuestionId)?.target_event_id : null}
-                          timeFilter={timeFilter}
-                        />
+                        <>
+                          <CanvasTimelineGraph
+                            key={`evidence-${graphView}-${selectedQuestionId || 'none'}`}
+                            graphData={graphData}
+                            onNodeClick={onNodeClick}
+                            selectedNode={selectedNode}
+                            targetEventId={selectedQuestionId ? questions.find(q => q.id === selectedQuestionId)?.target_event_id : null}
+                            timeFilter={timeFilter}
+                          />
+
+                          {/* Outcome Impacts Toggle */}
+                          <div style={{
+                            position: 'absolute',
+                            top: 50,
+                            right: 10,
+                            zIndex: 10,
+                            background: 'rgba(255,255,255,0.95)',
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                            border: '1px solid #e0e0e0'
+                          }}>
+                            <label style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              cursor: 'pointer',
+                              userSelect: 'none',
+                              gap: '6px'
+                            }}>
+                              <input
+                                type="checkbox"
+                                checked={includeOutcomes}
+                                onChange={(e) => setIncludeOutcomes(e.target.checked)}
+                                style={{ cursor: 'pointer' }}
+                              />
+                              <span style={{ fontWeight: '500', color: '#495057' }}>
+                                Show Outcome Impacts
+                              </span>
+                            </label>
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
@@ -411,6 +451,14 @@ function EventGraphsPage({
           node={selectedNode}
           onClose={() => onNodeClick(null)}
           onShowNeighborhood={onShowNeighborhood}
+        />
+      )}
+
+      {/* Outcome Impact Panel - shown when outcome node is selected */}
+      {selectedNode && selectedNode.isOutcome && (
+        <OutcomeImpactPanel
+          outcome={selectedNode}
+          onClose={() => onNodeClick(null)}
         />
       )}
     </div>

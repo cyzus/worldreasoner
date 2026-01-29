@@ -5,22 +5,20 @@ display, and both single and multi-select modes.
 """
 
 from typing import Optional, List, Set
-from datetime import datetime, timezone
 
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
-from rich.prompt import Prompt, Confirm
+from rich.prompt import Prompt
 
 from src.core.database import GenericDatabase
 from src.cli.core.question_manager import QuestionManager, QuestionFilter
 from src.cli.ui.tables import display_question_table
-from src.domain.models import Question, CausalHypothesis, Domain
+from src.domain.models import Question
 
 
 class QuestionSelector:
     """Interactive question selection with filtering and rich display.
-    
+
     Provides a user-friendly way to select questions from the database
     with support for filtering, sorting, and both single and multi-select modes.
     """
@@ -41,7 +39,7 @@ class QuestionSelector:
         multi_select: bool = True,
     ) -> List[Question]:
         """Display filtered questions and allow interactive selection.
-        
+
         Args:
             source: Filter by question source (e.g., 'polymarket')
             domain: Filter by domain (e.g., 'politics', 'technology')
@@ -50,7 +48,7 @@ class QuestionSelector:
             min_quality_score: Minimum quality score (0-1)
             limit: Maximum number of questions to display
             multi_select: Allow selecting multiple questions
-            
+
         Returns:
             List of selected Question objects
         """
@@ -67,7 +65,9 @@ class QuestionSelector:
         questions = self._load_questions(filter_obj, limit)
 
         if not questions:
-            self.console.print("[yellow]No questions match the selected filters[/yellow]")
+            self.console.print(
+                "[yellow]No questions match the selected filters[/yellow]"
+            )
             return []
 
         # Display questions
@@ -93,10 +93,10 @@ class QuestionSelector:
 
         selection = Prompt.ask("\nSelect questions")
 
-        if not selection or selection.lower() == 'q':
+        if not selection or selection.lower() == "q":
             return []
 
-        if selection.lower() == 'all':
+        if selection.lower() == "all":
             return questions
 
         return self._parse_selection(selection, questions)
@@ -105,7 +105,7 @@ class QuestionSelector:
         """Allow selecting a single question."""
         selection = Prompt.ask("\nSelect question number (or 'q' to cancel)")
 
-        if not selection or selection.lower() == 'q':
+        if not selection or selection.lower() == "q":
             return []
 
         try:
@@ -118,9 +118,11 @@ class QuestionSelector:
         self.console.print("[red]Invalid selection[/red]")
         return []
 
-    def _parse_selection(self, selection: str, questions: List[Question]) -> List[Question]:
+    def _parse_selection(
+        self, selection: str, questions: List[Question]
+    ) -> List[Question]:
         """Parse selection string like '1,3,5-10' into questions.
-        
+
         Examples:
             '1,3,5' -> questions 1, 3, 5
             '1-5' -> questions 1-5 inclusive
@@ -128,12 +130,12 @@ class QuestionSelector:
         """
         indices: Set[int] = set()
 
-        for part in selection.split(','):
+        for part in selection.split(","):
             part = part.strip()
-            if '-' in part:
+            if "-" in part:
                 # Handle range like '5-10'
                 try:
-                    start, end = part.split('-')
+                    start, end = part.split("-")
                     start = int(start.strip())
                     end = int(end.strip())
                     indices.update(range(start, end + 1))
@@ -147,11 +149,7 @@ class QuestionSelector:
                     self.console.print(f"[yellow]Invalid number: {part}[/yellow]")
 
         # Convert to 0-indexed and filter valid
-        return [
-            questions[i - 1]
-            for i in sorted(indices)
-            if 1 <= i <= len(questions)
-        ]
+        return [questions[i - 1] for i in sorted(indices) if 1 <= i <= len(questions)]
 
     def show_question_details(self, question_id: str) -> Optional[Question]:
         """Show detailed information about a single question."""
@@ -175,19 +173,27 @@ class QuestionSelector:
         ]
 
         if question.ground_truth is not None:
-            info_lines.append(f"[bold]Ground Truth:[/bold] [green]{question.ground_truth}[/green]")
+            info_lines.append(
+                f"[bold]Ground Truth:[/bold] [green]{question.ground_truth}[/green]"
+            )
         if question.context:
             info_lines.append(f"[bold]Context:[/bold] {question.context}")
         if question.resolution_criteria:
-            info_lines.append(f"[bold]Resolution Criteria:[/bold] {question.resolution_criteria}")
+            info_lines.append(
+                f"[bold]Resolution Criteria:[/bold] {question.resolution_criteria}"
+            )
 
         if details:
             info_lines.append(f"[bold]Related Events:[/bold] {len(details['events'])}")
-            info_lines.append(f"[bold]Related Articles:[/bold] {details['article_count']}")
-            info_lines.append(f"[bold]Causal Hypotheses:[/bold] {len(details['causal_hypotheses'])}")
+            info_lines.append(
+                f"[bold]Related Articles:[/bold] {details['article_count']}"
+            )
+            info_lines.append(
+                f"[bold]Causal Hypotheses:[/bold] {len(details['causal_hypotheses'])}"
+            )
 
         content = "\n".join(info_lines)
-        panel = Panel(content, title=f"Question Details", border_style="blue")
+        panel = Panel(content, title="Question Details", border_style="blue")
         self.console.print(panel)
 
         return question
