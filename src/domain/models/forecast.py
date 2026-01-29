@@ -89,6 +89,10 @@ class Forecast(BaseModel):
     # Mode and database tracking
     db: Optional[str] = Field(None, description="Database path used for this forecast")
     mode: ForecastMode = Field(ForecastMode.CONTAINER, description="Forecasting mode used")
+    enabled_tools: List[str] = Field(
+        default_factory=list,
+        description="Tool categories enabled during forecast (e.g., 'causal_tools', 'web_tools')"
+    )
     
     # Evaluation results (populated after resolution)
     is_correct: Optional[bool] = Field(None, description="Whether prediction was correct")

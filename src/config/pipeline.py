@@ -108,18 +108,38 @@ class QuestionQualityConfig(BaseModel):
     })
 
 
+class EvidenceSatisfactionConfig(BaseModel):
+    """Thresholds for evidence satisfaction (shared across codebase).
+    
+    This is the single source of truth for evidence quality thresholds.
+    Used by QuestionMonitorService, EvidencePipeline, and prompts.
+    """
+    min_graph_depth: int = Field(default=3, description="Minimum causal graph depth")
+    min_articles: int = Field(default=20, description="Minimum evidence articles")
+    min_hypotheses: int = Field(default=1, description="Minimum causal hypotheses")
+    min_confidence: float = Field(default=0.6, ge=0.0, le=1.0, description="Hypothesis confidence threshold")
+    min_strength: float = Field(default=0.3, ge=0.0, le=1.0, description="Hypothesis strength threshold")
+
+
 class EvidencePipelineConfig(BaseModel):
     """Configuration for the Evidence Pipeline (backward-looking causal analysis)."""
+
+    # Satisfaction thresholds (centralized)
+    satisfaction: EvidenceSatisfactionConfig = Field(
+        default_factory=EvidenceSatisfactionConfig,
+        description="Evidence satisfaction thresholds"
+    )
 
     # Evidence collection settings
     evidence_window_days: int = Field(
         default=365,
         description="Days before resolution to collect evidence articles (causal factors)"
     )
-    min_evidence_articles: int = Field(
-        default=20,
-        description="Minimum evidence articles per event"
-    )
+
+    @property
+    def min_evidence_articles(self) -> int:
+        """Backward-compatible accessor for min_articles."""
+        return self.satisfaction.min_articles
     include_expert_analysis: bool = Field(
         default=True,
         description="Prioritize expert analysis and post-mortem articles"

@@ -68,41 +68,40 @@ class ForecastAgent(BaseAgent):
         mcp_client = MCPClient(server_parameters=mcp_server_parameters)
         forecast_tools = mcp_client.get_tools()
 
+        # Causal tool names (these create new events, valid for any mode)
+        causal_tool_names = {
+            'identify_forecast_event',
+            'create_forecast_causal_link',
+            'inspect_forecast_graph'
+        }
+
+        # Base tools always available
+        base_tool_names = {'get_question', 'submit_forecast'}
+
         # Filter/add tools based on mode
         if mode == "knowledge_only":
-            # Only allow get_question and submit_forecast
-            allowed_tool_names = {'get_question', 'submit_forecast'}
-            forecast_tools = [
-                tool for tool in forecast_tools
-                if tool.name in allowed_tool_names
-            ]
+            # Knowledge-only: base tools + optionally causal tools
+            allowed = base_tool_names.copy()
+            if enable_causal_tools:
+                allowed.update(causal_tool_names)
+            forecast_tools = [t for t in forecast_tools if t.name in allowed]
         elif mode == "real_time":
-            # Add web tools for real-time mode
+            # Real-time: base tools + optionally causal tools + web tools
             from src.tools.web_search import WebSearchTool
             from src.tools.web_fetch import WebFetchTool
-            allowed_tool_names = {'get_question', 'submit_forecast'}
-            forecast_tools = [
-                tool for tool in forecast_tools
-                if tool.name in allowed_tool_names
-            ]
-            forecast_tools.extend([
-                WebSearchTool(),
-                WebFetchTool()
-            ])
-
-        # Filter out causal reasoning tools if not enabled
-        if not enable_causal_tools:
-            causal_tool_names = {
-                'identify_forecast_event',
-                'create_forecast_causal_link',
-                'inspect_forecast_graph'
-            }
-            forecast_tools = [
-                tool for tool in forecast_tools
-                if tool.name not in causal_tool_names
-            ]
+            allowed = base_tool_names.copy()
+            if enable_causal_tools:
+                allowed.update(causal_tool_names)
+            forecast_tools = [t for t in forecast_tools if t.name in allowed]
+            forecast_tools.extend([WebSearchTool(), WebFetchTool()])
         else:
-            max_steps = max(max_steps, 25)  # Allow more steps if causal tools enabled
+            # Container mode: all MCP tools, filter causal if not enabled
+            if not enable_causal_tools:
+                forecast_tools = [t for t in forecast_tools if t.name not in causal_tool_names]
+
+        # Increase max steps if causal tools enabled (they need more reasoning)
+        if enable_causal_tools:
+            max_steps = max(max_steps, 25)
 
         # Add any additional custom tools
         if tools:

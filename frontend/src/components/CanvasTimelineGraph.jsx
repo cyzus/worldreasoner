@@ -409,7 +409,10 @@ const CanvasTimelineGraph = ({
 
     // Handle zoom changes for LOD
     const handleZoom = useCallback((transform) => {
-        setCurrentZoom(transform.k)
+        // Defer state update to avoid warning about updating component during render
+        requestAnimationFrame(() => {
+            setCurrentZoom(transform.k)
+        })
     }, [])
 
     // Handle node click

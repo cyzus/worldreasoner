@@ -14,6 +14,7 @@ const QuestionCollectionPage = lazy(() => import('./components/QuestionCollectio
 const ForecastPage = lazy(() => import('./components/ForecastPage'))
 const EventGraphsPage = lazy(() => import('./components/EventGraphsPage'))
 
+
 function App() {
   // Graph store
   const fullGraphData = useGraphStore(state => state.fullGraphData)
