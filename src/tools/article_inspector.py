@@ -80,12 +80,11 @@ class ArticleInspectorTool(DatabaseAwareTool):
         if not question:
             return self._format_error(f"Question {self.question_id} not found")
 
-        # Get articles for this question
-        all_articles = self.db.get_many(Article)
-        question_articles = [
-            a for a in all_articles
-            if a.collected_for_question_id == self.question_id
-        ]
+        # Get articles for this question efficiently
+        question_articles = self.db.get_many(
+            Article, 
+            filters={'collected_for_question_id': self.question_id}
+        )
 
         # Filter articles by time window using shared utility
         filtered_articles = filter_articles_by_time_window(

@@ -119,17 +119,43 @@ const QuestionMonitor = ({ activeJobs = [] }) => {
         }
 
         const allIds = candidates.map(q => q.id)
+        const BATCH_SIZE = 5
 
         if (!bypassConfirm) {
-            const confirmMsg = `Start adaptive evidence collection for ${allIds.length} questions?`
+            const batchCount = Math.ceil(allIds.length / BATCH_SIZE)
+            const confirmMsg = `Start adaptive evidence collection for ${allIds.length} questions? This will create ${batchCount} batch jobs.`
             if (!window.confirm(confirmMsg)) return
         }
 
         try {
             setCollectingAll(true)
-            await startPipeline(allIds, 'adaptive_evidence')
+
+            // Split into batches
+            const batches = []
+            for (let i = 0; i < allIds.length; i += BATCH_SIZE) {
+                batches.push(allIds.slice(i, i + BATCH_SIZE))
+            }
+
+            console.log(`[Auto-Collect] Starting ${batches.length} batches for ${allIds.length} questions`)
+
+            // Submit batches sequentially to ensure order, but they will run in parallel on backend
+            // depending on backend capacity. 
+            // We use Promise.all to fire them rapidly if we wanted true parallel submission,
+            // but sequential loop is safer for rate limiting. 
+            // Let's do Promise.all for "parallel submission" as requested.
+
+            const results = await Promise.allSettled(
+                batches.map(batchIds => startPipeline(batchIds, 'adaptive_evidence'))
+            )
+
+            const failed = results.filter(r => r.status === 'rejected')
+
             if (!bypassConfirm) {
-                alert(`Started batch collection for ${allIds.length} questions`)
+                if (failed.length > 0) {
+                    alert(`Started ${batches.length - failed.length} batches. ${failed.length} batches failed.`)
+                } else {
+                    alert(`Started ${batches.length} batch jobs for ${allIds.length} questions`)
+                }
             }
         } catch (err) {
             console.error('Failed to start batch collection:', err)

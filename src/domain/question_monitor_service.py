@@ -161,11 +161,25 @@ class QuestionMonitorService(ServiceBase):
         
         hypothesis_count = len(question_hypotheses)
         
-        # Get evidence articles
-        evidence_article_ids = set()
-        for h in question_hypotheses:
-            evidence_article_ids.update(h.evidence_article_ids)
-        article_count = len(evidence_article_ids)
+        # Get evidence articles count efficiently
+        # Note: We are now counting "collected articles" instead of "evidence articles in hypotheses"
+        # to match the frontend behavior and be more robust.
+        # Ideally, we should check satisfaction based on collected articles first.
+        
+        # If we strictly want "used in hypothesis", we'd keep the old logic. 
+        # But the User asked to keep it DRY and consistent with the mismatch fix,
+        # which implies switching to 'collected' count.
+        
+        # However, for 'check_satisfaction', maybe we *do* care about hypothesis usage?
+        # The monitor defines "evidence satisfaction". Usually, that implies raw material availability.
+        # "Reasoning satisfaction" would cover hypotheses. 
+        # So using collected article count is likely correct for "evidence status".
+        
+        # We can't easily filter count_group_by by a specific ID in the current implementation efficiently 
+        # without fetching all counts or adding a filter to count_group_by.
+        # Since we are inside check_satisfaction for a single ID, a simple count() with filter is better.
+        
+        article_count = self.db.count(Article, filters={'collected_for_question_id': question_id})
         
         # Calculate graph depth
         graph_depth = 0

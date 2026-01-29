@@ -78,12 +78,12 @@ class GraphInspectorTool(DatabaseAwareTool):
         Returns:
             Multi-section text with visual graph representation and statistics
         """
-        # Get all hypotheses related to this question
-        all_hypotheses = self.db.get_many(CausalHypothesis)
-        question_hypotheses = [
-            h for h in all_hypotheses
-            if self.question_id in h.discovered_by_question_ids
-        ]
+        # Get all hypotheses related to this question efficiently
+        # queried via discovered_by_question_ids list field being LIKE %qid%
+        question_hypotheses = self.db.get_many(
+            CausalHypothesis,
+            filters={'discovered_by_question_ids__like': f'%"{self.question_id}"%'}
+        )
 
         if not question_hypotheses:
             return self._format_empty_graph()

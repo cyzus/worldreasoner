@@ -516,7 +516,11 @@ class GenericDatabase(Generic[T]):
 
         # Add field filters
         for field_name, value in filters.items():
-            query += f" AND {field_name} = ?"
+            if field_name.endswith('__like'):
+                real_field = field_name[:-6]
+                query += f" AND {real_field} LIKE ?"
+            else:
+                query += f" AND {field_name} = ?"
             params.append(value)
 
         with self._get_connection() as conn:
@@ -558,7 +562,7 @@ class GenericDatabase(Generic[T]):
         
         Args:
             model: Pydantic model class
-            filters: Optional dict of field:value filters
+            filters: Optional dict of field:value filters. Supports field__like.
             
         Returns:
             Count of instances
@@ -570,13 +574,56 @@ class GenericDatabase(Generic[T]):
         
         if filters:
             for field_name, value in filters.items():
-                query += f" AND {field_name} = ?"
+                if field_name.endswith('__like'):
+                    real_field = field_name[:-6]
+                    query += f" AND {real_field} LIKE ?"
+                else:
+                    query += f" AND {field_name} = ?"
                 params.append(value)
         
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(query, params)
             return cursor.fetchone()[0]
+
+    def count_group_by(
+        self, 
+        model: Type[T], 
+        group_by_field: str, 
+        filters: Optional[Dict[str, Any]] = None
+    ) -> Dict[Any, int]:
+        """Count instances grouped by a field.
+        
+        Args:
+            model: Pydantic model class
+            group_by_field: Field name to group by
+            filters: Optional dict of field:value filters. Supports field__like.
+            
+        Returns:
+            Dict mapping group value to count
+        """
+        table_name = _registry.get_table_name(model)
+        
+        query = f"SELECT {group_by_field}, COUNT(*) FROM {table_name} WHERE 1=1"
+        params = []
+        
+        if filters:
+            for field_name, value in filters.items():
+                if field_name.endswith('__like'):
+                    real_field = field_name[:-6]
+                    query += f" AND {real_field} LIKE ?"
+                else:
+                    query += f" AND {field_name} = ?"
+                params.append(value)
+                
+        query += f" GROUP BY {group_by_field}"
+        
+        with self._get_connection() as conn:
+            # ... (rest of method)
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            return {row[0]: row[1] for row in rows if row[0] is not None}
     
     def _row_to_model(self, model: Type[T], row: Dict[str, Any]) -> T:
         """Convert database row to model instance.
