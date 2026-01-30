@@ -45,17 +45,6 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
     NOTE: This tool automatically deduplicates events. If a similar event
     already exists in the database, it will return that event instead of
     creating a duplicate.
-
-    Args:
-        title (str): Short descriptive title of the event
-        description (str): Detailed description of what happened/will happen
-        domain (str): Event domain - one of: {", ".join(enum_to_list(Domain))}
-        occurred_date (str, optional): When the event occurred (ISO format with time zone)
-        event_type (str, optional): Type of event - one of: {", ".join(enum_to_list(EventType))}
-        source_article_ids (str, optional): Comma-separated article IDs mentioning this event
-
-    Returns:
-        str: JSON string with the created/matched Event object including ID
     """
 
     # Auto-generate inputs from Enum classes (single source of truth)
@@ -152,10 +141,8 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
         source_article_ids: str,
         occurred_date: str = None,
         event_type: str = None,
-
         is_outcome: bool = False,
         outcome_scenario: str = None,
-
         outcome_impacts: str = None,
     ) -> str:
         """Store event data and return as structured JSON.
