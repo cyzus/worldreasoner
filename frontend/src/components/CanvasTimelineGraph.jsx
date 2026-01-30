@@ -125,12 +125,30 @@ const CanvasTimelineGraph = ({
             .domain([new Date(minDate - span * 0.05), new Date(maxDate.getTime() + span * 0.05)])
             .range([100, dimensions.width - 100])
 
+        // Identify node impacts from links
+        const nodeImpacts = new Map()
+        if (graphData.links) {
+            graphData.links.forEach(l => {
+                const type = (l.relation_type || l.type || l.edge_type || '').toLowerCase()
+                const sourceId = l.source?.id || l.source
+
+                if (type.includes('impact_positive')) {
+                    nodeImpacts.set(sourceId, 'positive')
+                } else if (type.includes('impact_negative')) {
+                    nodeImpacts.set(sourceId, 'negative')
+                } else if (type.includes('impact_mixed')) {
+                    nodeImpacts.set(sourceId, 'mixed')
+                }
+            })
+        }
+
         // Assign fixed X positions based on date
         const nodes = nodesWithDates.map(n => ({
             ...n,
             fx: timeScale(n._date),  // Fixed X position
             // Initial Y with jitter
-            y: dimensions.height / 2 + (Math.random() - 0.5) * 200
+            y: dimensions.height / 2 + (Math.random() - 0.5) * 200,
+            _impact: nodeImpacts.get(n.id) // Store impact direction
         }))
 
         // Build node map for link resolution
@@ -154,9 +172,20 @@ const CanvasTimelineGraph = ({
 
     // Get node color based on status
     const getNodeColor = useCallback((node) => {
-        if (node.isOutcome || node.id === targetEventId) {
+        if (node.id === targetEventId) {
             return GraphStyles.nodeColors.target
         }
+        if (node.isOutcome) {
+            return GraphStyles.nodeColors.outcome || '#FFC107'
+        }
+
+        // Impact-based coloring
+        if (node._impact) {
+            if (node._impact === 'positive') return GraphStyles.linkColors.impact_positive
+            if (node._impact === 'negative') return GraphStyles.linkColors.impact_negative
+            if (node._impact === 'mixed') return GraphStyles.linkColors.impact_mixed
+        }
+
         const status = node.properties?.status || node.status
         if (status === 'occurred') {
             return '#10b981'  // Green
@@ -195,14 +224,15 @@ const CanvasTimelineGraph = ({
             return  // Skip invisible nodes
         }
 
-        const isTarget = node.isOutcome || node.id === targetEventId
+        const isTarget = node.id === targetEventId
+        const isOutcome = node.isOutcome
         const isSelected = selectedNode?.id === node.id
-        const size = isTarget ? NODE_TARGET_SIZE : NODE_BASE_SIZE
+        const size = (isTarget || isOutcome) ? NODE_TARGET_SIZE : NODE_BASE_SIZE
         const color = getNodeColor(node)
         const showCard = globalScale >= CARD_MIN_ZOOM
 
-        // Draw glow for target/selected
-        if (isTarget || isSelected) {
+        // Draw glow for target/outcome/selected
+        if (isTarget || isOutcome || isSelected) {
             ctx.beginPath()
             ctx.arc(node.x, node.y, size + (showCard ? 25 : 8), 0, 2 * Math.PI)
             const gradient = ctx.createRadialGradient(
@@ -212,6 +242,9 @@ const CanvasTimelineGraph = ({
             if (isTarget) {
                 gradient.addColorStop(0, 'rgba(255, 215, 0, 0.4)')
                 gradient.addColorStop(1, 'rgba(255, 215, 0, 0)')
+            } else if (isOutcome) {
+                gradient.addColorStop(0, 'rgba(255, 193, 7, 0.4)')
+                gradient.addColorStop(1, 'rgba(255, 193, 7, 0)')
             } else {
                 gradient.addColorStop(0, 'rgba(59, 130, 246, 0.3)')
                 gradient.addColorStop(1, 'rgba(59, 130, 246, 0)')
@@ -274,12 +307,17 @@ const CanvasTimelineGraph = ({
             ctx.fillStyle = '#1e293b'
             ctx.fillText(displayTitle, x + 8 / globalScale, y + 30 / globalScale)
 
-            // Target badge
+            // Target/Outcome badge
             if (isTarget) {
                 ctx.font = `700 ${9 / globalScale}px Inter, sans-serif`
                 ctx.fillStyle = '#f59e0b'
                 ctx.textAlign = 'right'
                 ctx.fillText('⭐ TARGET', x + cardW - 8 / globalScale, y + 14 / globalScale)
+            } else if (isOutcome) {
+                ctx.font = `700 ${9 / globalScale}px Inter, sans-serif`
+                ctx.fillStyle = '#d97706' // darker amber
+                ctx.textAlign = 'right'
+                ctx.fillText('🎯 OUTCOME', x + cardW - 8 / globalScale, y + 14 / globalScale)
             }
         } else {
             // Dot mode - simple circle
@@ -289,8 +327,8 @@ const CanvasTimelineGraph = ({
             ctx.fill()
 
             // Border
-            ctx.strokeStyle = isTarget ? '#b45309' : 'rgba(255, 255, 255, 0.8)'
-            ctx.lineWidth = isTarget ? 2 : 1.5
+            ctx.strokeStyle = (isTarget || isOutcome) ? '#b45309' : 'rgba(255, 255, 255, 0.8)'
+            ctx.lineWidth = (isTarget || isOutcome) ? 2 : 1.5
             ctx.stroke()
         }
     }, [getNodeColor, isNodeVisible, selectedNode, targetEventId])
@@ -418,7 +456,23 @@ const CanvasTimelineGraph = ({
     // Handle node click
     const handleNodeClick = useCallback((node) => {
         if (onNodeClick && isNodeVisible(node)) {
-            onNodeClick(node)
+            // Calculate screen coordinates for popup positioning
+            const coords = graphRef.current?.graph2ScreenCoords(node.x, node.y)
+
+            // Adjust for canvas position in viewport
+            const canvasRect = containerRef.current?.getBoundingClientRect()
+            const offsetX = canvasRect ? canvasRect.left : 0
+            const offsetY = canvasRect ? canvasRect.top : 0
+
+            const screenX = coords ? (coords.x + offsetX) : 0
+            const screenY = coords ? (coords.y + offsetY) : 0
+
+            // Allow parent to position UI relative to node
+            onNodeClick({
+                ...node,
+                _screenX: screenX,
+                _screenY: screenY
+            })
         }
     }, [onNodeClick, isNodeVisible])
 

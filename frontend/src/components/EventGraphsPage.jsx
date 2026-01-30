@@ -322,37 +322,7 @@ function EventGraphsPage({
                             timeFilter={timeFilter}
                           />
 
-                          {/* Outcome Impacts Toggle */}
-                          <div style={{
-                            position: 'absolute',
-                            top: 50,
-                            right: 10,
-                            zIndex: 10,
-                            background: 'rgba(255,255,255,0.95)',
-                            padding: '8px 12px',
-                            borderRadius: '6px',
-                            fontSize: '12px',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                            border: '1px solid #e0e0e0'
-                          }}>
-                            <label style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              cursor: 'pointer',
-                              userSelect: 'none',
-                              gap: '6px'
-                            }}>
-                              <input
-                                type="checkbox"
-                                checked={includeOutcomes}
-                                onChange={(e) => setIncludeOutcomes(e.target.checked)}
-                                style={{ cursor: 'pointer' }}
-                              />
-                              <span style={{ fontWeight: '500', color: '#495057' }}>
-                                Show Outcome Impacts
-                              </span>
-                            </label>
-                          </div>
+
                         </>
                       )}
                     </div>

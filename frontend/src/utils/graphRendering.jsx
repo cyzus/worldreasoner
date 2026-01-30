@@ -351,33 +351,45 @@ export const GraphLegend = () => (
         {/* Node colors section */}
         <div style={{ marginBottom: '10px' }}>
             <div style={{ fontWeight: '600', marginBottom: '6px', fontSize: '12px', color: '#374151' }}>
-                Event Status
+                Event Impact & Status
             </div>
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
                 <span style={{
                     width: 12,
                     height: 12,
                     borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #34d399 0%, #10b981 100%)',
+                    backgroundColor: GraphStyles.linkColors.impact_positive,
                     display: 'inline-block',
                     marginRight: 6,
                     border: '1px solid rgba(0,0,0,0.1)'
                 }}></span>
-                <span style={{ fontSize: '10px' }}>Confirmed (occurred)</span>
+                <span style={{ fontSize: '10px' }}>Positive Impact</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
                 <span style={{
                     width: 12,
                     height: 12,
                     borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #93c5fd 0%, #3b82f6 100%)',
+                    backgroundColor: GraphStyles.linkColors.impact_negative,
                     display: 'inline-block',
                     marginRight: 6,
                     border: '1px solid rgba(0,0,0,0.1)'
                 }}></span>
-                <span style={{ fontSize: '10px' }}>Predicted (pending)</span>
+                <span style={{ fontSize: '10px' }}>Negative Impact</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
+                <span style={{
+                    width: 12,
+                    height: 12,
+                    borderRadius: '50%',
+                    backgroundColor: GraphStyles.linkColors.impact_mixed,
+                    display: 'inline-block',
+                    marginRight: 6,
+                    border: '1px solid rgba(0,0,0,0.1)'
+                }}></span>
+                <span style={{ fontSize: '10px' }}>Mixed Impact</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
                 <span style={{
                     width: 12,
                     height: 12,
@@ -387,10 +399,19 @@ export const GraphLegend = () => (
                     marginRight: 6,
                     border: '2px solid #f59e0b'
                 }}></span>
-                <span style={{ fontSize: '10px', fontWeight: '600' }}>Target Event</span>
+                <span style={{ fontSize: '10px', fontWeight: '600' }}>Target / Outcome</span>
             </div>
-            <div style={{ fontSize: '9px', color: '#9ca3af', marginTop: '4px', fontStyle: 'italic' }}>
-                Shade = time (darker = older/sooner)
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+                <span style={{
+                    width: 12,
+                    height: 12,
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #93c5fd 0%, #3b82f6 100%)',
+                    display: 'inline-block',
+                    marginRight: 6,
+                    border: '1px solid rgba(0,0,0,0.1)'
+                }}></span>
+                <span style={{ fontSize: '10px' }}>No Impact (Neutral)</span>
             </div>
         </div>
 
