@@ -182,6 +182,14 @@ export const useGraphTraversal = (questions) => {
 
             console.log(`Expanded to ${visited.size} nodes (from ${seedEventIds.size} seed events, depth ${depth})`)
 
+            // Debug: Check if seed events exist in fullGraphData
+            const missingEventIds = Array.from(seedEventIds).filter(id => !fullGraphData.nodes.find(n => n.id === id))
+            if (missingEventIds.length > 0) {
+                console.warn(`⚠️ ${missingEventIds.length} seed events NOT found in fullGraphData:`, missingEventIds.slice(0, 5))
+                console.log(`Full graph has ${fullGraphData.nodes.length} nodes`)
+                console.log('💡 TIP: Increase "Max Nodes" in Controls panel or refresh the graph to load more events')
+            }
+
             // Filter nodes to include the neighborhood
             const filteredNodes = fullGraphData.nodes.filter(node => visited.has(node.id))
 
@@ -191,6 +199,8 @@ export const useGraphTraversal = (questions) => {
                 const targetId = typeof link.target === 'object' ? link.target.id : link.target
                 return visited.has(sourceId) && visited.has(targetId)
             })
+
+            console.log(`Filtered graph: ${filteredNodes.length} nodes, ${filteredLinks.length} links (from ${fullGraphData.links.length} total links)`)
 
             // Mark the outcome node (target_event_id)
             const outcomeNodeId = question.target_event_id
@@ -234,6 +244,9 @@ export const useGraphTraversal = (questions) => {
 
             // Update with new filtered data including synthetic links
             const combinedLinks = [...filteredLinks, ...syntheticLinks]
+
+            console.log(`Created ${syntheticLinks.length} synthetic links for orphaned nodes`)
+            console.log(`Final graph data: ${filteredNodes.length} nodes, ${combinedLinks.length} links`)
 
             const questionFilteredData = {
                 nodes: filteredNodes,

@@ -87,6 +87,8 @@ export const useAppData = () => {
                 links: cleanLinks
             }
 
+            console.log(`Full graph loaded: ${cleanNodes.length} nodes, ${cleanLinks.length} links`)
+
             setFullGraphData(cleanGraphData)
             setGraphData(cleanGraphData) // Initially show all
 

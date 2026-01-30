@@ -10,8 +10,8 @@ export const useGraphStore = create(
     centerNode: null,
     filters: {
       nodeTypes: [],
-      maxNodes: 1000,
-      maxEdges: 5000,
+      maxNodes: 3000,  // Increased from 1000 to include more events (backend allows up to 10000)
+      maxEdges: 8000,  // Increased proportionally (backend allows up to 20000)
       minEdgeWeight: 0,
     },
     includeOutcomes: false, // Show outcome impact edges

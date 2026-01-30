@@ -82,11 +82,7 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
             "type": "string",
             "description": "Comma-separated article IDs",
         },
-        "is_target": {
-            "type": "boolean",
-            "description": "Set to True if this event is the TARGET event (the outcome/ground truth) for the question. Logic will fail if a target already exists.",
-            "nullable": True,
-        },
+
         "is_outcome": {
             "type": "boolean",
             "description": "Set to True if this event represents a possible outcome scenario for the question",
@@ -98,11 +94,7 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
             "enum": enum_to_list(OutcomeScenario),
             "nullable": True,
         },
-        "outcome_option_index": {
-            "type": "integer",
-            "description": "Option index for MCQ outcomes (0-based, only for outcome_scenario=mcq_option)",
-            "nullable": True,
-        },
+
         "outcome_impacts": {
             "type": "string",
             "description": 'JSON array of impact assessments: [{"outcome_event_id": "evt_...", "direction": "positive|negative", "magnitude": 0.7, "confidence": 0.8, "reasoning": "..."}]',
@@ -160,10 +152,10 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
         source_article_ids: str,
         occurred_date: str = None,
         event_type: str = None,
-        is_target: bool = False,
+
         is_outcome: bool = False,
         outcome_scenario: str = None,
-        outcome_option_index: int = None,
+
         outcome_impacts: str = None,
     ) -> str:
         """Store event data and return as structured JSON.
@@ -175,10 +167,10 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
             occurred_date: Optional occurrence date (ISO format)
             event_type: Type of event (string, will be converted to enum)
             source_article_ids: Comma-separated article IDs
-            is_target: If True, attempts to set this event as the question's target
+
             is_outcome: If True, marks this as an outcome event
             outcome_scenario: Type of outcome (positive_resolution, negative_resolution, etc.)
-            outcome_option_index: Option index for MCQ outcomes
+
             outcome_impacts: JSON array of impact assessments on outcome events
 
         Returns:
@@ -277,49 +269,11 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
                 article_ids=article_ids,
                 is_outcome=is_outcome,
                 outcome_scenario=outcome_scenario,
-                outcome_option_index=outcome_option_index,
+
             )
             is_new = True
 
-        # Handle target event assignment logic
-        target_info = {}
-        if is_target:
-            if not self.question_id or not self.db:
-                return self.error_response(
-                    "Cannot set is_target=True without question_id and db_path configured.",
-                    error="config_error",
-                )
 
-            from src.domain.models import Question
-
-            question = self.db.get(Question, self.question_id)
-
-            if not question:
-                return self.error_response(
-                    f"Question {self.question_id} not found", error="question_not_found"
-                )
-
-            if question.target_event_id and question.target_event_id != event.id:
-                # Target already exists and is different - return ERROR as requested
-                return self.error_response(
-                    f"Question already has a target event ({question.target_event_id}). Cannot assign new target {event.id}.",
-                    error="target_already_exists",
-                    existing_target_id=question.target_event_id,
-                    proposed_target_id=event.id,
-                )
-
-            if not question.target_event_id:
-                question.target_event_id = event.id
-                self.db.save(Question, question)
-                logger.info(
-                    f"Assigned event {event.id} as target for question {question.id}"
-                )
-                target_info = {"is_target": True, "action": "assigned_as_target"}
-            else:
-                target_info = {
-                    "is_target": True,
-                    "action": "already_target (no change)",
-                }
 
         # Handle outcome impacts if provided
         impact_results = []
@@ -331,7 +285,7 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
             is_new=is_new,
             updated_articles=updated_articles,
             time_window_validation=time_window_validation,
-            target_info=target_info,
+
             impact_results=impact_results,
         )
 
@@ -421,7 +375,7 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
         article_ids: List[str],
         is_outcome: bool = False,
         outcome_scenario: str = None,
-        outcome_option_index: int = None,
+
     ) -> Event:
         """Create a new event.
 
@@ -434,7 +388,7 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
             article_ids: Source article IDs
             is_outcome: Whether this is an outcome event
             outcome_scenario: Type of outcome scenario
-            outcome_option_index: Option index for MCQ outcomes
+
 
         Returns:
             New Event instance
@@ -483,7 +437,7 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
             metadata=metadata,
             is_outcome=is_outcome,
             outcome_scenario=outcome_scenario_enum,
-            outcome_option_index=outcome_option_index,
+
         )
 
         # Store event using unified collector interface
@@ -676,7 +630,7 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
         is_new: bool,
         updated_articles: bool = False,
         time_window_validation: dict = None,
-        target_info: dict = None,
+
         impact_results: List[dict] = None,
     ) -> str:
         """Format event response as JSON.
@@ -686,7 +640,7 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
             is_new: Whether this is a newly created event
             updated_articles: Whether existing event was updated with new articles
             time_window_validation: Optional validation warnings about event date
-            target_info: Optional target assignment info
+
             impact_results: Optional outcome impact recording results
 
         Returns:
@@ -737,9 +691,6 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
             summary["suggestion"] = (
                 "Consider identifying events that occurred within the valid time window for better causal analysis."
             )
-
-        if target_info:
-            summary["target_info"] = target_info
 
         if impact_results:
             summary["outcome_impacts"] = impact_results
