@@ -4,11 +4,13 @@ This service provides consistent temporal filtering logic across the codebase,
 eliminating duplication between article_analysis.py and event_analysis.py.
 """
 
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, TYPE_CHECKING
 from datetime import datetime, timedelta
 
-from src.domain.models import Article, Event
 from src.utils.date_utils import ensure_timezone_aware
+
+if TYPE_CHECKING:
+    from src.domain.models import Article, Event
 
 
 class TemporalFilterService:
@@ -55,11 +57,11 @@ class TemporalFilterService:
 
     @staticmethod
     def filter_by_window(
-        items: List[Union[Article, Event]],
+        items: List[Union["Article", "Event"]],
         window_start: Optional[datetime],
         window_end: datetime,
         date_field: str = "published_date",
-    ) -> List[Union[Article, Event]]:
+    ) -> List[Union["Article", "Event"]]:
         """Filter items to those within a time window.
 
         Items are considered valid if:
@@ -102,10 +104,10 @@ class TemporalFilterService:
 
     @staticmethod
     def filter_by_cutoff(
-        items: List[Union[Article, Event]],
+        items: List[Union["Article", "Event"]],
         cutoff_date: datetime,
         date_field: str = "published_date",
-    ) -> List[Union[Article, Event]]:
+    ) -> List[Union["Article", "Event"]]:
         """Filter items to those before a cutoff date.
 
         This is a simplified version of filter_by_window that only applies

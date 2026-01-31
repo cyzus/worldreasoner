@@ -776,6 +776,10 @@ class PolymarketRunner(QuestionSourceRunner):
             **extra_metadata,  # Includes clob_token_ids, tags, and other market data
         }
 
+        # Log options for debugging
+        if mq.options:
+            logger.debug(f"Mapping market {mq.market_id} with {len(mq.options)} options")
+
         return Question(
             id=f"polymarket_{mq.market_id}",
             question_text=mq.question_text,

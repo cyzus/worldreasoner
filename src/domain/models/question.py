@@ -66,7 +66,8 @@ class Question(BaseModel):
 
     # Event reference (optional - for structured benchmark questions)
     target_event_id: Optional[str] = Field(
-        None, description="Legacy: Primary target event (now prefer outcome_event_ids)"
+        None,
+        description="DEPRECATED: Use outcome_event_ids + is_actual_outcome instead. Query Event(is_actual_outcome=True, extracted_for_question_id=question_id) to get actual outcome.",
     )
     outcome_event_ids: List[str] = Field(
         default_factory=list,

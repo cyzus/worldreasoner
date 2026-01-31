@@ -265,6 +265,27 @@ class EvidencePipeline(Pipeline):
         async with self.semaphore:
             logger.info(f"[AGENT MODE] Processing question: {question.id}")
 
+            # Get database connection for outcome service
+            db = GenericDatabase(self.database_config.db_path)
+
+            # Auto-generate outcome events if not already present
+            from src.domain.outcome_event_service import OutcomeEventService
+
+            outcome_service = OutcomeEventService(db)
+            outcome_events = outcome_service.get_outcome_events_for_question(
+                question.id
+            )
+
+            if not outcome_events:
+                outcome_events = outcome_service.auto_create_outcome_events(question)
+                logger.info(
+                    f"[{question.id}] Auto-created {len(outcome_events)} outcome events"
+                )
+            else:
+                logger.debug(
+                    f"[{question.id}] Found {len(outcome_events)} existing outcome events"
+                )
+
             # Create agent WITH question context for provenance tracking
             # This ensures all tools know which question they're serving
             hindsight_agent = HindsightAgent(
@@ -276,12 +297,14 @@ class EvidencePipeline(Pipeline):
             logger.debug(f"[{question.id}] Created context-aware HindsightAgent")
 
             # Construct agent prompt using prompt generator
+            # Pass outcome_events so they can be injected into prompt
             prompt = self.prompts.get_agent_prompt(
                 question=question,
                 min_graph_depth=self.min_graph_depth,
                 evidence_window_days=self.evidence_config.evidence_window_days,
                 min_evidence_articles=self.evidence_config.min_evidence_articles,
                 confidence_threshold=self.evidence_config.causal_confidence_threshold,
+                outcome_events=outcome_events,  # NEW: Pass outcomes for prompt injection
             )
 
             try:

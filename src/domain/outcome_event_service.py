@@ -48,7 +48,10 @@ class OutcomeEventService:
 
         elif question.question_type == QuestionType.MCQ:
             # Create one outcome event per option
-            for idx, option in enumerate(question.options or []):
+            # Fallback to metadata options if missing (legacy/ingestion issue)
+            options = question.options or (question.metadata and question.metadata.get("options")) or []
+            
+            for idx, option in enumerate(options):
                 outcome_events.append(
                     Event(
                         id=f"evt_{uuid.uuid4().hex[:12]}",
@@ -129,44 +132,4 @@ class OutcomeEventService:
         if is_actual:
             event.status = EventStatus.OCCURRED
         self.db.save(Event, event)
-        return event
-
-    def create_counterfactual_outcome(
-        self,
-        question_id: str,
-        title: str,
-        description: str,
-        domain,
-    ) -> Event:
-        """Create a counterfactual outcome event.
-
-        Args:
-            question_id: Question this outcome is for
-            title: Short title for the counterfactual
-            description: Detailed description
-            domain: Domain enum
-
-        Returns:
-            Created Event with is_outcome=True and outcome_scenario=COUNTERFACTUAL
-        """
-        event = Event(
-            id=f"evt_{uuid.uuid4().hex[:12]}",
-            title=title,
-            description=description,
-            domain=domain,
-            event_type=EventType.OUTCOME,
-            is_outcome=True,
-            outcome_scenario=OutcomeScenario.COUNTERFACTUAL,
-            status=EventStatus.PREDICTED,
-            extracted_for_question_id=question_id,
-        )
-        self.db.save(Event, event)
-
-        # Add to question's outcome_event_ids
-        question = self.db.get(Question, question_id)
-        if question:
-            if event.id not in question.outcome_event_ids:
-                question.outcome_event_ids.append(event.id)
-                self.db.save(Question, question)
-
         return event

@@ -71,22 +71,15 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
             "type": "string",
             "description": "Comma-separated article IDs",
         },
-
         "is_outcome": {
             "type": "boolean",
-            "description": "Set to True if this event represents a possible outcome scenario for the question",
+            "description": "If True, marks this as an EXTENDED/ALTERNATIVE outcome event discovered during research (not one of the initial pre-generated outcomes).",
+            "default": False,
             "nullable": True,
         },
-        "outcome_scenario": {
-            "type": "string",
-            "description": f"Type of outcome scenario (only for is_outcome=True): {', '.join(enum_to_list(OutcomeScenario))}",
-            "enum": enum_to_list(OutcomeScenario),
-            "nullable": True,
-        },
-
         "outcome_impacts": {
             "type": "string",
-            "description": 'JSON array of impact assessments: [{"outcome_event_id": "evt_...", "direction": "positive|negative", "magnitude": 0.7, "confidence": 0.8, "reasoning": "..."}]',
+            "description": 'JSON array of impact assessments on pre-created outcome events: [{"outcome_event_id": "evt_...", "direction": "positive|negative", "magnitude": 0.7, "confidence": 0.8, "reasoning": "..."}]. Use outcome_event_ids from the prompt.',
             "nullable": True,
         },
     }
@@ -142,7 +135,6 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
         occurred_date: str = None,
         event_type: str = None,
         is_outcome: bool = False,
-        outcome_scenario: str = None,
         outcome_impacts: str = None,
     ) -> str:
         """Store event data and return as structured JSON.
@@ -154,11 +146,8 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
             occurred_date: Optional occurrence date (ISO format)
             event_type: Type of event (string, will be converted to enum)
             source_article_ids: Comma-separated article IDs
-
-            is_outcome: If True, marks this as an outcome event
-            outcome_scenario: Type of outcome (positive_resolution, negative_resolution, etc.)
-
-            outcome_impacts: JSON array of impact assessments on outcome events
+            is_outcome: If True, marks as discovered outcome event
+            outcome_impacts: JSON array of impact assessments on pre-created outcome events
 
         Returns:
             JSON string of Event object (new or existing match)
@@ -255,8 +244,6 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
                 event_date=event_date,
                 article_ids=article_ids,
                 is_outcome=is_outcome,
-                outcome_scenario=outcome_scenario,
-
             )
             is_new = True
 
@@ -361,8 +348,6 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
         event_date: datetime,
         article_ids: List[str],
         is_outcome: bool = False,
-        outcome_scenario: str = None,
-
     ) -> Event:
         """Create a new event.
 
@@ -373,9 +358,7 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
             event_type_enum: Event type
             event_date: Event date
             article_ids: Source article IDs
-            is_outcome: Whether this is an outcome event
-            outcome_scenario: Type of outcome scenario
-
+            is_outcome: Whether this is a discovered outcome event
 
         Returns:
             New Event instance
@@ -399,13 +382,10 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
         # Determine source article (first article in list)
         source_article_id = article_ids[0] if article_ids else None
 
-        # Parse outcome scenario if provided
-        outcome_scenario_enum = None
-        if outcome_scenario:
-            try:
-                outcome_scenario_enum = OutcomeScenario(outcome_scenario.lower())
-            except ValueError:
-                pass
+        # Determine outcome scenario
+        outcome_scenario = None
+        if is_outcome:
+            outcome_scenario = OutcomeScenario.DISCOVERED
 
         # Create Event object
         event = Event(
@@ -423,8 +403,7 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
             is_synthetic=False,
             metadata=metadata,
             is_outcome=is_outcome,
-            outcome_scenario=outcome_scenario_enum,
-
+            outcome_scenario=outcome_scenario,
         )
 
         # Store event using unified collector interface

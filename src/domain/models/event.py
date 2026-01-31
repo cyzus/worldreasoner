@@ -47,7 +47,7 @@ class OutcomeScenario(str, Enum):
     POSITIVE_RESOLUTION = "positive_resolution"  # "Yes" / positive outcome
     NEGATIVE_RESOLUTION = "negative_resolution"  # "No" / negative outcome
     MCQ_OPTION = "mcq_option"  # Multiple choice option
-    COUNTERFACTUAL = "counterfactual"  # Alternative "what if" scenario
+    DISCOVERED = "discovered"  # Edge-case outcomes created outside normal flow
 
 
 @register_model(

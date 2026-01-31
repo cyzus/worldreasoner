@@ -51,7 +51,11 @@ QUESTION ID: {question_id}
 QUESTION: {question_text}
 RESOLUTION DATE: {resolution_date}
 GROUND TRUTH (the KNOWN outcome): {ground_truth}
-{target_event_info}
+
+AVAILABLE OUTCOME EVENTS (pre-created for this question):
+{outcome_events_info}
+
+When recording outcome impacts for events, use the outcome_event_ids listed above.
 
 PROCESS:
 
@@ -87,7 +91,7 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
             "window_start",
             "actual_window_days",
             "ground_truth",
-            "target_event_info",
+            "outcome_events_info",
             "min_graph_depth",
             "min_evidence_articles",
             "confidence_threshold",
@@ -127,6 +131,7 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
         evidence_window_days: int,
         min_graph_depth: int,
         confidence_threshold: float,
+        outcome_events: list = None,
         **kwargs,
     ) -> str:
         """Generate prompt for HindsightAgent to build deep causal graph.
@@ -141,6 +146,7 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
             evidence_window_days: Days before resolution to collect evidence if no estimated_start_time
             min_evidence_articles: Minimum evidence articles needed
             confidence_threshold: Minimum confidence for causal links
+            outcome_events: List of pre-created outcome Event objects
             **kwargs: Additional context (not used)
 
         Returns:
@@ -162,12 +168,8 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
         # Calculate actual window size in days
         actual_window_days = (window_end - window_start).days
 
-        # Generate target event instructions based on whether target_event_id exists
-
-        if question.target_event_id:
-            target_event_info = f"TARGET EVENT ID: {question.target_event_id} (USE THIS as the final target for all causal chains)"
-        else:
-            target_event_info = "TARGET EVENT: Not yet created (you must create it first, ensuring is_target=True)"
+        # Format outcome events for prompt injection
+        outcome_events_info = self._format_outcome_events(outcome_events)
 
         # Build the prompt
         return self.AGENT_TEMPLATE.format(
@@ -177,8 +179,32 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
             window_start=window_start_str,
             actual_window_days=actual_window_days,
             ground_truth=str(question.ground_truth),
-            target_event_info=target_event_info,
+            outcome_events_info=outcome_events_info,
             min_graph_depth=min_graph_depth,
             min_evidence_articles=min_evidence_articles,
             confidence_threshold=confidence_threshold,
         )
+
+    def _format_outcome_events(self, outcome_events: list) -> str:
+        """Format outcome events for prompt injection.
+
+        Args:
+            outcome_events: List of Event objects with is_outcome=True
+
+        Returns:
+            Formatted string listing outcomes with IDs and titles
+        """
+        if not outcome_events:
+            return "No pre-created outcomes available."
+
+        lines = []
+        for event in outcome_events:
+            scenario = ""
+            if event.outcome_scenario:
+                scenario = f" ({event.outcome_scenario.value})"
+            is_actual_outcome = ""
+            if event.is_actual_outcome:
+                is_actual_outcome = " [GROUND TRUTH]"
+            lines.append(f"- {event.id}: {event.title}{scenario}{is_actual_outcome}")
+
+        return "\n".join(lines)
