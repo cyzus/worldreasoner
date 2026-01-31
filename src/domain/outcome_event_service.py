@@ -18,6 +18,7 @@ class OutcomeEventService:
         """Auto-create standard outcome events when a question is created.
 
         Creates Events with is_outcome=True to represent possible resolutions.
+        If question has ground_truth, matches and marks the correct outcome as actual.
 
         Args:
             question: Question to create outcome events for
@@ -52,8 +53,16 @@ class OutcomeEventService:
             options = question.options or (question.metadata and question.metadata.get("options")) or []
             
             for idx, option in enumerate(options):
-                outcome_events.append(
-                    Event(
+                # Check if this option matches ground truth
+                is_actual = False
+                if question.ground_truth is not None:
+                    # Match by exact string or index if integer
+                    if isinstance(question.ground_truth, int):
+                         is_actual = (idx == question.ground_truth)
+                    else:
+                         is_actual = (str(question.ground_truth) == str(option))
+
+                evt = Event(
                         id=f"evt_{uuid.uuid4().hex[:12]}",
                         title=f"Option {idx + 1}: {option}",
                         description=f"Question resolves to: {option}",
@@ -62,15 +71,22 @@ class OutcomeEventService:
                         is_outcome=True,
                         outcome_scenario=OutcomeScenario.MCQ_OPTION,
                         outcome_option_index=idx,
-                        status=EventStatus.PREDICTED,
+                        status=EventStatus.OCCURRED if is_actual else EventStatus.PREDICTED,
+                        is_actual_outcome=is_actual,
                         extracted_for_question_id=question.id,
                     )
-                )
+                
+                # If actual, populate occurred_date
+                if is_actual and question.resolution_date:
+                    evt.occurred_date = question.resolution_date
+                    
+                outcome_events.append(evt)
 
         elif question.question_type == QuestionType.QUANTITY:
             # For quantity questions, create a single outcome event
-            outcome_events.append(
-                Event(
+            is_actual = question.ground_truth is not None
+            
+            evt = Event(
                     id=f"evt_{uuid.uuid4().hex[:12]}",
                     title=f"Quantity outcome: {question.question_text[:50]}",
                     description=f"Final value for: {question.question_text}",
@@ -78,10 +94,16 @@ class OutcomeEventService:
                     event_type=EventType.OUTCOME,
                     is_outcome=True,
                     outcome_scenario=OutcomeScenario.POSITIVE_RESOLUTION,
-                    status=EventStatus.PREDICTED,
+                    status=EventStatus.OCCURRED if is_actual else EventStatus.PREDICTED,
+                    is_actual_outcome=is_actual,
                     extracted_for_question_id=question.id,
                 )
-            )
+             
+            # If actual, populate occurred_date
+            if is_actual and question.resolution_date:
+                evt.occurred_date = question.resolution_date
+                
+            outcome_events.append(evt)
 
         # Save to database
         for event in outcome_events:
@@ -97,7 +119,11 @@ class OutcomeEventService:
         self, question: Question, is_positive: bool, title: str, description: str
     ) -> Event:
         """Create a binary outcome event (yes/no)."""
-        return Event(
+        is_actual = False
+        if question.ground_truth is not None and isinstance(question.ground_truth, bool):
+            is_actual = (question.ground_truth == is_positive)
+            
+        evt = Event(
             id=f"evt_{uuid.uuid4().hex[:12]}",
             title=title,
             description=description,
@@ -109,9 +135,16 @@ class OutcomeEventService:
                 if is_positive
                 else OutcomeScenario.NEGATIVE_RESOLUTION
             ),
-            status=EventStatus.PREDICTED,
+            status=EventStatus.OCCURRED if is_actual else EventStatus.PREDICTED,
+            is_actual_outcome=is_actual,
             extracted_for_question_id=question.id,
         )
+        
+        # If actual, populate occurred_date
+        if is_actual and question.resolution_date:
+            evt.occurred_date = question.resolution_date
+            
+        return evt
 
     def get_outcome_events_for_question(self, question_id: str) -> List[Event]:
         """Get all outcome events for a question."""
