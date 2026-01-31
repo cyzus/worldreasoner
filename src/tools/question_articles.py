@@ -1,7 +1,6 @@
-"""Tool to retrieve articles collected for the current question context."""
-
 import json
 from typing import Optional
+from datetime import datetime, timezone
 
 from src.tools.database_mixin import DatabaseAwareTool
 from src.domain.models import Article
@@ -26,7 +25,26 @@ class QuestionArticlesTool(DatabaseAwareTool):
     - total_articles: Count of articles found.
     """
 
-    inputs = {}
+    inputs = {
+        "limit": {
+            "type": "integer",
+            "description": "Number of articles to return (default: 20)",
+            "default": 20,
+            "nullable": True,
+        },
+        "offset": {
+            "type": "integer",
+            "description": "Number of articles to skip (default: 0)",
+            "default": 0,
+            "nullable": True,
+        },
+        "sort": {
+            "type": "string",
+            "description": "Sort order: 'date_desc' (newest first) or 'date_asc' (oldest first). Default: 'date_desc'",
+            "default": "date_desc",
+            "nullable": True,
+        },
+    }
     output_type = "string"
 
     def __init__(self, db_path: str = None, question_id: Optional[str] = None):
@@ -39,11 +57,18 @@ class QuestionArticlesTool(DatabaseAwareTool):
         super().__init__(db_path=db_path, ensure_tables=[Article])
         self.question_id = question_id
 
-    def forward(self) -> str:
-        """Get all articles collected for this question.
+    def forward(
+        self, limit: int = 20, offset: int = 0, sort: str = "date_desc"
+    ) -> str:
+        """Get articles collected for this question with pagination.
+
+        Args:
+            limit: Max articles to return
+            offset: Number of articles to skip
+            sort: Sort order ('date_desc' or 'date_asc')
 
         Returns:
-            JSON string with article list
+            JSON string with paginated article list
         """
         if not self.question_id:
             return json.dumps(
@@ -71,12 +96,25 @@ class QuestionArticlesTool(DatabaseAwareTool):
                 question_articles.append(article)
 
         logger.debug(
-            f"Found {len(question_articles)} articles for question {self.question_id}"
+            f"Found {len(question_articles)} total articles for question {self.question_id}"
         )
+
+        # Sort articles
+        reverse_sort = sort != "date_asc"  # Default to desc (newest first)
+        question_articles.sort(
+            key=lambda a: a.published_date or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=reverse_sort,
+        )
+
+        # Apply pagination
+        total_count = len(question_articles)
+        start_idx = max(0, offset)
+        end_idx = min(start_idx + limit, total_count)
+        paginated_articles = question_articles[start_idx:end_idx]
 
         # Format response with essential info
         articles_data = []
-        for article in question_articles:
+        for article in paginated_articles:
             articles_data.append(
                 {
                     "id": article.id,
@@ -95,7 +133,10 @@ class QuestionArticlesTool(DatabaseAwareTool):
         return json.dumps(
             {
                 "question_id": self.question_id,
-                "total_articles": len(articles_data),
+                "total_articles": total_count,
+                "returned_count": len(articles_data),
+                "limit": limit,
+                "offset": offset,
                 "articles": articles_data,
             },
             indent=2,
