@@ -236,14 +236,15 @@ RECOMMENDATION:
         by_outcome = {}
         for impact in impacts:
             outcome_id = impact.outcome_event_id
+            outcome_event = self.db.get(Event, outcome_id)
+            if not outcome_event:
+                continue # Ignore impacts where the outcome event cannot be retrieved
+
             if outcome_id not in by_outcome:
-                outcome_event = self.db.get(Event, outcome_id)
                 by_outcome[outcome_id] = {
-                    "outcome_title": outcome_event.title
-                    if outcome_event
-                    else "Unknown",
+                    "outcome_title": outcome_event.title,
                     "outcome_scenario": outcome_event.outcome_scenario.value
-                    if outcome_event and outcome_event.outcome_scenario
+                    if outcome_event.outcome_scenario
                     else None,
                     "positive_impacts": [],
                     "negative_impacts": [],
