@@ -178,6 +178,10 @@ class GenericDatabase(Generic[T]):
 
     def _ensure_db_exists(self):
         """Create database file if it doesn't exist."""
+        # Skip for in-memory databases
+        if str(self.db_path) == ":memory:" or self.db_path.name == ":memory:":
+            return
+            
         if not self.db_path.exists():
             self.db_path.touch()
 

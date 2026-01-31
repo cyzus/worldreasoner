@@ -4,6 +4,8 @@ Runs a forecast using the 'real_time' mode which enables full web access.
 """
 
 import argparse
+import tempfile
+import os
 from datetime import datetime, timezone
 from src.config import get_config
 from src.core.database import GenericDatabase
@@ -17,7 +19,17 @@ def main():
     parser.add_argument("--db", default=":memory:", help="Database path")
     args = parser.parse_args()
 
-    db = GenericDatabase(args.db)
+    # Handle :memory: with temp file
+    db_path = args.db
+    cleanup_db = False
+    if args.db == ":memory:":
+        fd, db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        cleanup_db = True
+        print(f"Using temp DB: {db_path}")
+
+    db = GenericDatabase(db_path)
+    db.initialize_all_tables()
 
     if args.question_id:
         question = db.get(Question, args.question_id)
@@ -26,7 +38,9 @@ def main():
         question = Question(
             id="rt_adhoc",
             question_text=args.query,
-            question_type=QuestionType.BOOLEAN,
+            question_type=QuestionType.BINARY,
+            source="adhoc",
+            difficulty=3,
             domain=Domain.GENERAL,
             resolution_date=datetime.now(timezone.utc),
             created_at=datetime.now(timezone.utc),
@@ -37,8 +51,10 @@ def main():
         question = Question(
             id="q_tech_20251117_003",
             question_text="Will GPT-5 be released by OpenAI before the end of 2025?",
-            question_type=QuestionType.BOOLEAN,
-            domain=Domain.TECHNOLOGY,
+            question_type=QuestionType.BINARY,
+            source="example",
+            difficulty=3,
+            domain=Domain.TECH,
             resolution_date=datetime(2025, 12, 20, tzinfo=timezone.utc),
             created_at=datetime.now(timezone.utc)
         )
@@ -52,16 +68,24 @@ def main():
     agent = ForecastAgent(
         question=question,
         simulated_date=datetime.now(timezone.utc).isoformat(),
-        knowledge_cutoff=get_config().llm.knowledge_cutoff,
+        knowledge_cutoff="2024-01-01",
         config=get_config(),
         mode="real_time", # Enables web access
-        db_path=args.db
+        db_path=db_path
     )
 
     print(f"Real-time Forecast: {question.question_text}")
     print("-" * 50)
     result = agent.run(f"Forecast: {question.question_text}")
     print(result)
+
+    if cleanup_db and os.path.exists(db_path):
+        try:
+            # Close memory connection if present (not needed for file)
+            # Just unlink
+            os.unlink(db_path)
+        except:
+            pass
 
 if __name__ == "__main__":
     main()
