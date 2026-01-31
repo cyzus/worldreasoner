@@ -159,111 +159,79 @@ ERROR: {error}
         question: Question,
         quality: Dict,
     ) -> str:
-        """Format the article analysis as visual text.
+        """Format the article analysis as visual text."""
+        from src.utils.formatting_utils import InspectorReportBuilder
 
-        Args:
-            articles: List of articles
-            timeline_data: Timeline statistics
-            source_data: Source statistics
-            gaps: Identified timeline gaps
-            question: Question object with resolution_date and optional estimated_start_time
-            quality: Quality metrics from calculate_quality()
-
-        Returns:
-            Formatted multi-section text
-        """
-        sections = []
-
-        # Header
-        sections.append(format_inspector_header("ARTICLE COVERAGE INSPECTOR"))
-
+        builder = InspectorReportBuilder("ARTICLE COVERAGE INSPECTOR")
+        
         # Overview
-        sections.append(f"Question ID: {self.question_id}")
-        sections.append(f"Total Articles: {len(articles)}")
-
-        # Show time window
-        sections.extend(
-            format_time_window(
-                question.resolution_date, question.estimated_start_time, indent=""
-            )
-        )
-
-        sections.append("")
+        builder.add_kv("Question ID", self.question_id)
+        builder.add_kv("Total Articles", len(articles))
+        builder.add_time_window(question.resolution_date, question.estimated_start_time, indent=0)
+        builder.add_line()
 
         # Timeline section
         if timeline_data.get("has_dates"):
-            sections.extend(format_section_header("TIMELINE DISTRIBUTION"))
-
-            # Show coverage range (considering estimated_start_time)
+            builder.add_section_header("TIMELINE DISTRIBUTION")
+            
+            # Coverage range
             earliest = timeline_data.get("earliest")
-            latest = ensure_timezone_aware(question.resolution_date)
-            q_start = question.estimated_start_time
-
             if earliest:
-                # Note: For articles, we show to resolution_date (not latest article date)
-                sections.extend(
-                    format_coverage_range(
-                        earliest,
-                        latest,
-                        question.resolution_date,
-                        question.estimated_start_time,
-                        timeline_data["span_days"],
-                        item_type="Article",
-                    )
+                builder.add_coverage_range(
+                    earliest, 
+                    ensure_timezone_aware(question.resolution_date),
+                    question.resolution_date,
+                    question.estimated_start_time,
+                    item_type="Article"
                 )
-
-            sections.append("")
+                builder.add_line()
 
             # Monthly bar chart
-            sections.extend(
-                render_monthly_bar_chart(
-                    timeline_data.get("monthly", {}), item_type="Articles"
-                )
+            builder.add_monthly_bar_chart(
+                timeline_data.get("monthly", {}), 
+                item_type="Articles"
             )
 
         # Gaps section
         if gaps:
-            sections.extend(
-                format_timeline_gaps(
-                    gaps, min_gap_label=">7 days", max_display=5, compact=False
-                )
+            builder.add_timeline_gaps(
+                gaps, 
+                min_gap_label=">7 days", 
+                max_display=5, 
+                compact=False
             )
 
         # Source diversity
-        sections.extend(format_section_header("SOURCE DIVERSITY"))
-        sections.append(f"  Unique Sources:  {source_data['unique_sources']}")
-        sections.append(f"  Unique Domains:  {source_data['unique_domains']}")
-        sections.append("")
-        sections.append("  Top Sources:")
+        builder.add_section_header("SOURCE DIVERSITY")
+        builder.add_kv("Unique Sources", source_data['unique_sources'], indent=2)
+        builder.add_kv("Unique Domains", source_data['unique_domains'], indent=2)
+        builder.add_line()
+        builder.add_line("Top Sources:", indent=2)
         for source, count in source_data["top_sources"]:
-            sections.append(f"    • {source}: {count} articles")
-        sections.append("")
+            builder.add_line(f"• {source}: {count} articles", indent=4)
+        builder.add_line()
 
         # Coverage quality
-        sections.extend(format_section_header("COVERAGE QUALITY"))
-        sections.append(f"  Quality Score:  {quality['score']:.2f}/1.00")
-        sections.append(
-            f"  Volume:         {quality['volume_score']:.2f} ({len(articles)} articles)"
-        )
-        sections.append(
-            f"  Diversity:      {quality['diversity_score']:.2f} ({source_data['unique_sources']} sources)"
-        )
-        sections.append(
-            f"  Coverage:       {quality['coverage_score']:.2f} (gaps: {len(gaps)})"
-        )
+        builder.add_section_header("COVERAGE QUALITY")
+        metrics = {
+            "Quality Score": quality['score'],
+            "Volume": quality['volume_score'],
+            "Diversity": quality['diversity_score'],
+            "Coverage": quality['coverage_score'],
+        }
         if timeline_data.get("has_dates"):
-            sections.append(
-                f"  Distribution:   {quality['distribution_score']:.2f} (evenness)"
-            )
-            sections.append(
-                f"  Gap Severity:   {quality['gap_severity']:.2f} (penalty)"
-            )
-        sections.append("")
+            metrics.update({
+                "Distribution": quality['distribution_score'],
+                "Gap Severity": quality['gap_severity']
+            })
+            
+        builder.add_metrics(metrics)
+        builder.add_line()
 
         # Recommendation
         recommendation = get_recommendation(quality, gaps, source_data, timeline_data)
-        sections.extend(format_section_header("RECOMMENDATION"))
-        sections.append(f"  {recommendation}")
-        sections.append("")
+        builder.add_section_header("RECOMMENDATION")
+        builder.add_line(recommendation, indent=2)
+        builder.add_line()
 
-        return "\n".join(sections)
+        return builder.build()

@@ -287,57 +287,36 @@ RECOMMENDATION:
         disconnected: Optional[List[Set[str]]] = None,
         outcome_impacts: Optional[Dict] = None,
     ) -> str:
-        """Format the graph as a visual text representation.
+        """Format the graph as a visual text representation."""
+        from src.utils.formatting_utils import InspectorReportBuilder
 
-        Args:
-            question: Question object
-            events: Event ID to Event object mapping
-            graph: Adjacency list (target -> sources)
-            hypothesis_map: (source, target) -> hypothesis mapping
-            stats: Graph statistics
-            orphan_events: Orphan event ID to Event object mapping
-            temporal_data: Temporal coverage data
-            temporal_quality: Temporal quality metrics
-            temporal_gaps: Temporal gaps in coverage
-            disconnected: List of disconnected subgraph event ID sets
-            outcome_impacts: Outcome impact analysis summary
-
-        Returns:
-            Formatted multi-section text
-        """
-        sections = []
-
-        # Header
-        sections.append(format_inspector_header("RELATIONAL GRAPH INSPECTOR"))
-
+        builder = InspectorReportBuilder("RELATIONAL GRAPH INSPECTOR")
+        
         # Question info
         if question:
-            sections.append(f"Question: {question.question_text[:80]}...")
-            sections.append(f"Question ID: {self.question_id}")
-            sections.append("")
+            builder.add_kv("Question", f"{question.question_text[:80]}...")
+            builder.add_kv("Question ID", self.question_id)
+            builder.add_line()
 
         # Visual graph section
-        sections.extend(format_section_header("RELATIONAL GRAPH STRUCTURE"))
-
+        builder.add_section_header("RELATIONAL GRAPH STRUCTURE")
         target_event_id = question.target_event_id if question else None
+        
         if target_event_id and target_event_id in events:
-            # Build tree from target event
             tree_lines = self._build_causal_tree(
                 target_event_id, events, graph, hypothesis_map, set()
             )
-            sections.extend(tree_lines)
+            for line in tree_lines:
+                builder.add_line(line)
         else:
-            # Show all disconnected components
-            sections.append(
-                "⚠ No target event specified. Showing all relational links:"
-            )
-            sections.append("")
+            builder.add_line("⚠ No target event specified. Showing all relational links:")
+            builder.add_line()
             for target_id, source_ids in graph.items():
                 target_event = events.get(target_id)
                 target_desc = self._truncate(
                     target_event.description if target_event else target_id, 50
                 )
-                sections.append(f"  ▸ {target_desc}")
+                builder.add_line(f"▸ {target_desc}", indent=2)
                 for source_id in source_ids:
                     source_event = events.get(source_id)
                     source_desc = self._truncate(
@@ -345,269 +324,161 @@ RECOMMENDATION:
                     )
                     hyp = hypothesis_map.get((source_id, target_id))
                     conf = f"[conf: {hyp.confidence:.1f}]" if hyp else ""
-                    sections.append(f"    └─→ {source_desc} {conf}")
-                sections.append("")
+                    builder.add_line(f"└─→ {source_desc} {conf}", indent=4)
+                builder.add_line()
 
         # Temporal coverage section
         if temporal_data and temporal_data.get("has_dates"):
-            sections.extend(format_section_header("EVENT TEMPORAL COVERAGE"))
-
-            # Time window display
-            sections.extend(
-                format_time_window(
-                    question.resolution_date, question.estimated_start_time
-                )
-            )
-
+            builder.add_section_header("EVENT TEMPORAL COVERAGE")
+            
+            builder.add_time_window(question.resolution_date, question.estimated_start_time, indent=0)
+            
             # Coverage range
             earliest = temporal_data.get("earliest")
             latest = temporal_data.get("latest")
             if earliest and latest:
-                sections.extend(
-                    format_coverage_range(
-                        earliest,
-                        latest,
-                        question.resolution_date,
-                        question.estimated_start_time,
-                        temporal_data["span_days"],
-                        item_type="Event",
-                    )
+                builder.add_coverage_range(
+                    earliest, latest, 
+                    question.resolution_date, 
+                    question.estimated_start_time,
+                    item_type="Event"
                 )
-
-            sections.append("")
+                builder.add_line()
 
             # Monthly bar chart
-            sections.extend(
-                render_monthly_bar_chart(
-                    temporal_data.get("monthly", {}), item_type="Events"
-                )
+            builder.add_monthly_bar_chart(
+                temporal_data.get("monthly", {}), 
+                item_type="Events"
             )
-
-            # Temporal gaps (compact format)
+            
+            # Temporal gaps
             if temporal_gaps:
-                sections.extend(
-                    format_timeline_gaps(
-                        temporal_gaps,
-                        min_gap_label=">30 days",
-                        max_display=3,
-                        compact=True,
-                    )
+                builder.add_timeline_gaps(
+                    temporal_gaps, 
+                    min_gap_label=">30 days", 
+                    max_display=3, 
+                    compact=True
                 )
 
-            # Temporal quality metrics
+            # Metrics
             if temporal_quality:
-                sections.append(
-                    format_metric_line(
-                        "Temporal Quality", temporal_quality["temporal_score"]
-                    )
-                )
-                sections.append(
-                    format_metric_line(
-                        "Coverage Score", temporal_quality["coverage_score"]
-                    )
-                )
-                sections.append(
-                    format_metric_line(
-                        "Distribution", temporal_quality["distribution_score"]
-                    )
-                )
+                metrics = {
+                    "Temporal Quality": temporal_quality["temporal_score"],
+                    "Coverage Score": temporal_quality["coverage_score"],
+                    "Distribution": temporal_quality["distribution_score"],
+                }
                 if temporal_quality["gap_severity"] > 0:
-                    sections.append(
-                        format_metric_line(
-                            "Gap Severity",
-                            temporal_quality["gap_severity"],
-                            " (penalty)",
-                        )
-                    )
-                sections.append("")
+                    metrics["Gap Severity"] = temporal_quality["gap_severity"]
+                builder.add_metrics(metrics)
+                builder.add_line()
+                
         elif temporal_data is not None:
-            sections.extend(format_section_header("EVENT TEMPORAL COVERAGE"))
-            sections.append(
-                "  ⚠ No event dates available - cannot assess temporal coverage"
-            )
-            sections.append("")
+             builder.add_line("⚠ No event dates available - cannot assess temporal coverage", indent=2)
+             builder.add_line()
 
         # Outcome impact section
         if outcome_impacts:
-            sections.extend(format_section_header("OUTCOME IMPACT ANALYSIS"))
-            sections.append(f"  Total Impacts:    {outcome_impacts['impact_count']}")
-            sections.append(
-                f"  Outcomes Analyzed: {outcome_impacts['outcomes_analyzed']}"
-            )
-            sections.append("")
+            builder.add_section_header("OUTCOME IMPACT ANALYSIS")
+            builder.add_kv("Total Impacts", outcome_impacts['impact_count'], indent=2)
+            builder.add_kv("Outcomes Analyzed", outcome_impacts['outcomes_analyzed'], indent=2)
+            builder.add_line()
 
             for outcome_id, outcome_data in outcome_impacts["by_outcome"].items():
                 outcome_title = outcome_data["outcome_title"]
                 scenario = outcome_data["outcome_scenario"]
                 scenario_label = f" ({scenario})" if scenario else ""
-                sections.append(f"  Outcome: {outcome_title}{scenario_label}")
-                sections.append("  " + "─" * 60)
+                
+                builder.add_line(f"Outcome: {outcome_title}{scenario_label}", indent=2)
+                builder.add_line("─" * 60, indent=2)
 
-                # Show positive impacts
+                # Positive impacts
                 if outcome_data["positive_impacts"]:
-                    sections.append(
-                        f"    ✓ POSITIVE impacts ({len(outcome_data['positive_impacts'])}):"
-                    )
-                    for imp in sorted(
-                        outcome_data["positive_impacts"],
-                        key=lambda x: x["magnitude"],
-                        reverse=True,
-                    )[:3]:
+                    builder.add_line(f"✓ POSITIVE impacts ({len(outcome_data['positive_impacts'])}):", indent=4)
+                    for imp in sorted(outcome_data["positive_impacts"], key=lambda x: x["magnitude"], reverse=True)[:3]:
                         title_short = self._truncate(imp["event_title"], 45)
-                        sections.append(f"      • {title_short}")
-                        sections.append(
-                            f"        mag: {imp['magnitude']:.2f}, conf: {imp['confidence']:.2f}"
-                        )
+                        builder.add_line(f"• {title_short}", indent=6)
+                        builder.add_line(f"mag: {imp['magnitude']:.2f}, conf: {imp['confidence']:.2f}", indent=8)
 
-                # Show negative impacts
+                # Negative impacts
                 if outcome_data["negative_impacts"]:
-                    sections.append(
-                        f"    ✗ NEGATIVE impacts ({len(outcome_data['negative_impacts'])}):"
-                    )
-                    for imp in sorted(
-                        outcome_data["negative_impacts"],
-                        key=lambda x: x["magnitude"],
-                        reverse=True,
-                    )[:3]:
+                    builder.add_line(f"✗ NEGATIVE impacts ({len(outcome_data['negative_impacts'])}):", indent=4)
+                    for imp in sorted(outcome_data["negative_impacts"], key=lambda x: x["magnitude"], reverse=True)[:3]:
                         title_short = self._truncate(imp["event_title"], 45)
-                        sections.append(f"      • {title_short}")
-                        sections.append(
-                            f"        mag: {imp['magnitude']:.2f}, conf: {imp['confidence']:.2f}"
-                        )
-
-                sections.append("")
+                        builder.add_line(f"• {title_short}", indent=6)
+                        builder.add_line(f"mag: {imp['magnitude']:.2f}, conf: {imp['confidence']:.2f}", indent=8)
+                
+                builder.add_line()
 
         # Orphan events section
         if orphan_events:
-            sections.extend(
-                format_section_header("⚠ ORPHAN EVENTS (Related but Disconnected)")
-            )
-            sections.append(
-                f"Found {len(orphan_events)} event(s) related to this question but"
-            )
-            sections.append("not connected via relational hypotheses:")
-            sections.append("")
+            builder.add_section_header("⚠ ORPHAN EVENTS (Related but Disconnected)")
+            builder.add_line(f"Found {len(orphan_events)} event(s) related to this question but not connected via relational hypotheses:")
+            builder.add_line()
+            
             for event_id, event in orphan_events.items():
                 if event:
                     desc = self._truncate(event.description, 55)
-                    sections.append(f"  🔴 {desc}")
-                    sections.append(f"     ID: {event_id}")
+                    builder.add_line(f"🔴 {desc}", indent=2)
+                    builder.add_line(f"ID: {event_id}", indent=5)
                     if event.occurred_date:
-                        sections.append(f"     Date: {event.occurred_date}")
+                        builder.add_line(f"Date: {event.occurred_date}", indent=5)
                 else:
-                    sections.append(f"  🔴 {event_id} (event not found in database)")
-                sections.append("")
-            sections.append("RECOMMENDATION:")
-            sections.append(
-                "  → Consider creating relational hypotheses linking these events"
-            )
-            sections.append("  → Use causal_reasoner tool to establish relationships")
-            sections.append(
-                "  → These events may provide missing context or root causes"
-            )
-            sections.append("")
-
-        # Disconnected subgraphs section
-        if disconnected:
-            sections.extend(format_section_header("⚠ DISCONNECTED SUBGRAPHS"))
-            sections.append(
-                f"Found {len(disconnected)} subgraph(s) not connected to the target outcome:"
-            )
-            sections.append("")
-            for i, component in enumerate(disconnected, 1):
-                sections.append(f"  Subgraph {i} ({len(component)} events):")
-                for event_id in list(component)[:5]:  # Show max 5 events per subgraph
-                    event = events.get(event_id)
-                    desc = self._truncate(event.description if event else event_id, 50)
-                    sections.append(f"    🔸 {desc}")
-                if len(component) > 5:
-                    sections.append(f"    ... and {len(component) - 5} more")
-                sections.append("")
-            sections.append("WHY THIS HAPPENS:")
-            sections.append(
-                "  → These events form causal chains but aren't linked to the target"
-            )
-            sections.append(
-                "  → Missing hypothesis connecting this subgraph to the main graph"
-            )
-            sections.append("  → May be exploratory chains that need to be integrated")
-            sections.append("")
-            sections.append("RECOMMENDATION:")
-            sections.append(
-                "  → Find the event in each subgraph that should link to the target"
-            )
-            sections.append(
-                "  → Use causal_reasoner to create the connecting hypothesis"
-            )
-            sections.append("")
+                    builder.add_line(f"🔴 {event_id} (event not found)", indent=2)
+                builder.add_line()
+            
+            builder.add_line("RECOMMENDATION:")
+            builder.add_line("→ Consider creating relational hypotheses linking these events", indent=2)
+            builder.add_line("→ Use causal_reasoner tool to establish relationships", indent=2)
+            builder.add_line()
 
         # Causal chains section
-        sections.extend(format_section_header("RELATIONAL CHAINS (Root → Target)"))
-
+        builder.add_section_header("RELATIONAL CHAINS (Root → Target)")
         if target_event_id:
-            chains = self._find_all_causal_chains(
-                target_event_id, events, graph, hypothesis_map
-            )
-            if chains:
-                for i, chain in enumerate(chains[:5], 1):  # Show top 5 chains
-                    sections.append(f"Chain {i} (depth: {len(chain) - 1}):")
-                    for j, (event_id, hyp) in enumerate(chain):
-                        event = events.get(event_id)
-                        desc = self._truncate(
-                            event.description if event else event_id, 55
-                        )
-                        indent = "  " * j
-
-                        if j == 0:
-                            sections.append(f"  {indent}🌱 {desc}")
-                        elif j == len(chain) - 1:
-                            sections.append(f"  {indent}🎯 {desc}")
-                        else:
-                            sections.append(f"  {indent}⚡ {desc}")
-
-                        if hyp and j < len(chain) - 1:
-                            evidence_str = (
-                                f"[{len(hyp.evidence_article_ids)} articles]"
-                                if hyp.evidence_article_ids
-                                else "[no evidence]"
-                            )
-                            sections.append(
-                                f"  {indent}   └─ conf: {hyp.confidence:.1f}, strength: {hyp.strength:.1f} {evidence_str}"
-                            )
-                    sections.append("")
-            else:
-                sections.append("  No complete relational chains found.")
-                sections.append("")
+             chains = self._find_all_causal_chains(target_event_id, events, graph, hypothesis_map)
+             if chains:
+                 for i, chain in enumerate(chains[:5], 1):
+                     builder.add_line(f"Chain {i} (depth: {len(chain) - 1}):")
+                     for j, (event_id, hyp) in enumerate(chain):
+                         event = events.get(event_id)
+                         desc = self._truncate(event.description if event else event_id, 55)
+                         indent_chain = "  " * j
+                         
+                         if j == 0:
+                             icon = "🌱"
+                         elif j == len(chain) - 1:
+                             icon = "🎯"
+                         else:
+                             icon = "⚡"
+                             
+                         builder.add_line(f"{icon} {desc}", indent=2 + (j*2))
+                         
+                         if hyp and j < len(chain) - 1:
+                             evidence_str = f"[{len(hyp.evidence_article_ids)} articles]" if hyp.evidence_article_ids else "[no evidence]"
+                             builder.add_line(f"└─ conf: {hyp.confidence:.1f}, strength: {hyp.strength:.1f} {evidence_str}", indent=5 + (j*2))
+                     builder.add_line()
+             else:
+                 builder.add_line("No complete relational chains found.", indent=2)
+                 builder.add_line()
 
         # Statistics section
-        sections.extend(format_section_header("GRAPH STATISTICS"))
-        sections.append(f"  Events:           {stats['event_count']}")
-        sections.append(f"  Hypotheses:       {stats['hypothesis_count']}")
-        sections.append(f"  Max Depth:        {stats['max_depth']} levels")
-        sections.append(f"  Depth Score:      {stats['depth_score']:.1f}")
-        sections.append(f"  Leaf Events:      {stats['leaf_events']} (root causes)")
-        sections.append(f"  Avg Confidence:   {stats['confidence_score']:.2f}")
-        sections.append(f"  Avg Strength:     {stats['strength_score']:.2f}")
-        sections.append(
-            f"  With Evidence:    {stats['with_evidence']}/{stats['hypothesis_count']}"
-        )
-        sections.append(f"  Quality Score:    {stats['quality_score']:.2f}")
+        builder.add_section_header("GRAPH STATISTICS")
+        stats_map = {
+            "Events": stats['event_count'],
+            "Hypotheses": stats['hypothesis_count'],
+            "Max Depth": f"{stats['max_depth']} levels",
+            "Depth Score": stats['depth_score'],
+            "Quality Score": stats['quality_score'],
+        }
+        builder.add_metrics(stats_map)
         if orphan_events:
-            sections.append(f"  Orphan Events:    {len(orphan_events)} ⚠")
-        if temporal_quality:
-            sections.append(
-                f"  Temporal Score:   {temporal_quality['temporal_score']:.2f}"
-            )
-        sections.append("")
+            builder.add_kv("Orphan Events", f"{len(orphan_events)} ⚠", indent=2)
+        builder.add_line()
 
         # Recommendations
-        sections.extend(format_section_header("RECOMMENDATION"))
-
-        # Graph structure recommendation
+        builder.add_section_header("RECOMMENDATION")
         graph_recommendation = self._get_recommendation(stats)
-        sections.append(f"  Graph: {graph_recommendation}")
+        builder.add_kv("Graph", graph_recommendation, indent=2)
 
-        # Temporal coverage recommendation
         if temporal_data and temporal_quality:
             temporal_recommendation = get_event_temporal_recommendation(
                 temporal_quality,
@@ -615,11 +486,11 @@ RECOMMENDATION:
                 temporal_data,
                 question.estimated_start_time if question else None,
             )
-            sections.append(f"  Temporal: {temporal_recommendation}")
-
-        sections.append("")
-
-        return "\n".join(sections)
+            builder.add_kv("Temporal", temporal_recommendation, indent=2)
+        
+        builder.add_line()
+        
+        return builder.build()
 
     def _build_causal_tree(
         self,
