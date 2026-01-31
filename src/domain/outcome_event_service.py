@@ -131,5 +131,11 @@ class OutcomeEventService:
         event.is_actual_outcome = is_actual
         if is_actual:
             event.status = EventStatus.OCCURRED
+            
+            # Populate occurred_date from question resolution date
+            if event.extracted_for_question_id:
+                question = self.db.get(Question, event.extracted_for_question_id)
+                if question and question.resolution_date:
+                    event.occurred_date = question.resolution_date
         self.db.save(Event, event)
         return event
