@@ -28,6 +28,7 @@ Guidelines:
 - Use causal_reasoner to identify relationships between events
 - All chains must connect to the target event
 - Make sure the chronology of events makes sense (earlier events cause later events)
+- ⚠️ DATE ACCURACY: When extracting 'occurred_date', check the article year.
 
 OUTCOME IMPACT ANALYSIS:
 - For each significant event, assess its impact on BOTH outcomes (Yes/No or all MCQ options)
