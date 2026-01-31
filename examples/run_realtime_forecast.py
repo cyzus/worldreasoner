@@ -1,118 +1,67 @@
-"""Run real-time forecasting with live information.
+"""Example: Real-time forecasting.
 
-This script demonstrates how to use the ForecastAgent in real-time mode,
-which enables access to web_search and web_fetch tools for live information.
-
-Prerequisites:
-1. Set up config/local.yaml with LLM API keys
-2. MCP server running (default: http://127.0.0.1:8110/mcp)
-
-Usage:
-    # Forecast with existing question from database
-    python examples/run_realtime_forecast.py --question-id q_tech_20251117_003
-
-    # Forecast with ad-hoc question
-    python examples/run_realtime_forecast.py --question-text "Will Bitcoin exceed $100k today?"
-
-    # Custom database and max steps
-    python examples/run_realtime_forecast.py --question-text "..." --db custom.db --max-steps 20
+Runs a forecast using the 'real_time' mode which enables full web access.
 """
 
 import argparse
 from datetime import datetime, timezone
-
 from src.config import get_config
 from src.core.database import GenericDatabase
-from src.domain.models import Question
-from src.domain.models.question import QuestionType
-from src.utils.enums import Domain
+from src.domain.models import Question, QuestionType, Domain
 from src.agents.forecast_agent import ForecastAgent
-from src.utils.logging import logger
-
 
 def main():
-    """Main entry point for real-time forecasting."""
-    parser = argparse.ArgumentParser(
-        description="Real-time forecasting with live information"
-    )
-
-    # Question selection (mutually exclusive)
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--question-id", help="Existing question ID from database")
-    group.add_argument(
-        "--question-text", help="Ad-hoc question text for real-time forecast"
-    )
-
-    # Configuration
-    parser.add_argument(
-        "--max-steps", type=int, default=15, help="Maximum agent steps (default: 15)"
-    )
-    parser.add_argument(
-        "--db",
-        default="worldreasoner.db",
-        help="Database path (default: worldreasoner.db)",
-    )
-
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--query", help="Question text (optional)")
+    parser.add_argument("--question-id", help="Use existing question from DB")
+    parser.add_argument("--db", default=":memory:", help="Database path")
     args = parser.parse_args()
 
-    # Load configuration and database
-    config = get_config()
     db = GenericDatabase(args.db)
 
-    # Get or create question
     if args.question_id:
         question = db.get(Question, args.question_id)
-        if not question:
-            logger.error(f"Question not found: {args.question_id}")
-            return
-        logger.info(f"Using existing question: {args.question_id}")
-    else:
-        # Create ad-hoc question for real-time forecast
+    elif args.query:
+        # Create ad-hoc question from query
         question = Question(
-            id=f"q_realtime_{int(datetime.now(timezone.utc).timestamp())}",
-            question_text=args.question_text,
+            id="rt_adhoc",
+            question_text=args.query,
             question_type=QuestionType.BOOLEAN,
             domain=Domain.GENERAL,
-            resolution_date=datetime.now(timezone.utc),  # Will resolve "now"
+            resolution_date=datetime.now(timezone.utc),
             created_at=datetime.now(timezone.utc),
         )
-        logger.info(f"Created ad-hoc question: {question.id}")
+    else:
+        # Default demo question
+        print("Note: Using demo question.")
+        question = Question(
+            id="q_tech_20251117_003",
+            question_text="Will GPT-5 be released by OpenAI before the end of 2025?",
+            question_type=QuestionType.BOOLEAN,
+            domain=Domain.TECHNOLOGY,
+            resolution_date=datetime(2025, 12, 20, tzinfo=timezone.utc),
+            created_at=datetime.now(timezone.utc)
+        )
+        # We don't save to DB unless needed, but for agent compat it's often safer or neutral
+    
+    if not question:
+        print("No question specified.")
+        return
 
-    # Display question details
-    print("=" * 80)
-    print("REAL-TIME FORECASTING")
-    print("=" * 80)
-    print(f"\nQuestion: {question.question_text}")
-    print(f"Question ID: {question.id}")
-    print("Mode: real_time (web search and fetch enabled)")
-    print(f"Simulated date: {datetime.now(timezone.utc).date()} (today)")
-    print("\n" + "=" * 80)
-
-    # Create real-time forecast agent
+    # Initialize Agent
     agent = ForecastAgent(
         question=question,
         simulated_date=datetime.now(timezone.utc).isoformat(),
-        knowledge_cutoff=config.llm.knowledge_cutoff,
-        config=config,
-        mode="real_time",
-        max_steps=args.max_steps,
+        knowledge_cutoff=get_config().llm.knowledge_cutoff,
+        config=get_config(),
+        mode="real_time", # Enables web access
+        db_path=args.db
     )
 
-    logger.info("Starting real-time forecast agent...")
-    print("\nAgent is running (web tools enabled)...\n")
-
-    # Run the agent
-    result = agent.run(f"Make a forecast: {question.question_text}")
-
-    # Display result
-    print("\n" + "=" * 80)
-    print("FORECAST RESULT")
-    print("=" * 80)
+    print(f"Real-time Forecast: {question.question_text}")
+    print("-" * 50)
+    result = agent.run(f"Forecast: {question.question_text}")
     print(result)
-    print("\n" + "=" * 80)
-
-    logger.info("Real-time forecast completed")
-
 
 if __name__ == "__main__":
     main()
