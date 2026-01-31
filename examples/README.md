@@ -5,6 +5,24 @@ These examples are designed to be minimal and educational.
 
 Most scripts use an **in-memory database** (`:memory:`) by default to avoid side effects. You can persist data by providing a path via `--db my.db`.
 
+
+## 📥 Question Generation
+
+### `run_goal_collection.py`
+Demonstrates the goal-oriented data collection orchestrator.
+```bash
+python examples/run_goal_collection.py
+```
+
+## 🧠 Evidence Collection
+
+### `run_evidence.py`
+Demonstrates evidence retrieval and causal analysis with seeded data (Articles).
+```bash
+python examples/run_evidence.py
+```
+
+
 ## 🔮 Forecasting
 
 ### `run_forecast.py`
@@ -45,18 +63,3 @@ Analyze how forecast accuracy evolves as the resolution date approaches.
 python examples/run_temporal_forecast_analysis.py --question-id <ID>
 ```
 
-## 🧠 Causal Analysis
-
-### `deep_causal_analysis.py`
-Demonstrates the `HindsightAgent` for building causal graphs for past events.
-```bash
-python examples/deep_causal_analysis.py
-```
-
-## 📥 Data Collection
-
-### `run_goal_collection.py`
-Demonstrates the goal-oriented data collection orchestrator.
-```bash
-python examples/run_goal_collection.py
-```
