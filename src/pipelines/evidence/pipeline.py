@@ -18,7 +18,7 @@ from ..base import Pipeline, PipelineStageResult, PipelineStageStatus
 from src.pipelines.prompts import HindsightCausalAnalysisPrompts
 from src.config.pipeline import EvidencePipelineConfig
 from src.config import DatabaseConfig
-from src.domain.models import Question, Article, CausalHypothesis
+from src.domain.models import Question, Article, CausalHypothesis, Event
 from src.core.database import GenericDatabase
 from src.agents.hindsight_agent import HindsightAgent
 from src.utils.logging import logger
@@ -265,79 +265,43 @@ class EvidencePipeline(Pipeline):
         async with self.semaphore:
             logger.info(f"[AGENT MODE] Processing question: {question.id}")
 
-            # Get database connection for outcome service
+            # Get database connection
             db = GenericDatabase(self.database_config.db_path)
 
-            # Auto-generate outcome events if not already present
-            from src.domain.outcome_event_service import OutcomeEventService
+            # 1. Get/Create outcomes
+            outcome_events = self._get_or_create_outcomes(question, db)
 
-            outcome_service = OutcomeEventService(db)
-            outcome_events = outcome_service.get_outcome_events_for_question(
-                question.id
-            )
-
-            if not outcome_events:
-                outcome_events = outcome_service.auto_create_outcome_events(question)
-                logger.info(
-                    f"[{question.id}] Auto-created {len(outcome_events)} outcome events"
-                )
-            else:
-                logger.debug(
-                    f"[{question.id}] Found {len(outcome_events)} existing outcome events"
-                )
-
-            # Create agent WITH question context for provenance tracking
-            # This ensures all tools know which question they're serving
+            # 2. Setup Agent
             hindsight_agent = HindsightAgent(
                 db_path=self.database_config.db_path,
                 max_steps=self.agent_max_steps,
-                question_id=question.id,  # Provenance context
-                target_event_id=question.target_event_id,  # Target for causal graph
+                question_id=question.id,
+                target_event_id=question.target_event_id,
             )
             logger.debug(f"[{question.id}] Created context-aware HindsightAgent")
 
-            # Construct agent prompt using prompt generator
-            # Pass outcome_events so they can be injected into prompt
+            # 3. Create Prompt
             prompt = self.prompts.get_agent_prompt(
                 question=question,
                 min_graph_depth=self.min_graph_depth,
                 evidence_window_days=self.evidence_config.evidence_window_days,
                 min_evidence_articles=self.evidence_config.min_evidence_articles,
                 confidence_threshold=self.evidence_config.causal_confidence_threshold,
-                outcome_events=outcome_events,  # NEW: Pass outcomes for prompt injection
+                outcome_events=outcome_events,
             )
 
             try:
-                # Run agent in thread pool to avoid blocking
-                # Agent execution is automatically saved to logs/agent_runs/{agent_name}_{question_id}_{timestamp}.json
+                # 4. Run Agent
                 logger.debug(f"[{question.id}] Starting HindsightAgent...")
                 result = await asyncio.to_thread(
                     hindsight_agent.run, prompt, run_id=question.id
                 )
                 logger.info(f"[{question.id}] Agent completed successfully")
 
-                # Extract results from database (agent persisted everything)
-                db = GenericDatabase(self.database_config.db_path)
-
-                # Get articles and hypotheses for this question
-                all_articles = db.get_many(Article)
-                all_hypotheses = db.get_many(CausalHypothesis)
-
-                # Filter hypotheses for this question
-                question_hypotheses = [
-                    h
-                    for h in all_hypotheses
-                    if question.id in h.discovered_by_question_ids
-                ]
-
-                # Get articles referenced by these hypotheses
-                evidence_article_ids = set()
-                for hyp in question_hypotheses:
-                    evidence_article_ids.update(hyp.evidence_article_ids)
-
-                evidence_articles = [
-                    a for a in all_articles if a.id in evidence_article_ids
-                ]
+                # 5. Collect Results
+                evidence_articles, question_hypotheses = self._collect_agent_results(
+                    question.id, db
+                )
 
                 logger.info(
                     f"[{question.id}] Agent results: "
@@ -345,174 +309,57 @@ class EvidencePipeline(Pipeline):
                     f"{len(question_hypotheses)} hypotheses"
                 )
 
-                # Evaluate article quality based on collected evidence articles
-                from src.utils.article_analysis import (
-                    analyze_timeline,
-                    analyze_sources,
-                    identify_gaps,
-                    calculate_quality,
+                # 6. Calculate Metrics
+                article_metrics = self._calculate_article_metrics(
+                    evidence_articles, question
+                )
+                
+                graph_metrics = self._calculate_graph_metrics(
+                    question_hypotheses, question, db
                 )
 
-                article_quality_score = 0.0
-                article_coverage = None
+                # 7. Check Failure Conditions
+                status = "success"
+                failure_reason = None
+                
+                if article_metrics["score"] == 0.0:
+                    status = "failed"
+                    failure_reason = "Article quality is zero (no/insufficient articles)"
+                elif graph_metrics["score"] == 0.0:
+                    status = "failed"
+                    failure_reason = "Graph quality is zero (no/insufficient causal hypotheses)"
+                elif graph_metrics["max_depth"] < self.min_graph_depth:
+                    status = "failed"
+                    failure_reason = f"Graph depth ({graph_metrics['max_depth']}) below minimum ({self.min_graph_depth})"
 
-                if evidence_articles:
-                    # Use comprehensive quality calculation with timeline analysis
-                    from src.utils.date_utils import ensure_timezone_aware
-
-                    # Pass coverage_start for expected coverage window calculation
-                    coverage_start = (
-                        ensure_timezone_aware(question.estimated_start_time)
-                        if question.estimated_start_time
-                        else None
-                    )
-                    timeline_data = analyze_timeline(
-                        evidence_articles,
-                        question.resolution_date,
-                        coverage_start=coverage_start,
-                    )
-                    source_data = analyze_sources(evidence_articles)
-                    gaps = identify_gaps(timeline_data)
-
-                    quality_metrics = calculate_quality(
-                        evidence_articles,
-                        timeline_data,
-                        source_data,
-                        gaps,
-                        coverage_start=coverage_start,
-                    )
-
-                    article_quality_score = quality_metrics["score"]
-
-                    # Structure result for compatibility with existing code
-                    article_coverage = {
-                        "quality": quality_metrics,
-                        "article_count": len(evidence_articles),
-                        "sources": {"unique_sources": source_data["unique_sources"]},
-                        "coverage_end_date": question.resolution_date,
-                        "timeline": timeline_data,
-                        "gaps": gaps,
-                    }
-
-                    logger.info(
-                        f"[{question.id}] Article quality: {article_quality_score:.2f} "
-                        f"({article_coverage['article_count']} articles, "
-                        f"{article_coverage['sources']['unique_sources']} sources, "
-                        f"{len(gaps)} time gaps)"
-                    )
-                else:
-                    logger.warning(
-                        f"[{question.id}] No evidence articles collected - article quality: 0.0"
-                    )
-
-                # Evaluate graph quality using shared utilities
-                from src.utils.graph_analysis import calculate_graph_quality
-
-                graph_quality_score = 0.0
-                max_depth = 0
-
-                if question_hypotheses:
-                    # Determine target event ID (use existing or infer from graph)
-                    target_event_id = question.target_event_id
-
-                    if not target_event_id:
-                        # Use shared utility to infer target from graph
-                        from src.utils.graph_analysis import infer_target_event_id
-
-                        inferred_id = infer_target_event_id(question_hypotheses)
-
-                        if inferred_id:
-                            target_event_id = inferred_id
-                            logger.info(
-                                f"[{question.id}] Inferred target event from graph: {target_event_id}"
-                            )
-
-                            # Update the question in DB with the inferred target event
-                            try:
-                                question.target_event_id = target_event_id
-                                db.save(Question, question)
-                                logger.debug(
-                                    f"[{question.id}] Updated question with inferred target event"
-                                )
-                            except Exception as e:
-                                logger.warning(
-                                    f"[{question.id}] Failed to persist inferred target event: {e}"
-                                )
-                        else:
-                            # Fallback if no specific sink (e.g. cycles)
-                            # Pick arbitrary target to allow graph analysis to proceed
-                            all_targets = set(
-                                h.target_event_id for h in question_hypotheses
-                            )
-                            if all_targets:
-                                target_event_id = list(all_targets)[0]
-                                logger.warning(
-                                    f"[{question.id}] Circular graph detected? Using arbitrary target: {target_event_id}"
-                                )
-
-                    # Calculate graph quality using shared utility
-                    quality_metrics = calculate_graph_quality(
-                        hypotheses=question_hypotheses,
-                        target_event_id=target_event_id,
-                        min_depth_for_full_score=self.min_graph_depth,
-                    )
-
-                    graph_quality_score = quality_metrics["quality_score"]
-                    max_depth = quality_metrics["max_depth"]
-
-                    logger.info(
-                        f"[{question.id}] Graph quality: {graph_quality_score:.2f} "
-                        f"(depth: {max_depth}, events: {quality_metrics['event_count']}, "
-                        f"hypotheses: {quality_metrics['hypothesis_count']})"
-                    )
-                else:
-                    logger.warning(
-                        f"[{question.id}] No causal hypotheses generated - graph quality: 0.0"
-                    )
-
-                # Check if pipeline should be marked as failed based on quality
-                status_message = None
-                if article_quality_score == 0.0:
-                    status_message = (
-                        "Failed: Article quality is zero (no/insufficient articles)"
-                    )
-                    logger.error(f"[{question.id}] {status_message}")
-                elif graph_quality_score == 0.0:
-                    status_message = "Failed: Graph quality is zero (no/insufficient causal hypotheses)"
-                    logger.error(f"[{question.id}] {status_message}")
-                elif max_depth < self.min_graph_depth:
-                    status_message = f"Failed: Graph depth ({max_depth}) below minimum ({self.min_graph_depth})"
-                    logger.error(f"[{question.id}] {status_message}")
-
-                # If failed, return empty results to signal failure
-                if status_message:
+                if status == "failed":
+                    logger.error(f"[{question.id}] Failed: {failure_reason}")
                     return {
                         "evidence_articles": [],
                         "causal_hypotheses": [],
                         "stage_results": [],
                         "agent_output": result,
                         "status": "failed",
-                        "failure_reason": status_message,
-                        "article_quality": article_quality_score,
-                        "graph_quality": graph_quality_score,
-                        "graph_depth": max_depth,
+                        "failure_reason": failure_reason,
+                        "article_quality": article_metrics["score"],
+                        "graph_quality": graph_metrics["score"],
+                        "graph_depth": graph_metrics["max_depth"],
                     }
 
                 # Success
                 return {
                     "evidence_articles": evidence_articles,
                     "causal_hypotheses": question_hypotheses,
-                    "stage_results": [],  # Agent mode doesn't have stages
+                    "stage_results": [],
                     "agent_output": result,
                     "status": "success",
-                    "article_quality": article_quality_score,
-                    "graph_quality": graph_quality_score,
-                    "graph_depth": max_depth,
+                    "article_quality": article_metrics["score"],
+                    "graph_quality": graph_metrics["score"],
+                    "graph_depth": graph_metrics["max_depth"],
                 }
 
             except Exception as e:
                 logger.error(f"[{question.id}] Agent processing failed: {e}")
-                # Return empty result on failure
                 return {
                     "evidence_articles": [],
                     "causal_hypotheses": [],
@@ -520,6 +367,140 @@ class EvidencePipeline(Pipeline):
                     "status": "failed",
                     "failure_reason": str(e),
                 }
+
+    def _get_or_create_outcomes(self, question: Question, db: GenericDatabase) -> List[Any]:
+        """Get existing outcome events or create default ones."""
+        from src.domain.outcome_event_service import OutcomeEventService
+        outcome_service = OutcomeEventService(db)
+        outcome_events = outcome_service.get_outcome_events_for_question(question.id)
+
+        if not outcome_events:
+            outcome_events = outcome_service.auto_create_outcome_events(question)
+            logger.info(f"[{question.id}] Auto-created {len(outcome_events)} outcome events")
+        else:
+            logger.debug(f"[{question.id}] Found {len(outcome_events)} existing outcome events")
+        return outcome_events
+
+    def _collect_agent_results(self, question_id: str, db: GenericDatabase):
+        """Collect articles and hypotheses generated by the agent for a question."""
+        all_articles = db.get_many(Article)
+        all_hypotheses = db.get_many(CausalHypothesis)
+
+        question_hypotheses = [
+            h for h in all_hypotheses
+            if question_id in h.discovered_by_question_ids
+        ]
+
+        evidence_article_ids = set()
+        for hyp in question_hypotheses:
+            evidence_article_ids.update(hyp.evidence_article_ids)
+
+        evidence_articles = [
+            a for a in all_articles if a.id in evidence_article_ids
+        ]
+        return evidence_articles, question_hypotheses
+
+    def _calculate_article_metrics(self, articles: List[Article], question: Question) -> Dict[str, Any]:
+        """Calculate quality metrics for the collected articles."""
+        if not articles:
+            logger.warning(f"[{question.id}] No evidence articles - quality: 0.0")
+            return {"score": 0.0, "metrics": {}}
+
+        from src.utils.article_analysis import (
+            analyze_timeline,
+            analyze_sources,
+            identify_gaps,
+            calculate_quality,
+        )
+        from src.utils.date_utils import ensure_timezone_aware
+
+        coverage_start = (
+            ensure_timezone_aware(question.estimated_start_time)
+            if question.estimated_start_time else None
+        )
+        
+        timeline_data = analyze_timeline(
+            articles,
+            question.resolution_date,
+            coverage_start=coverage_start,
+        )
+        source_data = analyze_sources(articles)
+        gaps = identify_gaps(timeline_data)
+
+        quality_metrics = calculate_quality(
+            articles,
+            timeline_data,
+            source_data,
+            gaps,
+            coverage_start=coverage_start,
+        )
+
+        logger.info(
+            f"[{question.id}] Article quality: {quality_metrics['score']:.2f} "
+            f"({len(articles)} articles, "
+            f"{source_data['unique_sources']} sources)"
+        )
+        return {"score": quality_metrics["score"], "metrics": quality_metrics}
+
+    def _calculate_graph_metrics(
+        self, 
+        hypotheses: List[CausalHypothesis], 
+        question: Question, 
+        db: GenericDatabase
+    ) -> Dict[str, Any]:
+        """Calculate quality metrics for the causal graph."""
+        if not hypotheses:
+            logger.warning(f"[{question.id}] No hypotheses - graph quality: 0.0")
+            return {"score": 0.0, "max_depth": 0}
+
+        target_event_id = question.target_event_id
+        
+        # Priority 1: Check outcome_event_ids
+        if not target_event_id and question.outcome_event_ids:
+             # Try to find actual outcome specifically
+             actual_outcomes = [
+                 eid for eid in question.outcome_event_ids 
+                 if (evt := db.get(Event, eid)) and evt.is_actual_outcome
+             ]
+             if actual_outcomes:
+                 target_event_id = actual_outcomes[0]
+             elif question.outcome_event_ids:
+                 target_event_id = question.outcome_event_ids[0]
+
+        # Priority 2: Infer from graph
+        if not target_event_id:
+            from src.utils.graph_analysis import infer_target_event_id
+            target_event_id = infer_target_event_id(hypotheses)
+            
+            if target_event_id:
+                logger.info(f"[{question.id}] Inferred target event: {target_event_id}")
+                try:
+                    question.target_event_id = target_event_id
+                    db.save(Question, question)
+                except Exception as e:
+                    logger.warning(f"[{question.id}] Failed to persist inferred target: {e}")
+            else:
+                # Fallback to arbitrary target
+                all_targets = set(h.target_event_id for h in hypotheses)
+                if all_targets:
+                    target_event_id = list(all_targets)[0]
+
+        from src.utils.graph_analysis import calculate_graph_quality
+        metrics = calculate_graph_quality(
+            hypotheses=hypotheses,
+            target_event_id=target_event_id,
+            min_depth_for_full_score=self.min_graph_depth,
+        )
+
+        logger.info(
+            f"[{question.id}] Graph quality: {metrics['quality_score']:.2f} "
+            f"(depth: {metrics['max_depth']})"
+        )
+        return {
+            "score": metrics['quality_score'],
+            "max_depth": metrics['max_depth'],
+            "metrics": metrics
+        }
 
     def _load_resolved_questions(self) -> List[Question]:
         """Load resolved questions from database that haven't been processed yet.

@@ -159,7 +159,16 @@ def test_db(tmp_path):
     db = GenericDatabase(str(db_path))
     # Initialize schema
     from src.domain.models import Article, Event, Question, CausalHypothesis
-
+    # Import EventOutcomeImpact to ensure it can be created
+    # Check if we can import it from models or directly
+    try:
+        from src.domain.models import EventOutcomeImpact
+        db.create_table(EventOutcomeImpact)
+    except ImportError:
+        # Fallback if not exported in generic models
+        from src.domain.models.event_outcome_impact import EventOutcomeImpact
+        db.create_table(EventOutcomeImpact)
+        
     db.create_table(Article)
     db.create_table(Event)
     db.create_table(Question)

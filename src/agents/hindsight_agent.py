@@ -14,6 +14,7 @@ from src.tools import (
     GraphInspectorTool,
     ArticleInspectorTool,
     QuestionArticlesTool,
+    QuestionEventsTool,
 )
 from src.pipelines.prompts.hindsight_causal_analysis import (
     EVIDENCE_AGENT_DESCRIPTION,
@@ -108,6 +109,9 @@ class HindsightAgent(BaseAgent):
                 ArticleInspectorTool(
                     db_path=db_path, question_id=question_id
                 ),  # Check coverage
+                QuestionEventsTool(
+                    db_path=db_path, question_id=question_id
+                ),  # Get events and outcomes for this question
             ],
             max_steps=30,  # More steps for iterative graph building
             stream_outputs=False,

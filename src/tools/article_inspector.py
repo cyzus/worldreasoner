@@ -129,7 +129,6 @@ class ArticleInspectorTool(DatabaseAwareTool):
         time_window = "\n".join(time_window_lines)
 
         return f"""{header}
-Question ID: {self.question_id}
 {time_window}
 
 STATUS: No Articles Collected

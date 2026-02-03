@@ -12,6 +12,7 @@ from .causal_reasoner import CausalReasonerTool
 from .graph_inspector import GraphInspectorTool
 from .article_inspector import ArticleInspectorTool
 from .question_articles import QuestionArticlesTool
+from .question_events import QuestionEventsTool
 
 __all__ = [
     "ArticleCollectorTool",
@@ -26,4 +27,5 @@ __all__ = [
     "GraphInspectorTool",
     "ArticleInspectorTool",
     "QuestionArticlesTool",
+    "QuestionEventsTool",
 ]

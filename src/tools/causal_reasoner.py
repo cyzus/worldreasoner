@@ -25,43 +25,10 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
     """
 
     name = "causal_reasoner"
-    description = """Create a causal link in the graph between two events.
-
-    CRITICAL FOR DEEP GRAPHS: Build multi-level causal chains, not just direct links!
-
-    PROCESS FOR DEEP CAUSAL GRAPHS:
-    1. Create intermediate events first using event_identifier
-    2. Link them in chains: Root Cause → Intermediate → Immediate → Target
-    3. Don't just link everything directly to the target event!
-
-    Example for "Why did stock price crash?":
-    - Target: "Stock price fell 25%" (evt_target)
-    - Don't just do: "Bad earnings" → Target
-    - Instead build chain:
-      a) Create: "Whistleblower report filed" (evt_1)
-      b) Create: "SEC investigation opened" (evt_2)
-      c) Create: "CEO resigned" (evt_3)
-      d) Create: "Stock downgraded" (evt_4)
-      e) Link: evt_1 → evt_2 → evt_3 → evt_4 → evt_target
-
-    This creates a 5-level causal chain instead of shallow 1-level!
-
-    BEFORE calling this tool:
-    - Ensure both source and target events exist (use event_identifier first!)
-    - Check graph_inspector to see current depth
-    - If depth < 2, you need MORE intermediate events!
-
-    Args:
-        source_event_id (str): ID of the event that caused the target
-        target_event_id (str): ID of the event that was caused (can be intermediate or final)
-        relation_type (str): Type of causation (causes|enables|prevents|correlates|conditional)
-        strength (float): Strength of causal effect (0.0-1.0)
-        confidence (float): Your confidence in this link (0.0-1.0)
-        reasoning (str): Detailed explanation of the causal mechanism
-        evidence_article_ids (str): Comma-separated article IDs that support this claim
+    description = """Identify relationship between events in order to create the event graph.
 
     Returns:
-        str: JSON confirmation with hypothesis ID
+        str: JSON confirmation with relationship ID
     """
 
     inputs = {
@@ -174,7 +141,9 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
                 "Chronology validation failed: source event must occur before target event - also make sure you provide occurred_date for both events",
                 status="error",
                 source_event_id=source_event_id,
+                source_event_occurred_date=self._get_event_occurred_date(source_event_id),
                 target_event_id=target_event_id,
+                target_event_occurred_date=self._get_event_occurred_date(target_event_id),
             )
 
         # Generate unique hypothesis ID
@@ -238,6 +207,20 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
         suffix = uuid.uuid4().hex[:8]
         return f"hyp_{question_id}_{timestamp}_{self._counter:03d}_{suffix}"
 
+    def _get_event_occurred_date(self, event_id: str) -> Optional[datetime]:
+        """Get occurred date of an event from database.
+
+        Args:
+            event_id: ID of the event
+
+        Returns:
+            Occurred date of the event, or None if not found
+        """
+        if self.db is None:
+            return None
+        event = self.db.get(Event, event_id)
+        return event.occurred_date or event.predicted_date
+
     def _validate_chronology(self, source_event_id: str, target_event_id: str) -> bool:
         """Validate that source event occurs before target event.
 
@@ -251,17 +234,11 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
         if self.db is None:
             return True  # Cannot validate without DB
 
-        # Fetch events from database
-        source_event = self.db.get(Event, source_event_id)
-        target_event = self.db.get(Event, target_event_id)
+        source_date = self._get_event_occurred_date(source_event_id)
+        target_date = self._get_event_occurred_date(target_event_id)
 
-        # Check if events exist
-        if source_event is None or target_event is None:
-            return False  # Cannot validate if events don't exist
+        # Cannot validate without dates
+        if source_date is None or target_date is None:
+            return False
 
-        # Check if dates are present
-        if source_event.occurred_date is None or target_event.occurred_date is None:
-            return False  # Cannot validate without dates
-
-        # Validate chronological order
-        return source_event.occurred_date < target_event.occurred_date
+        return source_date <= target_date

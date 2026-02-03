@@ -22,13 +22,19 @@ Specialist agent for building deep causal graphs and analyzing outcome impacts.
 
 Guidelines:
 - Call get_question_articles to get article IDs
-- If target_event_id is provided, use EventDetailsTool to understand it
-- Create target event (outcome from ground truth) using event_identifier with is_target=True if not provided
-- Create events using event_identifier with source_article_ids from step 1
-- Use causal_reasoner to identify relationships between events
-- All chains must connect to the target event
-- Make sure the chronology of events makes sense (earlier events cause later events)
+- Call get_question_events to see existing events and OUTCOME events (use actual_outcome_event_id for final links)
+- If outcomes are provided, use EventDetailsTool to understand them
+- Create outcome event(s) (outcome from ground truth) using event_identifier with is_outcome=True if not provided
+- Create events with source_article_ids (remember to check the tool output like event ids to see status)
+- Identify relationships between events 
 - ⚠️ DATE ACCURACY: When extracting 'occurred_date', check the article year.
+
+CRITICAL - CONNECTING TO OUTCOME:
+- After building intermediate event chains, you MUST use causal_reasoner to create the FINAL LINK
+- The final link connects your last intermediate event(s) to the OUTCOME EVENT
+- Example: If you have "Negative Reviews" → "Critics Snub", you need one more link: "Critics Snub" → [OUTCOME EVENT]
+- Without this final link, the graph will show Max Depth: 0 and appear disconnected!
+- Use the outcome_event_id matching the ground truth (e.g., "Yes" or "No" scenario)
 
 OUTCOME IMPACT ANALYSIS:
 - For each significant event, assess its impact on BOTH outcomes (Yes/No or all MCQ options)
@@ -42,13 +48,13 @@ OUTCOME IMPACT ANALYSIS:
 
 FINAL VERIFICATION:
 - Use graph_inspector to check the quality, depth, and outcome impacts
+- If Max Depth is 0, you have NOT connected to the outcome - go back and add the final link!
 """
 
-MANAGER_AGENT_DESCRIPTION = """Your task: Build a DEEP causal explanation for this question with hindsight.
+MANAGER_AGENT_DESCRIPTION = """Your task: Make a comprehensive event analysis for this question with hindsight.
 
 NOTE: the question has already been resolved on {resolution_date} with known ground truth.
 
-QUESTION ID: {question_id}
 QUESTION: {question_text}
 RESOLUTION DATE: {resolution_date}
 GROUND TRUTH (the KNOWN outcome): {ground_truth}
@@ -66,6 +72,10 @@ PROCESS:
    - Target: {min_evidence_articles}+ high-quality articles across different dates
    - Use article_inspector to verify coverage; if insufficient, broaden search
 
+MANAGER AGENT: Assess the progress of the evidence collection process. If insufficient, repeat step 1.
+
+NOTE - if evidence collection constantly fails, there's no way you can build a event graph. You should keep trying until you get enough evidence.
+
 2. BUILD DEEP EVENT GRAPH WITH OUTCOME IMPACTS:
    Call causal_analyzer to build deep event relationship graph:
    - Target: {min_evidence_articles}+ events, {min_graph_depth}+ depth levels
@@ -73,10 +83,9 @@ PROCESS:
    - Record both positive and negative impacts (symmetric analysis)
    - Use graph_inspector to verify quality, depth, and outcome impacts
 
-3. EVALUATE & ITERATE
+MANAGER AGENT: Assess the progress of the event analysis. If insufficient, repeat step 2.
 
-
-Begin the analysis!"""
+3. EVALUATE & ITERATE step 1 or 2 based on manager's assessment."""
 
 
 class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
@@ -86,7 +95,6 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
     AGENT_TEMPLATE = PromptTemplate(
         template=MANAGER_AGENT_DESCRIPTION,
         required_vars=[
-            "question_id",
             "question_text",
             "resolution_date",
             "window_start",
@@ -174,7 +182,6 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
 
         # Build the prompt
         return self.AGENT_TEMPLATE.format(
-            question_id=question.id,
             question_text=question.question_text,
             resolution_date=resolution_date_str,
             window_start=window_start_str,

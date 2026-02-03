@@ -42,9 +42,8 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
     Use this tool AFTER you've analyzed articles and identified specific events.
     Call this tool once for EACH event you identify (not all at once).
     
-    NOTE: This tool automatically deduplicates events. If a similar event
-    already exists in the database, it will return that event instead of
-    creating a duplicate.
+    Returns:
+        Event (JSON containing event data and its ID).
     """
 
     # Auto-generate inputs from Enum classes (single source of truth)

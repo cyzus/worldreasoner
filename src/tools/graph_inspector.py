@@ -97,9 +97,27 @@ class GraphInspectorTool(DatabaseAwareTool):
             infer_target_event_id,
         )
 
-        target_event_id = question.target_event_id if question else None
+        target_event_id = None
+        
+        # Priority 1: Check if question has outcome_event_ids (new standard)
+        if question and question.outcome_event_ids:
+            # First look for actual outcome
+            actual_outcomes = [
+                eid for eid in question.outcome_event_ids 
+                if (evt := self.db.get(Event, eid)) and evt.is_actual_outcome
+            ]
+            if actual_outcomes:
+                target_event_id = actual_outcomes[0]
+            # Fallback to first outcome if no actual outcome set yet
+            elif question.outcome_event_ids:
+                target_event_id = question.outcome_event_ids[0]
+        
+        # Priority 2: Legacy target_event_id
+        if not target_event_id and question and question.target_event_id:
+             # Verify it's actually an outcome or sink node
+             target_event_id = question.target_event_id
 
-        # If no target event defined, try to infer it from graph to provide better visualization
+        # Priority 3: Infer from graph structure
         if not target_event_id and question_hypotheses:
             target_event_id = infer_target_event_id(question_hypotheses)
 
@@ -114,6 +132,10 @@ class GraphInspectorTool(DatabaseAwareTool):
 
         # Fetch event details
         events = {eid: self.db.get(Event, eid) for eid in event_ids}
+        
+        # Ensure target event is in the events list (even if orphan)
+        if target_event_id and target_event_id not in events:
+            events[target_event_id] = self.db.get(Event, target_event_id)
 
         # Analyze temporal coverage of events
         event_list = [e for e in events.values() if e is not None]
@@ -187,6 +209,7 @@ class GraphInspectorTool(DatabaseAwareTool):
             temporal_gaps,
             disconnected,
             outcome_impacts,
+            target_event_id,
         )
 
         return output
@@ -286,6 +309,7 @@ RECOMMENDATION:
         temporal_gaps: Optional[List[Dict]] = None,
         disconnected: Optional[List[Set[str]]] = None,
         outcome_impacts: Optional[Dict] = None,
+        target_event_id: Optional[str] = None,
     ) -> str:
         """Format the graph as a visual text representation."""
         from src.utils.formatting_utils import InspectorReportBuilder
@@ -300,7 +324,10 @@ RECOMMENDATION:
 
         # Visual graph section
         builder.add_section_header("RELATIONAL GRAPH STRUCTURE")
-        target_event_id = question.target_event_id if question else None
+        
+        # Determine target if not passed
+        if not target_event_id and question:
+            target_event_id = question.target_event_id
         
         if target_event_id and target_event_id in events:
             tree_lines = self._build_causal_tree(

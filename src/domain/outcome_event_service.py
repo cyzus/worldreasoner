@@ -72,6 +72,7 @@ class OutcomeEventService:
                         outcome_scenario=OutcomeScenario.MCQ_OPTION,
                         outcome_option_index=idx,
                         status=EventStatus.OCCURRED if is_actual else EventStatus.PREDICTED,
+                        occurred_date=question.resolution_date,
                         is_actual_outcome=is_actual,
                         extracted_for_question_id=question.id,
                     )
@@ -95,6 +96,7 @@ class OutcomeEventService:
                     is_outcome=True,
                     outcome_scenario=OutcomeScenario.POSITIVE_RESOLUTION,
                     status=EventStatus.OCCURRED if is_actual else EventStatus.PREDICTED,
+                    occurred_date=question.resolution_date,
                     is_actual_outcome=is_actual,
                     extracted_for_question_id=question.id,
                 )
@@ -137,6 +139,7 @@ class OutcomeEventService:
             ),
             status=EventStatus.OCCURRED if is_actual else EventStatus.PREDICTED,
             is_actual_outcome=is_actual,
+            occurred_date=question.resolution_date,
             extracted_for_question_id=question.id,
         )
         
