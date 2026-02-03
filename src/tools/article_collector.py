@@ -242,7 +242,9 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         self.seen_hashes.add(content_hash)
 
         # Validate and convert domain
-        domain_enum = parse_domain(domain)
+        domain_enum = parse_domain(domain, default=Domain.GENERAL)
+        if domain_enum is None:
+             domain_enum = Domain.GENERAL
 
         # Generate unique ID
         article_id = generate_article_id(domain_enum, pub_date, len(self.seen_hashes))
