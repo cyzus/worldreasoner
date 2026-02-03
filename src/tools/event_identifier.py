@@ -10,7 +10,9 @@ from src.utils.id_generator import generate_event_id
 from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
 from src.utils.logging import logger
 from src.utils.similarity import SimilarityMatcher
+from src.utils.schema_helper import pydantic_to_output_schema
 from src.tools.base import CollectorAwareTool, ToolResponseMixin
+from src.tools.output_models import EventOutput
 
 
 # Default similarity threshold for event deduplication
@@ -82,7 +84,8 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
             "nullable": True,
         },
     }
-    output_type = "string"  # JSON string
+    output_type = "object"
+    output_schema = pydantic_to_output_schema(EventOutput)
 
     def __init__(
         self,
@@ -135,8 +138,8 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
         event_type: str = None,
         is_outcome: bool = False,
         outcome_impacts: str = None,
-    ) -> str:
-        """Store event data and return as structured JSON.
+    ) -> EventOutput:
+        """Store event data and return as structured Event.
 
         Args:
             title: Event title
@@ -149,7 +152,7 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
             outcome_impacts: JSON array of impact assessments on pre-created outcome events
 
         Returns:
-            JSON string of Event object (new or existing match)
+            EventOutput: Pydantic model with event details
         """
         # Parse occurred date or use current time
         event_date = parse_iso_datetime(occurred_date)
@@ -616,48 +619,14 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
             if is_new
             else ("updated" if updated_articles else "reused_existing")
         )
-
-        summary = {
-            "id": event.id,
-            "title": event.title,
-            "domain": event.domain.value
-            if hasattr(event.domain, "value")
-            else str(event.domain),
-            "event_type": event.event_type.value
-            if hasattr(event.event_type, "value")
-            else str(event.event_type),
-            "occurred_date": event.occurred_date.isoformat()
-            if event.occurred_date
-            else None,
-            "description_preview": event.description[:150] + "..."
-            if len(event.description) > 150
-            else event.description,
-            "status": status_msg,
-            "is_new": is_new,
-        }
-
-        if not is_new:
-            summary["note"] = "Matched existing event - no duplicate created"
-
-        # Add outcome event info if applicable
-        if event.is_outcome:
-            summary["is_outcome"] = True
-            summary["outcome_scenario"] = (
-                event.outcome_scenario.value if event.outcome_scenario else None
-            )
-            if event.outcome_option_index is not None:
-                summary["outcome_option_index"] = event.outcome_option_index
-
-        # Add time window validation warnings if present
+        
+        # Add warnings to status if present
         if time_window_validation:
-            summary["status"] = f"{status_msg}_with_warnings"
-            summary["warnings"] = time_window_validation["warnings"]
-            summary["recommendation"] = time_window_validation["recommendation"]
-            summary["suggestion"] = (
-                "Consider identifying events that occurred within the valid time window for better causal analysis."
-            )
+            status_msg = f"{status_msg}_with_warnings"
 
-        if impact_results:
-            summary["outcome_impacts"] = impact_results
-
-        return json.dumps(summary, indent=2, default=str)
+        return EventOutput(
+            id=event.id,
+            title=event.title,
+            domain=event.domain.value if hasattr(event.domain, "value") else str(event.domain),
+            status=status_msg,
+        )

@@ -2,7 +2,9 @@
 
 from src.tools.database_mixin import DatabaseAwareTool
 from src.tools.base import ToolResponseMixin
+from src.tools.output_models import ArticleRetrievalOutput
 from src.domain.models import Article
+from src.utils.schema_helper import pydantic_to_output_schema
 
 
 class ArticleRetrievalTool(DatabaseAwareTool, ToolResponseMixin):
@@ -31,7 +33,8 @@ class ArticleRetrievalTool(DatabaseAwareTool, ToolResponseMixin):
             "description": "The ID of the article to retrieve",
         }
     }
-    output_type = "string"
+    output_type = "object"
+    output_schema = pydantic_to_output_schema(ArticleRetrievalOutput)
 
     def __init__(self, db=None, db_path: str = None):
         """Initialize the article retrieval tool.
@@ -45,14 +48,14 @@ class ArticleRetrievalTool(DatabaseAwareTool, ToolResponseMixin):
         """
         super().__init__(db=db, db_path=db_path, ensure_tables=[Article])
 
-    def forward(self, article_id: str) -> str:
+    def forward(self, article_id: str) -> ArticleRetrievalOutput:
         """Retrieve article by ID.
 
         Args:
             article_id: Article ID to retrieve
 
         Returns:
-            JSON string with full article content
+            ArticleRetrievalOutput Pydantic model with full article content
         """
         from src.domain.models import Article
 
@@ -62,21 +65,13 @@ class ArticleRetrievalTool(DatabaseAwareTool, ToolResponseMixin):
         if not article:
             return self.not_found_response("Article", article_id, Article)
 
-        # Return full article content
-        response = {
-            "id": article.id,
-            "title": article.title,
-            "url": article.url,
-            "source": article.source,
-            "domain": article.domain.value
-            if hasattr(article.domain, "value")
-            else article.domain,
-            "published_date": article.published_date.isoformat(),
-            "author": article.author,
-            "word_count": article.word_count,
-            "tags": article.tags,
-            "content": article.content,  # Full content!
-            "event_ids": article.event_ids,
-        }
-
-        return self.json_response(response)
+        # Return Pydantic output model directly (smolagents passes through as-is)
+        return ArticleRetrievalOutput(
+            id=article.id,
+            title=article.title,
+            url=article.url,
+            content=article.content,  # Full content!
+            source=article.source,
+            published_date=article.published_date.isoformat() if article.published_date else None,
+            word_count=article.word_count,
+        )

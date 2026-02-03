@@ -13,6 +13,8 @@ from src.core.database import GenericDatabase
 from src.utils.logging import logger
 from src.utils.id_generator import generate_forecast_hypothesis_id
 from src.utils.enums import enum_to_list
+from src.utils.schema_helper import pydantic_to_output_schema
+from src.tools.output_models import ForecastHypothesisOutput
 
 
 class ForecastCausalReasonerTool(Tool):
@@ -71,7 +73,8 @@ class ForecastCausalReasonerTool(Tool):
             "nullable": True,
         },
     }
-    output_type = "string"
+    output_type = "object"
+    output_schema = pydantic_to_output_schema(ForecastHypothesisOutput)
 
     def __init__(
         self, forecast_db_path: str = "worldreasoner.db", session_id: str = None
@@ -119,18 +122,23 @@ class ForecastCausalReasonerTool(Tool):
             try:
                 relation_enum = CausalRelationType(relation_type.lower())
             except ValueError:
-                return json.dumps(
-                    {
-                        "error": f"Invalid relation_type: {relation_type}. "
-                        f"Use: causes, enables, prevents, correlates_with, conditional"
-                    }
+                return ForecastHypothesisOutput(
+                    status="error",
+                    hypothesis_id="error",
+                    relation=relation_type,
+                    strength=strength,
+                    confidence=confidence,
                 )
 
             # Validate ranges
             if not (0.0 <= strength <= 1.0):
-                return json.dumps({"error": "strength must be 0.0-1.0"})
+                return ForecastHypothesisOutput(
+                    status="error", hypothesis_id="error", relation="", strength=0.0, confidence=0.0
+                )
             if not (0.0 <= confidence <= 1.0):
-                return json.dumps({"error": "confidence must be 0.0-1.0"})
+                return ForecastHypothesisOutput(
+                    status="error", hypothesis_id="error", relation="", strength=0.0, confidence=0.0
+                )
 
             # Parse article IDs
             article_ids = [
@@ -155,17 +163,16 @@ class ForecastCausalReasonerTool(Tool):
             self.forecast_db.save(ForecastHypothesis, hypothesis)
             logger.info(f"Saved forecast hypothesis: {hyp_id}")
 
-            return json.dumps(
-                {
-                    "status": "created",
-                    "hypothesis_id": hyp_id,
-                    "relation": f"{source_event_id} {relation_enum.value} {target_event_id}",
-                    "strength": strength,
-                    "confidence": confidence,
-                },
-                indent=2,
+            return ForecastHypothesisOutput(
+                status="created",
+                hypothesis_id=hyp_id,
+                relation=f"{source_event_id} {relation_enum.value} {target_event_id}",
+                strength=strength,
+                confidence=confidence,
             )
 
         except Exception as e:
             logger.error(f"Error creating forecast causal link: {e}")
-            return json.dumps({"error": str(e)})
+            return ForecastHypothesisOutput(
+                status="error", hypothesis_id="error", relation="", strength=0.0, confidence=0.0
+            )

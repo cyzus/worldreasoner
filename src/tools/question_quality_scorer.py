@@ -13,6 +13,8 @@ from src.pipelines.prompts.question_quality import (
     QUESTION_QUALITY_ASSESSMENT_PROMPT,
 )
 from src.utils.logging import logger
+from src.utils.schema_helper import pydantic_to_output_schema
+from src.tools.output_models import QuestionQualityOutput
 
 
 class QualityAssessment(BaseModel):
@@ -41,7 +43,8 @@ class QuestionQualityScorer(Tool):
             "items": {"type": "object"},
         }
     }
-    output_type: str = "string"  # JSON string
+    output_type: str = "object"
+    output_schema = pydantic_to_output_schema(QuestionQualityOutput)
 
     def __init__(
         self,
@@ -166,7 +169,7 @@ class QuestionQualityScorer(Tool):
                 self.collector.add(assessment)
 
         # Update response with recalculated scores
-        response_json["assessments"] = [
+        assessments_list = [
             {
                 "question_id": a.question_id,
                 "composite_score": a.composite_score,
@@ -176,5 +179,8 @@ class QuestionQualityScorer(Tool):
             for a in parsed_assessments
         ]
 
-        # Return the raw JSON string as per tool's output_type
-        return json.dumps(response_json)
+        # Return QuestionQualityOutput Pydantic model
+        return QuestionQualityOutput(
+            scores=assessments_list,
+            overall_quality=response_json.get("overall_quality", "unknown"),
+        )

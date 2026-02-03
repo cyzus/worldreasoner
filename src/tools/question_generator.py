@@ -8,7 +8,9 @@ import uuid
 from src.domain.models import Question, QuestionType, Domain
 from src.utils.enums import enum_to_list
 from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
+from src.utils.schema_helper import pydantic_to_output_schema
 from src.tools.base import CollectorAwareTool
+from src.tools.output_models import QuestionOutput
 
 
 class QuestionGeneratorTool(CollectorAwareTool[Question]):
@@ -96,7 +98,8 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             "nullable": True,
         },
     }
-    output_type = "string"  # JSON string
+    output_type = "object"
+    output_schema = pydantic_to_output_schema(QuestionOutput)
 
     def __init__(
         self,
@@ -235,7 +238,9 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
                             f"Ground truth must be a VERIFIED PAST OUTCOME (e.g., 'YES', 'NO', '500000', 'Apple').\n"
                             f"NEVER put future dates in ground_truth. If outcome is unknown, don't create this question."
                         )
-                        return json.dumps({"error": error_msg, "status": "rejected"})
+                        return QuestionOutput(
+                            id="error", question_text=question_text, status=f"rejected: {error_msg}"
+                        )
 
         # CRITICAL VALIDATION: If ground_truth provided, resolution_reasoning must be provided
         if ground_truth and not resolution_reasoning:
@@ -245,7 +250,9 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
                 "The resolution_reasoning should explain the evidence/sources that confirm this answer.\n"
                 "Example: 'Based on CoinMarketCap data showing BTC closed at $95,431 on Dec 31, 2024'"
             )
-            return json.dumps({"error": error_msg, "status": "rejected"})
+            return QuestionOutput(
+                id="error", question_text=question_text, status="rejected: ground_truth provided but resolution_reasoning missing"
+            )
 
         # VALIDATION: If resolution_reasoning provided without ground_truth, reject
         if resolution_reasoning and not ground_truth:
@@ -254,7 +261,9 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
                 "You can only provide resolution_reasoning for questions that have been resolved (have ground_truth).\n"
                 "For unresolved questions, omit resolution_reasoning."
             )
-            return json.dumps({"error": error_msg, "status": "rejected"})
+            return QuestionOutput(
+                id="error", question_text=question_text, status="rejected: resolution_reasoning provided but ground_truth missing"
+            )
 
         # Parse event IDs
         event_ids = []
@@ -301,8 +310,8 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             from src.utils.logging import logger
 
             logger.debug(f"Skipping duplicate question: {question_id}")
-            return json.dumps(
-                {"status": "skipped", "reason": "duplicate", "id": question_id}
+            return QuestionOutput(
+                id=question_id, question_text=question_text, status="skipped: duplicate"
             )
 
         # Determine time horizon based on resolution date
@@ -349,20 +358,12 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
         # Store question using unified collector interface
         self.store_result(question, context=f"Question {question.id}")
 
-        # Return summary to save tokens (NOT full question)
-        summary = {
-            "id": question.id,
-            "question_text": question_text[:200] + "..."
-            if len(question_text) > 200
-            else question_text,
-            "question_type": question.question_type.value,
-            "domain": question.domain.value,
-            "difficulty": question.difficulty,
-            "resolution_date": question.resolution_date.isoformat(),
-            "status": "stored",
-        }
-
-        return json.dumps(summary, indent=2, default=str)
+        # Return QuestionOutput Pydantic model
+        return QuestionOutput(
+            id=question.id,
+            question_text=question_text,
+            status="stored",
+        )
 
     def _generate_question_id(
         self, domain: Domain, resolution_date: datetime, counter: int

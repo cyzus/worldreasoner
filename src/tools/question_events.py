@@ -5,8 +5,10 @@ from typing import Optional
 from datetime import datetime, timezone
 
 from src.tools.database_mixin import DatabaseAwareTool
+from src.tools.output_models import QuestionEventsOutput
 from src.domain.models import Event, Question
 from src.utils.logging import logger
+from src.utils.schema_helper import pydantic_to_output_schema
 
 
 class QuestionEventsTool(DatabaseAwareTool):
@@ -42,7 +44,8 @@ class QuestionEventsTool(DatabaseAwareTool):
             "nullable": True,
         },
     }
-    output_type = "string"
+    output_type = "object"
+    output_schema = pydantic_to_output_schema(QuestionEventsOutput)
 
     def __init__(self, db_path: str = None, question_id: Optional[str] = None):
         """Initialize the tool.
@@ -54,29 +57,25 @@ class QuestionEventsTool(DatabaseAwareTool):
         super().__init__(db_path=db_path, ensure_tables=[Event, Question])
         self.question_id = question_id
 
-    def forward(self, include_descriptions: bool = False) -> str:
+    def forward(self, include_descriptions: bool = False) -> QuestionEventsOutput:
         """Get events created for this question.
 
         Args:
             include_descriptions: Whether to include event descriptions
 
         Returns:
-            JSON string with categorized event list
+            QuestionEventsOutput: Pydantic model with categorized event list
         """
         if not self.question_id:
-            return json.dumps(
-                {"error": "No question_id context provided", "events": []}
-            )
+            return QuestionEventsOutput(outcome_events=[], regular_events=[], total=0)
 
         if not self.db:
-            return json.dumps({"error": "No database connection", "events": []})
+            return QuestionEventsOutput(outcome_events=[], regular_events=[], total=0)
 
         # Get question to find related event IDs
         question = self.db.get(Question, self.question_id)
         if not question:
-            return json.dumps(
-                {"error": f"Question {self.question_id} not found", "events": []}
-            )
+            return QuestionEventsOutput(outcome_events=[], regular_events=[], total=0)
 
         # Collect all event IDs related to this question
         event_ids = set()
@@ -149,15 +148,9 @@ class QuestionEventsTool(DatabaseAwareTool):
                 actual_outcome_id = oe["id"]
                 break
 
-        return json.dumps(
-            {
-                "question_id": self.question_id,
-                "actual_outcome_event_id": actual_outcome_id,
-                "total_outcome_events": len(outcome_events),
-                "total_regular_events": len(regular_events),
-                "outcome_events": outcome_events,
-                "regular_events": regular_events,
-                "hint": "Use 'actual_outcome_event_id' as target when creating final causal links."
-            },
-            indent=2,
+
+        return QuestionEventsOutput(
+            outcome_events=outcome_events,
+            regular_events=regular_events,
+            total=len(outcome_events) + len(regular_events),
         )

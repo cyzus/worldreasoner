@@ -4,6 +4,8 @@ import asyncio
 import json
 from typing import Dict, Any
 from smolagents import Tool
+from src.utils.schema_helper import pydantic_to_output_schema
+from src.tools.output_models import WebFetchOutput
 
 
 class WebFetchTool(Tool):
@@ -49,7 +51,8 @@ class WebFetchTool(Tool):
             "nullable": True,
         },
     }
-    output_type = "string"  # JSON string
+    output_type = "object"
+    output_schema = pydantic_to_output_schema(WebFetchOutput)
 
     def __init__(self):
         """Initialize the web fetch tool."""
@@ -127,7 +130,7 @@ class WebFetchTool(Tool):
                 "error": f"Error fetching URL: {str(e)}",
             }
 
-    def forward(self, url: str, timeout: int = 30) -> str:
+    def forward(self, url: str, timeout: int = 30) -> WebFetchOutput:
         """Fetch web page content.
 
         Args:
@@ -135,7 +138,7 @@ class WebFetchTool(Tool):
             timeout: Maximum time to wait in seconds
 
         Returns:
-            JSON string with fetched content
+            WebFetchOutput Pydantic model with fetched content
         """
         # Check if we're already in an async context
         try:
@@ -159,9 +162,17 @@ class WebFetchTool(Tool):
             # No event loop running, safe to create one
             result = asyncio.run(self._fetch_async(url, timeout))
 
-        return json.dumps(result, indent=2)
+        # Convert dict result to Pydantic model
+        return WebFetchOutput(
+            url=result.get("url", url),
+            title=result.get("title", ""),
+            markdown=result.get("markdown", ""),
+            metadata=result.get("metadata", {}),
+            success=result.get("success", False),
+            error=result.get("error"),
+        )
 
-    async def forward_async(self, url: str, timeout: int = 30) -> str:
+    async def forward_async(self, url: str, timeout: int = 30) -> WebFetchOutput:
         """Async version of forward for use in async contexts.
 
         Args:
@@ -169,7 +180,15 @@ class WebFetchTool(Tool):
             timeout: Maximum time to wait in seconds
 
         Returns:
-            JSON string with fetched content
+            WebFetchOutput Pydantic model with fetched content
         """
         result = await self._fetch_async(url, timeout)
-        return json.dumps(result, indent=2)
+        # Convert dict result to Pydantic model
+        return WebFetchOutput(
+            url=result.get("url", url),
+            title=result.get("title", ""),
+            markdown=result.get("markdown", ""),
+            metadata=result.get("metadata", {}),
+            success=result.get("success", False),
+            error=result.get("error"),
+        )

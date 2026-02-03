@@ -11,8 +11,11 @@ from src.utils.logging import logger
 from src.utils.enums import enum_to_list, parse_domain
 from src.utils.id_generator import generate_article_id
 from src.utils.date_utils import parse_iso_datetime
+from src.utils.schema_helper import pydantic_to_output_schema
 from src.tools.web_fetch import WebFetchTool
 from src.tools.base import CollectorAwareTool
+from src.tools.output_models import ArticleOutput
+
 
 
 class ArticleCollectorTool(CollectorAwareTool[Article]):
@@ -48,7 +51,7 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         author (str, optional): Author name if available
     
     Returns:
-        str: JSON string with the created Article object including generated ID and metadata
+        ArticleOutput: Structured article object with ID, metadata, and status
     """
 
     # Auto-generate inputs from Enum classes (single source of truth)
@@ -74,7 +77,8 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         },
         "author": {"type": "string", "description": "Author name", "nullable": True},
     }
-    output_type = "string"  # JSON string
+    output_type = "object"
+    output_schema = pydantic_to_output_schema(ArticleOutput)
 
     def __init__(
         self,
@@ -127,8 +131,8 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         published_date: str,
         domain: str = "general",
         author: Optional[str] = None,
-    ) -> str:
-        """Fetch article content from URL and store as structured JSON.
+    ) -> ArticleOutput:
+        """Fetch article content from URL and store as structured Article.
 
         Args:
             url: Source URL to fetch article from
@@ -139,7 +143,7 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             author: Optional author name
 
         Returns:
-            JSON string of Article object
+            ArticleOutput: Pydantic model with article metadata and status
         """
         # STAGE 1: Fast URL-based deduplication (before fetching content)
         # This is the most efficient check - prevents unnecessary web scraping
@@ -167,23 +171,14 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
                         f"Added existing article {existing.id} to internal list (duplicate URL, total: {len(self._fallback_items)})"
                     )
 
-                return json.dumps(
-                    {
-                        "id": existing.id,
-                        "title": existing.title,
-                        "url": existing.url,
-                        "source": existing.source,
-                        "author": existing.author,
-                        "published_date": existing.published_date.isoformat(),
-                        "domain": existing.domain,
-                        "word_count": existing.word_count,
-                        "reading_time_minutes": existing.reading_time_minutes,
-                        "content_preview": existing.content[:200] + "..."
-                        if len(existing.content) > 200
-                        else existing.content,
-                        "status": "already_exists",
-                        "message": f"Article already in database (duplicate URL: {normalized_url})",
-                    }
+                return ArticleOutput(
+                    id=existing.id,
+                    title=existing.title,
+                    url=existing.url,
+                    source=existing.source,
+                    status="already_exists",
+                    word_count=existing.word_count,
+                    published_date=existing.published_date.isoformat() if existing.published_date else None,
                 )
 
         # STAGE 2: Fetch content (only if URL not found)
@@ -191,11 +186,20 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         try:
             content = self.web_visitor.forward(url)
             if not content or len(content.strip()) < 100:
-                return json.dumps(
-                    {"error": f"Failed to fetch content from {url}", "url": url}
+                # Return error as ArticleOutput with minimal required fields
+                return ArticleOutput(
+                    id="error",
+                    title=title,
+                    url=url,
+                    status=f"error: Failed to fetch content from {url}",
                 )
         except Exception as e:
-            return json.dumps({"error": f"Error fetching URL: {str(e)}", "url": url})
+            return ArticleOutput(
+                id="error",
+                title=title,
+                url=url,
+                status=f"error: {str(e)}",
+            )
 
         # Parse published date or use current time
         pub_date = parse_iso_datetime(published_date)
@@ -223,13 +227,11 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             logger.debug(
                 f"Skipping duplicate content hash: {content_hash} for URL: {url}"
             )
-            return json.dumps(
-                {
-                    "error": "Duplicate article detected (same content, different URL)",
-                    "hash": content_hash,
-                    "url": url,
-                    "message": "This article content already exists in the current collection",
-                }
+            return ArticleOutput(
+                id="duplicate",
+                title=title,
+                url=url,
+                status="duplicate: Same content already exists",
             )
 
         # Also check database for content hash (cross-run syndication detection)
@@ -292,34 +294,21 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             self.db.save(Article, article)
             logger.debug(f"Article {article.id} persisted to database")
 
-        # Convert to JSON and return a SUMMARY to save tokens
-        # Return only metadata, NOT the full content
-        summary = {
-            "id": article.id,
-            "title": article.title,
-            "url": article.url,
-            "source": article.source,
-            "author": article.author,
-            "published_date": article.published_date.isoformat(),
-            "domain": article.domain,
-            "word_count": article.word_count,
-            "reading_time_minutes": article.reading_time_minutes,
-            "content_preview": article.content[:200] + "..."
-            if len(article.content) > 200
-            else article.content,
-            "status": "stored",
-        }
-
-        # Add time window validation warnings if present
+        # Return ArticleOutput Pydantic model with summary metadata
+        # Note: We don't include full content to save tokens
+        status_msg = "stored"
         if time_window_validation:
-            summary["status"] = "stored_with_warnings"
-            summary["warnings"] = time_window_validation["warnings"]
-            summary["recommendation"] = time_window_validation["recommendation"]
-            summary["suggestion"] = (
-                "Consider searching for articles published within the valid time window for better evidence quality."
-            )
-
-        return json.dumps(summary, indent=2, default=str)
+            status_msg = "stored_with_warnings"
+        
+        return ArticleOutput(
+            id=article.id,
+            title=article.title,
+            url=article.url,
+            source=article.source,
+            status=status_msg,
+            word_count=article.word_count,
+            published_date=article.published_date.isoformat(),
+        )
 
     def _normalize_url(self, url: str) -> str:
         """Normalize URL for consistent duplicate detection.

@@ -16,6 +16,8 @@ from src.utils.logging import logger
 from src.utils.enums import parse_domain, parse_event_type, enum_to_list, Domain
 from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
 from src.utils.id_generator import generate_forecast_event_id
+from src.utils.schema_helper import pydantic_to_output_schema
+from src.tools.output_models import ForecastEventOutput
 
 
 class ForecastEventIdentifierTool(Tool):
@@ -68,7 +70,8 @@ class ForecastEventIdentifierTool(Tool):
             "nullable": True,
         },
     }
-    output_type = "string"
+    output_type = "object"
+    output_schema = pydantic_to_output_schema(ForecastEventOutput)
 
     def __init__(
         self,
@@ -148,19 +151,9 @@ class ForecastEventIdentifierTool(Tool):
                 )
                 self.forecast_db.save(ForecastEvent, forecast_event)
                 logger.info(f"Reused existing event: {existing.id}")
-                return json.dumps(
-                    {
-                        "status": "reused",
-                        "event": {
-                            "id": forecast_event.id,
-                            "title": forecast_event.title,
-                            "domain": forecast_event.domain.value
-                            if hasattr(forecast_event.domain, "value")
-                            else forecast_event.domain,
-                        },
-                    },
-                    indent=2,
-                    default=str,
+                return ForecastEventOutput(
+                    status="reused",
+                    event={"id": forecast_event.id, "title": forecast_event.title, "domain": forecast_event.domain.value if hasattr(forecast_event.domain, "value") else forecast_event.domain},
                 )
 
             # Create new ForecastEvent

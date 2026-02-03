@@ -8,7 +8,9 @@ from smolagents import Tool
 from src.domain.models import CausalHypothesis, CausalRelationType, Event
 from src.core.collectors import ResultCollector
 from src.utils.enums import enum_to_list
+from src.utils.schema_helper import pydantic_to_output_schema
 from src.tools.base import ToolResponseMixin
+from src.tools.output_models import HypothesisOutput
 
 
 class CausalReasonerTool(Tool, ToolResponseMixin):
@@ -60,7 +62,8 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
             "nullable": True,
         },
     }
-    output_type = "string"  # JSON confirmation
+    output_type = "object"
+    output_schema = pydantic_to_output_schema(HypothesisOutput)
 
     def __init__(
         self,
@@ -137,13 +140,12 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
 
         # Validate chronology - source must occur before target
         if not self._validate_chronology(source_event_id, target_event_id):
-            return self.error_response(
-                "Chronology validation failed: source event must occur before target event - also make sure you provide occurred_date for both events",
+            return HypothesisOutput(
                 status="error",
-                source_event_id=source_event_id,
-                source_event_occurred_date=self._get_event_occurred_date(source_event_id),
-                target_event_id=target_event_id,
-                target_event_occurred_date=self._get_event_occurred_date(target_event_id),
+                hypothesis_id="error",
+                relation=f"{source_event_id} causes {target_event_id}",
+                strength=0.0,
+                confidence=0.0,
             )
 
         # Generate unique hypothesis ID
@@ -181,17 +183,14 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
 
             logger.debug(f"Hypothesis {hypothesis_id} persisted to database")
 
-        # Return confirmation (minimal to save tokens)
-        confirmation = {
-            "status": "recorded",
-            "hypothesis_id": hypothesis_id,
-            "relation": f"{source_event_id} {relation.value} {target_event_id}",
-            "strength": strength,
-            "confidence": confidence,
-            "evidence_count": len(evidence_ids),
-        }
-
-        return self.json_response(confirmation)
+        # Return HypothesisOutput Pydantic model
+        return HypothesisOutput(
+            status="recorded",
+            hypothesis_id=hypothesis_id,
+            relation=f"{source_event_id} {relation.value} {target_event_id}",
+            strength=strength,
+            confidence=confidence,
+        )
 
     def _generate_hypothesis_id(self, question_id: str) -> str:
         """Generate unique hypothesis ID.

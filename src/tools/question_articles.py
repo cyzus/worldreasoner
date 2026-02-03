@@ -3,8 +3,10 @@ from typing import Optional
 from datetime import datetime, timezone
 
 from src.tools.database_mixin import DatabaseAwareTool
+from src.tools.output_models import QuestionArticlesOutput
 from src.domain.models import Article
 from src.utils.logging import logger
+from src.utils.schema_helper import pydantic_to_output_schema
 
 
 class QuestionArticlesTool(DatabaseAwareTool):
@@ -45,7 +47,8 @@ class QuestionArticlesTool(DatabaseAwareTool):
             "nullable": True,
         },
     }
-    output_type = "string"
+    output_type = "object"
+    output_schema = pydantic_to_output_schema(QuestionArticlesOutput)
 
     def __init__(self, db_path: str = None, question_id: Optional[str] = None):
         """Initialize the tool.
@@ -59,7 +62,7 @@ class QuestionArticlesTool(DatabaseAwareTool):
 
     def forward(
         self, limit: int = 20, offset: int = 0, sort: str = "date_desc"
-    ) -> str:
+    ) -> QuestionArticlesOutput:
         """Get articles collected for this question with pagination.
 
         Args:
@@ -68,15 +71,13 @@ class QuestionArticlesTool(DatabaseAwareTool):
             sort: Sort order ('date_desc' or 'date_asc')
 
         Returns:
-            JSON string with paginated article list
+            QuestionArticlesOutput: Pydantic model with paginated article list
         """
         if not self.question_id:
-            return json.dumps(
-                {"error": "No question_id context provided", "articles": []}
-            )
+            return QuestionArticlesOutput(articles=[], total=0, limit=limit, offset=offset)
 
         if not self.db:
-            return json.dumps({"error": "No database connection", "articles": []})
+            return QuestionArticlesOutput(articles=[], total=0, limit=limit, offset=offset)
 
         # Find articles collected for this question
         all_articles = self.db.get_many(Article)
@@ -130,14 +131,10 @@ class QuestionArticlesTool(DatabaseAwareTool):
                 }
             )
 
-        return json.dumps(
-            {
-                "question_id": self.question_id,
-                "total_articles": total_count,
-                "returned_count": len(articles_data),
-                "limit": limit,
-                "offset": offset,
-                "articles": articles_data,
-            },
-            indent=2,
+
+        return QuestionArticlesOutput(
+            articles=articles_data,
+            total=total_count,
+            limit=limit,
+            offset=offset,
         )

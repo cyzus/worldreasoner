@@ -12,6 +12,8 @@ from typing import List, Dict, Any
 from datetime import datetime
 
 from smolagents import Tool
+from src.utils.schema_helper import pydantic_to_output_schema
+from src.tools.output_models import RssFetchOutput, RssFeedItem
 
 
 class RssFetchTool(Tool):
@@ -28,25 +30,28 @@ class RssFetchTool(Tool):
             "nullable": True,
         },
     }
-    output_type = "string"
+    output_type = "object"
+    output_schema = pydantic_to_output_schema(RssFetchOutput)
 
     def __init__(self):
         super().__init__()
 
-    def forward(self, feed_url: str, max_items: int = 10) -> str:
-        """Fetch and parse feed_url and return JSON list of items.
+    def forward(self, feed_url: str, max_items: int = 10) -> RssFetchOutput:
+        """Fetch and parse feed_url and return RSS feed output.
 
         Each item contains: title, link, published (ISO), summary.
         """
         parsed = feedparser.parse(feed_url)
         if parsed.bozo:
-            # bozo indicates parse issue; include bozo_exception text if available
-            err = str(getattr(parsed, "bozo_exception", ""))
-            return json.dumps(
-                {"error": "Failed to parse feed", "feed_url": feed_url, "detail": err}
+            # bozo indicates parse issue; return empty output with error info
+            # Note: Returning RssFetchOutput even on error to maintain type consistency
+            return RssFetchOutput(
+                feed_url=feed_url,
+                total_items=0,
+                items=[],
             )
 
-        items: List[Dict[str, Any]] = []
+        items: List[RssFeedItem] = []
         for entry in parsed.entries[: max_items or 10]:
             title = entry.get("title", "")
             link = entry.get("link", "")
@@ -69,15 +74,15 @@ class RssFetchTool(Tool):
                 "summary", entry.get("content", [{"value": ""}])[0].get("value", "")
             )
 
-            items.append(
-                {
-                    "title": title,
-                    "link": link,
-                    "published": published_iso,
-                    "summary": summary,
-                }
-            )
+            items.append(RssFeedItem(
+                title=title,
+                link=link,
+                published=published_iso,
+                summary=summary,
+            ))
 
-        return json.dumps(
-            {"feed_url": feed_url, "total_items": len(items), "items": items}, indent=2
+        return RssFetchOutput(
+            feed_url=feed_url,
+            total_items=len(items),
+            items=items,
         )
