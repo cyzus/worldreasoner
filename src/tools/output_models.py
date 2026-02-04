@@ -198,6 +198,9 @@ class WebFetchOutput(BaseModel):
     content: str = Field(description="Page content")
     title: Optional[str] = Field(default=None, description="Page title")
     links: Optional[List[str]] = Field(default=None, description="Extracted links")
+    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata")
+    success: bool = Field(default=True, description="Fetch success status")
+    error: Optional[str] = Field(default=None, description="Error message")
 
 
 class RssFeedItem(BaseModel):

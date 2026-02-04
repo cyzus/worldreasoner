@@ -29,6 +29,7 @@ class WebFetchTool(Tool):
     This tool uses advanced web scraping to handle modern websites with JavaScript.
     It returns clean markdown content suitable for LLM processing.
     
+    IMPORTANT: this tool doesn't automatically store articles to the database.
     Args:
         url (str): The URL to fetch content from
         timeout (int, optional): Maximum time to wait in seconds. Default: 30
@@ -166,7 +167,7 @@ class WebFetchTool(Tool):
         return WebFetchOutput(
             url=result.get("url", url),
             title=result.get("title", ""),
-            markdown=result.get("markdown", ""),
+            content=result.get("markdown", "") or "",
             metadata=result.get("metadata", {}),
             success=result.get("success", False),
             error=result.get("error"),
@@ -187,7 +188,7 @@ class WebFetchTool(Tool):
         return WebFetchOutput(
             url=result.get("url", url),
             title=result.get("title", ""),
-            markdown=result.get("markdown", ""),
+            content=result.get("markdown", "") or "",
             metadata=result.get("metadata", {}),
             success=result.get("success", False),
             error=result.get("error"),

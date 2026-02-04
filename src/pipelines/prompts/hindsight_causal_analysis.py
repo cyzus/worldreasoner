@@ -72,7 +72,7 @@ PROCESS:
    - Target: {min_evidence_articles}+ high-quality articles across different dates
    - Use article_inspector to verify coverage; if insufficient, broaden search
 
-MANAGER AGENT: Assess the progress of the evidence collection process. If insufficient, repeat step 1.
+MANAGER AGENT: Inspect the evidence/article collection yourself. If insufficient, repeat step 1.
 
 NOTE - if evidence collection constantly fails, there's no way you can build a event graph. You should keep trying until you get enough evidence.
 
@@ -83,9 +83,9 @@ NOTE - if evidence collection constantly fails, there's no way you can build a e
    - Record both positive and negative impacts (symmetric analysis)
    - Use graph_inspector to verify quality, depth, and outcome impacts
 
-MANAGER AGENT: Assess the progress of the event analysis. If insufficient, repeat step 2.
+MANAGER AGENT: Inspect the event graph yourself. If insufficient, repeat step 2.
 
-3. EVALUATE & ITERATE step 1 or 2 based on manager's assessment."""
+3. EVALUATE & ITERATE step 1 or 2 based on your own assessment."""
 
 
 class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):

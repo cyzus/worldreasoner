@@ -35,10 +35,9 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
     """
 
     name = "article_collector"
-    description = f"""Fetches and stores article data from a URL.
+    description = f"""Fetches and stores article data from a URL to database.
     
     Use this tool AFTER you've found article URLs using web_search.
-    Pass ONLY the URL and metadata (title, source, etc.).
     IMPORTANT: make sure the published_date is correct.
     This tool will internally fetch the full article content to save tokens.
     
