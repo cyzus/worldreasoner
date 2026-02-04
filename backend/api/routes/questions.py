@@ -838,6 +838,12 @@ async def get_question_price_history(
     interval: str = Query(
         "1d", description="Time interval: 1m, 1w, 1d, 6h, 1h, or max"
     ),
+    include_turning_points: bool = Query(
+        False, description="Include detected turning points in response"
+    ),
+    min_turning_point_change: float = Query(
+        5.0, description="Minimum change (percentage points) for turning point detection"
+    ),
     db: GenericDatabase = Depends(get_database),
 ):
     """Get price history for a Polymarket question.
@@ -848,6 +854,8 @@ async def get_question_price_history(
     Args:
         question_id: Question identifier (must be a Polymarket question)
         interval: Time interval for price data (1m, 1w, 1d, 6h, 1h, or max)
+        include_turning_points: If True, analyze and include turning points
+        min_turning_point_change: Minimum change for turning point detection
 
     Returns:
         Dict with price history for each outcome token:
@@ -859,7 +867,10 @@ async def get_question_price_history(
                 "token_id": [{"t": timestamp_ms, "p": price_0_to_1}, ...],
                 ...
             },
-            "outcomes": [str, ...]  # Outcome labels for each token
+            "outcomes": [str, ...],  # Outcome labels for each token
+            "turning_points": [...],  # Only if include_turning_points=True
+            "sharp_movements": [...],  # Only if include_turning_points=True
+            "curve_summary": {...}    # Only if include_turning_points=True
         }
     """
     try:
@@ -979,7 +990,7 @@ async def get_question_price_history(
             f"{len(price_history)} tokens, {sum(len(h) for h in price_history.values())} total points"
         )
 
-        return {
+        response = {
             "question_id": question_id,
             "market_id": market_id,
             "interval": interval,
@@ -987,12 +998,203 @@ async def get_question_price_history(
             "outcomes": options,
         }
 
+        # Optionally include turning points analysis
+        if include_turning_points and price_history:
+            from src.utils.polymarket import analyze_price_curve
+
+            # Analyze the first token (primary outcome)
+            first_token_id = clob_token_ids[0]
+            primary_history = price_history.get(first_token_id, [])
+
+            if primary_history:
+                analysis = analyze_price_curve(
+                    primary_history,
+                    min_turning_point_change=min_turning_point_change,
+                    min_sharp_movement_change=min_turning_point_change * 2,
+                )
+                response["turning_points"] = analysis["turning_points"]
+                response["sharp_movements"] = analysis["sharp_movements"]
+                response["curve_summary"] = analysis["summary"]
+
+                logger.info(
+                    f"Included turning points analysis: "
+                    f"{len(analysis['turning_points'])} turning points, "
+                    f"{len(analysis['sharp_movements'])} sharp movements"
+                )
+
+        return response
+
     except HTTPException:
         raise
     except Exception as e:
         import traceback
 
         logger.error(f"Failed to fetch price history: {e}")
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{question_id}/price_turning_points")
+async def get_price_turning_points(
+    question_id: str,
+    min_change_pct: float = Query(5.0, description="Minimum price change for turning points (percentage points)"),
+    create_events: bool = Query(False, description="Create Event records from turning points"),
+    db: GenericDatabase = Depends(get_database),
+):
+    """Detect and return major turning points in the market price curve.
+
+    Turning points are local maxima/minima where price reversed direction
+    significantly. These often correspond to important market-moving events.
+
+    Args:
+        question_id: Question identifier (must be a Polymarket question)
+        min_change_pct: Minimum price change to qualify as turning point (default: 5%)
+        create_events: If True, creates Event records for each turning point
+
+    Returns:
+        {
+            "question_id": str,
+            "turning_points": [...],  # Detected turning points
+            "sharp_movements": [...],  # Rapid price changes
+            "summary": {...},  # Overall curve statistics
+            "created_events": [...],  # Event IDs if create_events=True
+        }
+    """
+    from src.utils.polymarket import analyze_price_curve, get_price_history_for_market
+    from src.domain.models import Event
+
+    try:
+        logger.info(f"Analyzing price curve for question {question_id}")
+        question = db.get(Question, question_id)
+
+        if not question:
+            raise HTTPException(
+                status_code=404, detail=f"Question {question_id} not found"
+            )
+
+        if question.source != "polymarket":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Price analysis only available for Polymarket questions (source={question.source})",
+            )
+
+        metadata = question.metadata or {}
+        clob_token_ids = metadata.get("clob_token_ids", [])
+
+        if not clob_token_ids:
+            raise HTTPException(
+                status_code=404, detail="No CLOB token IDs available for this question"
+            )
+
+        # Fetch full price history
+        price_history = await get_price_history_for_market(
+            clob_token_ids,
+            interval="max",
+            fidelity=720,
+        )
+
+        if not price_history:
+            return {
+                "question_id": question_id,
+                "turning_points": [],
+                "sharp_movements": [],
+                "summary": None,
+                "created_events": [],
+            }
+
+        # Analyze the first token (primary outcome, usually "Yes")
+        first_token_id = clob_token_ids[0]
+        primary_history = price_history.get(first_token_id, [])
+
+        if not primary_history:
+            return {
+                "question_id": question_id,
+                "turning_points": [],
+                "sharp_movements": [],
+                "summary": None,
+                "created_events": [],
+            }
+
+        # Run analysis
+        analysis = analyze_price_curve(
+            primary_history,
+            min_turning_point_change=min_change_pct,
+            min_sharp_movement_change=min_change_pct * 2,  # Sharp movements need bigger change
+        )
+
+        created_event_ids = []
+
+        # Optionally create Event records from turning points
+        if create_events and analysis["turning_points"]:
+            from datetime import datetime, timezone
+            from src.domain.models.event import EventType, EventStatus
+            import uuid
+
+            options = metadata.get("options", ["Yes", "No"])
+            primary_outcome = options[0] if options else "Yes"
+
+            for tp in analysis["turning_points"][:10]:  # Limit to top 10
+                event_time = datetime.fromtimestamp(tp["timestamp"], tz=timezone.utc)
+
+                # Generate event title based on turning point type
+                if tp["type"] == "peak":
+                    title = f"Market peak: {primary_outcome} reached {tp['price']*100:.1f}%"
+                    description = (
+                        f"Market probability for '{primary_outcome}' peaked at {tp['price']*100:.1f}%, "
+                        f"rising {tp['change_before']:.1f}pp before reversing down {abs(tp['change_after']):.1f}pp. "
+                        f"This turning point suggests a shift in market sentiment."
+                    )
+                else:
+                    title = f"Market trough: {primary_outcome} dropped to {tp['price']*100:.1f}%"
+                    description = (
+                        f"Market probability for '{primary_outcome}' reached a low of {tp['price']*100:.1f}%, "
+                        f"dropping {abs(tp['change_before']):.1f}pp before recovering {tp['change_after']:.1f}pp. "
+                        f"This turning point suggests a shift in market sentiment."
+                    )
+
+                event = Event(
+                    id=str(uuid.uuid4()),
+                    title=title,
+                    description=description,
+                    occurred_date=event_time,
+                    event_type=EventType.INDICATOR,
+                    domain=question.domain,
+                    status=EventStatus.OCCURRED,
+                    extracted_for_question_id=question_id,
+                    metadata={
+                        "turning_point_type": tp["type"],
+                        "price": tp["price"],
+                        "change_before": tp["change_before"],
+                        "change_after": tp["change_after"],
+                        "significance": tp["significance"],
+                        "auto_detected": True,
+                        "source": "polymarket_price_analysis",
+                    },
+                )
+
+                db.save(Event, event)
+                created_event_ids.append(event.id)
+                logger.info(f"Created turning point event: {event.id} ({tp['type']} at {event_time})")
+
+        logger.info(
+            f"Price analysis complete for {question_id}: "
+            f"{len(analysis['turning_points'])} turning points, "
+            f"{len(analysis['sharp_movements'])} sharp movements"
+        )
+
+        return {
+            "question_id": question_id,
+            "turning_points": analysis["turning_points"],
+            "sharp_movements": analysis["sharp_movements"],
+            "summary": analysis["summary"],
+            "created_events": created_event_ids,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"Failed to analyze price curve: {e}")
         logger.error(f"Full traceback:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 

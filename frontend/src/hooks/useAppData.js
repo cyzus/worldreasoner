@@ -199,8 +199,18 @@ export const useAppData = () => {
         setLoadingPriceHistory(true)
 
         try {
-            const priceData = await fetchQuestionPriceHistory(questionId, interval)
+            // Fetch with turning points for full history view
+            const includeTurningPoints = interval === 'max'
+            const priceData = await fetchQuestionPriceHistory(
+                questionId,
+                interval,
+                includeTurningPoints,
+                5.0  // min change for turning points (5 percentage points)
+            )
             console.log('✓ Loaded price history:', priceData)
+            if (includeTurningPoints && priceData.turning_points) {
+                console.log(`  Found ${priceData.turning_points.length} turning points`)
+            }
             setPriceHistoryData(priceData)
         } catch (error) {
             console.warn('✗ Failed to load price history:', error.message || error)

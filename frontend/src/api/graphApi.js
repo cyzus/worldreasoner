@@ -132,10 +132,45 @@ export async function fetchEventQuestions(eventId) {
 
 /**
  * Fetch price history for a Polymarket question
+ * @param {string} questionId - Question ID
+ * @param {string} interval - Time interval (1h, 6h, 1d, 1w, max)
+ * @param {boolean} includeTurningPoints - Include turning point analysis
+ * @param {number} minTurningPointChange - Minimum change for turning points (percentage points)
  */
-export async function fetchQuestionPriceHistory(questionId, interval = '1d') {
+export async function fetchQuestionPriceHistory(
+  questionId,
+  interval = '1d',
+  includeTurningPoints = false,
+  minTurningPointChange = 5.0
+) {
+  const params = new URLSearchParams()
+  params.append('interval', interval)
+  if (includeTurningPoints) {
+    params.append('include_turning_points', 'true')
+    params.append('min_turning_point_change', minTurningPointChange.toString())
+  }
   const response = await axios.get(
-    `${API_BASE_URL}/questions/${questionId}/price_history?interval=${interval}`
+    `${API_BASE_URL}/questions/${questionId}/price_history?${params.toString()}`
+  )
+  return response.data
+}
+
+/**
+ * Fetch and analyze price turning points for a question
+ * @param {string} questionId - Question ID
+ * @param {number} minChangePct - Minimum price change for turning points
+ * @param {boolean} createEvents - Create Event records from turning points
+ */
+export async function fetchPriceTurningPoints(
+  questionId,
+  minChangePct = 5.0,
+  createEvents = false
+) {
+  const params = new URLSearchParams()
+  params.append('min_change_pct', minChangePct.toString())
+  params.append('create_events', createEvents.toString())
+  const response = await axios.get(
+    `${API_BASE_URL}/questions/${questionId}/price_turning_points?${params.toString()}`
   )
   return response.data
 }

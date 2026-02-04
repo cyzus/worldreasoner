@@ -6,6 +6,7 @@ Demonstrates the complete end-to-end flow:
 2. Get its price history
 3. Load related events from the graph
 4. Correlate price movements with event occurrences
+5. Detect turning points in price curves
 """
 
 import asyncio
@@ -13,7 +14,13 @@ import json
 import aiohttp
 from datetime import datetime
 from src.utils.logging import logger
-from src.utils.polymarket import get_price_history, get_price_history_for_market
+from src.utils.polymarket import (
+    get_price_history,
+    get_price_history_for_market,
+    detect_turning_points,
+    detect_sharp_movements,
+    analyze_price_curve,
+)
 from src.pipelines.question.sources.markets import PolymarketRunner
 from src.core.database import GenericDatabase
 
@@ -212,6 +219,191 @@ async def test_end_to_end_integration():
         logger.warning("× No questions fetched from Polymarket")
 
 
+def test_turning_point_detection():
+    """Test turning point detection with synthetic data."""
+    logger.info("\n" + "=" * 80)
+    logger.info("TEST 4: Turning Point Detection (Unit Test)")
+    logger.info("=" * 80)
+
+    # Create synthetic price data with clear turning points
+    # Pattern: rise -> peak -> fall -> trough -> rise
+    base_time = 1700000000  # Nov 2023
+    hour = 3600
+
+    # Generate smooth price curve with obvious turning points
+    price_history = []
+
+    # Phase 1: Rise from 0.3 to 0.7 (over 24h)
+    for i in range(24):
+        price_history.append({
+            "t": base_time + i * hour,
+            "p": 0.3 + (0.4 * i / 24)
+        })
+
+    # Phase 2: Peak at 0.7, then fall to 0.4 (over 24h)
+    peak_time = base_time + 24 * hour
+    for i in range(24):
+        price_history.append({
+            "t": peak_time + i * hour,
+            "p": 0.7 - (0.3 * i / 24)
+        })
+
+    # Phase 3: Trough at 0.4, then rise to 0.6 (over 24h)
+    trough_time = peak_time + 24 * hour
+    for i in range(24):
+        price_history.append({
+            "t": trough_time + i * hour,
+            "p": 0.4 + (0.2 * i / 24)
+        })
+
+    logger.info(f"Generated {len(price_history)} price points")
+    logger.info(f"Price range: {min(p['p'] for p in price_history):.2f} to {max(p['p'] for p in price_history):.2f}")
+
+    # Detect turning points
+    turning_points = detect_turning_points(
+        price_history,
+        min_change_pct=10.0,  # 10 percentage points
+        lookback_window=5,
+        lookahead_window=5,
+        min_time_between_points_hours=12.0,
+    )
+
+    logger.info(f"\nDetected {len(turning_points)} turning points:")
+    for tp in turning_points:
+        tp_time = datetime.fromtimestamp(tp["timestamp"])
+        logger.info(
+            f"  {tp['type'].upper()}: price={tp['price']:.2f} at {tp_time}, "
+            f"change_before={tp['change_before']:.1f}pp, "
+            f"change_after={tp['change_after']:.1f}pp, "
+            f"significance={tp['significance']:.1f}"
+        )
+
+    # Assertions
+    assert len(turning_points) >= 2, f"Expected at least 2 turning points, got {len(turning_points)}"
+
+    # Should have at least one peak
+    peaks = [tp for tp in turning_points if tp["type"] == "peak"]
+    troughs = [tp for tp in turning_points if tp["type"] == "trough"]
+
+    logger.info(f"\nFound {len(peaks)} peaks and {len(troughs)} troughs")
+
+    if peaks:
+        logger.info(f"  Highest peak: {peaks[0]['price']:.2f}")
+    if troughs:
+        logger.info(f"  Lowest trough: {troughs[0]['price']:.2f}")
+
+    logger.info("✓ Turning point detection test passed!")
+
+    return turning_points
+
+
+def test_sharp_movement_detection():
+    """Test sharp movement detection."""
+    logger.info("\n" + "=" * 80)
+    logger.info("TEST 5: Sharp Movement Detection (Unit Test)")
+    logger.info("=" * 80)
+
+    base_time = 1700000000
+    hour = 3600
+
+    # Create data with a sharp drop: 0.6 -> 0.3 in 6 hours
+    price_history = []
+
+    # Stable period
+    for i in range(12):
+        price_history.append({"t": base_time + i * hour, "p": 0.6})
+
+    # Sharp drop
+    drop_start = base_time + 12 * hour
+    for i in range(6):
+        price_history.append({
+            "t": drop_start + i * hour,
+            "p": 0.6 - (0.3 * i / 6)
+        })
+
+    # Stable at lower level
+    stable_time = drop_start + 6 * hour
+    for i in range(12):
+        price_history.append({"t": stable_time + i * hour, "p": 0.3})
+
+    logger.info(f"Generated {len(price_history)} price points with sharp drop")
+
+    # Detect sharp movements
+    movements = detect_sharp_movements(
+        price_history,
+        min_change_pct=15.0,  # 15 percentage points
+        window_hours=12.0,
+    )
+
+    logger.info(f"\nDetected {len(movements)} sharp movements:")
+    for mv in movements:
+        start_time = datetime.fromtimestamp(mv["start_timestamp"])
+        end_time = datetime.fromtimestamp(mv["end_timestamp"])
+        logger.info(
+            f"  {mv['direction'].upper()}: {mv['start_price']:.2f} -> {mv['end_price']:.2f} "
+            f"({mv['change_pct']:+.1f}pp) over {mv['duration_hours']:.1f}h"
+        )
+
+    # Should detect the sharp drop
+    down_movements = [m for m in movements if m["direction"] == "down"]
+    assert len(down_movements) >= 1, "Should detect at least one downward sharp movement"
+
+    logger.info("✓ Sharp movement detection test passed!")
+
+    return movements
+
+
+async def test_real_market_turning_points():
+    """Test turning point detection on real Polymarket data."""
+    logger.info("\n" + "=" * 80)
+    logger.info("TEST 6: Turning Points on Real Market Data")
+    logger.info("=" * 80)
+
+    # Fetch a real market with price history
+    clob_ids, history = await test_basic_price_history()
+
+    if not history:
+        logger.warning("Skipping real market test - no price history available")
+        return None
+
+    logger.info(f"\nAnalyzing real market with {len(history)} price points...")
+
+    # Run full analysis
+    analysis = analyze_price_curve(
+        history,
+        min_turning_point_change=5.0,
+        min_sharp_movement_change=10.0,
+    )
+
+    logger.info(f"\nCurve Summary:")
+    if analysis["summary"]:
+        summary = analysis["summary"]
+        logger.info(f"  Time range: {summary['time_range_days']:.1f} days")
+        logger.info(f"  Price range: {summary['price_range']['min']:.2f} to {summary['price_range']['max']:.2f}")
+        logger.info(f"  Volatility: {summary['volatility']:.4f}")
+        logger.info(f"  Trend: {summary['trend']}")
+
+    logger.info(f"\nTurning Points: {len(analysis['turning_points'])}")
+    for tp in analysis["turning_points"][:5]:  # Show top 5
+        tp_time = datetime.fromtimestamp(tp["timestamp"])
+        logger.info(
+            f"  {tp['type'].upper()}: {tp['price']*100:.1f}% at {tp_time.strftime('%Y-%m-%d %H:%M')}, "
+            f"significance={tp['significance']:.1f}"
+        )
+
+    logger.info(f"\nSharp Movements: {len(analysis['sharp_movements'])}")
+    for mv in analysis["sharp_movements"][:5]:  # Show top 5
+        start_time = datetime.fromtimestamp(mv["start_timestamp"])
+        logger.info(
+            f"  {mv['direction'].upper()}: {mv['start_price']*100:.1f}% -> {mv['end_price']*100:.1f}% "
+            f"({mv['change_pct']:+.1f}pp) at {start_time.strftime('%Y-%m-%d')}"
+        )
+
+    logger.info("✓ Real market analysis complete!")
+
+    return analysis
+
+
 async def main():
     """Run all integration tests."""
     logger.info("\n" + "=" * 80)
@@ -225,8 +417,17 @@ async def main():
         # Test 2: Multi-outcome markets
         # await test_multi_outcome_price_history()
 
-        # # Test 3: Complete integration flow
+        # Test 3: Complete integration flow
         # await test_end_to_end_integration()
+
+        # Test 4: Turning point detection (unit test)
+        test_turning_point_detection()
+
+        # Test 5: Sharp movement detection (unit test)
+        test_sharp_movement_detection()
+
+        # Test 6: Real market turning points
+        await test_real_market_turning_points()
 
         logger.info("\n" + "=" * 80)
         logger.info("✓ ALL TESTS COMPLETED")

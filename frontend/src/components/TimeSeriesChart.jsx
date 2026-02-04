@@ -13,10 +13,12 @@ import { pointer } from 'd3-selection'
  *
  * Shows market probability over time with events overlaid as markers.
  * The target event is highlighted with a gold marker.
+ * Turning points (detected price reversals) are shown as diamond markers.
  */
 const TimeSeriesChart = memo(function TimeSeriesChart({
   priceHistory,
   events = [],
+  turningPoints = [],
   targetEventId,
   outcomes = ['Yes', 'No'],
   width = 900,
@@ -27,6 +29,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
   const svgRef = useRef()
   const [hoveredEvent, setHoveredEvent] = useState(null)
   const [hoveredEventImpact, setHoveredEventImpact] = useState(null)
+  const [hoveredTurningPoint, setHoveredTurningPoint] = useState(null)
   const [hoveredPrice, setHoveredPrice] = useState(null)
   const [isExpanded, setIsExpanded] = useState(true)
 
@@ -520,6 +523,99 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
         .text(`Events (${eventsInTimeRange.length - (eventsInTimeRange.some(e => e.id === targetEventId) ? 1 : 0)})`)
     }
 
+    // Add turning point markers (diamond shapes on the price line)
+    if (Array.isArray(turningPoints) && turningPoints.length > 0) {
+      const turningPointsInRange = turningPoints.filter(tp => {
+        const tpTime = tp.timestamp * 1000 // Convert to ms
+        return tpTime >= xScale.domain()[0].getTime() && tpTime <= xScale.domain()[1].getTime()
+      })
+
+      turningPointsInRange.forEach((tp, idx) => {
+        const x = xScale(new Date(tp.timestamp * 1000))
+        const y = yScale(tp.price)
+        const isPeak = tp.type === 'peak'
+        const color = isPeak ? '#ef4444' : '#22c55e' // Red for peaks, green for troughs
+
+        // Draw diamond marker
+        const diamondSize = 6
+        const diamondPath = `M ${x} ${y - diamondSize} L ${x + diamondSize} ${y} L ${x} ${y + diamondSize} L ${x - diamondSize} ${y} Z`
+
+        g.append('path')
+          .attr('d', diamondPath)
+          .attr('fill', color)
+          .attr('stroke', '#ffffff')
+          .attr('stroke-width', 2)
+          .style('cursor', 'pointer')
+          .style('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))')
+          .on('mouseenter', function () {
+            setHoveredTurningPoint(tp)
+            select(this)
+              .attr('transform', `scale(1.3)`)
+              .attr('transform-origin', `${x}px ${y}px`)
+          })
+          .on('mouseleave', function () {
+            setHoveredTurningPoint(null)
+            select(this)
+              .attr('transform', null)
+          })
+
+        // Add small label for significant turning points
+        if (tp.significance >= 15 || idx < 3) {
+          g.append('text')
+            .attr('x', x)
+            .attr('y', isPeak ? y - 12 : y + 16)
+            .attr('text-anchor', 'middle')
+            .style('fill', color)
+            .style('font-size', '9px')
+            .style('font-weight', 'bold')
+            .style('pointer-events', 'none')
+            .text(isPeak ? '▼' : '▲')
+        }
+      })
+
+      // Add turning points to legend
+      const tpLegendY = (eventsInTimeRange.length > 0 ? 55 : 0) + outcomes.length * 25 + 20
+      const tpLegend = g.append('g')
+        .attr('transform', `translate(${innerWidth + 20}, ${tpLegendY})`)
+
+      tpLegend.append('text')
+        .attr('y', 0)
+        .style('fill', '#495057')
+        .style('font-size', '11px')
+        .style('font-weight', 'bold')
+        .text('Turning Points:')
+
+      // Peak legend
+      const peakDiamond = 'M 5 8 L 9 12 L 5 16 L 1 12 Z'
+      tpLegend.append('path')
+        .attr('d', peakDiamond)
+        .attr('fill', '#ef4444')
+        .attr('stroke', '#ffffff')
+        .attr('stroke-width', 1)
+
+      tpLegend.append('text')
+        .attr('x', 15)
+        .attr('y', 16)
+        .style('fill', '#495057')
+        .style('font-size', '10px')
+        .text(`Peaks (${turningPointsInRange.filter(t => t.type === 'peak').length})`)
+
+      // Trough legend
+      const troughDiamond = 'M 5 25 L 9 29 L 5 33 L 1 29 Z'
+      tpLegend.append('path')
+        .attr('d', troughDiamond)
+        .attr('fill', '#22c55e')
+        .attr('stroke', '#ffffff')
+        .attr('stroke-width', 1)
+
+      tpLegend.append('text')
+        .attr('x', 15)
+        .attr('y', 33)
+        .style('fill', '#495057')
+        .style('font-size', '10px')
+        .text(`Troughs (${turningPointsInRange.filter(t => t.type === 'trough').length})`)
+    }
+
     // Add interactive tooltip line
     const tooltipLine = g.append('line')
       .attr('stroke', '#6c757d')
@@ -591,7 +687,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
         setHoveredPrice(null)
       })
 
-  }, [priceHistory, events, targetEventId, outcomes, width, height, isExpanded])
+  }, [priceHistory, events, turningPoints, targetEventId, outcomes, width, height, isExpanded])
 
   // Count events in time range for title
   const eventsInRange = (Array.isArray(events) && events.length > 0) ? events.filter(event => {
@@ -617,9 +713,11 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
         <h3 style={{ color: '#212529', margin: 0, fontSize: '16px', fontWeight: 600 }}>
           Market Price History
-          {eventsInRange.length > 0 && (
+          {(eventsInRange.length > 0 || turningPoints.length > 0) && (
             <span style={{ fontSize: '13px', color: '#6c757d', marginLeft: '10px', fontWeight: 400 }}>
-              ({eventsInRange.length} event{eventsInRange.length !== 1 ? 's' : ''} marked)
+              ({eventsInRange.length > 0 ? `${eventsInRange.length} event${eventsInRange.length !== 1 ? 's' : ''}` : ''}
+              {eventsInRange.length > 0 && turningPoints.length > 0 ? ', ' : ''}
+              {turningPoints.length > 0 ? `${turningPoints.length} turning point${turningPoints.length !== 1 ? 's' : ''}` : ''})
             </span>
           )}
         </h3>
@@ -787,6 +885,96 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Turning point tooltip */}
+      {isExpanded && hoveredTurningPoint && (
+        <div style={{
+          position: 'absolute',
+          top: '120px',
+          left: '80px',
+          background: '#ffffff',
+          border: `2px solid ${hoveredTurningPoint.type === 'peak' ? '#ef4444' : '#22c55e'}`,
+          borderRadius: '8px',
+          padding: '12px 16px',
+          color: '#495057',
+          fontSize: '12px',
+          maxWidth: '320px',
+          pointerEvents: 'none',
+          zIndex: 1000,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.15)'
+        }}>
+          <div style={{
+            color: hoveredTurningPoint.type === 'peak' ? '#ef4444' : '#22c55e',
+            fontWeight: 'bold',
+            marginBottom: '6px',
+            fontSize: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}>
+            {hoveredTurningPoint.type === 'peak' ? '◆ MARKET PEAK' : '◆ MARKET TROUGH'}
+          </div>
+
+          <div style={{ fontWeight: '600', marginBottom: '8px', fontSize: '14px', color: '#212529' }}>
+            Price: {(hoveredTurningPoint.price * 100).toFixed(1)}%
+          </div>
+
+          <div style={{ fontSize: '11px', color: '#6c757d', marginBottom: '8px' }}>
+            {new Date(hoveredTurningPoint.timestamp * 1000).toLocaleString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </div>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '8px',
+            paddingTop: '8px',
+            borderTop: '1px solid #e5e7eb'
+          }}>
+            <div>
+              <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '2px' }}>Before</div>
+              <div style={{
+                fontSize: '12px',
+                fontWeight: '600',
+                color: hoveredTurningPoint.change_before > 0 ? '#22c55e' : '#ef4444'
+              }}>
+                {hoveredTurningPoint.change_before > 0 ? '+' : ''}{hoveredTurningPoint.change_before.toFixed(1)}pp
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '2px' }}>After</div>
+              <div style={{
+                fontSize: '12px',
+                fontWeight: '600',
+                color: hoveredTurningPoint.change_after > 0 ? '#22c55e' : '#ef4444'
+              }}>
+                {hoveredTurningPoint.change_after > 0 ? '+' : ''}{hoveredTurningPoint.change_after.toFixed(1)}pp
+              </div>
+            </div>
+          </div>
+
+          <div style={{
+            marginTop: '8px',
+            padding: '6px 10px',
+            backgroundColor: '#f3f4f6',
+            borderRadius: '4px',
+            fontSize: '11px'
+          }}>
+            <span style={{ color: '#6b7280' }}>Significance: </span>
+            <span style={{ fontWeight: '600', color: '#374151' }}>
+              {hoveredTurningPoint.significance.toFixed(1)}
+            </span>
+            <span style={{ color: '#9ca3af', marginLeft: '4px' }}>
+              (total swing)
+            </span>
+          </div>
         </div>
       )}
     </div>

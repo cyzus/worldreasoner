@@ -17,10 +17,15 @@ export function useQuestions(domain = null) {
   })
 }
 
-export function usePriceHistory(questionId, interval) {
+export function usePriceHistory(questionId, interval, includeTurningPoints = false) {
   return useQuery({
-    queryKey: ['priceHistory', questionId, interval],
-    queryFn: () => api.fetchQuestionPriceHistory(questionId, interval),
+    queryKey: ['priceHistory', questionId, interval, includeTurningPoints],
+    queryFn: () => api.fetchQuestionPriceHistory(
+      questionId,
+      interval,
+      includeTurningPoints,
+      5.0  // min change for turning points
+    ),
     enabled: !!questionId,
   })
 }

@@ -68,6 +68,7 @@ PROCESS:
 
 1. COLLECT EVIDENCE:
    Call evidence_collector to gather relevant articles:
+   - collect and store relevant evidence to db using article_collector
    - Time window: {window_start} to {resolution_date} ({actual_window_days} days)
    - Target: {min_evidence_articles}+ high-quality articles across different dates
    - Use article_inspector to verify coverage; if insufficient, broaden search
@@ -81,6 +82,7 @@ NOTE - if evidence collection constantly fails, there's no way you can build a e
    - Target: {min_evidence_articles}+ events, {min_graph_depth}+ depth levels
    - For each significant event, analyze its impact on outcome likelihood
    - Record both positive and negative impacts (symmetric analysis)
+   - Draw relationship between events using causal_reasoner
    - Use graph_inspector to verify quality, depth, and outcome impacts
 
 MANAGER AGENT: Inspect the event graph yourself. If insufficient, repeat step 2.

@@ -86,7 +86,14 @@ const ForecastPage = ({
   const loadPriceHistory = async (questionId, interval = priceHistoryInterval, expectedQuestionId = null) => {
     setLoadingPriceHistory(true);
     try {
-      const data = await fetchQuestionPriceHistory(questionId, interval);
+      // Include turning points for full history view
+      const includeTurningPoints = interval === 'max';
+      const data = await fetchQuestionPriceHistory(
+        questionId,
+        interval,
+        includeTurningPoints,
+        5.0  // min change for turning points (5 percentage points)
+      );
 
       // Only update state if this is still the expected question
       // This prevents race conditions when clicking multiple questions quickly
@@ -547,8 +554,11 @@ const ForecastPage = ({
                         <TimeSeriesChart
                           priceHistory={priceHistoryData.price_history}
                           events={questionRelatedEvents}
+                          turningPoints={priceHistoryData.turning_points || []}
                           targetEventId={selectedQuestion.target_event_id}
                           outcomes={priceHistoryData.outcomes || ['Yes', 'No']}
+                          activeInterval={priceHistoryInterval}
+                          onIntervalChange={handleIntervalChange}
                         />
                       ) : (
                         <div className="no-data">No price history available</div>
