@@ -202,17 +202,13 @@ export const useGraphTraversal = (questions) => {
 
             console.log(`Filtered graph: ${filteredNodes.length} nodes, ${filteredLinks.length} links (from ${fullGraphData.links.length} total links)`)
 
-            // Mark the outcome node (target_event_id)
+            // Mark outcome nodes (preserve is_outcome from backend + target_event_id)
             const outcomeNodeId = question.target_event_id
-            if (outcomeNodeId) {
-                filteredNodes.forEach(node => {
-                    if (node.id === outcomeNodeId) {
-                        node.isOutcome = true
-                    } else {
-                        node.isOutcome = false
-                    }
-                })
-            }
+            filteredNodes.forEach(node => {
+                // Preserve isOutcome from backend data (outcome events have is_outcome=True)
+                // Also mark target_event_id as outcome for backward compatibility
+                node.isOutcome = node.properties?.is_outcome || node.id === outcomeNodeId
+            })
 
             // Find orphaned nodes (nodes with no causal connections to other nodes)
             const connectedNodeIds = new Set()
@@ -267,13 +263,13 @@ export const useGraphTraversal = (questions) => {
 
             const filteredNodes = fullGraphData.nodes.filter(node => seedEventIds.has(node.id))
 
-            // Mark outcome node
+            // Mark outcome nodes (preserve is_outcome from backend + target_event_id)
             const outcomeNodeId = question.target_event_id
-            if (outcomeNodeId) {
-                filteredNodes.forEach(node => {
-                    node.isOutcome = node.id === outcomeNodeId
-                })
-            }
+            filteredNodes.forEach(node => {
+                // Preserve isOutcome from backend data (outcome events have is_outcome=True)
+                // Also mark target_event_id as outcome for backward compatibility
+                node.isOutcome = node.properties?.is_outcome || node.id === outcomeNodeId
+            })
 
             const nodeIds = new Set(filteredNodes.map(n => n.id))
             const filteredLinks = fullGraphData.links.filter(link => {

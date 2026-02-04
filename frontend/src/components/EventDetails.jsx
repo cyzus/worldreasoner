@@ -16,6 +16,10 @@ const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborh
   const [questionsLoaded, setQuestionsLoaded] = useState(false)
   const [impactsLoaded, setImpactsLoaded] = useState(false)
 
+  // Filter state for outcome impacts
+  const [minConfidence, setMinConfidence] = useState(0)
+  const [filterDirection, setFilterDirection] = useState(null)
+
   // Dragging state
   const [position, setPosition] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
@@ -122,6 +126,9 @@ const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborh
     setArticlesLoaded(false)
     setQuestionsLoaded(false)
     setImpactsLoaded(false)
+    // Reset filters
+    setMinConfidence(0)
+    setFilterDirection(null)
   }, [node.id])
 
   // Load articles when expanded
@@ -170,17 +177,26 @@ const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborh
       setLoadingImpacts(true)
 
       const fetchPromise = node.isOutcome
-        ? fetchOutcomeImpacts(node.id) // Get incoming impacts for outcomes
+        ? fetchOutcomeImpacts(
+            node.id,
+            minConfidence > 0 ? minConfidence : null,
+            filterDirection
+          ) // Get incoming impacts for outcomes with filters
         : fetchEventImpacts(node.id)   // Get outgoing impacts for regular events
 
       fetchPromise
         .then(data => {
-          console.log('Fetched impacts for event:', node.id, data)
+          console.log('Fetched impacts for event:', node.id, 'Type:', node.isOutcome ? 'outcome' : 'regular', 'Data:', data)
+          console.log('Impact count:', data?.length || 0)
+          if (data && data.length > 0) {
+            console.log('First impact:', data[0])
+          }
           setImpacts(data || [])
           setImpactsLoaded(true)
         })
         .catch(error => {
-          console.error('Failed to load impacts:', error)
+          console.error('Failed to load impacts for', node.id, 'Error:', error)
+          console.error('Error details:', error.response?.data || error.message)
           setImpactsLoaded(true)
         })
         .finally(() => {
@@ -188,6 +204,13 @@ const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborh
         })
     }
   }, [showImpacts, impactsLoaded, loadingImpacts, node.id, node.isOutcome])
+
+  // Reload impacts when filters change (for outcome events only)
+  useEffect(() => {
+    if (showImpacts && impactsLoaded && node.isOutcome) {
+      setImpactsLoaded(false)
+    }
+  }, [minConfidence, filterDirection])
 
   return (
     <div className="event-details" style={{
@@ -244,6 +267,49 @@ const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborh
         }}>
           {node.name}
         </h3>
+
+        {/* Outcome badges - shown when node is an outcome event */}
+        {node.isOutcome && (
+          <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            <span style={{
+              display: 'inline-block',
+              padding: '3px 10px',
+              backgroundColor: '#fbbf24',
+              color: '#fff',
+              borderRadius: '12px',
+              fontSize: '0.7rem',
+              fontWeight: '600'
+            }}>
+              ⭐ Outcome Event
+            </span>
+            {node.properties?.outcome_scenario && (
+              <span style={{
+                display: 'inline-block',
+                padding: '3px 10px',
+                backgroundColor: '#e0e7ff',
+                color: '#4338ca',
+                borderRadius: '12px',
+                fontSize: '0.7rem',
+                fontWeight: '600'
+              }}>
+                {node.properties.outcome_scenario}
+              </span>
+            )}
+            {node.properties?.is_actual_outcome && (
+              <span style={{
+                display: 'inline-block',
+                padding: '3px 10px',
+                backgroundColor: '#4CAF50',
+                color: '#fff',
+                borderRadius: '12px',
+                fontSize: '0.7rem',
+                fontWeight: '600'
+              }}>
+                ✓ Actual Outcome
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="details-content" style={{ padding: '16px 20px', overflowY: 'auto' }}>
@@ -397,6 +463,55 @@ const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborh
             </span>
           </button>
 
+          {/* Filters for outcome events */}
+          {showImpacts && node.isOutcome && (
+            <div style={{
+              padding: '8px 12px',
+              backgroundColor: '#f8f9fa',
+              borderTop: '1px solid #e9ecef',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
+            }}>
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#666', display: 'block', marginBottom: '4px' }}>
+                  Min Confidence: {(minConfidence * 100).toFixed(0)}%
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={minConfidence}
+                  onChange={(e) => setMinConfidence(parseFloat(e.target.value))}
+                  style={{ width: '100%' }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#666', display: 'block', marginBottom: '4px' }}>
+                  Direction
+                </label>
+                <select
+                  value={filterDirection || ''}
+                  onChange={(e) => setFilterDirection(e.target.value || null)}
+                  style={{
+                    width: '100%',
+                    padding: '4px 8px',
+                    fontSize: '0.8rem',
+                    borderRadius: '4px',
+                    border: '1px solid #ced4da'
+                  }}
+                >
+                  <option value="">All</option>
+                  <option value="positive">Positive</option>
+                  <option value="negative">Negative</option>
+                  <option value="mixed">Mixed</option>
+                  <option value="neutral">Neutral</option>
+                </select>
+              </div>
+            </div>
+          )}
+
           {showImpacts && (
             <div className="section-content">
               {loadingImpacts ? (
@@ -425,6 +540,12 @@ const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborh
                     const magnitude = impact.properties?.impact_magnitude || 0
                     const confidence = impact.properties?.confidence || 0
                     const reasoning = impact.properties?.reasoning || 'No reasoning'
+                    const evidenceCount = impact.properties?.evidence_count || 0
+                    const chainCount = impact.properties?.causal_chain_hypothesis_ids?.length || 0
+                    // For outcome events, source_id is the impacting event
+                    // For regular events, target_id is the outcome being impacted
+                    const eventId = node.isOutcome ? impact.source_id : impact.target_id
+                    const eventLabel = impact.label || `Event ${eventId?.substring(0, 8)}`
 
                     return (
                       <div key={index} className="impact-item" style={{
@@ -434,6 +555,19 @@ const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborh
                         borderRadius: '6px',
                         backgroundColor: '#fff'
                       }}>
+                        {/* Event name */}
+                        {eventId && (
+                          <div style={{
+                            fontSize: '0.8rem',
+                            fontWeight: '600',
+                            color: '#495057',
+                            marginBottom: '6px',
+                            paddingBottom: '6px',
+                            borderBottom: '1px solid #f0f0f0'
+                          }}>
+                            {node.isOutcome ? '← From: ' : '→ To: '}{eventLabel}
+                          </div>
+                        )}
                         <div style={{
                           display: 'flex',
                           alignItems: 'center',
@@ -469,10 +603,27 @@ const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborh
                           lineHeight: '1.4',
                           padding: '6px',
                           backgroundColor: '#f8f9fa',
-                          borderRadius: '4px'
+                          borderRadius: '4px',
+                          marginBottom: '6px'
                         }}>
                           {reasoning}
                         </div>
+                        {/* Metadata */}
+                        {(evidenceCount > 0 || chainCount > 0) && (
+                          <div style={{
+                            display: 'flex',
+                            gap: '10px',
+                            fontSize: '0.7rem',
+                            color: '#6c757d'
+                          }}>
+                            {evidenceCount > 0 && (
+                              <span>📄 {evidenceCount} evidence article{evidenceCount !== 1 ? 's' : ''}</span>
+                            )}
+                            {chainCount > 0 && (
+                              <span>🔗 {chainCount} causal link{chainCount !== 1 ? 's' : ''}</span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   })}

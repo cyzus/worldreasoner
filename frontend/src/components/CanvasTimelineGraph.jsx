@@ -175,8 +175,13 @@ const CanvasTimelineGraph = ({
         if (node.id === targetEventId) {
             return GraphStyles.nodeColors.target
         }
-        if (node.isOutcome) {
+        // Only actual outcome gets special color (large aura)
+        if (node.properties?.is_actual_outcome) {
             return GraphStyles.nodeColors.outcome || '#FFC107'
+        }
+        // Other outcome events get a subtle indicator color
+        if (node.isOutcome) {
+            return '#FDB022' // Lighter amber for non-actual outcomes
         }
 
         // Impact-based coloring
@@ -226,13 +231,14 @@ const CanvasTimelineGraph = ({
 
         const isTarget = node.id === targetEventId
         const isOutcome = node.isOutcome
+        const isActualOutcome = node.properties?.is_actual_outcome // Only actual outcome gets large aura
         const isSelected = selectedNode?.id === node.id
-        const size = (isTarget || isOutcome) ? NODE_TARGET_SIZE : NODE_BASE_SIZE
+        const size = (isTarget || isActualOutcome) ? NODE_TARGET_SIZE : NODE_BASE_SIZE
         const color = getNodeColor(node)
         const showCard = globalScale >= CARD_MIN_ZOOM
 
-        // Draw glow for target/outcome/selected
-        if (isTarget || isOutcome || isSelected) {
+        // Draw glow for target/actual outcome/selected
+        if (isTarget || isActualOutcome || isSelected) {
             ctx.beginPath()
             ctx.arc(node.x, node.y, size + (showCard ? 25 : 8), 0, 2 * Math.PI)
             const gradient = ctx.createRadialGradient(
@@ -242,7 +248,7 @@ const CanvasTimelineGraph = ({
             if (isTarget) {
                 gradient.addColorStop(0, 'rgba(255, 215, 0, 0.4)')
                 gradient.addColorStop(1, 'rgba(255, 215, 0, 0)')
-            } else if (isOutcome) {
+            } else if (isActualOutcome) {
                 gradient.addColorStop(0, 'rgba(255, 193, 7, 0.4)')
                 gradient.addColorStop(1, 'rgba(255, 193, 7, 0)')
             } else {
@@ -313,7 +319,7 @@ const CanvasTimelineGraph = ({
                 ctx.fillStyle = '#f59e0b'
                 ctx.textAlign = 'right'
                 ctx.fillText('⭐ TARGET', x + cardW - 8 / globalScale, y + 14 / globalScale)
-            } else if (isOutcome) {
+            } else if (isActualOutcome) {
                 ctx.font = `700 ${9 / globalScale}px Inter, sans-serif`
                 ctx.fillStyle = '#d97706' // darker amber
                 ctx.textAlign = 'right'
@@ -327,8 +333,8 @@ const CanvasTimelineGraph = ({
             ctx.fill()
 
             // Border
-            ctx.strokeStyle = (isTarget || isOutcome) ? '#b45309' : 'rgba(255, 255, 255, 0.8)'
-            ctx.lineWidth = (isTarget || isOutcome) ? 2 : 1.5
+            ctx.strokeStyle = (isTarget || isActualOutcome) ? '#b45309' : 'rgba(255, 255, 255, 0.8)'
+            ctx.lineWidth = (isTarget || isActualOutcome) ? 2 : 1.5
             ctx.stroke()
         }
     }, [getNodeColor, isNodeVisible, selectedNode, targetEventId])

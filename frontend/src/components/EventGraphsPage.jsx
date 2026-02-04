@@ -3,7 +3,6 @@ import ControlPanel from './ControlPanel'
 import QuestionList from './QuestionList'
 import CanvasTimelineGraph from './CanvasTimelineGraph'
 import EventDetails from './EventDetails'
-import OutcomeImpactPanel from './OutcomeImpactPanel'
 
 import TimeSeriesChart from './TimeSeriesChart'
 import ForecastGraph from './ForecastGraph'
@@ -422,14 +421,6 @@ function EventGraphsPage({
           node={selectedNode}
           onClose={() => onNodeClick(null)}
           onShowNeighborhood={onShowNeighborhood}
-        />
-      )}
-
-      {/* Outcome Impact Panel - shown when outcome node is selected */}
-      {selectedNode && selectedNode.isOutcome && (
-        <OutcomeImpactPanel
-          outcome={selectedNode}
-          onClose={() => onNodeClick(null)}
         />
       )}
     </div>
