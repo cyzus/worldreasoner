@@ -210,6 +210,50 @@ export const useGraphTraversal = (questions) => {
                 node.isOutcome = node.properties?.is_outcome || node.id === outcomeNodeId
             })
 
+            // Fetch and apply outcome impacts to color nodes
+            try {
+                const { fetchOutcomes } = await import('../api/graphApi')
+                const outcomes = await fetchOutcomes(questionId)
+
+                // For each outcome, fetch its impacts and color the source events
+                for (const outcome of outcomes) {
+                    try {
+                        const { fetchOutcomeImpacts } = await import('../api/graphApi')
+                        const impacts = await fetchOutcomeImpacts(outcome.id)
+
+                        // Apply impact colors to nodes
+                        impacts.forEach(impact => {
+                            const sourceNode = filteredNodes.find(n => n.id === impact.source_id)
+                            if (sourceNode) {
+                                const direction = impact.properties?.impact_direction
+                                console.log(`Setting impact for node ${sourceNode.name || sourceNode.id}:`, {
+                                    direction,
+                                    magnitude: impact.properties?.impact_magnitude,
+                                    targetOutcome: outcome.id
+                                })
+                                // If node already has an impact, keep the stronger one
+                                if (!sourceNode._impactDirection ||
+                                    (direction === 'positive' || direction === 'negative')) {
+                                    sourceNode._impactDirection = direction
+                                    sourceNode._impactMagnitude = impact.properties?.impact_magnitude || 0
+
+                                    // Verify it was set
+                                    if ((sourceNode.name || '').includes('Santa')) {
+                                        console.log(`✓ Impact set on Santa node:`, sourceNode._impactDirection, sourceNode)
+                                    }
+                                }
+                            }
+                        })
+                    } catch (err) {
+                        console.warn(`Failed to fetch impacts for outcome ${outcome.id}:`, err)
+                    }
+                }
+
+                console.log('Applied impact colors to nodes')
+            } catch (err) {
+                console.warn('Failed to fetch outcomes for impact coloring:', err)
+            }
+
             // Find orphaned nodes (nodes with no causal connections to other nodes)
             const connectedNodeIds = new Set()
             filteredLinks.forEach(link => {
@@ -244,6 +288,17 @@ export const useGraphTraversal = (questions) => {
             console.log(`Created ${syntheticLinks.length} synthetic links for orphaned nodes`)
             console.log(`Final graph data: ${filteredNodes.length} nodes, ${combinedLinks.length} links`)
 
+            // Verify Santa node has impact before setting graph data
+            const santaNode = filteredNodes.find(n => (n.name || '').includes('Santa'))
+            if (santaNode) {
+                console.log(`Santa node before setGraphData:`, {
+                    name: santaNode.name,
+                    hasImpactDirection: !!santaNode._impactDirection,
+                    impactDirection: santaNode._impactDirection,
+                    impactMagnitude: santaNode._impactMagnitude
+                })
+            }
+
             const questionFilteredData = {
                 nodes: filteredNodes,
                 links: combinedLinks,
@@ -270,6 +325,35 @@ export const useGraphTraversal = (questions) => {
                 // Also mark target_event_id as outcome for backward compatibility
                 node.isOutcome = node.properties?.is_outcome || node.id === outcomeNodeId
             })
+
+            // Fetch and apply outcome impacts to color nodes (fallback path)
+            try {
+                const { fetchOutcomes } = await import('../api/graphApi')
+                const outcomes = await fetchOutcomes(questionId)
+
+                for (const outcome of outcomes) {
+                    try {
+                        const { fetchOutcomeImpacts } = await import('../api/graphApi')
+                        const impacts = await fetchOutcomeImpacts(outcome.id)
+
+                        impacts.forEach(impact => {
+                            const sourceNode = filteredNodes.find(n => n.id === impact.source_id)
+                            if (sourceNode) {
+                                const direction = impact.properties?.impact_direction
+                                if (!sourceNode._impactDirection ||
+                                    (direction === 'positive' || direction === 'negative')) {
+                                    sourceNode._impactDirection = direction
+                                    sourceNode._impactMagnitude = impact.properties?.impact_magnitude || 0
+                                }
+                            }
+                        })
+                    } catch (err) {
+                        console.warn(`Failed to fetch impacts for outcome ${outcome.id}:`, err)
+                    }
+                }
+            } catch (err) {
+                console.warn('Failed to fetch outcomes for impact coloring (fallback):', err)
+            }
 
             const nodeIds = new Set(filteredNodes.map(n => n.id))
             const filteredLinks = fullGraphData.links.filter(link => {

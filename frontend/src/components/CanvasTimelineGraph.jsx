@@ -184,11 +184,32 @@ const CanvasTimelineGraph = ({
             return '#FDB022' // Lighter amber for non-actual outcomes
         }
 
+        // Debug logging for Santa node
+        if ((node.name || '').includes('Santa')) {
+            console.log(`Santa node in getNodeColor:`, {
+                name: node.name,
+                hasImpactDirection: !!node._impactDirection,
+                impactDirection: node._impactDirection,
+                impactMagnitude: node._impactMagnitude
+            })
+        }
+
         // Impact-based coloring
-        if (node._impact) {
-            if (node._impact === 'positive') return GraphStyles.linkColors.impact_positive
-            if (node._impact === 'negative') return GraphStyles.linkColors.impact_negative
-            if (node._impact === 'mixed') return GraphStyles.linkColors.impact_mixed
+        if (node._impactDirection) {
+            const color = node._impactDirection === 'positive' ? GraphStyles.linkColors.impact_positive
+                        : node._impactDirection === 'negative' ? GraphStyles.linkColors.impact_negative
+                        : node._impactDirection === 'mixed' ? GraphStyles.linkColors.impact_mixed
+                        : null
+            if (color && (node.name || '').includes('Santa')) {
+                console.log(`Santa Claus node color:`, {
+                    name: node.name,
+                    impactDirection: node._impactDirection,
+                    color,
+                    positive_color: GraphStyles.linkColors.impact_positive,
+                    negative_color: GraphStyles.linkColors.impact_negative
+                })
+            }
+            if (color) return color
         }
 
         const status = node.properties?.status || node.status
