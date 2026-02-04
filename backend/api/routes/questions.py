@@ -1014,12 +1014,14 @@ async def get_question_price_history(
                 )
                 response["turning_points"] = analysis["turning_points"]
                 response["sharp_movements"] = analysis["sharp_movements"]
+                response["lead_changes"] = analysis["lead_changes"]
                 response["curve_summary"] = analysis["summary"]
 
                 logger.info(
-                    f"Included turning points analysis: "
+                    f"Included price analysis: "
                     f"{len(analysis['turning_points'])} turning points, "
-                    f"{len(analysis['sharp_movements'])} sharp movements"
+                    f"{len(analysis['sharp_movements'])} sharp movements, "
+                    f"{len(analysis['lead_changes'])} lead changes"
                 )
 
         return response

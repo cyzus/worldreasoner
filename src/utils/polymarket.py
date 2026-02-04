@@ -235,29 +235,119 @@ def detect_sharp_movements(
     return filtered[:20]  # Limit to top 20 movements
 
 
+def detect_lead_changes(
+    price_history: List[Dict[str, Any]],
+    threshold: float = 0.5,
+    min_time_between_changes_hours: float = 1.0,
+) -> List[Dict[str, Any]]:
+    """
+    Detect when the leading outcome changes (price crosses threshold).
+
+    For binary markets, this detects when the market flips from "Yes likely"
+    to "No likely" (or vice versa) - i.e., when price crosses 50%.
+
+    Args:
+        price_history: List of price points [{"t": timestamp_seconds, "p": price_0_to_1}, ...]
+        threshold: Price level that defines lead change (default: 0.5 for binary markets)
+        min_time_between_changes_hours: Minimum hours between detected changes
+
+    Returns:
+        List of lead changes:
+        [
+            {
+                "timestamp": int,           # When the crossover happened
+                "price": float,             # Price at crossover
+                "direction": str,           # "above" or "below" (new state)
+                "previous_price": float,    # Price before crossover
+                "time_above_threshold": float,  # Hours spent above threshold before (if crossing below)
+            },
+            ...
+        ]
+    """
+    if not price_history or len(price_history) < 2:
+        return []
+
+    sorted_history = sorted(price_history, key=lambda x: x["t"])
+    min_time_gap = min_time_between_changes_hours * 3600
+
+    lead_changes = []
+    last_change_time = None
+
+    for i in range(1, len(sorted_history)):
+        prev_point = sorted_history[i - 1]
+        curr_point = sorted_history[i]
+
+        prev_price = prev_point["p"]
+        curr_price = curr_point["p"]
+        curr_time = curr_point["t"]
+
+        # Check for threshold crossing
+        crossed_above = prev_price < threshold <= curr_price
+        crossed_below = prev_price >= threshold > curr_price
+
+        if not (crossed_above or crossed_below):
+            continue
+
+        # Check time gap from last change
+        if last_change_time and (curr_time - last_change_time) < min_time_gap:
+            continue
+
+        # Calculate how long the market was in the previous state
+        time_in_previous_state = None
+        if i >= 2:
+            # Look back to find when it entered the previous state
+            for j in range(i - 2, -1, -1):
+                check_price = sorted_history[j]["p"]
+                if crossed_above and check_price >= threshold:
+                    # Was above, find when it went below
+                    time_in_previous_state = (curr_time - sorted_history[j + 1]["t"]) / 3600
+                    break
+                elif crossed_below and check_price < threshold:
+                    # Was below, find when it went above
+                    time_in_previous_state = (curr_time - sorted_history[j + 1]["t"]) / 3600
+                    break
+
+        lead_changes.append({
+            "timestamp": curr_time,
+            "price": round(curr_price, 4),
+            "direction": "above" if crossed_above else "below",
+            "previous_price": round(prev_price, 4),
+            "time_in_previous_state_hours": round(time_in_previous_state, 2) if time_in_previous_state else None,
+        })
+
+        last_change_time = curr_time
+
+    return lead_changes
+
+
 def analyze_price_curve(
     price_history: List[Dict[str, Any]],
     min_turning_point_change: float = 5.0,
     min_sharp_movement_change: float = 10.0,
+    lead_change_threshold: float = 0.5,
 ) -> Dict[str, Any]:
     """
-    Comprehensive analysis of a price curve, detecting turning points and sharp movements.
+    Comprehensive analysis of a price curve, detecting turning points, sharp movements,
+    and lead changes.
 
     Args:
         price_history: List of price points [{"t": timestamp_seconds, "p": price_0_to_1}, ...]
         min_turning_point_change: Minimum change for turning points (percentage points)
         min_sharp_movement_change: Minimum change for sharp movements (percentage points)
+        lead_change_threshold: Price threshold for lead changes (default: 0.5 for binary markets)
 
     Returns:
         {
             "turning_points": [...],
             "sharp_movements": [...],
+            "lead_changes": [...],
             "summary": {
                 "total_points": int,
                 "time_range_days": float,
                 "price_range": {"min": float, "max": float},
                 "volatility": float,  # Standard deviation of prices
                 "trend": str,  # "up", "down", or "sideways"
+                "lead_changes_count": int,  # Number of times lead changed
             }
         }
     """
@@ -265,6 +355,7 @@ def analyze_price_curve(
         return {
             "turning_points": [],
             "sharp_movements": [],
+            "lead_changes": [],
             "summary": None,
         }
 
@@ -311,9 +402,16 @@ def analyze_price_curve(
         min_change_pct=min_sharp_movement_change,
     )
 
+    # Detect lead changes (when market crosses threshold)
+    lead_changes = detect_lead_changes(
+        price_history,
+        threshold=lead_change_threshold,
+    )
+
     return {
         "turning_points": turning_points,
         "sharp_movements": sharp_movements,
+        "lead_changes": lead_changes,
         "summary": {
             "total_points": len(price_history),
             "time_range_days": round(time_range_days, 1),
@@ -323,6 +421,7 @@ def analyze_price_curve(
             },
             "volatility": round(volatility, 4),
             "trend": trend,
+            "lead_changes_count": len(lead_changes),
         },
     }
 

@@ -271,7 +271,12 @@ class EvidencePipeline(Pipeline):
             # 1. Get/Create outcomes
             outcome_events = self._get_or_create_outcomes(question, db)
 
-            # 2. Setup Agent
+            # 2. Fetch market analysis (turning points + lead changes) for Polymarket questions
+            market_analysis = await self._fetch_market_analysis(question)
+            turning_points = market_analysis.get("turning_points", [])
+            lead_changes = market_analysis.get("lead_changes", [])
+
+            # 3. Setup Agent
             hindsight_agent = HindsightAgent(
                 db_path=self.database_config.db_path,
                 max_steps=self.agent_max_steps,
@@ -280,7 +285,7 @@ class EvidencePipeline(Pipeline):
             )
             logger.debug(f"[{question.id}] Created context-aware HindsightAgent")
 
-            # 3. Create Prompt
+            # 4. Create Prompt
             prompt = self.prompts.get_agent_prompt(
                 question=question,
                 min_graph_depth=self.min_graph_depth,
@@ -288,17 +293,19 @@ class EvidencePipeline(Pipeline):
                 min_evidence_articles=self.evidence_config.min_evidence_articles,
                 confidence_threshold=self.evidence_config.causal_confidence_threshold,
                 outcome_events=outcome_events,
+                turning_points=turning_points,
+                lead_changes=lead_changes,
             )
 
             try:
-                # 4. Run Agent
+                # 5. Run Agent
                 logger.debug(f"[{question.id}] Starting HindsightAgent...")
                 result = await asyncio.to_thread(
                     hindsight_agent.run, prompt, run_id=question.id
                 )
                 logger.info(f"[{question.id}] Agent completed successfully")
 
-                # 5. Collect Results
+                # 6. Collect Results
                 evidence_articles, question_hypotheses = self._collect_agent_results(
                     question.id, db
                 )
@@ -309,16 +316,16 @@ class EvidencePipeline(Pipeline):
                     f"{len(question_hypotheses)} hypotheses"
                 )
 
-                # 6. Calculate Metrics
+                # 7. Calculate Metrics
                 article_metrics = self._calculate_article_metrics(
                     evidence_articles, question
                 )
-                
+
                 graph_metrics = self._calculate_graph_metrics(
                     question_hypotheses, question, db
                 )
 
-                # 7. Check Failure Conditions
+                # 8. Check Failure Conditions
                 status = "success"
                 failure_reason = None
                 
@@ -380,6 +387,79 @@ class EvidencePipeline(Pipeline):
         else:
             logger.debug(f"[{question.id}] Found {len(outcome_events)} existing outcome events")
         return outcome_events
+
+    async def _fetch_market_analysis(self, question: Question) -> Dict[str, Any]:
+        """Fetch market analysis (turning points + lead changes) for Polymarket questions.
+
+        Turning points and lead changes help guide evidence collection by identifying
+        when market sentiment shifted significantly.
+
+        Args:
+            question: Question to analyze
+
+        Returns:
+            Dict with "turning_points" and "lead_changes" lists, or empty dict if not applicable
+        """
+        empty_result = {"turning_points": [], "lead_changes": []}
+
+        # Only for Polymarket questions
+        if question.source != "polymarket":
+            return empty_result
+
+        metadata = question.metadata or {}
+        clob_token_ids = metadata.get("clob_token_ids", [])
+
+        if not clob_token_ids:
+            logger.debug(f"[{question.id}] No CLOB token IDs, skipping market analysis")
+            return empty_result
+
+        try:
+            from src.utils.polymarket import get_price_history_for_market, analyze_price_curve
+
+            # Fetch price history
+            price_history = await get_price_history_for_market(
+                clob_token_ids,
+                interval="max",
+                fidelity=720,
+            )
+
+            if not price_history:
+                return empty_result
+
+            # Analyze first token (primary outcome)
+            first_token_id = clob_token_ids[0]
+            history = price_history.get(first_token_id, [])
+
+            if not history:
+                return empty_result
+
+            # Run analysis
+            analysis = analyze_price_curve(
+                history,
+                min_turning_point_change=5.0,
+                min_sharp_movement_change=10.0,
+            )
+
+            turning_points = analysis.get("turning_points", [])
+            lead_changes = analysis.get("lead_changes", [])
+
+            if turning_points or lead_changes:
+                logger.info(
+                    f"[{question.id}] Market analysis: "
+                    f"{len(turning_points)} turning points, "
+                    f"{len(lead_changes)} lead changes"
+                )
+            else:
+                logger.debug(f"[{question.id}] No significant market events detected")
+
+            return {
+                "turning_points": turning_points,
+                "lead_changes": lead_changes,
+            }
+
+        except Exception as e:
+            logger.warning(f"[{question.id}] Failed to fetch market analysis: {e}")
+            return empty_result
 
     def _collect_agent_results(self, question_id: str, db: GenericDatabase):
         """Collect articles and hypotheses generated by the agent for a question."""

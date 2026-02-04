@@ -61,7 +61,7 @@ GROUND TRUTH (the KNOWN outcome): {ground_truth}
 
 AVAILABLE OUTCOME EVENTS (pre-created for this question):
 {outcome_events_info}
-
+{market_turning_points_section}
 When recording outcome impacts for events, use the outcome_event_ids listed above.
 
 PROCESS:
@@ -72,7 +72,7 @@ PROCESS:
    - Time window: {window_start} to {resolution_date} ({actual_window_days} days)
    - Target: {min_evidence_articles}+ high-quality articles across different dates
    - Use article_inspector to verify coverage; if insufficient, broaden search
-
+   {turning_points_evidence_hint}
 MANAGER AGENT: Inspect the evidence/article collection yourself. If insufficient, repeat step 1.
 
 NOTE - if evidence collection constantly fails, there's no way you can build a event graph. You should keep trying until you get enough evidence.
@@ -103,6 +103,8 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
             "actual_window_days",
             "ground_truth",
             "outcome_events_info",
+            "market_turning_points_section",
+            "turning_points_evidence_hint",
             "min_graph_depth",
             "min_evidence_articles",
             "confidence_threshold",
@@ -143,6 +145,8 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
         min_graph_depth: int,
         confidence_threshold: float,
         outcome_events: list = None,
+        turning_points: list = None,
+        lead_changes: list = None,
         **kwargs,
     ) -> str:
         """Generate prompt for HindsightAgent to build deep causal graph.
@@ -158,6 +162,8 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
             min_evidence_articles: Minimum evidence articles needed
             confidence_threshold: Minimum confidence for causal links
             outcome_events: List of pre-created outcome Event objects
+            turning_points: Optional list of detected market turning points from price analysis
+            lead_changes: Optional list of detected lead changes (when market crossed 50%)
             **kwargs: Additional context (not used)
 
         Returns:
@@ -182,6 +188,10 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
         # Format outcome events for prompt injection
         outcome_events_info = self._format_outcome_events(outcome_events)
 
+        # Format market analysis section (turning points + lead changes)
+        market_turning_points_section = self._format_turning_points_section(turning_points, lead_changes)
+        turning_points_evidence_hint = self._format_turning_points_hint(turning_points, lead_changes)
+
         # Build the prompt
         return self.AGENT_TEMPLATE.format(
             question_text=question.question_text,
@@ -190,6 +200,8 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
             actual_window_days=actual_window_days,
             ground_truth=str(question.ground_truth),
             outcome_events_info=outcome_events_info,
+            market_turning_points_section=market_turning_points_section,
+            turning_points_evidence_hint=turning_points_evidence_hint,
             min_graph_depth=min_graph_depth,
             min_evidence_articles=min_evidence_articles,
             confidence_threshold=confidence_threshold,
@@ -216,5 +228,116 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
             if event.is_actual_outcome:
                 is_actual_outcome = " [TARGET GROUND TRUTH]"
             lines.append(f"- {event.id}: {event.title}{scenario}{is_actual_outcome}")
+
+        return "\n".join(lines)
+
+    def _format_turning_points_section(self, turning_points: list, lead_changes: list = None) -> str:
+        """Format market turning points and lead changes as a prompt section.
+
+        Args:
+            turning_points: List of turning point dicts from price analysis
+            lead_changes: List of lead change dicts (when market crosses 50%)
+
+        Returns:
+            Formatted section string or empty string if no data
+        """
+        lines = []
+
+        # Format lead changes first (most significant market events)
+        if lead_changes:
+            from datetime import datetime
+
+            lines.append("\nLEAD CHANGES (when market prediction flipped):")
+            lines.append("These are moments when the favored outcome changed. CRITICAL events to investigate:")
+
+            for lc in lead_changes:
+                lc_time = datetime.fromtimestamp(lc["timestamp"])
+                direction = lc["direction"]
+                price_pct = lc["price"] * 100
+                prev_pct = lc["previous_price"] * 100
+
+                if direction == "above":
+                    desc = f"'Yes' became favored (crossed above 50%: {prev_pct:.1f}% -> {price_pct:.1f}%)"
+                else:
+                    desc = f"'No' became favored (crossed below 50%: {prev_pct:.1f}% -> {price_pct:.1f}%)"
+
+                time_info = ""
+                if lc.get("time_in_previous_state_hours"):
+                    time_info = f" [was in previous state for {lc['time_in_previous_state_hours']:.1f}h]"
+
+                lines.append(f"- {lc_time.strftime('%Y-%m-%d %H:%M')}: {desc}{time_info}")
+
+        # Format turning points
+        if turning_points:
+            from datetime import datetime
+
+            if lines:
+                lines.append("")  # Add spacing
+
+            lines.append("TURNING POINTS (significant price reversals):")
+            lines.append("These are moments when market sentiment shifted significantly:")
+
+            for tp in turning_points[:5]:  # Top 5 most significant
+                tp_time = datetime.fromtimestamp(tp["timestamp"])
+                tp_type = tp["type"].upper()
+
+                if tp["type"] == "peak":
+                    direction_desc = f"rose {tp['change_before']:.1f}pp then fell {abs(tp['change_after']):.1f}pp"
+                else:
+                    direction_desc = f"dropped {abs(tp['change_before']):.1f}pp then recovered {tp['change_after']:.1f}pp"
+
+                lines.append(
+                    f"- {tp_type} on {tp_time.strftime('%Y-%m-%d %H:%M')}: "
+                    f"price {direction_desc} (significance: {tp['significance']:.1f})"
+                )
+
+        if not lines:
+            return ""
+
+        return "\n".join(lines)
+
+    def _format_turning_points_hint(self, turning_points: list, lead_changes: list = None) -> str:
+        """Format evidence collection hint based on turning points and lead changes.
+
+        Args:
+            turning_points: List of turning point dicts from price analysis
+            lead_changes: List of lead change dicts
+
+        Returns:
+            Hint string for evidence collection or empty string
+        """
+        from datetime import datetime
+
+        # Collect all significant dates, prioritizing lead changes
+        priority_dates = []
+        critical_dates = []
+
+        # Lead changes are CRITICAL - the market prediction actually flipped
+        if lead_changes:
+            for lc in lead_changes:
+                lc_time = datetime.fromtimestamp(lc["timestamp"])
+                date_str = lc_time.strftime("%Y-%m-%d")
+                if date_str not in critical_dates:
+                    critical_dates.append(date_str)
+
+        # Turning points are important but less critical
+        if turning_points:
+            for tp in turning_points[:5]:
+                tp_time = datetime.fromtimestamp(tp["timestamp"])
+                date_str = tp_time.strftime("%Y-%m-%d")
+                if date_str not in priority_dates and date_str not in critical_dates:
+                    priority_dates.append(date_str)
+
+        if not critical_dates and not priority_dates:
+            return ""
+
+        lines = []
+        if critical_dates:
+            lines.append(f"\n   CRITICAL DATES (lead changes - market prediction flipped): {', '.join(critical_dates)}")
+            lines.append("   These are the MOST IMPORTANT dates - find what news caused the market to flip its prediction.")
+
+        if priority_dates:
+            lines.append(f"\n   PRIORITY DATES (from turning points): {', '.join(priority_dates)}")
+            lines.append("   Search for news around these dates - they mark significant sentiment shifts.")
 
         return "\n".join(lines)
