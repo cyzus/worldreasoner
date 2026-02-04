@@ -183,14 +183,26 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         # STAGE 2: Fetch content (only if URL not found)
         # This avoids passing large content through the LLM
         try:
-            content = self.web_visitor.forward(url)
-            if not content or len(content.strip()) < 100:
-                # Return error as ArticleOutput with minimal required fields
+            web_output = self.web_visitor.forward(url)
+            
+            # WebFetchTool returns WebFetchOutput object now
+            if not web_output.success or not web_output.content:
+                # Return error as ArticleOutput
+                error_msg = web_output.error or "Empty content fetched"
                 return ArticleOutput(
                     id="error",
                     title=title,
                     url=url,
-                    status=f"error: Failed to fetch content from {url}",
+                    status=f"error: {error_msg}",
+                )
+            
+            content = web_output.content
+            if len(content.strip()) < 100:
+                return ArticleOutput(
+                    id="error",
+                    title=title,
+                    url=url,
+                    status=f"error: Content too short ({len(content)} chars)",
                 )
         except Exception as e:
             return ArticleOutput(
