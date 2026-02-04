@@ -453,37 +453,22 @@ class EvidencePipeline(Pipeline):
             logger.warning(f"[{question.id}] No hypotheses - graph quality: 0.0")
             return {"score": 0.0, "max_depth": 0}
 
-        target_event_id = question.target_event_id
+        # Resolve target event using shared utility
+        from src.utils.graph_analysis import resolve_target_event_id
+        target_event_id = resolve_target_event_id(question, db, hypotheses)
         
-        # Priority 1: Check outcome_event_ids
-        if not target_event_id and question.outcome_event_ids:
-             # Try to find actual outcome specifically
-             actual_outcomes = [
-                 eid for eid in question.outcome_event_ids 
-                 if (evt := db.get(Event, eid)) and evt.is_actual_outcome
-             ]
-             if actual_outcomes:
-                 target_event_id = actual_outcomes[0]
-             elif question.outcome_event_ids:
-                 target_event_id = question.outcome_event_ids[0]
-
-        # Priority 2: Infer from graph
-        if not target_event_id:
-            from src.utils.graph_analysis import infer_target_event_id
-            target_event_id = infer_target_event_id(hypotheses)
-            
-            if target_event_id:
-                logger.info(f"[{question.id}] Inferred target event: {target_event_id}")
-                try:
-                    question.target_event_id = target_event_id
-                    db.save(Question, question)
-                except Exception as e:
-                    logger.warning(f"[{question.id}] Failed to persist inferred target: {e}")
-            else:
-                # Fallback to arbitrary target
-                all_targets = set(h.target_event_id for h in hypotheses)
-                if all_targets:
-                    target_event_id = list(all_targets)[0]
+        if target_event_id and not question.target_event_id:
+             logger.info(f"[{question.id}] Setting target event: {target_event_id}")
+             try:
+                 question.target_event_id = target_event_id
+                 db.save(Question, question)
+             except Exception as e:
+                 logger.warning(f"[{question.id}] Failed to persist target: {e}")
+        else:
+            # Fallback to arbitrary target
+            all_targets = set(h.target_event_id for h in hypotheses)
+            if all_targets:
+                target_event_id = list(all_targets)[0]
 
         from src.utils.graph_analysis import calculate_graph_quality
         metrics = calculate_graph_quality(

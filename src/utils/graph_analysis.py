@@ -211,3 +211,51 @@ def infer_target_event_id(hypotheses: List[CausalHypothesis]) -> Optional[str]:
     # If no sink found (e.g. cycles), we might want to return None or fallback
     # For now, return None and let caller decide fallback strategy
     return None
+
+
+def resolve_target_event_id(
+    question: Optional["Question"], 
+    db: Any, 
+    hypotheses: Optional[List[CausalHypothesis]] = None
+) -> Optional[str]:
+    """Resolve the target event ID (outcome) for a question. 
+    
+    Standardized logic that prioritizes:
+    1. outcome_event_ids (checking for actual outcome)
+    2. legacy target_event_id
+    3. inferred from graph structure
+    
+    Args:
+        question: The Question object (optional)
+        db: Database interface (must have .get(Event, id) method)
+        hypotheses: Optional list of hypotheses for inference fallback
+        
+    Returns:
+        Target event ID or None
+    """
+    from src.domain.models import Event
+    
+    target_event_id = None
+    
+    if question:
+        # Priority 1: Check outcome_event_ids (new standard)
+        if question.outcome_event_ids:
+             # Try to find actual outcome specifically
+             actual_outcomes = [
+                 eid for eid in question.outcome_event_ids 
+                 if (evt := db.get(Event, eid)) and evt.is_actual_outcome
+             ]
+             if actual_outcomes:
+                 target_event_id = actual_outcomes[0]
+             elif question.outcome_event_ids:
+                 target_event_id = question.outcome_event_ids[0]
+
+        # Priority 2: Legacy target_event_id
+        if not target_event_id and question.target_event_id:
+            target_event_id = question.target_event_id
+
+    # Priority 3: Infer from graph
+    if not target_event_id and hypotheses:
+        target_event_id = infer_target_event_id(hypotheses)
+        
+    return target_event_id

@@ -94,32 +94,10 @@ class GraphInspectorTool(DatabaseAwareTool):
         # Build graph structure and statistics using shared utility
         from src.utils.graph_analysis import (
             analyze_graph_structure,
-            infer_target_event_id,
+            resolve_target_event_id,
         )
 
-        target_event_id = None
-        
-        # Priority 1: Check if question has outcome_event_ids (new standard)
-        if question and question.outcome_event_ids:
-            # First look for actual outcome
-            actual_outcomes = [
-                eid for eid in question.outcome_event_ids 
-                if (evt := self.db.get(Event, eid)) and evt.is_actual_outcome
-            ]
-            if actual_outcomes:
-                target_event_id = actual_outcomes[0]
-            # Fallback to first outcome if no actual outcome set yet
-            elif question.outcome_event_ids:
-                target_event_id = question.outcome_event_ids[0]
-        
-        # Priority 2: Legacy target_event_id
-        if not target_event_id and question and question.target_event_id:
-             # Verify it's actually an outcome or sink node
-             target_event_id = question.target_event_id
-
-        # Priority 3: Infer from graph structure
-        if not target_event_id and question_hypotheses:
-            target_event_id = infer_target_event_id(question_hypotheses)
+        target_event_id = resolve_target_event_id(question, self.db, question_hypotheses)
 
         graph_stats = analyze_graph_structure(question_hypotheses, target_event_id)
         graph_stats["question_id"] = self.question_id  # Add question_id for context
