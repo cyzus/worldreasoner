@@ -173,23 +173,24 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
                 feed_url=source.url, max_items=self.config.max_articles_per_source or 5
             )
 
-            # Parse response
-            try:
-                rss_json = json.loads(rss_resp)
-            except Exception as e:
-                logger.error(
-                    f"[RSS] Failed to parse RSS response for {source.name}: {e}"
-                )
+            # rss_resp is already an RssFetchOutput object, not a JSON string.
+            # No need to parse it.
+            rss_data = rss_resp
+
+            if rss_data.total_items == 0:
+                logger.warning(f"[RSS] No items returned for {source.name}")
                 return 0
 
-            # Check for errors
-            if "error" in rss_json:
-                logger.error(
-                    f"[RSS] Error from feed {source.name}: {rss_json['error']}"
-                )
-                return 0
+            # Convert Pydantic items to dicts for _fetch_rss_item_async
+            # Using model_dump() for Pydantic v2 compatibility (or .dict() if needed)
+            items = []
+            for item in rss_data.items:
+                try:
+                    items.append(item.model_dump())
+                except AttributeError:
+                    # Fallback for Pydantic v1
+                    items.append(item.dict())
 
-            items = rss_json.get("items", [])
             logger.info(f"[RSS] Feed returned {len(items)} items for {source.name}")
 
             # Fetch all items concurrently using asyncio.gather
