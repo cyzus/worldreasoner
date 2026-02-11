@@ -8,12 +8,224 @@ from datetime import datetime, timezone
 from src.utils.logging import logger
 
 
+def _detect_turning_points_local(
+    sorted_history: List[Dict[str, Any]],
+    min_change_pct: float = 5.0,
+    lookback_window: int = 5,
+    lookahead_window: int = 5,
+    min_time_between_points_hours: float = 6.0,
+) -> List[Dict[str, Any]]:
+    """Original local peak/trough turning point detector."""
+    if not sorted_history or len(sorted_history) < 3:
+        return []
+
+    n_points = len(sorted_history)
+    effective_lookback = min(lookback_window, max(2, (n_points - 1) // 3))
+    effective_lookahead = min(lookahead_window, max(2, (n_points - 1) // 3))
+
+    turning_points = []
+    min_time_gap = min_time_between_points_hours * 3600
+
+    for i in range(effective_lookback, len(sorted_history) - effective_lookahead):
+        current = sorted_history[i]
+        current_price = current["p"]
+        current_time = current["t"]
+
+        lookback_prices = [sorted_history[j]["p"] for j in range(i - effective_lookback, i)]
+        lookahead_prices = [sorted_history[j]["p"] for j in range(i + 1, i + effective_lookahead + 1)]
+
+        first_lookback_price = sorted_history[i - effective_lookback]["p"]
+        last_lookahead_price = sorted_history[i + effective_lookahead]["p"]
+
+        is_peak = (
+            current_price >= max(lookback_prices) and
+            current_price >= max(lookahead_prices)
+        )
+
+        is_trough = (
+            current_price <= min(lookback_prices) and
+            current_price <= min(lookahead_prices)
+        )
+
+        if not (is_peak or is_trough):
+            continue
+
+        change_before = (current_price - first_lookback_price) * 100
+        change_after = (last_lookahead_price - current_price) * 100
+
+        if is_peak:
+            if change_before <= 0 or change_after >= 0:
+                continue
+            significance = abs(change_before) + abs(change_after)
+        else:
+            if change_before >= 0 or change_after <= 0:
+                continue
+            significance = abs(change_before) + abs(change_after)
+
+        if significance < min_change_pct:
+            continue
+
+        candidate = {
+            "timestamp": current_time,
+            "price": current_price,
+            "type": "peak" if is_peak else "trough",
+            "change_before": round(change_before, 2),
+            "change_after": round(change_after, 2),
+            "significance": round(significance, 2),
+        }
+
+        if turning_points:
+            last_time = turning_points[-1]["timestamp"]
+            if current_time - last_time < min_time_gap:
+                if significance > turning_points[-1]["significance"]:
+                    turning_points[-1] = candidate
+                continue
+
+        turning_points.append(candidate)
+
+    turning_points.sort(key=lambda x: x["significance"], reverse=True)
+    return turning_points
+
+
+def _detect_turning_points_pelt_bic(
+    sorted_history: List[Dict[str, Any]],
+    min_change_pct: float = 5.0,
+    lookback_window: int = 5,
+    lookahead_window: int = 5,
+    min_time_between_points_hours: float = 6.0,
+    pelt_min_segment_points: int = 5,
+    pelt_jump: int = 1,
+    pelt_penalty_scale: float = 1.0,
+) -> List[Dict[str, Any]]:
+    """
+    Detect turning points using PELT changepoint segmentation with a BIC-style penalty.
+
+    This method first finds regime boundaries with PELT, then extracts local peaks/troughs
+    around those boundaries and applies the same reversal/significance checks as the
+    original heuristic detector.
+    """
+    if not sorted_history or len(sorted_history) < 3:
+        return []
+
+    try:
+        import numpy as np
+        import ruptures as rpt
+    except ImportError:
+        logger.warning("ruptures not installed; falling back to local turning-point detection")
+        return _detect_turning_points_local(
+            sorted_history=sorted_history,
+            min_change_pct=min_change_pct,
+            lookback_window=lookback_window,
+            lookahead_window=lookahead_window,
+            min_time_between_points_hours=min_time_between_points_hours,
+        )
+
+    n_points = len(sorted_history)
+    effective_lookback = min(lookback_window, max(2, (n_points - 1) // 3))
+    effective_lookahead = min(lookahead_window, max(2, (n_points - 1) // 3))
+    min_time_gap = min_time_between_points_hours * 3600
+
+    prices = np.array([p["p"] for p in sorted_history], dtype=float)
+    signal = prices.reshape(-1, 1)
+
+    # Robust noise estimate from first differences (MAD), with std fallback.
+    diffs = np.diff(prices)
+    if diffs.size > 0:
+        mad = np.median(np.abs(diffs - np.median(diffs)))
+        sigma = mad / 0.6745 if mad > 0 else float(np.std(diffs))
+    else:
+        sigma = 0.0
+    if sigma <= 1e-12:
+        sigma = float(np.std(prices))
+    if sigma <= 1e-12:
+        sigma = 1e-6
+
+    # BIC-style penalty for mean-shift segmentation (scaled for tuning).
+    penalty = max(1e-8, pelt_penalty_scale * np.log(max(n_points, 2)) * (sigma ** 2))
+
+    algo = rpt.Pelt(
+        model="l2",
+        min_size=max(2, pelt_min_segment_points),
+        jump=max(1, pelt_jump),
+    ).fit(signal)
+
+    breakpoints = algo.predict(pen=penalty)
+    boundaries = [b for b in breakpoints[:-1] if 0 < b < n_points]
+    if not boundaries:
+        return []
+
+    turning_points = []
+    for b in boundaries:
+        left_anchor = max(0, b - effective_lookback)
+        right_anchor = min(n_points - 1, b + effective_lookahead)
+        if right_anchor - left_anchor < 2:
+            continue
+
+        window_prices = prices[left_anchor:right_anchor + 1]
+        peak_idx = int(left_anchor + int(np.argmax(window_prices)))
+        trough_idx = int(left_anchor + int(np.argmin(window_prices)))
+
+        peak_price = prices[peak_idx]
+        trough_price = prices[trough_idx]
+        left_price = prices[left_anchor]
+        right_price = prices[right_anchor]
+
+        peak_before = (peak_price - left_price) * 100
+        peak_after = (right_price - peak_price) * 100
+        peak_valid = peak_before > 0 and peak_after < 0
+        peak_sig = abs(peak_before) + abs(peak_after) if peak_valid else 0.0
+
+        trough_before = (trough_price - left_price) * 100
+        trough_after = (right_price - trough_price) * 100
+        trough_valid = trough_before < 0 and trough_after > 0
+        trough_sig = abs(trough_before) + abs(trough_after) if trough_valid else 0.0
+
+        candidate = None
+        if peak_valid and peak_sig >= min_change_pct and peak_sig >= trough_sig:
+            candidate = {
+                "timestamp": sorted_history[peak_idx]["t"],
+                "price": float(peak_price),
+                "type": "peak",
+                "change_before": round(float(peak_before), 2),
+                "change_after": round(float(peak_after), 2),
+                "significance": round(float(peak_sig), 2),
+            }
+        elif trough_valid and trough_sig >= min_change_pct:
+            candidate = {
+                "timestamp": sorted_history[trough_idx]["t"],
+                "price": float(trough_price),
+                "type": "trough",
+                "change_before": round(float(trough_before), 2),
+                "change_after": round(float(trough_after), 2),
+                "significance": round(float(trough_sig), 2),
+            }
+
+        if candidate is None:
+            continue
+
+        if turning_points:
+            last_time = turning_points[-1]["timestamp"]
+            if candidate["timestamp"] - last_time < min_time_gap:
+                if candidate["significance"] > turning_points[-1]["significance"]:
+                    turning_points[-1] = candidate
+                continue
+
+        turning_points.append(candidate)
+
+    turning_points.sort(key=lambda x: x["significance"], reverse=True)
+    return turning_points
+
+
 def detect_turning_points(
     price_history: List[Dict[str, Any]],
     min_change_pct: float = 5.0,
     lookback_window: int = 5,
     lookahead_window: int = 5,
     min_time_between_points_hours: float = 6.0,
+    method: str = "pelt_bic",
+    pelt_min_segment_points: int = 5,
+    pelt_jump: int = 1,
+    pelt_penalty_scale: float = 1.0,
 ) -> List[Dict[str, Any]]:
     """
     Detect major turning points in a price curve.
@@ -28,6 +240,10 @@ def detect_turning_points(
         lookback_window: Number of points to look back for comparison (adaptive for sparse data)
         lookahead_window: Number of points to look ahead for confirmation (adaptive for sparse data)
         min_time_between_points_hours: Minimum hours between detected turning points
+        method: Turning point method: "pelt_bic" (default) or "local"
+        pelt_min_segment_points: Minimum segment size for PELT (used when method="pelt_bic")
+        pelt_jump: PELT jump parameter for speed/precision tradeoff
+        pelt_penalty_scale: Multiplier for BIC-style penalty (higher = fewer changepoints)
 
     Returns:
         List of turning points with metadata:
@@ -46,101 +262,28 @@ def detect_turning_points(
     if not price_history or len(price_history) < 3:
         return []
 
-    # Sort by timestamp to ensure chronological order
     sorted_history = sorted(price_history, key=lambda x: x["t"])
 
-    # Adapt window sizes for sparse data
-    # Need at least 3 points (1 before, current, 1 after) to detect a turning point
-    n_points = len(sorted_history)
-    # Scale windows based on data density, minimum of 2 points each side
-    effective_lookback = min(lookback_window, max(2, (n_points - 1) // 3))
-    effective_lookahead = min(lookahead_window, max(2, (n_points - 1) // 3))
-
-    turning_points = []
-    min_time_gap = min_time_between_points_hours * 3600  # Convert to seconds
-
-    for i in range(effective_lookback, len(sorted_history) - effective_lookahead):
-        current = sorted_history[i]
-        current_price = current["p"]
-        current_time = current["t"]
-
-        # Get prices in lookback and lookahead windows
-        lookback_prices = [sorted_history[j]["p"] for j in range(i - effective_lookback, i)]
-        lookahead_prices = [sorted_history[j]["p"] for j in range(i + 1, i + effective_lookahead + 1)]
-
-        # Get the first and last prices in each window for change calculation
-        first_lookback_price = sorted_history[i - effective_lookback]["p"]
-        last_lookahead_price = sorted_history[i + effective_lookahead]["p"]
-
-        # Check if local maximum (peak) - higher than all surrounding points
-        is_peak = (
-            current_price >= max(lookback_prices) and
-            current_price >= max(lookahead_prices)
+    normalized_method = (method or "pelt_bic").strip().lower()
+    if normalized_method in {"local", "heuristic"}:
+        return _detect_turning_points_local(
+            sorted_history=sorted_history,
+            min_change_pct=min_change_pct,
+            lookback_window=lookback_window,
+            lookahead_window=lookahead_window,
+            min_time_between_points_hours=min_time_between_points_hours,
         )
 
-        # Check if local minimum (trough) - lower than all surrounding points
-        is_trough = (
-            current_price <= min(lookback_prices) and
-            current_price <= min(lookahead_prices)
-        )
-
-        if not (is_peak or is_trough):
-            continue
-
-        # Calculate change from first lookback to current (before)
-        # and from current to last lookahead (after)
-        change_before = (current_price - first_lookback_price) * 100
-        change_after = (last_lookahead_price - current_price) * 100
-
-        # For a true peak: price went up, then went down
-        # change_before should be positive, change_after should be negative
-        if is_peak:
-            if change_before <= 0 or change_after >= 0:
-                continue  # Not a real reversal
-            # Significance is the total swing (up then down)
-            significance = abs(change_before) + abs(change_after)
-
-        # For a true trough: price went down, then went up
-        # change_before should be negative, change_after should be positive
-        else:  # is_trough
-            if change_before >= 0 or change_after <= 0:
-                continue  # Not a real reversal
-            # Significance is the total swing (down then up)
-            significance = abs(change_before) + abs(change_after)
-
-        # Check if this turning point is significant enough
-        if significance < min_change_pct:
-            continue
-
-        # Check time gap from last turning point
-        if turning_points:
-            last_time = turning_points[-1]["timestamp"]
-            if current_time - last_time < min_time_gap:
-                # Keep the more significant one
-                if significance > turning_points[-1]["significance"]:
-                    turning_points[-1] = {
-                        "timestamp": current_time,
-                        "price": current_price,
-                        "type": "peak" if is_peak else "trough",
-                        "change_before": round(change_before, 2),
-                        "change_after": round(change_after, 2),
-                        "significance": round(significance, 2),
-                    }
-                continue
-
-        turning_points.append({
-            "timestamp": current_time,
-            "price": current_price,
-            "type": "peak" if is_peak else "trough",
-            "change_before": round(change_before, 2),
-            "change_after": round(change_after, 2),
-            "significance": round(significance, 2),
-        })
-
-    # Sort by significance and return top turning points
-    turning_points.sort(key=lambda x: x["significance"], reverse=True)
-
-    return turning_points
+    return _detect_turning_points_pelt_bic(
+        sorted_history=sorted_history,
+        min_change_pct=min_change_pct,
+        lookback_window=lookback_window,
+        lookahead_window=lookahead_window,
+        min_time_between_points_hours=min_time_between_points_hours,
+        pelt_min_segment_points=pelt_min_segment_points,
+        pelt_jump=pelt_jump,
+        pelt_penalty_scale=pelt_penalty_scale,
+    )
 
 
 def detect_sharp_movements(
@@ -325,6 +468,7 @@ def analyze_price_curve(
     min_turning_point_change: float = 5.0,
     min_sharp_movement_change: float = 10.0,
     lead_change_threshold: float = 0.5,
+    turning_point_method: str = "pelt_bic",
 ) -> Dict[str, Any]:
     """
     Comprehensive analysis of a price curve, detecting turning points, sharp movements,
@@ -335,6 +479,7 @@ def analyze_price_curve(
         min_turning_point_change: Minimum change for turning points (percentage points)
         min_sharp_movement_change: Minimum change for sharp movements (percentage points)
         lead_change_threshold: Price threshold for lead changes (default: 0.5 for binary markets)
+        turning_point_method: Turning point method: "pelt_bic" (default) or "local"
 
     Returns:
         {
@@ -394,6 +539,7 @@ def analyze_price_curve(
     turning_points = detect_turning_points(
         price_history,
         min_change_pct=min_turning_point_change,
+        method=turning_point_method,
     )
 
     # Detect sharp movements
