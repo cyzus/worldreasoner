@@ -288,6 +288,7 @@ function EventGraphsPage({
                 display: 'flex',
                 gap: '16px',
                 flexDirection: graphView === 'both' ? 'row' : 'column',
+                flexWrap: graphView === 'both' ? 'wrap' : 'nowrap',
                 minHeight: '500px',
                 height: '60vh',
                 marginBottom: '16px'
@@ -296,7 +297,7 @@ function EventGraphsPage({
                 {(graphView === 'evidence' || graphView === 'both') && (
                   <div className="graph-container" style={{
                     flex: 1,
-                    minWidth: graphView === 'both' ? '400px' : 'auto',
+                    minWidth: graphView === 'both' ? 'min(400px, 100%)' : '0',
                     minHeight: 0,
                     overflow: 'hidden',
                     display: 'flex',
@@ -332,7 +333,7 @@ function EventGraphsPage({
                 {(graphView === 'forecast' || graphView === 'both') && (
                   <div className="graph-container" style={{
                     flex: 1,
-                    minWidth: graphView === 'both' ? '400px' : 'auto',
+                    minWidth: graphView === 'both' ? 'min(400px, 100%)' : '0',
                     minHeight: 0,
                     overflow: 'hidden',
                     display: 'flex',

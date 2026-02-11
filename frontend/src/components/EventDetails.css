@@ -2,7 +2,7 @@
   position: absolute;
   top: 1rem;
   right: 1rem;
-  width: 450px;
+  width: min(450px, calc(100% - 2rem));
   background: #ffffff;
   border: 1px solid #dee2e6;
   border-radius: 8px;
@@ -449,4 +449,19 @@
 .section-content::-webkit-scrollbar-thumb:hover,
 .details-content::-webkit-scrollbar-thumb:hover {
   background: #adb5bd;
+}
+
+@media (max-width: 768px) {
+  .event-details {
+    top: 0.5rem;
+    right: 0.5rem;
+    left: 0.5rem;
+    width: auto;
+    max-height: calc(100% - 1rem);
+  }
+
+  .details-header,
+  .details-content {
+    padding: 0.875rem;
+  }
 }

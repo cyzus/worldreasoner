@@ -7,6 +7,7 @@
 .event-graphs-page .nested-tabs {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
   margin: 16px 20px 0 20px;
   background: white;
   padding: 0 20px;
@@ -80,4 +81,19 @@
 .page-main::-webkit-scrollbar-thumb:hover,
 .scroll-container::-webkit-scrollbar-thumb:hover {
   background: #a0a0a0;
+}
+
+@media (max-width: 768px) {
+  .event-graphs-page .nested-tabs {
+    margin: 8px 8px 0;
+    padding: 8px;
+    gap: 6px;
+  }
+
+  .event-graphs-page .nested-tab {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 140px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
 }

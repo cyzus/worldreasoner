@@ -1,8 +1,9 @@
 .app {
   display: flex;
   flex-direction: column;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   background: #f8f9fa;
 }
 
@@ -28,6 +29,7 @@
   display: flex;
   align-items: center;
   gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .header-divider {
@@ -66,6 +68,7 @@
   gap: 0.75rem;
   font-size: 0.8125rem;
   color: #495057;
+  flex-wrap: wrap;
 }
 
 .stats-bar span {
@@ -96,6 +99,7 @@
 .top-tabs {
   display: flex;
   gap: 0;
+  flex-wrap: wrap;
   background: #ffffff;
   border-bottom: 2px solid #dee2e6;
   padding: 0 2rem;
@@ -298,8 +302,8 @@
 
 /* Standard sidebar (fixed width, scrollable) */
 .page-sidebar {
-  width: 400px;
-  min-width: 400px;
+  width: clamp(280px, 32vw, 400px);
+  min-width: 280px;
   display: flex;
   flex-direction: column;
   background: white;
@@ -351,4 +355,93 @@
 
 .section-card-body {
   padding: 16px;
+}
+
+@media (max-width: 1024px) {
+  .app-header {
+    padding: 1rem 1.25rem;
+  }
+
+  .top-tabs {
+    padding: 0 1rem;
+  }
+
+  .top-tab-btn {
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+  }
+
+  .page-sidebar {
+    width: 320px;
+    min-width: 260px;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-header {
+    padding: 0.875rem 0.875rem 0.75rem;
+    align-items: flex-start;
+  }
+
+  .app-header h1 {
+    font-size: 1.25rem;
+  }
+
+  .header-info-bar {
+    gap: 0.5rem;
+  }
+
+  .header-divider {
+    display: none;
+  }
+
+  .stats-bar span {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  .top-tabs {
+    padding: 0 0.5rem;
+    gap: 0.25rem;
+    border-bottom-width: 1px;
+  }
+
+  .top-tab-btn {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: 140px;
+    text-align: center;
+    padding: 0.625rem 0.5rem;
+    top: 0;
+    border-bottom-width: 2px;
+  }
+
+  .page-header {
+    padding: 12px;
+    min-height: 52px;
+  }
+
+  .page-header h2 {
+    font-size: 1.1rem;
+  }
+
+  .page-content {
+    flex-direction: column;
+  }
+
+  .page-sidebar {
+    width: 100%;
+    min-width: 0;
+    border-right: none;
+    border-bottom: 1px solid #dee2e6;
+    box-shadow: none;
+    max-height: 45vh;
+  }
+
+  .page-main {
+    min-height: 0;
+  }
+
+  .scroll-container {
+    padding: 12px;
+  }
 }

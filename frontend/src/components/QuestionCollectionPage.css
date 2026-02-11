@@ -27,6 +27,7 @@
 .source-tabs {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
   margin: 0 20px 12px 20px;
   border-bottom: 2px solid #e0e0e0;
   padding-bottom: 0;
@@ -82,3 +83,30 @@
 
 /* Internal panel styling (overriding global card style slightly if needed) */
 /* Global page-sidebar and page-main handle the layout now */
+
+@media (max-width: 768px) {
+  .collection-header {
+    margin: 8px;
+    padding: 10px 12px;
+  }
+
+  .collection-header h2 {
+    font-size: 18px;
+  }
+
+  .source-tabs {
+    margin: 0 8px 8px;
+    padding: 8px;
+    gap: 6px;
+    border-bottom-width: 1px;
+    border-radius: 8px;
+  }
+
+  .source-tab {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 120px;
+    padding: 8px 10px;
+    font-size: 13px;
+    top: 0;
+  }
+}
