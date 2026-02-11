@@ -60,7 +60,6 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
         "occurred_date": {
             "type": "string",
             "description": "When event occurred (ISO 8601 WITH timezone, e.g. 2025-11-27T14:30:00Z or 2025-11-27T14:30:00+00:00; MUST include 'Z' or an explicit offset)",
-            "nullable": True,
         },
         "event_type": {
             "type": "string",
@@ -134,7 +133,7 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
         description: str,
         domain: str,
         source_article_ids: str,
-        occurred_date: str = None,
+        occurred_date: str,
         event_type: str = None,
         is_outcome: bool = False,
         outcome_impacts: str = None,
