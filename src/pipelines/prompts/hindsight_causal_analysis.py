@@ -18,7 +18,7 @@ Guidelines:
 """
 
 GRAPH_AGENT_DESCRIPTION = """
-Specialist agent for building deep causal graphs and analyzing outcome impacts.
+Specialist agent for building deep event graphs and analyzing outcome impacts.
 
 Guidelines:
 - Call get_question_articles to get article IDs
