@@ -7,6 +7,7 @@ import { timeMonth, timeWeek, timeDay } from 'd3-time'
 import { timeFormat } from 'd3-time-format'
 import { line, curveMonotoneX } from 'd3-shape'
 import { pointer } from 'd3-selection'
+import { GraphStyles } from '../styles/GraphStyles'
 
 /**
  * TimeSeriesChart - Displays Polymarket price history with event markers
@@ -333,9 +334,39 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
 
     // Add event markers (if events provided)
     if (eventsInTimeRange.length > 0) {
+      const getEventMarkerColor = (event, isTarget) => {
+        if (isTarget) {
+          return GraphStyles.nodeColors.target || '#f59e0b'
+        }
+
+        if (event.properties?.is_actual_outcome) {
+          return GraphStyles.nodeColors.outcome || '#FFC107'
+        }
+        if (event.isOutcome || event.properties?.is_outcome) {
+          return '#FDB022'
+        }
+
+        const impactDirection = event._impactDirection || event.impact_direction || event.properties?.impact_direction
+        if (impactDirection) {
+          if (impactDirection === 'positive') return GraphStyles.linkColors.impact_positive
+          if (impactDirection === 'negative') return GraphStyles.linkColors.impact_negative
+          if (impactDirection === 'mixed') return GraphStyles.linkColors.impact_mixed
+        }
+
+        const status = event.properties?.status || event.status
+        if (status === 'occurred') return '#10b981'
+        if (status === 'predicted' || status === 'uncertain') return '#3b82f6'
+
+        const eventDate = event.occurred_date || event.predicted_date
+        if (eventDate && new Date(eventDate) < new Date()) return '#10b981'
+
+        return GraphStyles.nodeColors[event.domain] || event.color || GraphStyles.nodeColors.general || '#3b82f6'
+      }
+
       eventsInTimeRange.forEach((event, idx) => {
         const x = event.xPos
         const isTarget = event.id === targetEventId
+        const markerColor = getEventMarkerColor(event, isTarget)
         const level = event.level || 0
         const yOffset = -15 - (level * levelHeight)
 
@@ -349,7 +380,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
           .attr('x2', x)
           .attr('y1', yOffset + 6) // Start just below the circle
           .attr('y2', innerHeight)
-          .attr('stroke', isTarget ? '#f59e0b' : '#4a90e2')
+          .attr('stroke', markerColor)
           .attr('stroke-width', isTarget ? 2 : 1) // Thinner lines for stacked events
           .attr('stroke-dasharray', isTarget ? '0' : '5,5')
           .attr('opacity', 0.4)
@@ -360,13 +391,13 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
           .attr('cx', x)
           .attr('cy', yOffset)
           .attr('r', isTarget ? 8 : 6)
-          .attr('fill', isTarget ? '#f59e0b' : '#4a90e2')
+          .attr('fill', markerColor)
           .attr('stroke', '#ffffff')
           .attr('stroke-width', 2)
           .style('cursor', 'pointer')
           .style('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))')
           .on('mouseenter', function () {
-            setHoveredEvent(event)
+            setHoveredEvent({ ...event, _markerColor: markerColor })
             setHoveredEventImpact(impact)
             select(this)
               .attr('r', isTarget ? 10 : 8)
@@ -427,7 +458,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
             .attr('x', x)
             .attr('y', yOffset - 10)
             .attr('text-anchor', 'middle')
-            .style('fill', '#4a90e2')
+            .style('fill', markerColor)
             .style('font-size', '9px')
             .style('font-weight', 'bold')
             .style('text-shadow', '0 1px 2px rgba(0,0,0,0.1)')
@@ -903,7 +934,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
           top: '60px',
           left: '80px',
           background: '#ffffff',
-          border: hoveredEvent.id === targetEventId ? '2px solid #f59e0b' : '2px solid #4a90e2',
+          border: `2px solid ${hoveredEvent._markerColor || (hoveredEvent.id === targetEventId ? '#f59e0b' : '#4a90e2')}`,
           borderRadius: '8px',
           padding: '12px 16px',
           color: '#495057',

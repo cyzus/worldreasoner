@@ -383,8 +383,12 @@ class EvidencePipeline(Pipeline):
 
         if not outcome_events:
             outcome_events = outcome_service.auto_create_outcome_events(question)
+            # Ensure actual outcome flags are correctly set for non-boolean ground truths.
+            outcome_events = outcome_service.ensure_actual_outcome_alignment(question)
             logger.info(f"[{question.id}] Auto-created {len(outcome_events)} outcome events")
         else:
+            # Backfill legacy data where is_actual_outcome may be missing/incorrect.
+            outcome_events = outcome_service.ensure_actual_outcome_alignment(question)
             logger.debug(f"[{question.id}] Found {len(outcome_events)} existing outcome events")
         return outcome_events
 

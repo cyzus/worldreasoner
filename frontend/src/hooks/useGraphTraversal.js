@@ -19,6 +19,159 @@ export const useGraphTraversal = (questions) => {
     const setQuestionRelatedEvents = useQuestionStore(state => state.setQuestionRelatedEvents)
     const setPriceHistoryInterval = useQuestionStore(state => state.setPriceHistoryInterval)
 
+    const buildChartEvents = useCallback((nodes, seedEventIds) => {
+        return nodes
+            .filter(node => seedEventIds.has(node.id))
+            .map(node => ({
+                id: node.id,
+                title: node.name,
+                occurred_date: node.properties?.occurred_date,
+                predicted_date: node.properties?.predicted_date,
+                status: node.properties?.status || node.status,
+                domain: node.domain || node.properties?.domain,
+                properties: node.properties || {},
+                _impactDirection: node._impactDirection,
+                _impactMagnitude: node._impactMagnitude,
+                isOutcome: node.isOutcome || node.properties?.is_outcome || false,
+                color: node.color,
+            }))
+    }, [])
+
+    const applyOutcomeAwareImpactColors = useCallback(async (nodes, questionId, outcomeNodeId = null) => {
+        try {
+            const { fetchOutcomes, fetchOutcomeImpacts } = await import('../api/graphApi')
+            const outcomes = await fetchOutcomes(questionId)
+
+            if (!Array.isArray(outcomes) || outcomes.length === 0) {
+                return
+            }
+
+            // Determine which outcome(s) are actual ground truth.
+            const actualOutcomeIds = new Set(
+                outcomes
+                    .filter(o => o.properties?.is_actual_outcome === true)
+                    .map(o => o.id)
+            )
+            // Fallback: infer actual outcome from question.ground_truth when DB flags are missing.
+            if (actualOutcomeIds.size === 0) {
+                const question = questions.find(q => q.id === questionId)
+                const rawTruth = question?.ground_truth
+                const normalizedTruth = String(rawTruth ?? '')
+                    .trim()
+                    .replace(/^"+|"+$/g, '')
+                    .toLowerCase()
+
+                if (normalizedTruth) {
+                    let matched = null
+
+                    if (['yes', 'true', '1'].includes(normalizedTruth)) {
+                        matched = outcomes.find(o =>
+                            (o.properties?.outcome_scenario || '').toLowerCase() === 'positive_resolution'
+                        )
+                    } else if (['no', 'false', '0'].includes(normalizedTruth)) {
+                        matched = outcomes.find(o =>
+                            (o.properties?.outcome_scenario || '').toLowerCase() === 'negative_resolution'
+                        )
+                    }
+
+                    if (!matched) {
+                        matched = outcomes.find(o => {
+                            const label = String(o.label || '').toLowerCase()
+                            return label.startsWith(`${normalizedTruth} -`) || label === normalizedTruth
+                        })
+                    }
+
+                    if (matched) {
+                        actualOutcomeIds.add(matched.id)
+                    }
+                }
+            }
+            if (actualOutcomeIds.size === 0 && outcomeNodeId) {
+                actualOutcomeIds.add(outcomeNodeId)
+            }
+
+            const nodeById = new Map(nodes.map(n => [n.id, n]))
+            const nodeScores = new Map() // node_id -> { score, positive, negative }
+            const MIN_IMPACT_CONFIDENCE = 0.55
+            const CONFIDENCE_EXPONENT = 1.5
+
+            for (const outcome of outcomes) {
+                const isActualOutcome = actualOutcomeIds.has(outcome.id)
+                const outcomeSign = isActualOutcome ? 1 : -1
+
+                let impacts = []
+                try {
+                    impacts = await fetchOutcomeImpacts(outcome.id)
+                } catch (err) {
+                    console.warn(`Failed to fetch impacts for outcome ${outcome.id}:`, err)
+                    continue
+                }
+
+                impacts.forEach(impact => {
+                    const sourceNode = nodeById.get(impact.source_id)
+                    if (!sourceNode) return
+
+                    const direction = impact.properties?.impact_direction
+                    const magnitude = Number(impact.properties?.impact_magnitude ?? impact.weight ?? 0)
+                    const confidence = Number(impact.properties?.confidence ?? 1.0)
+                    if (!Number.isFinite(confidence) || confidence < MIN_IMPACT_CONFIDENCE) return
+
+                    // Confidence-aware weighting:
+                    // - low-confidence impacts are filtered out
+                    // - remaining impacts are weighted non-linearly by confidence
+                    const confidenceWeight = Math.pow(Math.max(0, Math.min(1, confidence)), CONFIDENCE_EXPONENT)
+                    const strength = Math.max(0, magnitude) * confidenceWeight
+
+                    let impactToOutcomeSign = 0
+                    if (direction === 'positive') impactToOutcomeSign = 1
+                    else if (direction === 'negative') impactToOutcomeSign = -1
+                    else if (direction === 'mixed' || direction === 'neutral') impactToOutcomeSign = 0
+                    else return
+
+                    // Reframe impact relative to actual outcome.
+                    // Positive impact on non-actual outcome should count as negative (red), and vice versa.
+                    const contribution = impactToOutcomeSign * outcomeSign * strength
+
+                    const current = nodeScores.get(sourceNode.id) || { score: 0, positive: 0, negative: 0 }
+                    current.score += contribution
+                    if (contribution > 0) current.positive += contribution
+                    else if (contribution < 0) current.negative += Math.abs(contribution)
+                    nodeScores.set(sourceNode.id, current)
+                })
+            }
+
+            // Set node impact direction based on aggregate support/opposition to actual outcome.
+            nodeScores.forEach((acc, nodeId) => {
+                const node = nodeById.get(nodeId)
+                if (!node) return
+
+                const absScore = Math.abs(acc.score)
+                const total = acc.positive + acc.negative
+                const balance = total > 0 ? Math.min(acc.positive, acc.negative) / Math.max(acc.positive, acc.negative) : 0
+
+                if (total === 0 || absScore < 1e-8) {
+                    node._impactDirection = 'mixed'
+                    node._impactMagnitude = 0
+                    return
+                }
+
+                // If both directions are substantial, mark as mixed.
+                if (acc.positive > 0 && acc.negative > 0 && balance >= 0.35) {
+                    node._impactDirection = 'mixed'
+                    node._impactMagnitude = Math.min(1, absScore / total)
+                    return
+                }
+
+                node._impactDirection = acc.score > 0 ? 'positive' : 'negative'
+                node._impactMagnitude = Math.min(1, absScore / total)
+            })
+
+            console.log('Applied outcome-aware impact colors to nodes')
+        } catch (err) {
+            console.warn('Failed to apply outcome-aware impact coloring:', err)
+        }
+    }, [questions])
+
     // Handle neighborhood view (client-side filtering)
     const handleShowNeighborhood = useCallback((nodeId, depth = 2) => {
         // Find the center node
@@ -133,18 +286,6 @@ export const useGraphTraversal = (questions) => {
             const questionEventsData = await fetchQuestionEvents(questionId)
             const seedEventIds = new Set(questionEventsData.event_ids)
 
-            // Extract full event data for all question-related events (for TimeSeriesChart)
-            const relatedEvents = fullGraphData.nodes
-                .filter(node => seedEventIds.has(node.id))
-                .map(node => ({
-                    id: node.id,
-                    title: node.name,
-                    occurred_date: node.properties?.occurred_date,
-                    predicted_date: node.properties?.predicted_date,
-                }))
-            setQuestionRelatedEvents(relatedEvents)
-            console.log(`Stored ${relatedEvents.length} events for TimeSeriesChart`)
-
             console.log('=== Question Filter Statistics ===')
             console.log(`Direct events: ${questionEventsData.direct_events}`)
             console.log(`Extracted during evidence: ${questionEventsData.extracted_events}`)
@@ -210,49 +351,8 @@ export const useGraphTraversal = (questions) => {
                 node.isOutcome = node.properties?.is_outcome || node.id === outcomeNodeId
             })
 
-            // Fetch and apply outcome impacts to color nodes
-            try {
-                const { fetchOutcomes } = await import('../api/graphApi')
-                const outcomes = await fetchOutcomes(questionId)
-
-                // For each outcome, fetch its impacts and color the source events
-                for (const outcome of outcomes) {
-                    try {
-                        const { fetchOutcomeImpacts } = await import('../api/graphApi')
-                        const impacts = await fetchOutcomeImpacts(outcome.id)
-
-                        // Apply impact colors to nodes
-                        impacts.forEach(impact => {
-                            const sourceNode = filteredNodes.find(n => n.id === impact.source_id)
-                            if (sourceNode) {
-                                const direction = impact.properties?.impact_direction
-                                console.log(`Setting impact for node ${sourceNode.name || sourceNode.id}:`, {
-                                    direction,
-                                    magnitude: impact.properties?.impact_magnitude,
-                                    targetOutcome: outcome.id
-                                })
-                                // If node already has an impact, keep the stronger one
-                                if (!sourceNode._impactDirection ||
-                                    (direction === 'positive' || direction === 'negative')) {
-                                    sourceNode._impactDirection = direction
-                                    sourceNode._impactMagnitude = impact.properties?.impact_magnitude || 0
-
-                                    // Verify it was set
-                                    if ((sourceNode.name || '').includes('Santa')) {
-                                        console.log(`✓ Impact set on Santa node:`, sourceNode._impactDirection, sourceNode)
-                                    }
-                                }
-                            }
-                        })
-                    } catch (err) {
-                        console.warn(`Failed to fetch impacts for outcome ${outcome.id}:`, err)
-                    }
-                }
-
-                console.log('Applied impact colors to nodes')
-            } catch (err) {
-                console.warn('Failed to fetch outcomes for impact coloring:', err)
-            }
+            // Apply impact colors relative to actual outcome.
+            await applyOutcomeAwareImpactColors(filteredNodes, questionId, outcomeNodeId)
 
             // Find orphaned nodes (nodes with no causal connections to other nodes)
             const connectedNodeIds = new Set()
@@ -305,6 +405,11 @@ export const useGraphTraversal = (questions) => {
             }
             setGraphData(questionFilteredData)
 
+            // Build chart events AFTER impact coloring so marker colors match graph semantics.
+            const relatedEvents = buildChartEvents(filteredNodes, seedEventIds)
+            setQuestionRelatedEvents(relatedEvents)
+            console.log(`Stored ${relatedEvents.length} events for TimeSeriesChart`)
+
         } catch (error) {
             console.error('Failed to fetch question events:', error)
             // Fallback to old behavior using only related_event_ids
@@ -326,34 +431,8 @@ export const useGraphTraversal = (questions) => {
                 node.isOutcome = node.properties?.is_outcome || node.id === outcomeNodeId
             })
 
-            // Fetch and apply outcome impacts to color nodes (fallback path)
-            try {
-                const { fetchOutcomes } = await import('../api/graphApi')
-                const outcomes = await fetchOutcomes(questionId)
-
-                for (const outcome of outcomes) {
-                    try {
-                        const { fetchOutcomeImpacts } = await import('../api/graphApi')
-                        const impacts = await fetchOutcomeImpacts(outcome.id)
-
-                        impacts.forEach(impact => {
-                            const sourceNode = filteredNodes.find(n => n.id === impact.source_id)
-                            if (sourceNode) {
-                                const direction = impact.properties?.impact_direction
-                                if (!sourceNode._impactDirection ||
-                                    (direction === 'positive' || direction === 'negative')) {
-                                    sourceNode._impactDirection = direction
-                                    sourceNode._impactMagnitude = impact.properties?.impact_magnitude || 0
-                                }
-                            }
-                        })
-                    } catch (err) {
-                        console.warn(`Failed to fetch impacts for outcome ${outcome.id}:`, err)
-                    }
-                }
-            } catch (err) {
-                console.warn('Failed to fetch outcomes for impact coloring (fallback):', err)
-            }
+            // Apply impact colors relative to actual outcome (fallback path).
+            await applyOutcomeAwareImpactColors(filteredNodes, questionId, outcomeNodeId)
 
             const nodeIds = new Set(filteredNodes.map(n => n.id))
             const filteredLinks = fullGraphData.links.filter(link => {
@@ -391,9 +470,14 @@ export const useGraphTraversal = (questions) => {
             const fallbackData = { nodes: filteredNodes, links: [...filteredLinks, ...syntheticLinks] }
             setGraphData(fallbackData)
 
+            // Keep chart events in sync in fallback mode as well.
+            const fallbackSeedIds = new Set(seedEventIds)
+            const relatedEvents = buildChartEvents(filteredNodes, fallbackSeedIds)
+            setQuestionRelatedEvents(relatedEvents)
+
             setTimeFilter(null)
         }
-    }, [fullGraphData, questions, setGraphData, setSelectedQuestionId, setQuestionRelatedEvents, setPriceHistoryData, setTimeFilter, setPriceHistoryInterval])
+    }, [fullGraphData, questions, setGraphData, setSelectedQuestionId, setQuestionRelatedEvents, setPriceHistoryData, setTimeFilter, setPriceHistoryInterval, buildChartEvents, applyOutcomeAwareImpactColors])
 
     return {
         handleShowNeighborhood,
