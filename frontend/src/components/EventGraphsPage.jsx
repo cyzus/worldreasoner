@@ -388,6 +388,7 @@ function EventGraphsPage({
                       priceHistory={priceHistoryData.price_history}
                       events={questionRelatedEvents}
                       turningPoints={priceHistoryData.turning_points || []}
+                      leadChanges={priceHistoryData.lead_changes || []}
                       targetEventId={questions.find(q => q.id === selectedQuestionId)?.target_event_id}
                       outcomes={priceHistoryData.outcomes || ['Yes', 'No']}
                       activeInterval={priceHistoryInterval}

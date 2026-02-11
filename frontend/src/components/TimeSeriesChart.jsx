@@ -19,6 +19,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
   priceHistory,
   events = [],
   turningPoints = [],
+  leadChanges = [],
   targetEventId,
   outcomes = ['Yes', 'No'],
   width = 900,
@@ -30,6 +31,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
   const [hoveredEvent, setHoveredEvent] = useState(null)
   const [hoveredEventImpact, setHoveredEventImpact] = useState(null)
   const [hoveredTurningPoint, setHoveredTurningPoint] = useState(null)
+  const [hoveredLeadChange, setHoveredLeadChange] = useState(null)
   const [hoveredPrice, setHoveredPrice] = useState(null)
   const [isExpanded, setIsExpanded] = useState(true)
 
@@ -616,6 +618,94 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
         .text(`Troughs (${turningPointsInRange.filter(t => t.type === 'trough').length})`)
     }
 
+    // Add lead-change markers (threshold crossovers)
+    if (Array.isArray(leadChanges) && leadChanges.length > 0) {
+      const leadChangesInRange = leadChanges.filter(lc => {
+        const lcTime = lc.timestamp * 1000 // Convert to ms
+        return lcTime >= xScale.domain()[0].getTime() && lcTime <= xScale.domain()[1].getTime()
+      })
+
+      leadChangesInRange.forEach((lc) => {
+        const x = xScale(new Date(lc.timestamp * 1000))
+        const y = yScale(lc.price)
+        const crossedAbove = lc.direction === 'above'
+        const color = crossedAbove ? '#2563eb' : '#f59e0b' // Blue when crossing above, amber when crossing below
+
+        // Draw ring marker
+        g.append('circle')
+          .attr('cx', x)
+          .attr('cy', y)
+          .attr('r', 6)
+          .attr('fill', '#ffffff')
+          .attr('stroke', color)
+          .attr('stroke-width', 2.5)
+          .style('cursor', 'pointer')
+          .style('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))')
+          .on('mouseenter', function () {
+            setHoveredLeadChange(lc)
+            select(this).attr('r', 8)
+          })
+          .on('mouseleave', function () {
+            setHoveredLeadChange(null)
+            select(this).attr('r', 6)
+          })
+
+        // Direction glyph inside ring
+        g.append('text')
+          .attr('x', x)
+          .attr('y', y + 3)
+          .attr('text-anchor', 'middle')
+          .style('fill', color)
+          .style('font-size', '9px')
+          .style('font-weight', '700')
+          .style('pointer-events', 'none')
+          .text(crossedAbove ? '↑' : '↓')
+      })
+
+      const baseLegendY = (eventsInTimeRange.length > 0 ? 55 : 0) + outcomes.length * 25 + 20
+      const hasTurningPoints = Array.isArray(turningPoints) && turningPoints.length > 0
+      const leadLegendY = hasTurningPoints ? baseLegendY + 50 : baseLegendY
+      const leadLegend = g.append('g')
+        .attr('transform', `translate(${innerWidth + 20}, ${leadLegendY})`)
+
+      leadLegend.append('text')
+        .attr('y', 0)
+        .style('fill', '#495057')
+        .style('font-size', '11px')
+        .style('font-weight', 'bold')
+        .text('Lead Changes:')
+
+      leadLegend.append('circle')
+        .attr('cx', 5)
+        .attr('cy', 12)
+        .attr('r', 4)
+        .attr('fill', '#ffffff')
+        .attr('stroke', '#2563eb')
+        .attr('stroke-width', 2)
+
+      leadLegend.append('text')
+        .attr('x', 15)
+        .attr('y', 16)
+        .style('fill', '#495057')
+        .style('font-size', '10px')
+        .text(`Crossed Above (${leadChangesInRange.filter(l => l.direction === 'above').length})`)
+
+      leadLegend.append('circle')
+        .attr('cx', 5)
+        .attr('cy', 28)
+        .attr('r', 4)
+        .attr('fill', '#ffffff')
+        .attr('stroke', '#f59e0b')
+        .attr('stroke-width', 2)
+
+      leadLegend.append('text')
+        .attr('x', 15)
+        .attr('y', 32)
+        .style('fill', '#495057')
+        .style('font-size', '10px')
+        .text(`Crossed Below (${leadChangesInRange.filter(l => l.direction === 'below').length})`)
+    }
+
     // Add interactive tooltip line
     const tooltipLine = g.append('line')
       .attr('stroke', '#6c757d')
@@ -687,7 +777,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
         setHoveredPrice(null)
       })
 
-  }, [priceHistory, events, turningPoints, targetEventId, outcomes, width, height, isExpanded])
+  }, [priceHistory, events, turningPoints, leadChanges, targetEventId, outcomes, width, height, isExpanded])
 
   // Count events in time range for title
   const eventsInRange = (Array.isArray(events) && events.length > 0) ? events.filter(event => {
@@ -713,11 +803,13 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
         <h3 style={{ color: '#212529', margin: 0, fontSize: '16px', fontWeight: 600 }}>
           Market Price History
-          {(eventsInRange.length > 0 || turningPoints.length > 0) && (
+          {(eventsInRange.length > 0 || turningPoints.length > 0 || leadChanges.length > 0) && (
             <span style={{ fontSize: '13px', color: '#6c757d', marginLeft: '10px', fontWeight: 400 }}>
               ({eventsInRange.length > 0 ? `${eventsInRange.length} event${eventsInRange.length !== 1 ? 's' : ''}` : ''}
               {eventsInRange.length > 0 && turningPoints.length > 0 ? ', ' : ''}
-              {turningPoints.length > 0 ? `${turningPoints.length} turning point${turningPoints.length !== 1 ? 's' : ''}` : ''})
+              {turningPoints.length > 0 ? `${turningPoints.length} turning point${turningPoints.length !== 1 ? 's' : ''}` : ''}
+              {(eventsInRange.length > 0 || turningPoints.length > 0) && leadChanges.length > 0 ? ', ' : ''}
+              {leadChanges.length > 0 ? `${leadChanges.length} lead change${leadChanges.length !== 1 ? 's' : ''}` : ''})
             </span>
           )}
         </h3>
@@ -974,6 +1066,71 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
             <span style={{ color: '#9ca3af', marginLeft: '4px' }}>
               (total swing)
             </span>
+          </div>
+        </div>
+      )}
+
+      {/* Lead change tooltip */}
+      {isExpanded && hoveredLeadChange && (
+        <div style={{
+          position: 'absolute',
+          top: '120px',
+          left: '420px',
+          background: '#ffffff',
+          border: `2px solid ${hoveredLeadChange.direction === 'above' ? '#2563eb' : '#f59e0b'}`,
+          borderRadius: '8px',
+          padding: '12px 16px',
+          color: '#495057',
+          fontSize: '12px',
+          maxWidth: '320px',
+          pointerEvents: 'none',
+          zIndex: 1000,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.15)'
+        }}>
+          <div style={{
+            color: hoveredLeadChange.direction === 'above' ? '#2563eb' : '#f59e0b',
+            fontWeight: 'bold',
+            marginBottom: '6px',
+            fontSize: '12px'
+          }}>
+            ⭕ LEAD CHANGE ({hoveredLeadChange.direction === 'above' ? 'Crossed Above 50%' : 'Crossed Below 50%'})
+          </div>
+
+          <div style={{ fontWeight: '600', marginBottom: '8px', fontSize: '14px', color: '#212529' }}>
+            Price: {(hoveredLeadChange.price * 100).toFixed(1)}%
+          </div>
+
+          <div style={{ fontSize: '11px', color: '#6c757d', marginBottom: '8px' }}>
+            {new Date(hoveredLeadChange.timestamp * 1000).toLocaleString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </div>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '8px',
+            paddingTop: '8px',
+            borderTop: '1px solid #e5e7eb'
+          }}>
+            <div>
+              <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '2px' }}>Previous Price</div>
+              <div style={{ fontSize: '12px', fontWeight: '600', color: '#374151' }}>
+                {(hoveredLeadChange.previous_price * 100).toFixed(1)}%
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '2px' }}>State Duration</div>
+              <div style={{ fontSize: '12px', fontWeight: '600', color: '#374151' }}>
+                {hoveredLeadChange.time_in_previous_state_hours != null
+                  ? `${hoveredLeadChange.time_in_previous_state_hours.toFixed(1)}h`
+                  : 'n/a'}
+              </div>
+            </div>
           </div>
         </div>
       )}
