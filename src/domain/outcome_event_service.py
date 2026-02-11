@@ -143,7 +143,7 @@ class OutcomeEventService:
             ),
             status=EventStatus.OCCURRED if is_actual else EventStatus.PREDICTED,
             is_actual_outcome=is_actual,
-            occurred_date=question.resolution_date if is_actual else None,
+            occurred_date=question.resolution_date,
             extracted_for_question_id=question.id,
         )
         
