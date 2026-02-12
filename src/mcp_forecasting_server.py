@@ -415,8 +415,8 @@ def identify_forecast_event(
     ctx: Context,
     title: str,
     description: str,
-    domain: str,
     occurred_date: str,
+    domain: str = None,
     event_type: str = None,
     source_article_ids: str = None,
 ) -> str:
@@ -427,8 +427,8 @@ def identify_forecast_event(
     Args:
         title: Short event title
         description: Detailed event description
-        domain: Event domain
         occurred_date: When event occurred (ISO format with timezone)
+        domain: Event domain (optional, defaults to 'general')
         event_type: Optional event type
         source_article_ids: Optional comma-separated article IDs
 

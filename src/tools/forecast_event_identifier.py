@@ -51,8 +51,8 @@ class ForecastEventIdentifierTool(Tool):
         "description": {"type": "string", "description": "Detailed event description"},
         "domain": {
             "type": "string",
-            "description": f"Event domain - one of: {', '.join(enum_to_list(Domain))}",
-            "enum": enum_to_list(Domain),
+            "description": "Event domain (optional, defaults to 'general' if invalid)",
+            "nullable": True,
         },
         "occurred_date": {
             "type": "string",
@@ -103,8 +103,8 @@ class ForecastEventIdentifierTool(Tool):
         self,
         title: str,
         description: str,
-        domain: str,
         occurred_date: str,
+        domain: Optional[str] = None,
         event_type: Optional[str] = None,
         source_article_ids: Optional[str] = None,
     ) -> str:
@@ -122,8 +122,8 @@ class ForecastEventIdentifierTool(Tool):
             JSON string with event details
         """
         try:
-            # Parse and validate
-            domain_enum = parse_domain(domain)
+            # Parse and validate with fallback
+            domain_enum = parse_domain(domain, default=Domain.GENERAL)
             occurred_date_obj = parse_iso_datetime(occurred_date)
             occurred_date_obj = ensure_timezone_aware(occurred_date_obj)
             event_type_enum = parse_event_type(event_type) if event_type else None
