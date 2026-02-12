@@ -19,6 +19,7 @@ class PipelineType(str, Enum):
     FORECAST = "forecast"
     EVALUATION = "evaluation"
     BENCHMARK = "benchmark"
+    AUTO_BENCHMARK = "auto_benchmark"
 
 
 @dataclass

@@ -44,7 +44,7 @@ class JobStatus(str, Enum):
 class PipelineJobRequest(BaseModel):
     """Request to start a pipeline job."""
 
-    question_ids: List[str]
+    question_ids: List[str] = []
     pipeline_type: PipelineType
     config: Dict[str, Any] = {}
 
@@ -99,8 +99,17 @@ async def create_pipeline_job(
     for existing_job in jobs.values():
         if existing_job.status in [JobStatus.PENDING, JobStatus.RUNNING]:
             if existing_job.pipeline_type == request.pipeline_type:
+                # For jobs without question_ids (e.g. auto_benchmark), just check type
+                if not request.question_ids and not existing_job.question_ids:
+                    logger.warning(
+                        f"Duplicate job attempt blocked: {existing_job.job_id} already running"
+                    )
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Similar job {existing_job.job_id} is already {existing_job.status.value}",
+                    )
                 # Check for same set of questions
-                if set(existing_job.question_ids) == request_qids_set:
+                elif set(existing_job.question_ids) == request_qids_set:
                     logger.warning(
                         f"Duplicate job attempt blocked: {existing_job.job_id} already processing these questions"
                     )

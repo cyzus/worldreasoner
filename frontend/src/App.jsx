@@ -12,6 +12,7 @@ import './App.css'
 const PipelinePage = lazy(() => import('./components/PipelinePage'))
 const QuestionCollectionPage = lazy(() => import('./components/QuestionCollectionPage'))
 const ForecastPage = lazy(() => import('./components/ForecastPage'))
+const BenchmarkPage = lazy(() => import('./components/BenchmarkPage'))
 const EventGraphsPage = lazy(() => import('./components/EventGraphsPage'))
 
 
@@ -149,6 +150,12 @@ function App() {
           >
             🎯 Forecast
           </button>
+          <button
+            className={`top-tab-btn ${leftPanelTab === 'benchmark' ? 'active' : ''}`}
+            onClick={() => setLeftPanelTab('benchmark')}
+          >
+            📈 Benchmark
+          </button>
         </div>
 
         <Suspense fallback={<div className="loading-fallback">Loading...</div>}>
@@ -195,6 +202,9 @@ function App() {
           ) : leftPanelTab === 'forecast' ? (
             /* Full-width forecast page */
             <ForecastPage />
+          ) : leftPanelTab === 'benchmark' ? (
+            /* Full-width benchmark page */
+            <BenchmarkPage />
           ) : leftPanelTab === 'pipelines' ? (
             /* Full-width pipeline page */
             <PipelinePage

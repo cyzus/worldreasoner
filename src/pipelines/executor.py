@@ -74,6 +74,10 @@ class PipelineExecutor:
                 result = await self._run_evaluation(question_ids, on_progress, **kwargs)
             elif pipeline_type == PipelineType.BENCHMARK:
                 result = await self._run_benchmark(question_ids, on_progress, **kwargs)
+            elif pipeline_type == PipelineType.AUTO_BENCHMARK:
+                result = await self._run_auto_benchmark(
+                    question_ids, on_progress, **kwargs
+                )
             else:
                 raise ValueError(f"Unknown pipeline type: {pipeline_type}")
 
@@ -503,22 +507,33 @@ class PipelineExecutor:
                     continue
 
                 if not force_reprocess:
-                    # Check if evidence already exists
+                    # Check if evidence already exists AND meets graph depth requirement
                     all_hypotheses = self.db.get_many(CausalHypothesis)
                     hypotheses = [
                         h for h in all_hypotheses if qid in h.discovered_by_question_ids
                     ]
                     if hypotheses:
-                        logger.info(
-                            f"Question {qid} already has {len(hypotheses)} hypotheses, skipping"
-                        )
-                        results.skipped.append(
-                            {
-                                "id": qid,
-                                "reason": f"Already has {len(hypotheses)} hypotheses",
-                            }
-                        )
-                        continue
+                        from src.utils.graph_analysis import resolve_target_event_id, calculate_graph_quality
+                        target = resolve_target_event_id(question, self.db, hypotheses)
+                        metrics = calculate_graph_quality(hypotheses, target)
+                        graph_depth = metrics["max_depth"]
+                        if graph_depth >= 3:
+                            logger.info(
+                                f"Question {qid} already has {len(hypotheses)} hypotheses "
+                                f"(depth {graph_depth}), skipping"
+                            )
+                            results.skipped.append(
+                                {
+                                    "id": qid,
+                                    "reason": f"Already has {len(hypotheses)} hypotheses (depth {graph_depth})",
+                                }
+                            )
+                            continue
+                        else:
+                            logger.info(
+                                f"Question {qid} has {len(hypotheses)} hypotheses but "
+                                f"insufficient depth ({graph_depth} < 3), reprocessing"
+                            )
 
                 # Run pipeline on single question
                 logger.info(f"Running evidence pipeline on question: {qid}")
@@ -633,6 +648,35 @@ class PipelineExecutor:
                 if not question:
                     results.failed.append({"id": qid, "error": "Question not found"})
                     continue
+
+                # Check if evidence already exists AND meets graph depth requirement
+                all_hypotheses = self.db.get_many(CausalHypothesis)
+                hypotheses = [
+                    h for h in all_hypotheses if qid in h.discovered_by_question_ids
+                ]
+                if hypotheses:
+                    from src.utils.graph_analysis import resolve_target_event_id, calculate_graph_quality
+                    target = resolve_target_event_id(question, self.db, hypotheses)
+                    metrics = calculate_graph_quality(hypotheses, target)
+                    graph_depth = metrics["max_depth"]
+                    min_depth = kwargs.get("min_graph_depth", min_graph_depth)
+                    if graph_depth >= min_depth:
+                        logger.info(
+                            f"Question {qid} already has {len(hypotheses)} hypotheses "
+                            f"(depth {graph_depth}), skipping"
+                        )
+                        results.skipped.append(
+                            {
+                                "id": qid,
+                                "reason": f"Already has {len(hypotheses)} hypotheses (depth {graph_depth})",
+                            }
+                        )
+                        continue
+                    else:
+                        logger.info(
+                            f"Question {qid} has {len(hypotheses)} hypotheses but "
+                            f"insufficient depth ({graph_depth} < {min_depth}), reprocessing"
+                        )
 
                 logger.info(f"Running adaptive evidence pipeline on question: {qid}")
                 pipeline_results = await pipeline.run([question])
@@ -880,6 +924,81 @@ class PipelineExecutor:
             skipped=forecast_result.skipped + eval_result.skipped,
             duration_seconds=0.0,
         )
+
+    async def _run_auto_benchmark(
+        self, question_ids: List[str], on_progress: Optional[Callable], **kwargs
+    ) -> PipelineResult:
+        """Run auto-benchmark across conditions, models, and questions."""
+        from src.domain.evaluation.auto_benchmark import (
+            AutoBenchmarkService,
+            AutoBenchmarkProgress,
+        )
+        from src.domain.evaluation.conditions import get_conditions
+
+        results = PipelineResult([], [], [], 0.0)
+
+        try:
+            service = AutoBenchmarkService(
+                db_path=self.db_path,
+                config=self.config,
+                output_dir=kwargs.get("output_dir", "benchmarks"),
+            )
+
+            # Get questions
+            questions = service.get_resolved_questions(
+                question_ids=question_ids if question_ids else None,
+                max_questions=kwargs.get("max_questions"),
+                source=kwargs.get("source"),
+                domain=kwargs.get("domain"),
+            )
+
+            if not questions:
+                results.failed.append({"error": "No resolved questions found"})
+                return results
+
+            # Get models
+            models = kwargs.get("models", [self.config.llm.model])
+
+            # Get conditions
+            condition_names = kwargs.get("conditions")
+            conditions = get_conditions(condition_names)
+
+            # Map progress
+            def progress_adapter(p: AutoBenchmarkProgress):
+                if on_progress:
+                    on_progress(
+                        PipelineProgress(
+                            current=p.overall_current,
+                            total=p.overall_total,
+                            question_id=p.question_id,
+                            stage=p.condition_name,
+                            message=f"{p.model_name} | {p.question_id}",
+                        )
+                    )
+
+            benchmark_result = service.run_auto_benchmark(
+                questions=questions,
+                models=models,
+                conditions=conditions,
+                offset_days=kwargs.get("offset_days", 0),
+                on_progress=progress_adapter,
+                resume=kwargs.get("resume", False),
+            )
+
+            results.processed.append(
+                {
+                    "run_id": benchmark_result.run_id,
+                    "duration_seconds": benchmark_result.duration_seconds,
+                    "comparative_summary": benchmark_result.comparative_summary,
+                    "benchmark_result": benchmark_result,
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"Auto-benchmark failed: {e}")
+            results.failed.append({"error": str(e)})
+
+        return results
 
     async def clear_evidence(
         self,

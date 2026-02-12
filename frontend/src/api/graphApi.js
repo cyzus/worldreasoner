@@ -337,3 +337,27 @@ export async function markActualOutcome(outcomeId, isActual) {
   )
   return response.data
 }
+
+/**
+ * Fetch list of saved benchmark results
+ */
+export async function fetchBenchmarkResults() {
+  const response = await axios.get(`${API_BASE_URL}/benchmark/results`)
+  return response.data
+}
+
+/**
+ * Fetch full result data for a specific benchmark run
+ */
+export async function fetchBenchmarkResult(runId) {
+  const response = await axios.get(`${API_BASE_URL}/benchmark/results/${runId}`)
+  return response.data
+}
+
+/**
+ * Fetch available experiment conditions
+ */
+export async function fetchBenchmarkConditions() {
+  const response = await axios.get(`${API_BASE_URL}/benchmark/conditions`)
+  return response.data
+}

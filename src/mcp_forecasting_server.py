@@ -59,7 +59,7 @@ Configuration:
 import os
 import json
 import argparse
-from typing import Optional
+from typing import Optional, Union
 from contextvars import ContextVar
 
 from fastmcp import FastMCP
@@ -533,7 +533,7 @@ def inspect_forecast_graph(ctx: Context) -> str:
 @mcp.tool()
 def submit_forecast(
     ctx: Context,
-    prediction: str,
+    prediction: Union[str, float, int],
     confidence: float,
     reasoning: str,
     articles_accessed: list[str],
@@ -553,9 +553,12 @@ def submit_forecast(
 
         logger.info(f"Submitting forecast for question {forecast_context.question_id}")
 
+        # Ensure prediction is a string
+        prediction_str = str(prediction)
+
         # Validate prediction
         valid, parsed_prediction, error = forecast_service.validate_prediction(
-            question, prediction
+            question, prediction_str
         )
         if not valid:
             return json.dumps({"error": error})

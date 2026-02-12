@@ -16,7 +16,7 @@ Usage:
 import typer
 from rich.console import Console
 
-from src.cli.commands import db, evidence, forecast, question
+from src.cli.commands import benchmark, db, evidence, forecast, question
 from src.core.database import GenericDatabase
 from src.config import get_config
 
@@ -35,12 +35,7 @@ app.add_typer(db.app, name="db", help="Database management commands")
 app.add_typer(question.app, name="question", help="Question collection commands")
 app.add_typer(evidence.app, name="evidence", help="Evidence pipeline commands")
 app.add_typer(forecast.app, name="forecast", help="Forecasting commands")
-
-# Phase 4+ will add:
-# app.add_typer(evaluate.app, name="evaluate", help="Evaluation commands")
-# app.add_typer(benchmark.app, name="benchmark", help="LLM benchmark research commands")
-# app.add_typer(temporal.app, name="temporal", help="Temporal forecast analysis")
-# app.add_typer(research.app, name="research", help="Research session management")
+app.add_typer(benchmark.app, name="benchmark", help="LLM benchmark research commands")
 
 
 @app.callback()

@@ -21,6 +21,7 @@ from .routes import (
     evaluation,
     monitor,
     outcomes,
+    benchmark,
 )
 from src.core.database import GenericDatabase
 from src.config import get_config
@@ -44,6 +45,10 @@ async def lifespan(app: FastAPI):
             db = GenericDatabase(cfg.database.db_path)
             tables = db.initialize_all_tables()
             logger.info(f"Database initialized. Ensured {tables} tables exist.")
+
+            # Migrate: ensure new columns exist on older databases
+            from src.domain.models import Forecast
+            db.ensure_column(Forecast, "enabled_tools", "TEXT")
         except Exception as e:
             logger.warning(f"Failed to initialize database tables on startup: {e}")
 
@@ -126,6 +131,7 @@ def create_app() -> FastAPI:
     app.include_router(evaluation.router, prefix="/api/evaluation", tags=["evaluation"])
     app.include_router(monitor.router, prefix="/api/monitor", tags=["monitor"])
     app.include_router(outcomes.router, prefix="/api/outcomes", tags=["outcomes"])
+    app.include_router(benchmark.router, prefix="/api/benchmark", tags=["benchmark"])
     app.include_router(websocket.router, prefix="/ws", tags=["websocket"])
 
     @app.get("/")
