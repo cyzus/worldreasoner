@@ -271,6 +271,10 @@ class EvidencePipeline(Pipeline):
             # 1. Get/Create outcomes
             outcome_events = self._get_or_create_outcomes(question, db)
 
+            # 1b. Resolve target event (actual outcome) for the agent
+            from src.utils.graph_analysis import resolve_target_event_id
+            resolved_target = resolve_target_event_id(question, db)
+
             # 2. Fetch market analysis (turning points + lead changes) for Polymarket questions
             market_analysis = await self._fetch_market_analysis(question)
             turning_points = market_analysis.get("turning_points", [])
@@ -281,7 +285,7 @@ class EvidencePipeline(Pipeline):
                 db_path=self.database_config.db_path,
                 max_steps=self.agent_max_steps,
                 question_id=question.id,
-                target_event_id=question.target_event_id,
+                target_event_id=resolved_target,
             )
             logger.debug(f"[{question.id}] Created context-aware HindsightAgent")
 
