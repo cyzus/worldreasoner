@@ -552,8 +552,9 @@ class EvidencePipeline(Pipeline):
                  db.save(Question, question)
              except Exception as e:
                  logger.warning(f"[{question.id}] Failed to persist target: {e}")
-        else:
-            # Fallback to arbitrary target
+        
+        # Fallback only if resolve_target_event_id returned None
+        if not target_event_id:
             all_targets = set(h.target_event_id for h in hypotheses)
             if all_targets:
                 target_event_id = list(all_targets)[0]

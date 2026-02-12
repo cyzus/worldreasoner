@@ -40,9 +40,9 @@ class GraphVisualizer:
         if node in visited:
             return 0
 
-        # Leaf nodes (root causes with no incoming edges) have depth 1
+        # Leaf nodes (root causes with no incoming edges) have depth 0 (no edges)
         if node not in graph:
-            return 1
+            return 0
 
         visited.add(node)
         max_child_depth = 0
