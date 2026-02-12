@@ -90,7 +90,9 @@ class QuestionService:
         # === Also include events referenced in question but NOT pre-existing ===
         # Pre-existing events (target_event_id, related_event_ids) should be kept
         pre_existing_event_ids = set()
-        if question.target_event_id:
+        if question.outcome_event_ids:
+            pre_existing_event_ids.update(question.outcome_event_ids)
+        if question.target_event_id:  # Legacy fallback
             pre_existing_event_ids.add(question.target_event_id)
         pre_existing_event_ids.update(question.related_event_ids)
 
@@ -289,7 +291,7 @@ class QuestionService:
         referencing_questions = [
             q.id
             for q in all_questions
-            if q.target_event_id == event_id or event_id in (q.related_event_ids or [])
+            if event_id in (q.outcome_event_ids or []) or q.target_event_id == event_id or event_id in (q.related_event_ids or [])
         ]
 
         if referencing_questions:

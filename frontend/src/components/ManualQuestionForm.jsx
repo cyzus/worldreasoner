@@ -32,7 +32,6 @@ function ManualQuestionForm({ onQuestionCreated }) {
     ground_truth: '',
     resolution_criteria: '',
     context: '',
-    target_event_id: '',
     related_event_ids: '',
     // MCQ specific
     options: '',
@@ -135,7 +134,6 @@ function ManualQuestionForm({ onQuestionCreated }) {
         resolution_date: new Date(formData.resolution_date).toISOString(),
         resolution_criteria: formData.resolution_criteria.trim() || null,
         context: formData.context.trim() || null,
-        target_event_id: formData.target_event_id.trim() || null,
         related_event_ids: formData.related_event_ids
           ? formData.related_event_ids.split(',').map(id => id.trim()).filter(id => id)
           : [],

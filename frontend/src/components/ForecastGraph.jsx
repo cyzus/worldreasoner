@@ -7,7 +7,6 @@ import './ForecastGraph.css'
  */
 const ForecastGraph = memo(function ForecastGraph({
   graphData,
-  targetEventId,
   onNodeClick,
   selectedNode
 }) {
@@ -33,7 +32,7 @@ const ForecastGraph = memo(function ForecastGraph({
       name: event.title || event.name || event.id,
       type: event.event_type || event.type || 'event',
       domain: event.domain || 'unknown',
-      isOutcome: event.id === targetEventId,
+      isOutcome: event.is_outcome || event.properties?.is_outcome || false,
       // Structure properties to match evidence graph format
       properties: {
         event_type: event.event_type || event.properties?.event_type || event.type,
@@ -68,7 +67,7 @@ const ForecastGraph = memo(function ForecastGraph({
       }))
 
     return { nodes, links }
-  }, [graphData, targetEventId])
+  }, [graphData])
 
   // Empty state
   if (!graphData || (!graphData.events && !graphData.nodes)) {
@@ -86,7 +85,6 @@ const ForecastGraph = memo(function ForecastGraph({
     <div className="graph-visualization" style={{ width: '100%', height: '100%', position: 'relative' }}>
       <CanvasTimelineGraph
         graphData={transformedData}
-        targetEventId={targetEventId}
         onNodeClick={onNodeClick}
         selectedNode={selectedNode}
       />

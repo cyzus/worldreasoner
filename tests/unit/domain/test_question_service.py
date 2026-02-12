@@ -200,8 +200,8 @@ class TestClearEvidence:
         )
         test_db.save(Event, pre_event)
 
-        # Update question to reference this event
-        sample_question.target_event_id = pre_event.id
+        # Update question to reference this event via outcome_event_ids
+        sample_question.outcome_event_ids = [pre_event.id]
         test_db.save(Question, sample_question)
 
         # Clear evidence
@@ -323,7 +323,7 @@ class TestDeleteEvent:
         )
         test_db.save(Event, event)
 
-        sample_question.target_event_id = event.id
+        sample_question.outcome_event_ids = [event.id]
         test_db.save(Question, sample_question)
 
         result = service.delete_event(event.id, cascade=True, dry_run=False)

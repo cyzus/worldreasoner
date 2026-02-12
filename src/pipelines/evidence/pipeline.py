@@ -545,13 +545,8 @@ class EvidencePipeline(Pipeline):
         from src.utils.graph_analysis import resolve_target_event_id
         target_event_id = resolve_target_event_id(question, db, hypotheses)
         
-        if target_event_id and not question.target_event_id:
-             logger.info(f"[{question.id}] Setting target event: {target_event_id}")
-             try:
-                 question.target_event_id = target_event_id
-                 db.save(Question, question)
-             except Exception as e:
-                 logger.warning(f"[{question.id}] Failed to persist target: {e}")
+        # NOTE: No longer persisting target_event_id on question (deprecated).
+        # Outcome events are managed via outcome_event_ids + is_actual_outcome.
         
         # Fallback only if resolve_target_event_id returned None
         if not target_event_id:

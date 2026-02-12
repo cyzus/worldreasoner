@@ -42,10 +42,10 @@ const isNodeVisible = (node, timeFilter) => {
  * @param {Object} node - Node data
  * @param {CanvasRenderingContext2D} ctx - Canvas context
  * @param {number} globalScale - Current zoom level
- * @param {Object} options - Additional options (selectedNode, targetEventId, pulseTime, timeFilter)
+ * @param {Object} options - Additional options (selectedNode, pulseTime, timeFilter)
  */
 export const paintNode = (node, ctx, globalScale, options = {}) => {
-    const { selectedNode, targetEventId, pulseTime, timeFilter } = options
+    const { selectedNode, pulseTime, timeFilter } = options
 
     // Check visibility first
     if (!isNodeVisible(node, timeFilter)) {
@@ -59,8 +59,7 @@ export const paintNode = (node, ctx, globalScale, options = {}) => {
 
     const label = node.name || node.title || node.id
     const fontSize = 11 / globalScale
-    const isTarget = node.id === targetEventId
-    const isOutcome = node.isOutcome || isTarget
+    const isOutcome = node.isOutcome || node.properties?.is_actual_outcome
     const nodeSize = isOutcome ? GraphStyles.nodeSize.target + 3 : GraphStyles.nodeSize.default + 3
     const isSelected = selectedNode && selectedNode.id === node.id
 

@@ -6,7 +6,7 @@ import { GraphStyles } from '../styles/GraphStyles'
 import { paintNode as sharedPaintNode, paintLink as sharedPaintLink, GraphLegend } from '../utils/graphRendering.jsx'
 
 
-function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSettings, targetEventId, timeFilter }) {
+function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSettings, timeFilter }) {
   const graphRef = useRef()
   const animationFrameRef = useRef()
   const timeRef = useRef(0)
@@ -105,15 +105,13 @@ function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSetting
         return
       }
 
-      // Center on target event if specified
-      if (targetEventId) {
-        const targetNode = nodes.find(n => n.id === targetEventId)
-        if (targetNode && Number.isFinite(targetNode.x) && Number.isFinite(targetNode.y)) {
-          graphRef.current.centerAt(targetNode.x, targetNode.y, 1000)
-          graphRef.current.zoom(1.8, 1000)
-          hasZoomedRef.current = true
-          return
-        }
+      // Center on actual outcome node if present
+      const actualOutcomeNode = nodes.find(n => n.properties?.is_actual_outcome)
+      if (actualOutcomeNode && Number.isFinite(actualOutcomeNode.x) && Number.isFinite(actualOutcomeNode.y)) {
+        graphRef.current.centerAt(actualOutcomeNode.x, actualOutcomeNode.y, 1000)
+        graphRef.current.zoom(1.8, 1000)
+        hasZoomedRef.current = true
+        return
       }
 
       // Default: fit to viewport - always fit when data changes
@@ -124,7 +122,7 @@ function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSetting
     // Start attempting to center after a brief delay
     const timer = setTimeout(attemptCenter, 300)
     return () => clearTimeout(timer)
-  }, [graphData, targetEventId, dimensions])
+  }, [graphData, dimensions])
 
   // Handle window resize - re-center the graph
   useEffect(() => {
@@ -314,11 +312,10 @@ function GraphVisualization({ graphData, onNodeClick, selectedNode, forceSetting
   const handleNodePaint = React.useCallback((node, ctx, globalScale) => {
     sharedPaintNode(node, ctx, globalScale, {
       selectedNode,
-      targetEventId,
       timeFilter: timeFilterRef.current, // Read from ref to avoid recreating callback
       pulseTime: pulseTimeRef.current
     })
-  }, [selectedNode, targetEventId])
+  }, [selectedNode])
 
   // Stable callback for link painting
   const handleLinkPaint = React.useCallback((link, ctx, globalScale) => {

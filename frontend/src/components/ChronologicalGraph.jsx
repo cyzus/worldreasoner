@@ -24,7 +24,6 @@ const ChronologicalGraph = ({
     height,
     onNodeClick,
     selectedNode,
-    targetEventId,
     timeFilter = null, // { start: Date, end: Date } from Timeline
     padding = { top: 40, right: 100, bottom: 60, left: 100 }
 }) => {
@@ -250,7 +249,7 @@ const ChronologicalGraph = ({
 
         // Helper: Get status class matching Legend
         const getStatusClass = (d) => {
-            if (d.isOutcome || d.id === targetEventId) return 'target'
+            if (d.isOutcome || d.properties?.is_actual_outcome) return 'target'
             const status = d.properties?.status || d.status
             if (status === 'occurred') return 'confirmed'
             if (status === 'predicted') return 'predicted'
@@ -261,7 +260,7 @@ const ChronologicalGraph = ({
         // 1. DOTS
         nodeGroups.append("circle")
             .attr("class", d => `chrono-dot ${getStatusClass(d)}`)
-            .attr("r", d => (d.isOutcome || d.id === targetEventId) ? 8 : 5)
+            .attr("r", d => (d.isOutcome || d.properties?.is_actual_outcome) ? 8 : 5)
             .on("click", (e, d) => { e.stopPropagation(); onNodeClick(d); })
 
         // 2. CARDS

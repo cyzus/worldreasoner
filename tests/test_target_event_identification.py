@@ -100,12 +100,15 @@ async def test_target_event_identification():
         for question in updated_questions:
             logger.info(f"Question: {question.question_text}")
             logger.info(f"  Ground Truth: {question.ground_truth}")
-            logger.info(f"  Target Event ID: {question.target_event_id}")
+            logger.info(f"  Outcome Event IDs: {question.outcome_event_ids}")
+            logger.info(f"  Target Event ID (legacy): {question.target_event_id}")
 
-            if question.target_event_id:
+            # Check outcome_event_ids first, then legacy target_event_id
+            check_ids = question.outcome_event_ids or ([question.target_event_id] if question.target_event_id else [])
+            if check_ids:
                 # Try to fetch the created event
                 db = GenericDatabase("worldreasoner.db")
-                event = db.get(Event, question.target_event_id)
+                event = db.get(Event, check_ids[0])
                 if event:
                     logger.info(f"  Event Name: {event.title}")
                     logger.info(f"  Event Date: {event.occurred_date}")

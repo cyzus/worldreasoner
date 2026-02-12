@@ -153,7 +153,7 @@ async def get_event_questions(event_id: str):
         directly_related = [
             q
             for q in all_questions
-            if q.target_event_id == event_id or event_id in q.related_event_ids
+            if event_id in (q.outcome_event_ids or []) or q.target_event_id == event_id or event_id in q.related_event_ids
         ]
 
         # 2. Reverse lookup: questions that discovered this event via evidence pipeline

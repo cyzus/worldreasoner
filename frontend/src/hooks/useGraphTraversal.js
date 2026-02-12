@@ -343,12 +343,10 @@ export const useGraphTraversal = (questions) => {
 
             console.log(`Filtered graph: ${filteredNodes.length} nodes, ${filteredLinks.length} links (from ${fullGraphData.links.length} total links)`)
 
-            // Mark outcome nodes (preserve is_outcome from backend + target_event_id)
-            const outcomeNodeId = question.target_event_id
+            // Mark outcome nodes from backend is_outcome / is_actual_outcome properties
+            const outcomeNodeId = filteredNodes.find(n => n.properties?.is_actual_outcome)?.id
             filteredNodes.forEach(node => {
-                // Preserve isOutcome from backend data (outcome events have is_outcome=True)
-                // Also mark target_event_id as outcome for backward compatibility
-                node.isOutcome = node.properties?.is_outcome || node.id === outcomeNodeId
+                node.isOutcome = node.properties?.is_outcome || false
             })
 
             // Apply impact colors relative to actual outcome.
@@ -414,6 +412,9 @@ export const useGraphTraversal = (questions) => {
             console.error('Failed to fetch question events:', error)
             // Fallback to old behavior using only related_event_ids
             const seedEventIds = new Set()
+            if (question.outcome_event_ids) {
+                question.outcome_event_ids.forEach(id => seedEventIds.add(id))
+            }
             if (question.target_event_id) {
                 seedEventIds.add(question.target_event_id)
             }
@@ -423,12 +424,10 @@ export const useGraphTraversal = (questions) => {
 
             const filteredNodes = fullGraphData.nodes.filter(node => seedEventIds.has(node.id))
 
-            // Mark outcome nodes (preserve is_outcome from backend + target_event_id)
-            const outcomeNodeId = question.target_event_id
+            // Mark outcome nodes from backend is_outcome / is_actual_outcome properties
+            const outcomeNodeId = filteredNodes.find(n => n.properties?.is_actual_outcome)?.id
             filteredNodes.forEach(node => {
-                // Preserve isOutcome from backend data (outcome events have is_outcome=True)
-                // Also mark target_event_id as outcome for backward compatibility
-                node.isOutcome = node.properties?.is_outcome || node.id === outcomeNodeId
+                node.isOutcome = node.properties?.is_outcome || false
             })
 
             // Apply impact colors relative to actual outcome (fallback path).

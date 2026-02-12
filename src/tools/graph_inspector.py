@@ -148,7 +148,11 @@ class GraphInspectorTool(DatabaseAwareTool):
         # Find orphan events (related to question but not in any hypothesis)
         orphan_event_ids = set()
         if question:
-            # Check target event
+            # Check outcome events
+            for oid in question.outcome_event_ids or []:
+                if oid not in event_ids:
+                    orphan_event_ids.add(oid)
+            # Check legacy target event
             if question.target_event_id and question.target_event_id not in event_ids:
                 orphan_event_ids.add(question.target_event_id)
             # Check related events
@@ -305,7 +309,8 @@ RECOMMENDATION:
         
         # Determine target if not passed
         if not target_event_id and question:
-            target_event_id = question.target_event_id
+            from src.utils.graph_analysis import resolve_target_event_id
+            target_event_id = resolve_target_event_id(question, self.db)
         
         if target_event_id and target_event_id in events:
             tree_lines = self._build_causal_tree(

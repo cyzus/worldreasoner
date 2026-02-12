@@ -171,7 +171,7 @@ async def test_evidence_pipeline_with_mock_resolved_question(test_db_path):
         difficulty=3,
         resolution_date=datetime.now(timezone.utc) - timedelta(days=10),
         ground_truth=True,
-        target_event_id=event.id,
+        outcome_event_ids=[event.id],
         source="test",  # Required field for test
     )
     db.save(Question, question)

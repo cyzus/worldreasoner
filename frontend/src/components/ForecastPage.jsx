@@ -556,7 +556,6 @@ const ForecastPage = ({
                           events={questionRelatedEvents}
                           turningPoints={priceHistoryData.turning_points || []}
                           leadChanges={priceHistoryData.lead_changes || []}
-                          targetEventId={selectedQuestion.target_event_id}
                           outcomes={priceHistoryData.outcomes || ['Yes', 'No']}
                           activeInterval={priceHistoryInterval}
                           onIntervalChange={handleIntervalChange}

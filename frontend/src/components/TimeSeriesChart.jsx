@@ -21,7 +21,6 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
   events = [],
   turningPoints = [],
   leadChanges = [],
-  targetEventId,
   outcomes = ['Yes', 'No'],
   width = 900,
   height = 400,
@@ -365,7 +364,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
 
       eventsInTimeRange.forEach((event, idx) => {
         const x = event.xPos
-        const isTarget = event.id === targetEventId
+        const isTarget = event.is_actual_outcome || event.properties?.is_actual_outcome
         const markerColor = getEventMarkerColor(event, isTarget)
         const level = event.level || 0
         const yOffset = -15 - (level * levelHeight)
@@ -523,7 +522,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
         .style('font-weight', 'bold')
         .text('Events:')
 
-      if (eventsInTimeRange.some(e => e.id === targetEventId)) {
+      if (eventsInTimeRange.some(e => e.is_actual_outcome || e.properties?.is_actual_outcome)) {
         eventLegend.append('circle')
           .attr('cx', 5)
           .attr('cy', 18)
@@ -537,12 +536,12 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
           .attr('y', 22)
           .style('fill', '#495057')
           .style('font-size', '10px')
-          .text('Target')
+          .text('Outcome')
       }
 
       eventLegend.append('circle')
         .attr('cx', 5)
-        .attr('cy', eventsInTimeRange.some(e => e.id === targetEventId) ? 35 : 18)
+        .attr('cy', eventsInTimeRange.some(e => e.is_actual_outcome || e.properties?.is_actual_outcome) ? 35 : 18)
         .attr('r', 4)
         .attr('fill', '#4a90e2')
         .attr('stroke', '#ffffff')
@@ -550,10 +549,10 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
 
       eventLegend.append('text')
         .attr('x', 15)
-        .attr('y', eventsInTimeRange.some(e => e.id === targetEventId) ? 39 : 22)
+        .attr('y', eventsInTimeRange.some(e => e.is_actual_outcome || e.properties?.is_actual_outcome) ? 39 : 22)
         .style('fill', '#495057')
         .style('font-size', '10px')
-        .text(`Events (${eventsInTimeRange.length - (eventsInTimeRange.some(e => e.id === targetEventId) ? 1 : 0)})`)
+        .text(`Events (${eventsInTimeRange.length - (eventsInTimeRange.some(e => e.is_actual_outcome || e.properties?.is_actual_outcome) ? 1 : 0)})`)
     }
 
     // Add turning point markers (diamond shapes on the price line)
@@ -808,7 +807,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
         setHoveredPrice(null)
       })
 
-  }, [priceHistory, events, turningPoints, leadChanges, targetEventId, outcomes, width, height, isExpanded])
+  }, [priceHistory, events, turningPoints, leadChanges, outcomes, width, height, isExpanded])
 
   // Count events in time range for title
   const eventsInRange = (Array.isArray(events) && events.length > 0) ? events.filter(event => {
@@ -934,7 +933,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
           top: '60px',
           left: '80px',
           background: '#ffffff',
-          border: `2px solid ${hoveredEvent._markerColor || (hoveredEvent.id === targetEventId ? '#f59e0b' : '#4a90e2')}`,
+          border: `2px solid ${hoveredEvent._markerColor || ((hoveredEvent.is_actual_outcome || hoveredEvent.properties?.is_actual_outcome) ? '#f59e0b' : '#4a90e2')}`,
           borderRadius: '8px',
           padding: '12px 16px',
           color: '#495057',
@@ -944,9 +943,9 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
           zIndex: 1000,
           boxShadow: '0 8px 24px rgba(0,0,0,0.15)'
         }}>
-          {hoveredEvent.id === targetEventId && (
+          {(hoveredEvent.is_actual_outcome || hoveredEvent.properties?.is_actual_outcome) && (
             <div style={{ color: '#f59e0b', fontWeight: 'bold', marginBottom: '6px', fontSize: '12px' }}>
-              🎯 TARGET EVENT
+              🎯 OUTCOME EVENT
             </div>
           )}
           <div style={{ fontWeight: '600', marginBottom: '6px', fontSize: '13px', lineHeight: '1.4', color: '#212529' }}>

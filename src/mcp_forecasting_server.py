@@ -72,6 +72,7 @@ from src.core.hybrid_search import HybridSearch
 from src.domain.models import Forecast
 from src.utils.logging import logger
 from src.utils.serialization import serialize_domain
+from src.utils.graph_analysis import resolve_target_event_id
 
 # Import services
 from src.domain.forecast_context_service import ForecastContextService, ForecastContext
@@ -572,7 +573,7 @@ def submit_forecast(
             reasoning=reasoning,
             articles_accessed=articles_accessed or [],
             simulated_date=forecast_context.simulated_date,
-            target_event_id=question.target_event_id,
+            target_event_id=resolve_target_event_id(question, db),
             model_name=forecast_context.model_name,
             mode=forecast_context.forecast_mode,
             db_path=forecast_context.db_path,

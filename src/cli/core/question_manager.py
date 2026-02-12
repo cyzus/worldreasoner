@@ -132,7 +132,8 @@ class QuestionManager:
                 else None,
             }
             if show_related:
-                item["target_event_id"] = q.target_event_id
+                from src.utils.graph_analysis import resolve_target_event_id
+                item["target_event_id"] = resolve_target_event_id(q, self.db)
                 item["related_event_count"] = len(q.related_event_ids)
             results.append(item)
 
@@ -146,7 +147,9 @@ class QuestionManager:
 
         # Get related events
         event_ids = []
-        if question.target_event_id:
+        if question.outcome_event_ids:
+            event_ids.extend(question.outcome_event_ids)
+        if question.target_event_id:  # Legacy fallback
             event_ids.append(question.target_event_id)
         event_ids.extend(question.related_event_ids)
 

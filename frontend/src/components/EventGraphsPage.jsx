@@ -318,7 +318,6 @@ function EventGraphsPage({
                             graphData={graphData}
                             onNodeClick={onNodeClick}
                             selectedNode={selectedNode}
-                            targetEventId={selectedQuestionId ? questions.find(q => q.id === selectedQuestionId)?.target_event_id : null}
                             timeFilter={timeFilter}
                           />
 
@@ -352,7 +351,6 @@ function EventGraphsPage({
                         <ForecastGraph
                           key={`forecast-${graphView}-${selectedQuestionId || 'none'}`}
                           graphData={forecastGraphData}
-                          targetEventId={selectedQuestionId ? questions.find(q => q.id === selectedQuestionId)?.target_event_id : null}
                           onNodeClick={onNodeClick}
                           selectedNode={selectedNode}
                         />
@@ -390,7 +388,6 @@ function EventGraphsPage({
                       events={questionRelatedEvents}
                       turningPoints={priceHistoryData.turning_points || []}
                       leadChanges={priceHistoryData.lead_changes || []}
-                      targetEventId={questions.find(q => q.id === selectedQuestionId)?.target_event_id}
                       outcomes={priceHistoryData.outcomes || ['Yes', 'No']}
                       activeInterval={priceHistoryInterval}
                       onIntervalChange={setPriceHistoryInterval}

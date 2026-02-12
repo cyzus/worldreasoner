@@ -105,8 +105,8 @@ def question_with_evidence(test_db, resolved_question):
     )
     test_db.save(Event, event)
 
-    # Update question with target event
-    resolved_question.target_event_id = event.id
+    # Update question with outcome event
+    resolved_question.outcome_event_ids = [event.id]
     test_db.save(Question, resolved_question)
 
     # Create hypotheses with evidence articles

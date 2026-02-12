@@ -84,10 +84,8 @@ class QuestionEventsTool(DatabaseAwareTool):
         if question.outcome_event_ids:
             event_ids.update(question.outcome_event_ids)
         
-        # From target_event_id (legacy)
-        if question.target_event_id:
-            event_ids.add(question.target_event_id)
-        
+        # Note: target_event_id (legacy) no longer read — outcome_event_ids covers it
+
         # From related_event_ids
         if question.related_event_ids:
             event_ids.update(question.related_event_ids)

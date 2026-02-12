@@ -32,7 +32,7 @@ This method uses the [PELT](https://centre-borelli.github.io/ruptures-docs/) (Pr
 ```
 1. Convert prices to a 1-D signal
 2. Estimate noise level (robust MAD-based σ estimate)
-3. Compute BIC-style penalty: penalty = scale × ln(n) × σ²
+3. Compute BIC (Bayesian Information Criterion)-style penalty: penalty = scale × ln(n) × σ²
 4. Run PELT with L2 (mean-shift) cost model to find changepoints
 5. For each changepoint boundary:
    a. Open a window [boundary - lookback, boundary + lookahead]

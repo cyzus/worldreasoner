@@ -113,10 +113,10 @@ const QuestionCard = memo(({
                             <span>{new Date(q.resolution_date).toLocaleDateString()}</span>
                         </div>
                     )}
-                    {q.target_event_id && (
+                    {q.outcome_event_ids?.length > 0 && (
                         <div className="meta-item">
                             <span className="meta-label">📍</span>
-                            <span>Has target event</span>
+                            <span>{q.outcome_event_ids.length} outcome event{q.outcome_event_ids.length > 1 ? 's' : ''}</span>
                         </div>
                     )}
                     {q.related_event_ids && q.related_event_ids.length > 0 && (

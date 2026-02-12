@@ -687,7 +687,9 @@ async def get_question_events(
 
         # Start with events directly referenced by question
         event_ids = set()
-        if question.target_event_id:
+        if question.outcome_event_ids:
+            event_ids.update(question.outcome_event_ids)
+        if question.target_event_id:  # Legacy fallback
             event_ids.add(question.target_event_id)
         event_ids.update(question.related_event_ids)
 
@@ -1414,7 +1416,9 @@ async def get_causal_path_analysis(
             )
 
         # Check if question has a target event
-        if not question.target_event_id:
+        from src.utils.graph_analysis import resolve_target_event_id
+        resolved = resolve_target_event_id(question, db)
+        if not resolved:
             return {
                 "question_id": question_id,
                 "has_target_event": False,
@@ -1424,7 +1428,7 @@ async def get_causal_path_analysis(
         # Analyze paths to target
         analyzer = CausalPathAnalyzer(db)
         analysis = analyzer.analyze_paths_to_target(
-            target_event_id=question.target_event_id, max_depth=10, max_paths=20
+            target_event_id=resolved, max_depth=10, max_paths=20
         )
 
         # Get path statistics
@@ -1469,7 +1473,7 @@ async def get_causal_path_analysis(
 
         # Get path information for each event
         event_path_info = analyzer.get_path_for_events(
-            event_ids, question.target_event_id
+            event_ids, resolved
         )
 
         logger.info(
@@ -1479,7 +1483,7 @@ async def get_causal_path_analysis(
 
         return {
             "question_id": question_id,
-            "target_event_id": question.target_event_id,
+            "target_event_id": resolved,
             "has_target_event": True,
             "statistics": stats,
             "paths": all_paths_details,

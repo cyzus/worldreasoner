@@ -61,7 +61,6 @@ const CanvasTimelineGraph = ({
     graphData,
     onNodeClick,
     selectedNode,
-    targetEventId,
     timeFilter = null
 }) => {
     const containerRef = useRef(null)
@@ -172,9 +171,6 @@ const CanvasTimelineGraph = ({
 
     // Get node color based on status
     const getNodeColor = useCallback((node) => {
-        if (node.id === targetEventId) {
-            return GraphStyles.nodeColors.target
-        }
         // Only actual outcome gets special color (large aura)
         if (node.properties?.is_actual_outcome) {
             return GraphStyles.nodeColors.outcome || '#FFC107'
@@ -224,7 +220,7 @@ const CanvasTimelineGraph = ({
             return '#10b981'
         }
         return '#3b82f6'
-    }, [targetEventId])
+    }, [])
 
     // Get link color based on relation type
     const getLinkColor = useCallback((link) => {
@@ -250,26 +246,22 @@ const CanvasTimelineGraph = ({
             return  // Skip invisible nodes
         }
 
-        const isTarget = node.id === targetEventId
         const isOutcome = node.isOutcome
-        const isActualOutcome = node.properties?.is_actual_outcome // Only actual outcome gets large aura
+        const isActualOutcome = node.properties?.is_actual_outcome
         const isSelected = selectedNode?.id === node.id
-        const size = (isTarget || isActualOutcome) ? NODE_TARGET_SIZE : NODE_BASE_SIZE
+        const size = isActualOutcome ? NODE_TARGET_SIZE : NODE_BASE_SIZE
         const color = getNodeColor(node)
         const showCard = globalScale >= CARD_MIN_ZOOM
 
-        // Draw glow for target/actual outcome/selected
-        if (isTarget || isActualOutcome || isSelected) {
+        // Draw glow for actual outcome/selected
+        if (isActualOutcome || isSelected) {
             ctx.beginPath()
             ctx.arc(node.x, node.y, size + (showCard ? 25 : 8), 0, 2 * Math.PI)
             const gradient = ctx.createRadialGradient(
                 node.x, node.y, size,
                 node.x, node.y, size + (showCard ? 25 : 8)
             )
-            if (isTarget) {
-                gradient.addColorStop(0, 'rgba(255, 215, 0, 0.4)')
-                gradient.addColorStop(1, 'rgba(255, 215, 0, 0)')
-            } else if (isActualOutcome) {
+            if (isActualOutcome) {
                 gradient.addColorStop(0, 'rgba(255, 193, 7, 0.4)')
                 gradient.addColorStop(1, 'rgba(255, 193, 7, 0)')
             } else {
@@ -334,13 +326,8 @@ const CanvasTimelineGraph = ({
             ctx.fillStyle = '#1e293b'
             ctx.fillText(displayTitle, x + 8 / globalScale, y + 30 / globalScale)
 
-            // Target/Outcome badge
-            if (isTarget) {
-                ctx.font = `700 ${9 / globalScale}px Inter, sans-serif`
-                ctx.fillStyle = '#f59e0b'
-                ctx.textAlign = 'right'
-                ctx.fillText('⭐ TARGET', x + cardW - 8 / globalScale, y + 14 / globalScale)
-            } else if (isActualOutcome) {
+            // Outcome badge
+            if (isActualOutcome) {
                 ctx.font = `700 ${9 / globalScale}px Inter, sans-serif`
                 ctx.fillStyle = '#d97706' // darker amber
                 ctx.textAlign = 'right'
@@ -354,11 +341,11 @@ const CanvasTimelineGraph = ({
             ctx.fill()
 
             // Border
-            ctx.strokeStyle = (isTarget || isActualOutcome) ? '#b45309' : 'rgba(255, 255, 255, 0.8)'
-            ctx.lineWidth = (isTarget || isActualOutcome) ? 2 : 1.5
+            ctx.strokeStyle = isActualOutcome ? '#b45309' : 'rgba(255, 255, 255, 0.8)'
+            ctx.lineWidth = isActualOutcome ? 2 : 1.5
             ctx.stroke()
         }
-    }, [getNodeColor, isNodeVisible, selectedNode, targetEventId])
+    }, [getNodeColor, isNodeVisible, selectedNode])
 
     // Custom link painting
     const paintLink = useCallback((link, ctx, globalScale) => {

@@ -188,7 +188,8 @@ class QuestionMonitorService(ServiceBase):
         graph_depth = 0
         if question_hypotheses:
             question = self.db.get(Question, question_id)
-            target_event_id = question.target_event_id if question else None
+            from src.utils.graph_analysis import resolve_target_event_id
+            target_event_id = resolve_target_event_id(question, self.db, question_hypotheses)
 
             if target_event_id:
                 quality_metrics = calculate_graph_quality(

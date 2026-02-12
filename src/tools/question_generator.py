@@ -341,7 +341,7 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             resolution_date=res_date,
             estimated_start_time=est_start_time,  # When question becomes valid for forecasting
             ground_truth=normalized_ground_truth,  # Use normalized value
-            target_event_id=event_ids[0] if event_ids else None,
+            target_event_id=None,  # Deprecated: outcome events managed by OutcomeEventService
             related_event_ids=event_ids,
             related_article_ids=[aid.strip() for aid in related_article_ids.split(",")]
             if related_article_ids
