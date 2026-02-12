@@ -12,9 +12,82 @@ The system analyzes price curves to detect two types of significant market event
 
 ## Turning Points Detection
 
-### Core Detection Logic
+Turning points can be detected using two methods, selected via the `method` parameter:
 
-The algorithm scans through price history looking for local maxima (peaks) and local minima (troughs) that represent true reversals:
+| Method | Key | Description |
+|--------|-----|-------------|
+| **PELT/BIC** (default) | `"pelt_bic"` | Statistical changepoint detection using the PELT algorithm with a BIC-style penalty. More robust for noisy or irregular data. |
+| **Local Heuristic** | `"local"` | Sliding-window peak/trough detection. Simpler, purely geometric approach. |
+
+Both methods share the same reversal verification, significance calculation, time-gap filtering, and output format. They differ only in **how candidate turning points are identified**.
+
+---
+
+### Method 1: PELT/BIC (Default)
+
+This method uses the [PELT](https://centre-borelli.github.io/ruptures-docs/) (Pruned Exact Linear Time) changepoint detection algorithm to find **regime boundaries** — points where the underlying price level shifts — and then extracts peaks and troughs around those boundaries.
+
+#### How It Works
+
+```
+1. Convert prices to a 1-D signal
+2. Estimate noise level (robust MAD-based σ estimate)
+3. Compute BIC-style penalty: penalty = scale × ln(n) × σ²
+4. Run PELT with L2 (mean-shift) cost model to find changepoints
+5. For each changepoint boundary:
+   a. Open a window [boundary - lookback, boundary + lookahead]
+   b. Find the local peak and trough within the window
+   c. Apply reversal verification and significance checks
+6. Apply time-gap filtering and sort by significance
+```
+
+#### Noise Estimation
+
+A robust noise estimate is computed from first-differences using the Median Absolute Deviation (MAD):
+
+```python
+diffs = np.diff(prices)
+mad = np.median(np.abs(diffs - np.median(diffs)))
+sigma = mad / 0.6745  # Scale to match Gaussian std dev
+```
+
+Falls back to standard deviation if MAD is zero (constant price segments).
+
+#### BIC-Style Penalty
+
+The penalty controls how many changepoints are detected — higher penalty → fewer, more significant changepoints:
+
+```python
+penalty = pelt_penalty_scale × ln(n_points) × sigma²
+```
+
+- `pelt_penalty_scale` (default: 1.0) is a user-tunable multiplier
+- The `ln(n)` term is the BIC complexity penalty that scales with data size
+- `sigma²` normalizes by the data's noise level
+
+#### Peak/Trough Extraction Around Boundaries
+
+For each PELT changepoint boundary, a window is opened and the highest (peak candidate) and lowest (trough candidate) prices within that window are found. The winner is whichever has the higher significance, provided it passes the reversal and minimum-significance checks.
+
+#### Fallback
+
+If the `ruptures` library is not installed, the method automatically falls back to the local heuristic detector.
+
+#### PELT-Specific Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `pelt_min_segment_points` | 5 | Minimum number of data points per regime segment |
+| `pelt_jump` | 1 | Speed/precision tradeoff (higher = faster but coarser) |
+| `pelt_penalty_scale` | 1.0 | Multiplier for BIC penalty (higher = fewer changepoints) |
+
+---
+
+### Method 2: Local Heuristic
+
+The original geometric detector that scans through price history looking for local maxima (peaks) and local minima (troughs) using sliding windows.
+
+#### How It Works
 
 ```
 For each point P at index i:
@@ -25,23 +98,7 @@ For each point P at index i:
   5. Calculate significance based on magnitude of the swing
 ```
 
-### Step-by-Step Calculation
-
-#### 1. Window Selection
-
-```python
-lookback_window = 5   # Points to look back (adaptive for sparse data)
-lookahead_window = 5  # Points to look ahead (adaptive for sparse data)
-```
-
-For sparse data (few price points), windows automatically shrink:
-```python
-effective_window = min(default_window, max(2, (n_points - 1) // 3))
-```
-
-This ensures markets with only 10-15 data points can still have turning points detected.
-
-#### 2. Local Extremum Detection
+#### Local Extremum Detection
 
 **Peak (Local Maximum):**
 ```python
@@ -59,7 +116,23 @@ is_trough = (
 )
 ```
 
-#### 3. Reversal Verification
+---
+
+### Shared Logic (Both Methods)
+
+#### Window Selection
+
+```python
+lookback_window = 5   # Points to look back (adaptive for sparse data)
+lookahead_window = 5  # Points to look ahead (adaptive for sparse data)
+```
+
+For sparse data (few price points), windows automatically shrink:
+```python
+effective_window = min(default_window, max(2, (n_points - 1) // 3))
+```
+
+#### Reversal Verification
 
 A peak/trough must be a TRUE reversal, not just a local extremum in a continuing trend:
 
@@ -72,19 +145,11 @@ A peak/trough must be a TRUE reversal, not just a local extremum in a continuing
 - `change_after` must be positive (price rose after the trough)
 
 ```python
-change_before = (current_price - first_lookback_price) * 100  # in percentage points
-change_after = (last_lookahead_price - current_price) * 100   # in percentage points
-
-# For a valid peak:
-if change_before <= 0 or change_after >= 0:
-    skip  # Not a true reversal
-
-# For a valid trough:
-if change_before >= 0 or change_after <= 0:
-    skip  # Not a true reversal
+change_before = (current_price - anchor_left_price) * 100   # in percentage points
+change_after  = (anchor_right_price - current_price) * 100  # in percentage points
 ```
 
-#### 4. Significance Calculation
+#### Significance Calculation
 
 Significance measures how "important" the turning point is:
 
@@ -92,41 +157,30 @@ Significance measures how "important" the turning point is:
 significance = abs(change_before) + abs(change_after)
 ```
 
-This is the **total swing** - how much the price moved up to reach the point plus how much it moved down after (or vice versa for troughs).
+This is the **total swing** — how much the price moved to reach the point plus how much it moved after.
 
 **Example:**
-- Price rises 15pp to reach a peak, then falls 12pp after
-- Significance = 15 + 12 = 27
+- Price rises 15pp to reach a peak, then falls 12pp after → Significance = 15 + 12 = **27**
 
-#### 5. Minimum Threshold
-
-Only turning points above a minimum significance are kept:
+#### Minimum Threshold
 
 ```python
 min_change_pct = 5.0  # Default: 5 percentage points total swing
-
-if significance < min_change_pct:
-    skip  # Not significant enough
 ```
 
-#### 6. Time Gap Filtering
+#### Time Gap Filtering
 
 To avoid detecting multiple turning points in rapid succession:
 
 ```python
 min_time_between_points_hours = 6.0
 
-if (current_time - last_turning_point_time) < min_time_gap:
-    # Keep whichever has higher significance
-    if current_significance > last_significance:
-        replace_last_with_current
-    else:
-        skip_current
+# If too close to the previous turning point, keep whichever has higher significance
 ```
 
-#### 7. Final Sorting
+#### Final Sorting
 
-Results are sorted by significance (descending), so the most important turning points come first:
+Results are sorted by significance (descending):
 
 ```python
 turning_points.sort(key=lambda x: x["significance"], reverse=True)
@@ -351,10 +405,14 @@ Set `create_events=true` to persist turning points as Event records in the datab
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
+| `method` | `"pelt_bic"` | Detection method: `"pelt_bic"` (statistical) or `"local"` (heuristic) |
 | `min_change_pct` | 5.0 | Minimum total swing (pp) for a turning point |
 | `lookback_window` | 5 | Points to look back (adaptive) |
 | `lookahead_window` | 5 | Points to look ahead (adaptive) |
 | `min_time_between_points_hours` | 6.0 | Minimum gap between turning points |
+| `pelt_min_segment_points` | 5 | Min data points per regime segment (PELT only) |
+| `pelt_jump` | 1 | Speed/precision tradeoff (PELT only) |
+| `pelt_penalty_scale` | 1.0 | BIC penalty multiplier — higher = fewer changepoints (PELT only) |
 
 ### Lead Changes
 
@@ -369,3 +427,4 @@ Set `create_events=true` to persist turning points as Event records in the datab
 2. **Noise sensitivity**: Low thresholds may detect insignificant fluctuations
 3. **Hindsight only**: Algorithm needs data after the turning point to confirm the reversal
 4. **Single outcome**: Currently analyzes the primary outcome (first token) only
+5. **PELT dependency**: The `pelt_bic` method requires the `ruptures` and `numpy` packages; falls back to `local` if not installed
