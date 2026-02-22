@@ -4,6 +4,7 @@ This module ensures temporal validity in forecasting by restricting access to
 information published or occurred before a specified cutoff date.
 """
 
+import contextvars
 from datetime import datetime
 from typing import List, Optional, TYPE_CHECKING
 from dataclasses import dataclass
@@ -268,6 +269,7 @@ class TemporalGateway:
         Returns:
             List of article IDs that pass temporal check
         """
+        from ..domain.models import Article
 
         accessible = []
 
@@ -288,6 +290,7 @@ class TemporalGateway:
         Returns:
             List of event IDs that pass temporal check
         """
+        from ..domain.models import Event
 
         accessible = []
 
@@ -299,16 +302,23 @@ class TemporalGateway:
         return accessible
 
 
+# Module-level ContextVar for async/thread-safe temporal state
+_temporal_cutoff_var: contextvars.ContextVar[Optional[datetime]] = contextvars.ContextVar(
+    "temporal_cutoff", default=None
+)
+
+
 class TemporalContext:
-    """Thread-local context for temporal constraints.
+    """Async/thread-safe context for temporal constraints.
+
+    Uses contextvars.ContextVar for safe concurrent access in async
+    frameworks (FastAPI, asyncio) and threaded environments.
 
     Usage as context manager:
         >>> with TemporalContext(cutoff_date=question.cutoff_date):
         ...     # All operations in this block respect the cutoff
         ...     articles = db.get_articles()
     """
-
-    _cutoff_date: Optional[datetime] = None
 
     def __init__(self, cutoff_date: datetime):
         """Initialize temporal context.
@@ -320,12 +330,11 @@ class TemporalContext:
             raise ValueError("cutoff_date must be timezone-aware")
 
         self.cutoff_date = cutoff_date
-        self._previous_cutoff = None
+        self._token: Optional[contextvars.Token] = None
 
     def __enter__(self):
         """Enter context - set cutoff date."""
-        self._previous_cutoff = TemporalContext._cutoff_date
-        TemporalContext._cutoff_date = self.cutoff_date
+        self._token = _temporal_cutoff_var.set(self.cutoff_date)
         logger.debug(
             f"Entered TemporalContext with cutoff: {self.cutoff_date.isoformat()}"
         )
@@ -333,7 +342,9 @@ class TemporalContext:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit context - restore previous cutoff."""
-        TemporalContext._cutoff_date = self._previous_cutoff
+        if self._token is not None:
+            _temporal_cutoff_var.reset(self._token)
+            self._token = None
         logger.debug("Exited TemporalContext")
         return False
 
@@ -344,7 +355,7 @@ class TemporalContext:
         Returns:
             Current cutoff date if in temporal context, None otherwise
         """
-        return cls._cutoff_date
+        return _temporal_cutoff_var.get()
 
     @classmethod
     def is_active(cls) -> bool:
@@ -353,4 +364,4 @@ class TemporalContext:
         Returns:
             True if inside a TemporalContext block
         """
-        return cls._cutoff_date is not None
+        return _temporal_cutoff_var.get() is not None

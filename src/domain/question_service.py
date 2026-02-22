@@ -5,7 +5,7 @@ Used by both CLI and pipelines to break circular dependency.
 """
 
 from typing import Dict, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.core.database import GenericDatabase
 from src.domain.models import Question, Article, Event, CausalHypothesis
@@ -338,15 +338,19 @@ class QuestionService:
         if not question:
             return {"error": f"Question {question_id} not found"}
 
-        # Apply updates
+        # Apply updates (protect immutable fields)
+        immutable_fields = {"id", "created_at"}
         data = question.model_dump()
         for key, value in updates.items():
+            if key in immutable_fields:
+                logger.warning(f"Skipping immutable field '{key}' in update_question")
+                continue
             if key in data:
                 data[key] = value
 
         # Rebuild and save
         updated_question = Question(**data)
-        updated_question.updated_at = datetime.now()
+        updated_question.updated_at = datetime.now(timezone.utc)
         self.db.save(Question, updated_question)
 
         return {"success": True, "updated": list(updates.keys())}

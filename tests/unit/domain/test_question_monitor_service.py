@@ -12,7 +12,9 @@ from src.domain.models.question import Question, QuestionType
 from src.domain.models.forecast import Forecast, ForecastMode
 from src.domain.models.causal_hypothesis import CausalHypothesis
 from src.domain.models.event import Event, EventType, EventStatus, CausalRelationType
+from src.domain.models.article import Article
 from src.domain.models.domain import Domain
+
 
 
 @pytest.fixture
@@ -24,6 +26,7 @@ def test_db(tmp_path):
     db.create_table(Forecast)
     db.create_table(CausalHypothesis)
     db.create_table(Event)
+    db.create_table(Article)
     return db
 
 
@@ -109,8 +112,22 @@ def question_with_evidence(test_db, resolved_question):
     resolved_question.outcome_event_ids = [event.id]
     test_db.save(Question, resolved_question)
 
-    # Create hypotheses with evidence articles
-    hypothesis = CausalHypothesis(
+    # Create actual Article records (service counts via db.count on articles table)
+    for i in range(1, 6):
+        art = Article(
+            id=f"art_{i:03d}",
+            title=f"Evidence article number {i} for AI benchmark",
+            content="A" * 100,  # min_length=100
+            source="test",
+            published_date=datetime(2023, 12, i, tzinfo=timezone.utc),
+            domain=Domain.TECH,
+            collected_for_question_id=resolved_question.id,
+        )
+        test_db.save(Article, art)
+
+    # Create a chain of 2 hypotheses for graph_depth >= 2
+    # Chain: evt_root_001 -> evt_source_001 -> evt_target_001
+    hypothesis1 = CausalHypothesis(
         id="hyp_001",
         source_event_id="evt_source_001",
         target_event_id=event.id,
@@ -121,7 +138,21 @@ def question_with_evidence(test_db, resolved_question):
         discovered_by_question_ids=[resolved_question.id],
         evidence_article_ids=["art_001", "art_002", "art_003", "art_004", "art_005"],
     )
-    test_db.save(CausalHypothesis, hypothesis)
+    test_db.save(CausalHypothesis, hypothesis1)
+
+    hypothesis2 = CausalHypothesis(
+        id="hyp_002",
+        source_event_id="evt_root_001",
+        target_event_id="evt_source_001",
+        relation_type=CausalRelationType.CAUSES,
+        strength=0.7,
+        confidence=0.7,
+        reasoning="Root cause led to intermediate event",
+        discovered_by_question_ids=[resolved_question.id],
+        evidence_article_ids=["art_001"],
+    )
+    test_db.save(CausalHypothesis, hypothesis2)
+
     return resolved_question
 
 
@@ -206,7 +237,20 @@ class TestCheckSatisfaction:
         )
         test_db.save(Question, q)
 
-        # Create hypothesis with only 2 articles (config requires 5)
+        # Create 2 actual articles collected for this question (config requires 5)
+        for i in range(1, 3):
+            art = Article(
+                id=f"art_partial_{i:03d}",
+                title=f"Partial evidence article number {i} for question",
+                content="B" * 100,
+                source="test",
+                published_date=datetime(2023, 12, i, tzinfo=timezone.utc),
+                domain=Domain.TECH,
+                collected_for_question_id=q.id,
+            )
+            test_db.save(Article, art)
+
+        # Create hypothesis
         hypothesis = CausalHypothesis(
             id="hyp_partial_001",
             source_event_id="evt_001",
@@ -216,7 +260,7 @@ class TestCheckSatisfaction:
             confidence=0.8,
             reasoning="This reasoning is long enough to pass the validation check",
             discovered_by_question_ids=[q.id],
-            evidence_article_ids=["art_001", "art_002"],
+            evidence_article_ids=["art_partial_001", "art_partial_002"],
         )
         test_db.save(CausalHypothesis, hypothesis)
 

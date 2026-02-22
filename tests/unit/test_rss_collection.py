@@ -1,7 +1,6 @@
 """Unit tests for RSS-based article collection."""
 
 import pytest
-import json
 import yaml
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
@@ -20,39 +19,35 @@ class TestRssFetchTool:
         """Test that RSS tool initializes correctly."""
         tool = RssFetchTool()
         assert tool.name == "rss_fetch"
-        assert tool.output_type == "string"
+        assert tool.output_type == "object"
 
     @pytest.mark.integration
     def test_rss_tool_fetch_real_feed(self):
         """Test fetching a real RSS feed (BBC News)."""
         tool = RssFetchTool()
-        result_json = tool.forward(
+        result = tool.forward(
             feed_url="http://feeds.bbci.co.uk/news/rss.xml", max_items=5
         )
 
-        # Parse the JSON result
-        result = json.loads(result_json)
-
-        # Verify structure
-        assert "feed_url" in result
-        assert "total_items" in result
-        assert "items" in result
-        assert isinstance(result["items"], list)
+        # Verify structure (Pydantic model)
+        assert result.feed_url is not None
+        assert result.total_items is not None
+        assert isinstance(result.items, list)
 
         # Check we got items
-        assert result["total_items"] > 0
-        assert len(result["items"]) <= 5
+        assert result.total_items > 0
+        assert len(result.items) <= 5
 
         # Verify item structure
-        if result["items"]:
-            item = result["items"][0]
-            assert "title" in item
-            assert "link" in item
-            assert "published" in item
+        if result.items:
+            item = result.items[0]
+            assert item.title is not None
+            assert item.link is not None
+            assert item.published is not None
             # Title should not be empty
-            assert len(item["title"]) > 0
+            assert len(item.title) > 0
             # Link should be a URL
-            assert item["link"].startswith("http")
+            assert item.link.startswith("http")
 
     @pytest.mark.integration
     def test_rss_tool_multiple_feeds(self):
@@ -66,25 +61,23 @@ class TestRssFetchTool:
 
         results = []
         for feed_url in feeds:
-            result_json = tool.forward(feed_url=feed_url, max_items=3)
-            result = json.loads(result_json)
+            result = tool.forward(feed_url=feed_url, max_items=3)
             results.append(result)
 
         # All feeds should return items
         for result in results:
-            assert "items" in result
-            assert len(result["items"]) > 0
+            assert result.items is not None
+            assert len(result.items) > 0
 
     def test_rss_tool_invalid_feed(self):
         """Test handling of invalid RSS feed URL."""
         tool = RssFetchTool()
-        result_json = tool.forward(
+        result = tool.forward(
             feed_url="https://example.com/not-a-feed", max_items=5
         )
 
-        result = json.loads(result_json)
-        # Should return error or empty items
-        assert "error" in result or result.get("total_items") == 0
+        # Should return empty items (bozo feed)
+        assert result.total_items == 0
 
 
 class TestArticleCollectionWithRSS:

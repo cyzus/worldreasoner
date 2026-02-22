@@ -5,7 +5,7 @@ that is provided via MCP connection metadata/headers.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 from src.domain.models import Question
@@ -69,18 +69,15 @@ class ForecastContextService(ServiceBase):
         Raises:
             ValueError: If required headers are missing or invalid
         """
-        # Extract headers (case-insensitive)
-        question_id = headers.get("x-question-id") or headers.get("X-Question-ID")
-        simulated_date_str = headers.get("x-simulated-date") or headers.get(
-            "X-Simulated-Date"
-        )
-        knowledge_cutoff_str = headers.get("x-knowledge-cutoff") or headers.get(
-            "X-Knowledge-Cutoff"
-        )
-        session_id = headers.get("x-session-id") or headers.get("X-Session-ID")
-        model_name = headers.get("x-model-name") or headers.get("X-Model-Name")
-        forecast_mode = headers.get("x-forecast-mode") or headers.get("X-Forecast-Mode")
-        db_path = headers.get("x-database-path") or headers.get("X-Database-Path")
+        # Extract headers (case-insensitive normalization)
+        normalized_headers = {k.lower(): v for k, v in headers.items()}
+        question_id = normalized_headers.get("x-question-id")
+        simulated_date_str = normalized_headers.get("x-simulated-date")
+        knowledge_cutoff_str = normalized_headers.get("x-knowledge-cutoff")
+        session_id = normalized_headers.get("x-session-id")
+        model_name = normalized_headers.get("x-model-name")
+        forecast_mode = normalized_headers.get("x-forecast-mode")
+        db_path = normalized_headers.get("x-database-path")
 
         # Validate required fields
         if not question_id:
@@ -106,7 +103,7 @@ class ForecastContextService(ServiceBase):
 
         # Generate session ID if not provided
         if not session_id:
-            session_id = f"session_{question_id}_{int(datetime.now().timestamp())}"
+            session_id = f"session_{question_id}_{int(datetime.now(timezone.utc).timestamp())}"
             logger.warning(f"No session_id in headers, generated new one: {session_id}")
 
         return ForecastContext(

@@ -17,27 +17,30 @@ def sample_questions():
     return [
         Question(
             id="q_001",
-            question_text="Q1",
+            question_text="Will tech stocks rise in Q1 2026?",
             question_type=QuestionType.BINARY,
             domain=Domain.TECH,
             difficulty=3,
+            source="test",
             resolution_date=datetime.now(timezone.utc),
         ),
         Question(
             id="q_002",
-            question_text="Q2",
+            question_text="Which party wins the next election?",
             question_type=QuestionType.MCQ,
             domain=Domain.POLITICS,
             difficulty=4,
+            source="test",
             resolution_date=datetime.now(timezone.utc),
             options=["A", "B"],
         ),
         Question(
             id="q_003",
-            question_text="Q3",
+            question_text="What will the GDP growth rate be?",
             question_type=QuestionType.QUANTITY,
             domain=Domain.FINANCE,
             difficulty=5,
+            source="test",
             resolution_date=datetime.now(timezone.utc),
         ),
     ]

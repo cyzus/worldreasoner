@@ -6,8 +6,8 @@ from collections import defaultdict
 from src.tools.database_mixin import DatabaseAwareTool
 from src.domain.models import CausalHypothesis, Event
 from src.utils.graph_visualization import GraphVisualizer
+from src.core.temporal_filter_service import TemporalFilterService
 from src.utils.event_analysis import (
-    filter_events_by_time_window,
     analyze_event_timeline,
     identify_event_gaps,
     calculate_event_temporal_quality,
@@ -123,8 +123,11 @@ class GraphInspectorTool(DatabaseAwareTool):
 
         if question and event_list:
             # Filter events by time window
-            filtered_events = filter_events_by_time_window(
-                event_list, question.resolution_date, question.estimated_start_time
+            window_start, window_end = TemporalFilterService.get_evidence_window(
+                question.resolution_date, question.estimated_start_time
+            )
+            filtered_events = TemporalFilterService.filter_by_window(
+                event_list, window_start, window_end, date_field="occurred_date"
             )
 
             # Analyze event timeline

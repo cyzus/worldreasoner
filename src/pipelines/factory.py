@@ -7,7 +7,7 @@ across CLI and backend API.
 
 from src.config import Config
 from src.config.database import DatabaseConfig
-from src.config.pipeline import EvidencePipelineConfig
+from src.config.pipeline import EvidencePipelineConfig, EvidenceSatisfactionConfig
 from src.pipelines.types import PipelineType
 
 
@@ -28,9 +28,13 @@ class PipelineFactory:
         """
         from src.pipelines.evidence import EvidencePipeline
 
+        satisfaction_kwargs = {}
+        if "min_evidence_articles" in kwargs:
+            satisfaction_kwargs["min_articles"] = kwargs["min_evidence_articles"]
+
         evidence_config = EvidencePipelineConfig(
+            satisfaction=EvidenceSatisfactionConfig(**satisfaction_kwargs),
             evidence_window_days=kwargs.get("evidence_window_days", 365),
-            min_evidence_articles=kwargs.get("min_evidence_articles", 5),
             include_expert_analysis=True,
         )
 

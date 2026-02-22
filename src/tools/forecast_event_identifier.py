@@ -172,24 +172,23 @@ class ForecastEventIdentifierTool(Tool):
 
             self.forecast_db.save(ForecastEvent, forecast_event)
             logger.info(f"Saved forecast event: {event_id}")
-            return json.dumps(
-                {
-                    "status": "created",
-                    "event": {
-                        "id": forecast_event.id,
-                        "title": forecast_event.title,
-                        "domain": forecast_event.domain.value
-                        if hasattr(forecast_event.domain, "value")
-                        else forecast_event.domain,
-                    },
+            return ForecastEventOutput(
+                status="created",
+                event={
+                    "id": forecast_event.id,
+                    "title": forecast_event.title,
+                    "domain": forecast_event.domain.value
+                    if hasattr(forecast_event.domain, "value")
+                    else forecast_event.domain,
                 },
-                indent=2,
-                default=str,
             )
 
         except Exception as e:
             logger.error(f"Error identifying forecast event: {e}")
-            return json.dumps({"error": str(e)})
+            return ForecastEventOutput(
+                status="error",
+                event={"error": str(e)},
+            )
 
     def _find_existing_event(
         self, title: str, occurred_date: datetime, domain

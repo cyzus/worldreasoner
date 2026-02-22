@@ -50,8 +50,13 @@ class ArticleListItem(BaseModel):
 
     id: str = Field(description="Article ID")
     title: str = Field(description="Article title")
+    source: Optional[str] = Field(default=None, description="Source name")
     url: Optional[str] = Field(default=None, description="Article URL")
     published_date: Optional[str] = Field(default=None, description="Publication date")
+    content_preview: Optional[str] = Field(
+        default=None, description="Preview of article content"
+    )
+    word_count: Optional[int] = Field(default=None, description="Word count")
 
 
 class QuestionArticlesOutput(BaseModel):
@@ -82,11 +87,11 @@ class EventOutput(BaseModel):
 class EventDetailsOutput(BaseModel):
     """Output model for EventDetailsTool."""
 
-    id: str = Field(description="Event ID")
-    title: str = Field(description="Event title")
-    domain: str = Field(description="Event domain")
-    description: str = Field(description="Event description")
-    occurred_date: Optional[str] = Field(default=None, description="When event occurred")
+    event: Dict[str, Any] = Field(description="Full event details dictionary")
+    linked_articles: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Linked article content"
+    )
+    summary: str = Field(description="Brief summary of event and articles")
 
 
 class OutcomeEventItem(BaseModel):

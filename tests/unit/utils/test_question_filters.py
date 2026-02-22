@@ -31,7 +31,7 @@ def sample_questions():
             resolution_date=now + timedelta(days=30),
             resolution_criteria="Market index increases by 5% or more",
             source="test",
-            metadata={"category": "technology"},
+            metadata={"category": "tech"},
         ),
         Question(
             id="q_002",
@@ -63,7 +63,7 @@ def test_filter_questions_by_type(sample_questions):
     """Test filtering by question type."""
     filtered = filter_questions_by_type(
         sample_questions,
-        allowed_types=["boolean"],
+        allowed_types=["binary"],
     )
 
     assert len(filtered) == 2
@@ -74,12 +74,12 @@ def test_filter_questions_by_category_dict(sample_questions):
     """Test filtering by category with dict."""
     filtered = filter_questions_by_category(
         sample_questions,
-        category_filter={"technology": 1, "finance": 1},
+        category_filter={"tech": 1, "finance": 1},
     )
 
     assert len(filtered) == 2
     categories = {q.metadata["category"] for q in filtered}
-    assert categories == {"technology", "finance"}
+    assert categories == {"tech", "finance"}
 
 
 def test_filter_questions_by_category_list(sample_questions):
@@ -120,8 +120,8 @@ def test_filter_questions_combined(sample_questions):
 
     filtered = filter_questions(
         sample_questions,
-        type_filter=["boolean"],
-        category_filter=["technology", "politics"],
+        type_filter=["binary"],
+        category_filter=["tech", "politics"],
         quality_requirements=requirements,
     )
 

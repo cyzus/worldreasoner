@@ -34,7 +34,7 @@ Usage:
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import (
     List,
@@ -136,7 +136,8 @@ class GenericDatabase(Generic[T]):
     """
 
     def __init__(
-        self, db_path: str = "worldreasoner.db", cutoff_date: Optional[datetime] = None
+        self, db_path: str = "worldreasoner.db", cutoff_date: Optional[datetime] = None,
+        timeout: float = 30.0
     ):
         """Initialize database connection.
 
@@ -145,12 +146,15 @@ class GenericDatabase(Generic[T]):
             cutoff_date: Optional cutoff date for temporal filtering (timezone-aware).
                         If provided, Articles and Events will be automatically filtered.
                         If not provided, checks for active TemporalContext.
+            timeout: SQLite connection timeout in seconds (default: 30.0)
 
         Raises:
             ValueError: If cutoff_date is not timezone-aware
         """
         self.db_path = Path(db_path)
         self.cutoff_date = cutoff_date
+        self._timeout = timeout
+        self._batch_conn: Optional[sqlite3.Connection] = None
 
         # Create temporal gateway if cutoff provided or context active
         if cutoff_date is not None:
@@ -187,9 +191,17 @@ class GenericDatabase(Generic[T]):
 
     @contextmanager
     def _get_connection(self):
-        """Get database connection context manager."""
-        # Increase timeout to 30s to handle concurrent batch writes
-        conn = sqlite3.connect(str(self.db_path), timeout=30.0)
+        """Get database connection context manager.
+        
+        If inside a batch() context, reuses the shared connection.
+        Otherwise creates a new connection per operation.
+        """
+        if self._batch_conn is not None:
+            # Reuse batch connection — don't close it here
+            yield self._batch_conn
+            return
+
+        conn = sqlite3.connect(str(self.db_path), timeout=self._timeout)
 
         # Enable Write-Ahead Logging for better concurrency
         # This significantly reduces "database is locked" errors
@@ -199,6 +211,40 @@ class GenericDatabase(Generic[T]):
         try:
             yield conn
         finally:
+            conn.close()
+
+    def _commit(self, conn):
+        """Commit if not inside a batch() context (batch commits at exit)."""
+        if self._batch_conn is None:
+            conn.commit()
+
+    @contextmanager
+    def batch(self):
+        """Context manager for batching multiple operations in a single transaction.
+        
+        Reuses a single connection and wraps all operations in a transaction.
+        Commits on success, rolls back on error. Individual operation commits
+        are deferred until the batch exits.
+        
+        Usage:
+            with db.batch():
+                db.save(Article, article1)
+                db.save(Article, article2)
+                db.save(Event, event1)
+                # All committed together at end
+        """
+        conn = sqlite3.connect(str(self.db_path), timeout=self._timeout)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.row_factory = sqlite3.Row
+        self._batch_conn = conn
+        try:
+            yield self
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            self._batch_conn = None
             conn.close()
 
     def _get_python_type(self, field_info) -> str:
@@ -440,7 +486,7 @@ class GenericDatabase(Generic[T]):
         if "updated_at" not in model.model_fields:
             columns += ", updated_at"
             placeholders += ", ?"
-            serialized_values.append(datetime.now().isoformat())
+            serialized_values.append(datetime.now(timezone.utc).isoformat())
 
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -452,11 +498,13 @@ class GenericDatabase(Generic[T]):
             """,
                 serialized_values,
             )
-            conn.commit()
+            self._commit(conn)
             return True
 
     def save_many(self, model: Type[T], instances: List[T]) -> int:
         """Save multiple instances in batch.
+
+        Uses a single database connection for all inserts for performance.
 
         Args:
             model: Pydantic model class
@@ -465,10 +513,40 @@ class GenericDatabase(Generic[T]):
         Returns:
             Number of instances saved
         """
+        if not instances:
+            return 0
+
+        table_name = _registry.get_table_name(model)
+        field_names = list(model.model_fields.keys())
+        has_updated_at = "updated_at" in model.model_fields
+
+        columns = ", ".join(field_names)
+        placeholders = ", ".join(["?"] * len(field_names))
+        if not has_updated_at:
+            columns += ", updated_at"
+            placeholders += ", ?"
+
+        sql = f"INSERT OR REPLACE INTO {table_name} ({columns}) VALUES ({placeholders})"
+
         count = 0
-        for instance in instances:
-            if self.save(model, instance):
-                count += 1
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            for instance in instances:
+                data = instance.model_dump()
+                serialized_values = []
+                for field_name in field_names:
+                    field_info = model.model_fields[field_name]
+                    python_type = self._get_python_type(field_info)
+                    value = data.get(field_name)
+                    serialized_values.append(self._serialize_value(value, python_type))
+                if not has_updated_at:
+                    serialized_values.append(datetime.now(timezone.utc).isoformat())
+                try:
+                    cursor.execute(sql, serialized_values)
+                    count += 1
+                except Exception:
+                    pass  # Skip individual failures
+            self._commit(conn)
         return count
 
     def get(self, model: Type[T], id_value: str) -> Optional[T]:
@@ -546,12 +624,23 @@ class GenericDatabase(Generic[T]):
                 query += " AND occurred_date < ?"
                 params.append(self.cutoff_date.isoformat())
 
-        # Add field filters
+        # Add field filters (validate field names against model to prevent SQL injection)
+        valid_fields = set(model.model_fields.keys())
         for field_name, value in filters.items():
             if field_name.endswith("__like"):
                 real_field = field_name[:-6]
+                if real_field not in valid_fields:
+                    raise ValueError(
+                        f"Invalid filter field '{real_field}' for model {model.__name__}. "
+                        f"Valid fields: {sorted(valid_fields)}"
+                    )
                 query += f" AND {real_field} LIKE ?"
             else:
+                if field_name not in valid_fields:
+                    raise ValueError(
+                        f"Invalid filter field '{field_name}' for model {model.__name__}. "
+                        f"Valid fields: {sorted(valid_fields)}"
+                    )
                 query += f" AND {field_name} = ?"
             params.append(value)
 
@@ -586,7 +675,7 @@ class GenericDatabase(Generic[T]):
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(f"DELETE FROM {table_name} WHERE id = ?", (id_value,))
-            conn.commit()
+            self._commit(conn)
             return cursor.rowcount > 0
 
     def count(self, model: Type[T], filters: Optional[Dict[str, Any]] = None) -> int:
@@ -605,11 +694,20 @@ class GenericDatabase(Generic[T]):
         params = []
 
         if filters:
+            valid_fields = set(model.model_fields.keys())
             for field_name, value in filters.items():
                 if field_name.endswith("__like"):
                     real_field = field_name[:-6]
+                    if real_field not in valid_fields:
+                        raise ValueError(
+                            f"Invalid filter field '{real_field}' for model {model.__name__}"
+                        )
                     query += f" AND {real_field} LIKE ?"
                 else:
+                    if field_name not in valid_fields:
+                        raise ValueError(
+                            f"Invalid filter field '{field_name}' for model {model.__name__}"
+                        )
                     query += f" AND {field_name} = ?"
                 params.append(value)
 
@@ -636,6 +734,14 @@ class GenericDatabase(Generic[T]):
         """
         table_name = _registry.get_table_name(model)
 
+        # Validate group_by_field
+        valid_fields = set(model.model_fields.keys())
+        if group_by_field not in valid_fields:
+            raise ValueError(
+                f"Invalid group_by field '{group_by_field}' for model {model.__name__}. "
+                f"Valid fields: {sorted(valid_fields)}"
+            )
+
         query = f"SELECT {group_by_field}, COUNT(*) FROM {table_name} WHERE 1=1"
         params = []
 
@@ -643,8 +749,16 @@ class GenericDatabase(Generic[T]):
             for field_name, value in filters.items():
                 if field_name.endswith("__like"):
                     real_field = field_name[:-6]
+                    if real_field not in valid_fields:
+                        raise ValueError(
+                            f"Invalid filter field '{real_field}' for model {model.__name__}"
+                        )
                     query += f" AND {real_field} LIKE ?"
                 else:
+                    if field_name not in valid_fields:
+                        raise ValueError(
+                            f"Invalid filter field '{field_name}' for model {model.__name__}"
+                        )
                     query += f" AND {field_name} = ?"
                 params.append(value)
 
@@ -690,4 +804,4 @@ class GenericDatabase(Generic[T]):
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(f"DELETE FROM {table_name}")
-            conn.commit()
+            self._commit(conn)

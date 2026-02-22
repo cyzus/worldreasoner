@@ -21,7 +21,7 @@ class QuestionQualityRankingStage(PipelineStage[Question, Question]):
     """
 
     def __init__(self, config: QuestionQualityConfig, db_path: str):
-        super().__init__("question_quality_ranking", {"config": config.dict()})
+        super().__init__("question_quality_ranking", config)
         self.config = config
         self.scorer = QuestionQualityScorer(
             timeout=config.timeout, dimension_weights=config.dimension_weights

@@ -27,7 +27,7 @@ def test_db_path(tmp_path):
 class TestCreateEvidencePipeline:
     """Test evidence pipeline creation."""
 
-    @patch("src.pipelines.factory.EvidencePipeline")
+    @patch("src.pipelines.evidence.EvidencePipeline")
     def test_create_basic_evidence_pipeline(
         self, mock_pipeline_class, mock_config, test_db_path
     ):
@@ -45,7 +45,7 @@ class TestCreateEvidencePipeline:
         assert "min_graph_depth" not in call_kwargs
         assert call_kwargs["enable_persistence"] is True
 
-    @patch("src.pipelines.factory.EvidencePipeline")
+    @patch("src.pipelines.evidence.EvidencePipeline")
     def test_create_adaptive_evidence_pipeline(
         self, mock_pipeline_class, mock_config, test_db_path
     ):
@@ -66,7 +66,7 @@ class TestCreateEvidencePipeline:
         assert call_kwargs["min_graph_depth"] == 5
         assert call_kwargs["enable_persistence"] is True
 
-    @patch("src.pipelines.factory.EvidencePipeline")
+    @patch("src.pipelines.evidence.EvidencePipeline")
     def test_create_with_custom_config(
         self, mock_pipeline_class, mock_config, test_db_path
     ):
@@ -91,14 +91,14 @@ class TestCreateEvidencePipeline:
 class TestCreateByType:
     """Test generic create method with pipeline types."""
 
-    @patch("src.pipelines.factory.EvidencePipeline")
+    @patch("src.pipelines.evidence.EvidencePipeline")
     def test_create_evidence_type(self, mock_pipeline_class, mock_config, test_db_path):
         """Create pipeline by EVIDENCE type."""
         PipelineFactory.create(PipelineType.EVIDENCE, mock_config, test_db_path)
 
         assert mock_pipeline_class.called
 
-    @patch("src.pipelines.factory.EvidencePipeline")
+    @patch("src.pipelines.evidence.EvidencePipeline")
     def test_create_adaptive_evidence_type(
         self, mock_pipeline_class, mock_config, test_db_path
     ):
@@ -126,7 +126,7 @@ class TestCreateByType:
 class TestConfigurationConsistency:
     """Test that factory creates consistent configurations."""
 
-    @patch("src.pipelines.factory.EvidencePipeline")
+    @patch("src.pipelines.evidence.EvidencePipeline")
     def test_database_config_passed(
         self, mock_pipeline_class, mock_config, test_db_path
     ):
@@ -140,7 +140,7 @@ class TestConfigurationConsistency:
 
         assert database_config.db_path == test_db_path
 
-    @patch("src.pipelines.factory.EvidencePipeline")
+    @patch("src.pipelines.evidence.EvidencePipeline")
     def test_persistence_enabled_by_default(
         self, mock_pipeline_class, mock_config, test_db_path
     ):
@@ -152,7 +152,7 @@ class TestConfigurationConsistency:
         call_kwargs = mock_pipeline_class.call_args[1]
         assert call_kwargs["enable_persistence"] is True
 
-    @patch("src.pipelines.factory.EvidencePipeline")
+    @patch("src.pipelines.evidence.EvidencePipeline")
     def test_expert_analysis_enabled(
         self, mock_pipeline_class, mock_config, test_db_path
     ):

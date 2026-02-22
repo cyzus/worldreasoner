@@ -20,7 +20,7 @@ class QuestionPipelineConfig(BaseModel):
         description="Domains to generate questions for",
     )
     question_types: List[str] = Field(
-        default=["boolean", "mcq", "quantity", "timeframe"],
+        default=["binary", "mcq", "quantity", "timeframe"],
         description="Types of questions to generate",
     )
 

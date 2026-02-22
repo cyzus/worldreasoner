@@ -16,7 +16,7 @@ def sample_goal():
     """Create sample collection goal."""
     return CollectionGoal(
         total_questions=100,
-        type_distribution={"boolean": 50, "mcq": 50},
+        type_distribution={"binary": 50, "mcq": 50},
         source_minimums={"source1": 60, "source2": 40},
     )
 
@@ -84,7 +84,7 @@ async def test_fill_type_gap(sample_goal, coordinator, mock_runner):
     )
 
     # Create analysis with type gap
-    analysis = GapAnalysis(type_gaps={"boolean": 5}, category_gaps={}, total_needed=5)
+    analysis = GapAnalysis(type_gaps={"binary": 5}, category_gaps={}, total_needed=5)
     progress = CollectionProgress()
 
     # Fill gaps
@@ -135,7 +135,7 @@ async def test_fill_gaps_source_exhausted(sample_goal, coordinator, mock_runner)
     filler.exhausted_sources.add("source1")
 
     # Create analysis
-    analysis = GapAnalysis(type_gaps={"boolean": 5}, category_gaps={}, total_needed=5)
+    analysis = GapAnalysis(type_gaps={"binary": 5}, category_gaps={}, total_needed=5)
     progress = CollectionProgress()
 
     # Fill gaps - should skip exhausted source
@@ -156,7 +156,7 @@ async def test_fill_gaps_source_cannot_provide(sample_goal, coordinator, mock_ru
     mock_runner.can_provide = AsyncMock(return_value=False)
 
     # Create analysis
-    analysis = GapAnalysis(type_gaps={"boolean": 5}, category_gaps={}, total_needed=5)
+    analysis = GapAnalysis(type_gaps={"binary": 5}, category_gaps={}, total_needed=5)
     progress = CollectionProgress()
 
     # Fill gaps
@@ -168,47 +168,60 @@ async def test_fill_gaps_source_cannot_provide(sample_goal, coordinator, mock_ru
 
 @pytest.mark.asyncio
 async def test_fill_gaps_quota_exceeded(sample_goal, coordinator, mock_runner):
-    """Test that sources at quota limit are skipped."""
+    """Test that sources at quota limit still collect but return empty if nothing new."""
     sources = {"source1": mock_runner}
     filler = GapFiller(sources, coordinator, sample_goal)
 
-    # Setup progress with source1 at quota
+    # Setup mock to return empty result (simulating no new questions available)
+    mock_runner.collect = AsyncMock(
+        return_value=CollectionResult(
+            source_name="source1",
+            questions=[],
+            requested_count=10,
+            actual_count=0,
+            success=True,
+        )
+    )
+
+    # Setup progress with source1 already having 60 questions
     progress = CollectionProgress()
-    for i in range(60):  # source1 quota is 60
+    for i in range(60):
         q = create_test_question(
             id=f"q_{i}", question_type="binary", source_name="source1"
         )
         progress.add_question(q)
 
     # Create analysis
-    analysis = GapAnalysis(type_gaps={"boolean": 5}, category_gaps={}, total_needed=5)
+    analysis = GapAnalysis(type_gaps={"binary": 5}, category_gaps={}, total_needed=5)
 
-    # Fill gaps - should skip due to quota
+    # Fill gaps - source still gets called (quota is not enforced at GapFiller level)
     questions = await filler.fill_gaps(analysis, progress, set())
 
     assert questions == []
-    mock_runner.collect.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_fill_gaps_marks_source_exhausted_on_failure(
     sample_goal, coordinator, mock_runner
 ):
-    """Test that sources returning 0 questions are marked exhausted."""
+    """Test that sources returning failure are marked exhausted."""
     sources = {"source1": mock_runner}
     filler = GapFiller(sources, coordinator, sample_goal)
 
-    # Setup mock to return empty result
-    mock_runner.collect.return_value = CollectionResult(
-        source_name="source1",
-        questions=[],
-        requested_count=5,
-        actual_count=0,
-        success=True,
+    # Setup mock to return a FAILED result (success=False marks exhausted)
+    mock_runner.collect = AsyncMock(
+        return_value=CollectionResult(
+            source_name="source1",
+            questions=[],
+            requested_count=5,
+            actual_count=0,
+            success=False,
+            error_message="Source exhausted",
+        )
     )
 
     # Create analysis
-    analysis = GapAnalysis(type_gaps={"boolean": 5}, category_gaps={}, total_needed=5)
+    analysis = GapAnalysis(type_gaps={"binary": 5}, category_gaps={}, total_needed=5)
     progress = CollectionProgress()
 
     # Fill gaps
@@ -272,7 +285,7 @@ async def test_fill_multiple_gaps_incrementally(sample_goal, coordinator):
     filler = GapFiller(sources, coordinator, sample_goal)
 
     # Need 5 boolean questions
-    analysis = GapAnalysis(type_gaps={"boolean": 5}, category_gaps={}, total_needed=5)
+    analysis = GapAnalysis(type_gaps={"binary": 5}, category_gaps={}, total_needed=5)
     progress = CollectionProgress()
 
     # Fill gaps

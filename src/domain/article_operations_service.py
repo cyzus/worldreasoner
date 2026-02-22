@@ -80,8 +80,8 @@ class ArticleOperationsService:
         for article_id in article_ids:
             article = temporal_db.get(Article, article_id)
             if article:
-                # Apply domain filter if specified
-                if domain and len(article_ids) > max_results * 10:
+                # Always apply domain filter when specified
+                if domain:
                     domain_filter = parse_domain(domain)
                     if domain_filter is not None and article.domain != domain_filter:
                         continue
@@ -105,7 +105,7 @@ class ArticleOperationsService:
             simulated_date: Cutoff date for temporal validation
 
         Returns:
-            Article object if accessible, None if not found or published after simulated_date
+            Article object if accessible, None if not found in database
 
         Raises:
             ValueError: If article was published after simulated_date

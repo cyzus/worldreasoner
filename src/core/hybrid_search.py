@@ -382,10 +382,15 @@ class HybridSearch:
             embedding_bytes = row["embedding"]
             embedding = np.frombuffer(embedding_bytes, dtype=np.float32)
 
-            # Cosine similarity
-            similarity = np.dot(query_embedding, embedding) / (
-                np.linalg.norm(query_embedding) * np.linalg.norm(embedding)
-            )
+            # Cosine similarity (guard against zero-norm vectors)
+            query_norm = np.linalg.norm(query_embedding)
+            embedding_norm = np.linalg.norm(embedding)
+            if query_norm == 0 or embedding_norm == 0:
+                similarity = 0.0
+            else:
+                similarity = np.dot(query_embedding, embedding) / (
+                    query_norm * embedding_norm
+                )
 
             article_ids.append(article_id)
             similarities.append(float(similarity))
@@ -434,7 +439,9 @@ class HybridSearch:
         )
 
         # Normalize scores to [0, 1] range
-        def normalize_scores(results: List[Tuple[str, float]]) -> Dict[str, float]:
+        def normalize_scores(
+            results: List[Tuple[str, float]], invert: bool = False
+        ) -> Dict[str, float]:
             if not results:
                 return {}
 
@@ -446,12 +453,20 @@ class HybridSearch:
             if max_score == min_score:
                 return {aid: 1.0 for aid, _ in results}
 
-            return {
+            normalized = {
                 aid: (score - min_score) / (max_score - min_score)
                 for aid, score in results
             }
 
-        fts_normalized = normalize_scores(fts_results)
+            # Invert for scores where lower raw value = better match
+            # (e.g., BM25 returns negative scores, more negative = better)
+            if invert:
+                normalized = {aid: 1.0 - score for aid, score in normalized.items()}
+
+            return normalized
+
+        # BM25 scores are negative (more negative = better match), so invert
+        fts_normalized = normalize_scores(fts_results, invert=True)
         semantic_normalized = normalize_scores(semantic_results)
 
         # Combine scores using weighted sum

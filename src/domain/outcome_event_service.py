@@ -6,6 +6,7 @@ import uuid
 from src.core.database import GenericDatabase
 from src.domain.models.event import Event, OutcomeScenario, EventStatus, EventType
 from src.domain.models.question import Question, QuestionType
+from src.utils.logging import logger
 
 
 class OutcomeEventService:
@@ -206,8 +207,15 @@ class OutcomeEventService:
                 if isinstance(question.ground_truth, int) and event.outcome_option_index is not None:
                     should_be_actual = event.outcome_option_index == question.ground_truth
                 elif event.outcome_option_index is not None and question.options:
-                    option = question.options[event.outcome_option_index]
-                    should_be_actual = self._normalize_text(option) == normalized_truth
+                    if event.outcome_option_index < len(question.options):
+                        option = question.options[event.outcome_option_index]
+                        should_be_actual = self._normalize_text(option) == normalized_truth
+                    else:
+                        logger.warning(
+                            f"Event {event.id} has outcome_option_index={event.outcome_option_index} "
+                            f"but question only has {len(question.options)} options"
+                        )
+                        should_be_actual = False
                 else:
                     # Fallback: parse from title "Option N: value"
                     title = event.title or ""

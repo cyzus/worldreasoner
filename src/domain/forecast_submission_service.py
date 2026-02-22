@@ -6,6 +6,7 @@ validation, forecast creation, and graph linking.
 
 from typing import Tuple, Any, Optional, Dict, List
 from datetime import datetime, timezone
+import sqlite3
 
 from src.domain.models import Question, Forecast
 from src.domain.models.question import QuestionType
@@ -41,7 +42,17 @@ class ForecastSubmissionService(ServiceBase):
         try:
             # Parse prediction based on question type
             if question.question_type == QuestionType.BINARY:
-                parsed_prediction = prediction.lower() in ["true", "yes", "1"]
+                valid_true = ["true", "yes", "1"]
+                valid_false = ["false", "no", "0"]
+                prediction_lower = prediction.lower().strip()
+                if prediction_lower not in valid_true + valid_false:
+                    return (
+                        False,
+                        None,
+                        f"Invalid binary prediction '{prediction}'. "
+                        f"Expected one of: {valid_true + valid_false}",
+                    )
+                parsed_prediction = prediction_lower in valid_true
             elif question.question_type == QuestionType.MCQ:
                 parsed_prediction = prediction
             elif question.question_type == QuestionType.QUANTITY:
@@ -174,6 +185,6 @@ class ForecastSubmissionService(ServiceBase):
             )
 
             return {"events": len(events), "hypotheses": len(hypotheses)}
-        except Exception as e:
+        except (KeyError, ValueError, sqlite3.Error) as e:
             logger.warning(f"Could not link forecast graph to forecast_id: {e}")
             return {"events": 0, "hypotheses": 0}

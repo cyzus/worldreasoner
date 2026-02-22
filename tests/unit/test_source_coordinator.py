@@ -26,8 +26,6 @@ async def test_coordinator_parallel_mode():
     """Test coordinator initializes in parallel mode."""
     coordinator = SourceCoordinator(parallel=True)
     assert coordinator.parallel is True
-    assert coordinator.results == []
-    assert coordinator.errors == []
 
 
 @pytest.mark.asyncio
@@ -179,13 +177,14 @@ async def test_collect_handles_exceptions_parallel():
     # Execute
     results = await coordinator.collect_from_sources(requests)
 
-    # Should have 1 result (the successful one)
-    assert len(results) == 1
-    assert results[0].source_name == "ok_source"
-
-    # Error should be logged
-    assert len(coordinator.errors) == 1
-    assert "error_source" in coordinator.errors[0]
+    # Should have 2 results (failed source included as CollectionResult with success=False)
+    assert len(results) == 2
+    error_result = [r for r in results if r.source_name == "error_source"][0]
+    ok_result = [r for r in results if r.source_name == "ok_source"][0]
+    assert error_result.success is False
+    assert error_result.error_message is not None
+    assert "Test error" in error_result.error_message
+    assert ok_result.success is True
 
 
 @pytest.mark.asyncio
@@ -217,13 +216,14 @@ async def test_collect_handles_exceptions_sequential():
     # Execute
     results = await coordinator.collect_from_sources(requests)
 
-    # Should have 1 result (the successful one)
-    assert len(results) == 1
-    assert results[0].source_name == "ok_source"
-
-    # Error should be logged
-    assert len(coordinator.errors) == 1
-    assert "error_source" in coordinator.errors[0]
+    # Should have 2 results (failed source included as CollectionResult with success=False)
+    assert len(results) == 2
+    error_result = [r for r in results if r.source_name == "error_source"][0]
+    ok_result = [r for r in results if r.source_name == "ok_source"][0]
+    assert error_result.success is False
+    assert error_result.error_message is not None
+    assert "Test error" in error_result.error_message
+    assert ok_result.success is True
 
 
 @pytest.mark.asyncio
@@ -271,4 +271,3 @@ async def test_collect_empty_requests():
     results = await coordinator.collect_from_sources([])
 
     assert results == []
-    assert coordinator.errors == []

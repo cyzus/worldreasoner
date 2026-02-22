@@ -11,43 +11,6 @@ from datetime import datetime
 from src.domain.models import Event
 
 
-def filter_events_by_time_window(
-    events: List[Event],
-    resolution_date: datetime,
-    estimated_start_time: Optional[datetime] = None,
-) -> List[Event]:
-    """Filter events to valid time window for a question.
-
-    DEPRECATED: Use TemporalFilterService.filter_by_window instead.
-    This function is maintained for backward compatibility.
-
-    Args:
-        events: List of events to filter
-        resolution_date: Question resolution date (events must be before this)
-        estimated_start_time: Optional question/market start time (window start)
-
-    Returns:
-        List of events within the valid time window
-    """
-    import warnings
-
-    warnings.warn(
-        "filter_events_by_time_window is deprecated. Use TemporalFilterService.filter_by_window",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
-    # Delegate to new service
-    from src.core.temporal_filter_service import TemporalFilterService
-
-    window_start, window_end = TemporalFilterService.get_evidence_window(
-        resolution_date, estimated_start_time
-    )
-    return TemporalFilterService.filter_by_window(
-        events, window_start, window_end, date_field="occurred_date"
-    )
-
-
 def analyze_event_timeline(
     events: List[Event],
     resolution_date: datetime,

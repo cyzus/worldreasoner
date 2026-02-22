@@ -4,7 +4,42 @@ from datetime import datetime, timedelta, timezone
 
 from src.core.temporal_filter_service import TemporalFilterService
 from src.domain.models import Article, Event
+from src.domain.models.event import EventType
 from src.utils.enums import Domain
+
+
+# Helper to build valid Article instances for tests
+_LONG_CONTENT = "x" * 120  # Satisfy min_length=100 constraint
+_LONG_DESC = "Test event description that is long enough"  # Satisfy min_length=20
+
+
+def _article(id: str, published_date, **kwargs):
+    """Create a test Article with valid defaults for required fields."""
+    defaults = {
+        "id": id,
+        "title": f"Test Article {id} Title",
+        "url": f"http://example.com/{id}",
+        "content": _LONG_CONTENT,
+        "source": "test-source",
+        "domain": Domain.GENERAL,
+        "published_date": published_date,
+    }
+    defaults.update(kwargs)
+    return Article(**defaults)
+
+
+def _event(id: str, occurred_date, **kwargs):
+    """Create a test Event with valid defaults for required fields."""
+    defaults = {
+        "id": id,
+        "title": f"Test Event {id}",
+        "description": _LONG_DESC,
+        "event_type": EventType.INDICATOR,
+        "domain": Domain.POLITICS,
+        "occurred_date": occurred_date,
+    }
+    defaults.update(kwargs)
+    return Event(**defaults)
 
 
 class TestGetEvidenceWindow:
@@ -64,27 +99,9 @@ class TestFilterByWindow:
     def test_filter_articles_within_window(self):
         """Should include articles within the time window."""
         articles = [
-            Article(
-                id="a1",
-                title="Article 1",
-                url="http://example.com/1",
-                published_date=datetime(2024, 3, 1, tzinfo=timezone.utc),
-                content="Test 1",
-            ),
-            Article(
-                id="a2",
-                title="Article 2",
-                url="http://example.com/2",
-                published_date=datetime(2024, 4, 1, tzinfo=timezone.utc),
-                content="Test 2",
-            ),
-            Article(
-                id="a3",
-                title="Article 3",
-                url="http://example.com/3",
-                published_date=datetime(2024, 5, 1, tzinfo=timezone.utc),
-                content="Test 3",
-            ),
+            _article("a1", datetime(2024, 3, 1, tzinfo=timezone.utc)),
+            _article("a2", datetime(2024, 4, 1, tzinfo=timezone.utc)),
+            _article("a3", datetime(2024, 5, 1, tzinfo=timezone.utc)),
         ]
 
         window_start = datetime(2024, 2, 1, tzinfo=timezone.utc)
@@ -99,20 +116,8 @@ class TestFilterByWindow:
     def test_filter_articles_before_window_start(self):
         """Should exclude articles before window start."""
         articles = [
-            Article(
-                id="a1",
-                title="Article 1",
-                url="http://example.com/1",
-                published_date=datetime(2024, 1, 1, tzinfo=timezone.utc),
-                content="Test 1",
-            ),
-            Article(
-                id="a2",
-                title="Article 2",
-                url="http://example.com/2",
-                published_date=datetime(2024, 4, 1, tzinfo=timezone.utc),
-                content="Test 2",
-            ),
+            _article("a1", datetime(2024, 1, 1, tzinfo=timezone.utc)),
+            _article("a2", datetime(2024, 4, 1, tzinfo=timezone.utc)),
         ]
 
         window_start = datetime(2024, 3, 1, tzinfo=timezone.utc)
@@ -128,27 +133,9 @@ class TestFilterByWindow:
     def test_filter_articles_at_or_after_window_end(self):
         """Should exclude articles at or after window end (strictly before)."""
         articles = [
-            Article(
-                id="a1",
-                title="Article 1",
-                url="http://example.com/1",
-                published_date=datetime(2024, 4, 1, tzinfo=timezone.utc),
-                content="Test 1",
-            ),
-            Article(
-                id="a2",
-                title="Article 2",
-                url="http://example.com/2",
-                published_date=datetime(2024, 6, 1, tzinfo=timezone.utc),
-                content="Test 2",
-            ),  # Exactly at end
-            Article(
-                id="a3",
-                title="Article 3",
-                url="http://example.com/3",
-                published_date=datetime(2024, 7, 1, tzinfo=timezone.utc),
-                content="Test 3",
-            ),  # After end
+            _article("a1", datetime(2024, 4, 1, tzinfo=timezone.utc)),
+            _article("a2", datetime(2024, 6, 1, tzinfo=timezone.utc)),  # Exactly at end
+            _article("a3", datetime(2024, 7, 1, tzinfo=timezone.utc)),  # After end
         ]
 
         window_start = datetime(2024, 2, 1, tzinfo=timezone.utc)
@@ -164,20 +151,8 @@ class TestFilterByWindow:
     def test_filter_with_none_window_start(self):
         """Should allow None window_start (no lower bound)."""
         articles = [
-            Article(
-                id="a1",
-                title="Article 1",
-                url="http://example.com/1",
-                published_date=datetime(2020, 1, 1, tzinfo=timezone.utc),
-                content="Test 1",
-            ),
-            Article(
-                id="a2",
-                title="Article 2",
-                url="http://example.com/2",
-                published_date=datetime(2024, 4, 1, tzinfo=timezone.utc),
-                content="Test 2",
-            ),
+            _article("a1", datetime(2020, 1, 1, tzinfo=timezone.utc)),
+            _article("a2", datetime(2024, 4, 1, tzinfo=timezone.utc)),
         ]
 
         window_end = datetime(2024, 6, 1, tzinfo=timezone.utc)
@@ -189,20 +164,8 @@ class TestFilterByWindow:
     def test_filter_events_by_occurred_date(self):
         """Should filter events using occurred_date field."""
         events = [
-            Event(
-                id="e1",
-                title="Event 1",
-                description="Test 1",
-                occurred_date=datetime(2024, 3, 1, tzinfo=timezone.utc),
-                domain=Domain.POLITICS,
-            ),
-            Event(
-                id="e2",
-                title="Event 2",
-                description="Test 2",
-                occurred_date=datetime(2024, 5, 1, tzinfo=timezone.utc),
-                domain=Domain.POLITICS,
-            ),
+            _event("e1", datetime(2024, 3, 1, tzinfo=timezone.utc)),
+            _event("e2", datetime(2024, 5, 1, tzinfo=timezone.utc)),
         ]
 
         window_start = datetime(2024, 2, 1, tzinfo=timezone.utc)
@@ -216,32 +179,22 @@ class TestFilterByWindow:
 
     def test_filter_items_without_dates(self):
         """Should skip items without dates."""
-        articles = [
-            Article(
-                id="a1",
-                title="Article 1",
-                url="http://example.com/1",
-                published_date=None,
-                content="Test 1",
-            ),
-            Article(
-                id="a2",
-                title="Article 2",
-                url="http://example.com/2",
-                published_date=datetime(2024, 4, 1, tzinfo=timezone.utc),
-                content="Test 2",
-            ),
+        # Use Events here because Event.occurred_date is Optional[datetime]
+        # while Article.published_date is required.
+        events = [
+            _event("e1", None),
+            _event("e2", datetime(2024, 4, 1, tzinfo=timezone.utc)),
         ]
 
         window_start = datetime(2024, 2, 1, tzinfo=timezone.utc)
         window_end = datetime(2024, 6, 1, tzinfo=timezone.utc)
 
         filtered = TemporalFilterService.filter_by_window(
-            articles, window_start, window_end
+            events, window_start, window_end, date_field="occurred_date"
         )
 
         assert len(filtered) == 1
-        assert filtered[0].id == "a2"
+        assert filtered[0].id == "e2"
 
 
 class TestFilterByCutoff:
@@ -250,20 +203,8 @@ class TestFilterByCutoff:
     def test_filter_articles_before_cutoff(self):
         """Should include articles before cutoff."""
         articles = [
-            Article(
-                id="a1",
-                title="Article 1",
-                url="http://example.com/1",
-                published_date=datetime(2024, 3, 1, tzinfo=timezone.utc),
-                content="Test 1",
-            ),
-            Article(
-                id="a2",
-                title="Article 2",
-                url="http://example.com/2",
-                published_date=datetime(2024, 4, 1, tzinfo=timezone.utc),
-                content="Test 2",
-            ),
+            _article("a1", datetime(2024, 3, 1, tzinfo=timezone.utc)),
+            _article("a2", datetime(2024, 4, 1, tzinfo=timezone.utc)),
         ]
 
         cutoff_date = datetime(2024, 5, 1, tzinfo=timezone.utc)
@@ -275,27 +216,9 @@ class TestFilterByCutoff:
     def test_filter_articles_at_or_after_cutoff(self):
         """Should exclude articles at or after cutoff (strictly before)."""
         articles = [
-            Article(
-                id="a1",
-                title="Article 1",
-                url="http://example.com/1",
-                published_date=datetime(2024, 4, 1, tzinfo=timezone.utc),
-                content="Test 1",
-            ),
-            Article(
-                id="a2",
-                title="Article 2",
-                url="http://example.com/2",
-                published_date=datetime(2024, 5, 1, tzinfo=timezone.utc),
-                content="Test 2",
-            ),  # Exactly at cutoff
-            Article(
-                id="a3",
-                title="Article 3",
-                url="http://example.com/3",
-                published_date=datetime(2024, 6, 1, tzinfo=timezone.utc),
-                content="Test 3",
-            ),  # After cutoff
+            _article("a1", datetime(2024, 4, 1, tzinfo=timezone.utc)),
+            _article("a2", datetime(2024, 5, 1, tzinfo=timezone.utc)),  # Exactly at cutoff
+            _article("a3", datetime(2024, 6, 1, tzinfo=timezone.utc)),  # After cutoff
         ]
 
         cutoff_date = datetime(2024, 5, 1, tzinfo=timezone.utc)
@@ -308,20 +231,8 @@ class TestFilterByCutoff:
     def test_filter_events_by_cutoff(self):
         """Should filter events using occurred_date field."""
         events = [
-            Event(
-                id="e1",
-                title="Event 1",
-                description="Test 1",
-                occurred_date=datetime(2024, 3, 1, tzinfo=timezone.utc),
-                domain=Domain.POLITICS,
-            ),
-            Event(
-                id="e2",
-                title="Event 2",
-                description="Test 2",
-                occurred_date=datetime(2024, 6, 1, tzinfo=timezone.utc),
-                domain=Domain.POLITICS,
-            ),
+            _event("e1", datetime(2024, 3, 1, tzinfo=timezone.utc)),
+            _event("e2", datetime(2024, 6, 1, tzinfo=timezone.utc)),
         ]
 
         cutoff_date = datetime(2024, 5, 1, tzinfo=timezone.utc)

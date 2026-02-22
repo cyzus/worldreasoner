@@ -2,10 +2,11 @@
 
 import json
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 from datetime import datetime, timezone
 
 from src.tools.question_quality_scorer import QuestionQualityScorer, QualityAssessment
+from src.tools.output_models import QuestionQualityOutput
 from src.domain.models import Question, QuestionType, Domain
 from src.core.collectors import ResultCollector
 
@@ -73,8 +74,14 @@ def mock_llm_response():
                 },
                 "reasoning": "Excellent question, clear and verifiable.",
             },
-        ]
+        ],
+        "overall_quality": "high",
     }
+
+
+def _expected_weighted_score(dimensions: dict, weights: dict) -> float:
+    """Helper to compute expected weighted composite score."""
+    return sum(dimensions.get(d, 0.0) * w for d, w in weights.items())
 
 
 @pytest.mark.asyncio
@@ -83,19 +90,26 @@ async def test_question_quality_scorer_forward(
     mock_llm_client, sample_questions, mock_llm_response
 ):
     """Test the forward method of QuestionQualityScorer."""
-    mock_llm_client.return_value.acomplete.return_value = json.dumps(mock_llm_response)
+    mock_llm_client.return_value.acomplete = AsyncMock(
+        return_value=json.dumps(mock_llm_response)
+    )
 
     scorer = QuestionQualityScorer()
     scorer.llm_client = mock_llm_client.return_value
-    result_json = await scorer.forward(sample_questions)
+    result = await scorer.forward(sample_questions)
 
     # Check that the LLM was called
     mock_llm_client.return_value.acomplete.assert_called_once()
 
-    # Check the result is a valid JSON string
-    result_data = json.loads(result_json)
-    assert result_data == mock_llm_response
-    assert len(result_data["assessments"]) == 2
+    # forward() returns a QuestionQualityOutput model
+    assert isinstance(result, QuestionQualityOutput)
+    assert len(result.scores) == 2
+    assert result.overall_quality == "high"
+
+    # Composite scores are recalculated with weighted averages
+    for score_entry, orig in zip(result.scores, mock_llm_response["assessments"]):
+        expected = _expected_weighted_score(orig["dimensions"], scorer.dimension_weights)
+        assert score_entry["composite_score"] == pytest.approx(expected, abs=1e-9)
 
 
 def test_quality_assessment_model():
@@ -117,7 +131,9 @@ async def test_scorer_with_collector(
     mock_llm_client, sample_questions, mock_llm_response
 ):
     """Test that the scorer correctly adds items to a ResultCollector."""
-    mock_llm_client.return_value.acomplete.return_value = json.dumps(mock_llm_response)
+    mock_llm_client.return_value.acomplete = AsyncMock(
+        return_value=json.dumps(mock_llm_response)
+    )
 
     collector = ResultCollector[QualityAssessment]()
     scorer = QuestionQualityScorer(collector=collector)
@@ -128,9 +144,12 @@ async def test_scorer_with_collector(
     collected_items = collector.get_all()
     assert len(collected_items) == 2
     assert collected_items[0].question_id == "q_001"
-    assert collected_items[0].composite_score == 0.85
     assert collected_items[1].question_id == "q_002"
-    assert collected_items[1].composite_score == 0.90
+
+    # Composite scores are recalculated with weighted averages
+    for item, orig in zip(collected_items, mock_llm_response["assessments"]):
+        expected = _expected_weighted_score(orig["dimensions"], scorer.dimension_weights)
+        assert item.composite_score == pytest.approx(expected, abs=1e-9)
 
 
 @pytest.mark.asyncio

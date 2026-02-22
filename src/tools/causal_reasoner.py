@@ -236,8 +236,8 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
         source_date = self._get_event_occurred_date(source_event_id)
         target_date = self._get_event_occurred_date(target_event_id)
 
-        # Cannot validate without dates
+        # Cannot validate without dates - allow the hypothesis (can't disprove)
         if source_date is None or target_date is None:
-            return False
+            return True
 
         return source_date <= target_date

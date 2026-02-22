@@ -62,8 +62,8 @@ def test_validate_chronology_both_predicted(causal_reasoner, test_db):
     assert causal_reasoner._validate_chronology("evt_pred_2", "evt_pred_1") is False
 
 def test_validate_chronology_missing_dates(causal_reasoner, test_db):
-    """Test validation fails when no dates are available."""
+    """Test validation allows link when no dates are available (benefit of the doubt)."""
     create_event(test_db, "evt_no_date_1")
     create_event(test_db, "evt_no_date_2")
     
-    assert causal_reasoner._validate_chronology("evt_no_date_1", "evt_no_date_2") is False
+    assert causal_reasoner._validate_chronology("evt_no_date_1", "evt_no_date_2") is True

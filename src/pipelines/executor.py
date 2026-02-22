@@ -625,8 +625,8 @@ class PipelineExecutor:
             database_config=database_config,
             enable_persistence=True,
             min_quality_score=kwargs.get("min_quality_score"),
-            agent_max_steps=kwargs.get("agent_max_steps", 30),
-            min_graph_depth=kwargs.get("min_graph_depth", 3),
+            agent_max_steps=agent_max_steps,
+            min_graph_depth=min_graph_depth,
         )
 
         results = PipelineResult([], [], [], 0.0)

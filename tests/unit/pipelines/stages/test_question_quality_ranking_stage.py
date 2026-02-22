@@ -15,26 +15,29 @@ def sample_questions():
     return [
         Question(
             id="q_001",
-            question_text="Q1",
+            question_text="Will tech stocks rise in Q1 2026?",
             question_type=QuestionType.BINARY,
             domain=Domain.TECH,
             difficulty=1,
+            source="test",
             resolution_date=datetime.now(timezone.utc),
         ),
         Question(
             id="q_002",
-            question_text="Q2",
+            question_text="Will AI adoption increase in 2026?",
             question_type=QuestionType.BINARY,
             domain=Domain.TECH,
             difficulty=1,
+            source="test",
             resolution_date=datetime.now(timezone.utc),
         ),
         Question(
             id="q_003",
-            question_text="Q3",
+            question_text="Will semiconductor prices drop soon?",
             question_type=QuestionType.BINARY,
             domain=Domain.TECH,
             difficulty=1,
+            source="test",
             resolution_date=datetime.now(timezone.utc),
         ),
     ]

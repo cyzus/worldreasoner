@@ -85,13 +85,15 @@ class TestParseContextFromHeaders:
             service.parse_context_from_headers(headers)
 
     def test_parse_invalid_date_format(self):
-        """Should raise ValueError for invalid date format."""
+        """Invalid date format falls back to current UTC time via parse_flexible_datetime."""
         service = ForecastContextService(Mock())
 
         headers = {"x-question-id": "q123", "x-simulated-date": "invalid-date"}
 
-        with pytest.raises(ValueError):
-            service.parse_context_from_headers(headers)
+        context = service.parse_context_from_headers(headers)
+        # parse_flexible_datetime returns fallback (datetime.now(UTC)) for unparseable strings
+        assert context.simulated_date is not None
+        assert context.simulated_date.tzinfo is not None
 
 
 class TestValidateContext:
@@ -167,9 +169,11 @@ class TestGetQuestionForContext:
 
         question = Question(
             id="q123",
-            question_text="Test question?",
+            question_text="Will the test question be resolved by June 2024?",
             question_type=QuestionType.BINARY,
             domain=Domain.POLITICS,
+            source="test",
+            difficulty=3,
             resolution_date=datetime(2024, 6, 1, tzinfo=timezone.utc),
         )
 
@@ -191,9 +195,11 @@ class TestGetQuestionForContext:
         db = Mock()
         question = Question(
             id="q123",
-            question_text="Test question?",
+            question_text="Will the test question be resolved by June 2024?",
             question_type=QuestionType.BINARY,
             domain=Domain.POLITICS,
+            source="test",
+            difficulty=3,
             resolution_date=datetime(2024, 6, 1, tzinfo=timezone.utc),
         )
         db.get.return_value = question
@@ -221,17 +227,19 @@ class TestGetQuestionForContext:
 
         service = ForecastContextService(db)
 
-        # Mock GenericDatabase constructor
-        import src.domain.forecast_context_service
+        # Mock GenericDatabase constructor in service_base where get_db is defined
+        import src.domain.service_base
 
-        original_db = src.domain.forecast_context_service.GenericDatabase
+        original_db = src.domain.service_base.GenericDatabase
 
         custom_db = Mock()
         question = Question(
             id="q123",
-            question_text="Test question?",
+            question_text="Will the test question be resolved by June 2024?",
             question_type=QuestionType.BINARY,
             domain=Domain.POLITICS,
+            source="test",
+            difficulty=3,
             resolution_date=datetime(2024, 6, 1, tzinfo=timezone.utc),
         )
         custom_db.get.return_value = question
@@ -241,7 +249,7 @@ class TestGetQuestionForContext:
                 return custom_db
             return db
 
-        src.domain.forecast_context_service.GenericDatabase = mock_db_constructor
+        src.domain.service_base.GenericDatabase = mock_db_constructor
 
         try:
             context = ForecastContext(
@@ -258,7 +266,7 @@ class TestGetQuestionForContext:
             assert result == question
             custom_db.get.assert_called_once_with(Question, "q123")
         finally:
-            src.domain.forecast_context_service.GenericDatabase = original_db
+            src.domain.service_base.GenericDatabase = original_db
 
     def test_get_question_not_found(self):
         """Should raise ValueError if question not found."""

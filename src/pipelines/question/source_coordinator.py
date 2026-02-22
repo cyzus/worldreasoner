@@ -79,7 +79,7 @@ class SourceCoordinator:
                         source_name=requests[i].source_name,
                         requested_count=requests[i].count,
                         actual_count=0,
-                        errors=[str(result)],
+                        error_message=str(result),
                     )
                 )
             else:
@@ -105,7 +105,7 @@ class SourceCoordinator:
                         source_name=req.source_name,
                         requested_count=req.count,
                         actual_count=0,
-                        errors=[str(e)],
+                        error_message=str(e),
                     )
                 )
 

@@ -56,14 +56,29 @@ def parse_json_response(response_str: str) -> Dict[str, Any]:
 
 
 def get_knowledge_cutoff_date(model_id: str) -> str:
+    """Get the knowledge cutoff date for a given LLM model.
+
+    Args:
+        model_id: Model identifier (e.g., "gpt-4", "gemini/gemini-2.5-flash")
+
+    Returns:
+        Cutoff date string or "Unknown" if not found
+    """
     from src.config.constants import PROJECT_ROOT
     import json
 
     cutoff_file = PROJECT_ROOT / "config" / "llm_cutoff_dates.json"
     model_id = model_id.split("/")[-1]  # Get the last part of the model ID
-    with open(cutoff_file, "r", encoding="utf-8") as f:
-        cutoff_data = json.load(f)
-    for key, model_info in cutoff_data["models"].items():
+
+    try:
+        with open(cutoff_file, "r", encoding="utf-8") as f:
+            cutoff_data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        logger.warning(f"Could not load LLM cutoff dates from {cutoff_file}: {e}")
+        return "Unknown"
+
+    models = cutoff_data.get("models", {})
+    for key, model_info in models.items():
         if model_id.lower() in key.lower():
-            return model_info["cutoff_date"]
+            return model_info.get("cutoff_date", "Unknown")
     return "Unknown"

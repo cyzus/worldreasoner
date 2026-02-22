@@ -1,41 +1,23 @@
 # WorldReasoner Configuration
 
-# Database
+# Database (SQLite)
 database:
-  host: localhost
-  port: 5432
-  database: worldreasoner
-  username: postgres
-  password: ""  # Set via environment variable: WORLDREASONER__DATABASE__PASSWORD
+  db_path: worldreasoner.db  # Path to SQLite database file
+  batch_size: 100             # Batch insert size for bulk operations
+  timeout: 5.0                # Connection timeout in seconds
 
 # Server Configuration
 server:
   # Backend API server (FastAPI visualization backend)
   host: localhost
   port: 8018
-  
+
   # MCP forecasting server (used by agents for forecasting)
   mcp_host: localhost
   mcp_port: 8110
-  
+
   reload: true
   log_level: info
-
-# Data directories
-data_dir: ./data
-
-# Embeddings (choose your provider)
-# embeddings:
-#   provider: openai  # openai | cohere | local
-#   model: text-embedding-3-small
-#   api_key: ""  # Set via environment variable
-
-# Vector database (choose your provider)
-# vector_db:
-#   provider: pinecone  # pinecone | weaviate | qdrant
-#   api_key: ""
-#   environment: ""
-#   index_name: worldreasoner
 
 # LLM
 llm:

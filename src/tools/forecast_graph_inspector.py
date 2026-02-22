@@ -5,7 +5,6 @@ it has built during its reasoning process.
 """
 
 from src.tools.database_mixin import DatabaseAwareTool
-import json
 from typing import Dict, List, Set
 from collections import defaultdict
 
@@ -103,7 +102,7 @@ class ForecastGraphInspectorTool(DatabaseAwareTool):
 
         except Exception as e:
             logger.error(f"Error inspecting forecast graph: {e}")
-            return json.dumps({"error": str(e)})
+            return f"ERROR: Failed to inspect forecast graph: {e}"
 
     def _analyze_graph_structure(
         self,
