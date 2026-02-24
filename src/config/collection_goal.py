@@ -3,11 +3,58 @@
 Defines targets for question collection with distribution requirements.
 """
 
-from typing import Dict
+from enum import Enum
+from typing import Dict, Optional, Tuple
 from pydantic import BaseModel, Field
 import yaml
 from ..domain.models.question import QuestionType
 from ..domain.models.domain import Domain
+
+
+class TimeHorizon(str, Enum):
+    """Time horizon classification for forecasting questions.
+
+    Based on the duration between when a question becomes forecastable
+    (estimated_start_time) and its resolution_date.
+    """
+
+    SHORT = "short"  # Up to 7 days
+    MEDIUM = "medium"  # 7 days to 90 days (1 week to ~3 months)
+    LONG = "long"  # More than 90 days (3+ months)
+
+    @classmethod
+    def classify(cls, days: float) -> "TimeHorizon":
+        """Classify a duration in days into a time horizon.
+
+        Args:
+            days: Number of days between start and resolution
+
+        Returns:
+            TimeHorizon classification
+        """
+        if days <= 7:
+            return cls.SHORT
+        elif days <= 90:
+            return cls.MEDIUM
+        else:
+            return cls.LONG
+
+    @classmethod
+    def get_day_range(cls, horizon: "TimeHorizon") -> Tuple[int, int]:
+        """Get the (min_days, max_days) range for a time horizon.
+
+        Args:
+            horizon: Time horizon to get range for
+
+        Returns:
+            Tuple of (min_days, max_days)
+        """
+        if horizon == cls.SHORT:
+            return (0, 7)
+        elif horizon == cls.MEDIUM:
+            return (7, 90)
+        else:
+            return (90, 365 * 5)  # Up to 5 years for long
 
 
 class QualityRequirements(BaseModel):
@@ -73,6 +120,12 @@ class CollectionGoal(BaseModel):
         description="Minimum count for each category (can collect more to reach total)",
     )
 
+    # Distribution by time horizon (optional)
+    time_horizon_distribution: Optional[Dict[TimeHorizon, int]] = Field(
+        default=None,
+        description="Minimum count for each time horizon. Based on duration between estimated_start_time and resolution_date. None = no time horizon constraint.",
+    )
+
     # Quality constraints
     quality: QualityRequirements = Field(
         default_factory=QualityRequirements,
@@ -105,6 +158,13 @@ class CollectionGoal(BaseModel):
             raise ValueError(
                 f"Category distribution minimums sum to {category_sum}, which exceeds total_questions {self.total_questions}"
             )
+
+        if self.time_horizon_distribution:
+            horizon_sum = sum(self.time_horizon_distribution.values())
+            if horizon_sum > self.total_questions:
+                raise ValueError(
+                    f"Time horizon distribution minimums sum to {horizon_sum}, which exceeds total_questions {self.total_questions}"
+                )
 
         return True
 

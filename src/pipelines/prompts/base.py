@@ -114,6 +114,7 @@ class BasePromptGenerator(ABC, Generic[T]):
     def build_priority_guidance(
         type_hints: Optional[List[str]] = None,
         category_hints: Optional[List[str]] = None,
+        time_horizon_hints: Optional[List[str]] = None,
         prefix: str = "\n\n⚠️ COLLECTION PRIORITIES:\n",
     ) -> str:
         """Build priority guidance section from hints.
@@ -121,12 +122,13 @@ class BasePromptGenerator(ABC, Generic[T]):
         Args:
             type_hints: Priority types needed (e.g., ["boolean", "mcq"])
             category_hints: Priority categories needed (e.g., ["finance", "tech"])
+            time_horizon_hints: Priority time horizons needed (e.g., ["medium"])
             prefix: Prefix for the guidance section
 
         Returns:
             Formatted priority guidance string, or empty string if no hints
         """
-        if not type_hints and not category_hints:
+        if not type_hints and not category_hints and not time_horizon_hints:
             return ""
 
         guidance_parts = []
@@ -138,11 +140,36 @@ class BasePromptGenerator(ABC, Generic[T]):
             guidance_parts.append(
                 f"PRIORITY CATEGORIES NEEDED: {BasePromptGenerator.format_list(category_hints)}"
             )
+        if time_horizon_hints:
+            # Provide specific day ranges for each horizon
+            from src.config.collection_goal import TimeHorizon
+            horizon_descriptions = []
+            for h in time_horizon_hints:
+                try:
+                    th = TimeHorizon(h)
+                    min_d, max_d = TimeHorizon.get_day_range(th)
+                    horizon_descriptions.append(f"{h} ({min_d}-{max_d} days)")
+                except ValueError:
+                    horizon_descriptions.append(h)
+            guidance_parts.append(
+                f"PRIORITY TIME HORIZONS NEEDED: {', '.join(horizon_descriptions)}"
+            )
+            guidance_parts.append(
+                "Generate questions where the time between when the question becomes forecastable "
+                "(estimated_start_time) and its resolution_date falls within the specified horizon range."
+            )
 
+        focus_items = []
+        if type_hints:
+            focus_items.append("types")
+        if category_hints:
+            focus_items.append("categories")
+        if time_horizon_hints:
+            focus_items.append("time horizons")
         return (
             prefix
             + "\n".join(guidance_parts)
-            + "\nFocus on generating questions of these types/categories first!"
+            + f"\nFocus on generating questions matching these {'/'.join(focus_items)} first!"
         )
 
     @staticmethod

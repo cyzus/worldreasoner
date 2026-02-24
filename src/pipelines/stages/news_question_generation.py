@@ -28,6 +28,7 @@ class NewsQuestionGenerationStage(PipelineStage[Article, Question]):
         db_path: Optional[str] = None,
         type_hints: Optional[List[str]] = None,
         category_hints: Optional[List[str]] = None,
+        time_horizon_hints: Optional[List[str]] = None,
         existing_question_ids: Optional[set] = None,
         target_count: Optional[int] = None,
     ):
@@ -42,6 +43,7 @@ class NewsQuestionGenerationStage(PipelineStage[Article, Question]):
         # Store hints for intelligent generation
         self.type_hints = type_hints
         self.category_hints = category_hints
+        self.time_horizon_hints = time_horizon_hints
         self.existing_question_ids = existing_question_ids or set()
         self.target_count = target_count
 
@@ -71,7 +73,7 @@ class NewsQuestionGenerationStage(PipelineStage[Article, Question]):
             inputs: List of articles to analyze and generate questions from
 
         Returns:
-            List of generated questions
+            List of NEW questions generated in this batch only
         """
         if not inputs:
             return []
@@ -91,6 +93,9 @@ class NewsQuestionGenerationStage(PipelineStage[Article, Question]):
             return []
 
         remaining_needed = max_questions - current_count
+
+        # Snapshot collector size before this batch so we can return only new items
+        count_before = len(self.collector.get_all())
 
         try:
             # Get current date for context
@@ -149,6 +154,7 @@ class NewsQuestionGenerationStage(PipelineStage[Article, Question]):
                 require_ground_truth=self.config.require_ground_truth,
                 type_hints=self.type_hints,
                 category_hints=self.category_hints,
+                time_horizon_hints=self.time_horizon_hints,
             )
 
             # Run the agent
@@ -165,13 +171,14 @@ class NewsQuestionGenerationStage(PipelineStage[Article, Question]):
                 f"Agent response: {result[:200] if isinstance(result, str) else result}"
             )
 
-            # Get generated questions
-            questions = self.collector.get_all()
+            # Get only the NEW questions generated in this batch
+            all_questions = self.collector.get_all()
+            new_questions = all_questions[count_before:]
 
             if self.usage_tracker.total_calls > 0:
                 self.usage_tracker.log_summary(context="NewsQuestionGeneration")
 
-            return questions
+            return new_questions
 
         except Exception as e:
             logger.error(f"Error generating questions from articles: {e}")

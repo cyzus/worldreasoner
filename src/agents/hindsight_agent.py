@@ -61,7 +61,9 @@ class HindsightAgent(BaseAgent):
 
         llm_model = LiteLLMModel(
             model_id=config.llm.model,
-            **config.llm.model_dump(exclude={"model", "embedding_model"}),
+            **config.llm.model_dump(
+                exclude={"model", "embedding_model"}, exclude_none=True
+            ),
         )
 
         # Evidence gathering specialist (web search, article collection)

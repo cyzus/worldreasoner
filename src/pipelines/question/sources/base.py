@@ -57,6 +57,7 @@ class QuestionSourceRunner(ABC):
         category_filter: Optional[Union[Dict[str, int], List[str]]] = None,
         quality_requirements: Optional[QualityRequirements] = None,
         existing_question_ids: Optional[set] = None,
+        time_horizon_hints: Optional[List[str]] = None,
     ) -> CollectionResult:
         """Collect questions from this source.
 
@@ -66,6 +67,7 @@ class QuestionSourceRunner(ABC):
             category_filter: Dict mapping categories to number still needed (e.g., {"finance": 1, "tech": 2})
             quality_requirements: Quality constraints for collected questions
             existing_question_ids: Set of existing IDs to skip (for deduplication)
+            time_horizon_hints: Priority time horizons needed (e.g., ["medium", "long"])
 
         Returns:
             CollectionResult with collected questions and metadata

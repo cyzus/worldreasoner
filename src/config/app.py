@@ -32,6 +32,18 @@ class LLMConfig(BaseModel):
     temperature: float = Field(
         default=1.0, ge=0.0, le=2.0, description="Sampling temperature"
     )
+    frequency_penalty: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=2.0,
+        description="Penalizes repeated tokens to reduce repetitive text (0.0=off, 2.0=max). Not supported by all models.",
+    )
+    presence_penalty: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=2.0,
+        description="Penalizes tokens that have appeared at all, encouraging topic diversity",
+    )
     max_tokens: Optional[int] = Field(
         default=None, description="Maximum tokens to generate"
     )

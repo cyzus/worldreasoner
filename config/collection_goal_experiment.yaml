@@ -1,0 +1,56 @@
+# Experiment Collection Goal Configuration
+# ==========================================
+# Collects 300 high-quality questions for the WorldReasoner benchmark dataset.
+#
+# Distribution:
+#   - 100 short range (<=7 days)
+#   - 100 medium range (1 week - 3 months)
+#   - 100 long range (3+ months)
+#   - 6 domains: Finance, Politics, Sports, Culture, Climate, Health
+#
+# See docs/plan/experiement.md for full experiment plan.
+
+# Total minimum number of questions to collect
+total_questions: 300
+
+# Distribution by question type (minimum counts)
+# Polymarket primarily provides binary and MCQ; news can provide all types.
+type_distribution:
+  binary: 180          # Binary yes/no questions (majority from Polymarket)
+  mcq: 60              # Multiple choice questions (multi-outcome markets + news)
+  quantity: 30          # Numeric/quantity questions (news-generated)
+  timeframe: 30         # Date/timeframe questions (news-generated)
+
+# Distribution by category/domain (minimum counts, ~50 each)
+# Maps to the 6 experiment domains
+category_distribution:
+  finance: 50           # Financial markets, earnings, economy
+  politics: 50          # Elections, policy, legislation, geopolitics
+  sports: 50            # Major sports events, tournaments, matches
+  culture: 50           # Entertainment, arts, media, movies, music
+  climate: 50           # Environmental, weather, climate policy
+  health: 50            # Medical, healthcare, pandemics, biotech
+
+# Distribution by time horizon (minimum counts)
+# Based on duration between estimated_start_time and resolution_date
+time_horizon_distribution:
+  short: 100            # Up to 7 days (e.g., weekly sports, earnings)
+  medium: 100           # 7-90 days (e.g., quarterly events, elections)
+  long: 100             # 90+ days (e.g., annual outcomes, long-term policy)
+
+# Quality requirements
+quality:
+  min_difficulty: 2              # Minimum difficulty (1-5 scale)
+  max_difficulty: 5              # Maximum difficulty
+  min_resolution_days: -365      # Look back up to 1 year for resolved questions
+  max_resolution_days: 0         # Only resolved questions (past)
+  require_resolution_criteria: true
+  min_confidence_score: 0.6      # Slightly relaxed for larger dataset
+
+# Ground truth requirement - we need resolved questions for evaluation
+require_ground_truth: true
+
+# Source minimums (minimum questions from each source)
+source_minimums:
+  polymarket: 180       # Prediction market (strong for binary/MCQ, good time coverage)
+  news: 120             # News pipeline (covers quantity/timeframe types, all domains)

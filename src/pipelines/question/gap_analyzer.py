@@ -1,9 +1,9 @@
 """Gap analysis for collection progress."""
 
 from typing import Dict, List
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from .progress import CollectionProgress
+from .progress import CollectionProgress, classify_question_time_horizon
 from src.config.collection_goal import CollectionGoal
 from src.utils.logging import logger
 
@@ -15,11 +15,12 @@ class GapAnalysis:
     type_gaps: Dict[str, int]  # qtype -> count needed
     category_gaps: Dict[str, int]  # category -> count needed
     total_needed: int
+    time_horizon_gaps: Dict[str, int] = field(default_factory=dict)  # horizon -> count needed
 
     @property
     def has_gaps(self) -> bool:
         """Check if any gaps exist."""
-        return bool(self.total_needed > 0 or self.type_gaps or self.category_gaps)
+        return bool(self.total_needed > 0 or self.type_gaps or self.category_gaps or self.time_horizon_gaps)
 
     @property
     def type_gaps_list(self) -> List[str]:
@@ -30,6 +31,11 @@ class GapAnalysis:
     def category_gaps_list(self) -> List[str]:
         """Get list of categories with gaps."""
         return [c for c, count in self.category_gaps.items() if count > 0]
+
+    @property
+    def time_horizon_gaps_list(self) -> List[str]:
+        """Get list of time horizons with gaps."""
+        return [h for h, count in self.time_horizon_gaps.items() if count > 0]
 
 
 class GapAnalyzer:
@@ -63,9 +69,12 @@ class GapAnalyzer:
         # Recalculate distributions from filtered questions
         by_type = {}
         by_category = {}
+        by_time_horizon = {}
         for q in questions:
             by_type[q.question_type] = by_type.get(q.question_type, 0) + 1
             by_category[q.domain] = by_category.get(q.domain, 0) + 1
+            horizon = classify_question_time_horizon(q)
+            by_time_horizon[horizon] = by_time_horizon.get(horizon, 0) + 1
 
         # Calculate gaps based on filtered distributions
         type_gaps_dict = {}
@@ -82,9 +91,19 @@ class GapAnalyzer:
             if gap > 0:
                 category_gaps_dict[category] = gap
 
+        time_horizon_gaps_dict = {}
+        if goal.time_horizon_distribution:
+            for horizon, target in goal.time_horizon_distribution.items():
+                horizon_key = horizon.value if hasattr(horizon, 'value') else horizon
+                actual = by_time_horizon.get(horizon_key, 0)
+                gap = max(0, target - actual)
+                if gap > 0:
+                    time_horizon_gaps_dict[horizon_key] = gap
+
         analysis = GapAnalysis(
             type_gaps=type_gaps_dict,
             category_gaps=category_gaps_dict,
+            time_horizon_gaps=time_horizon_gaps_dict,
             total_needed=total_needed,
         )
 
@@ -97,10 +116,14 @@ class GapAnalyzer:
                 logger.info(
                     f"  Distribution gaps - Types: {analysis.type_gaps}, Categories: {analysis.category_gaps}"
                 )
+                if analysis.time_horizon_gaps:
+                    logger.info(f"  Time horizon gaps: {analysis.time_horizon_gaps}")
         elif analysis.has_gaps:
             logger.info("Total goal met, but distribution gaps remain:")
             logger.info(f"  Types: {analysis.type_gaps}")
             logger.info(f"  Categories: {analysis.category_gaps}")
+            if analysis.time_horizon_gaps:
+                logger.info(f"  Time horizons: {analysis.time_horizon_gaps}")
         else:
             logger.info("No gaps detected - goal fully met")
 

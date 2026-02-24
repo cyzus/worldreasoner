@@ -20,6 +20,7 @@ class SourceRequest:
     category_filter: Optional[Union[Dict[str, int], List[str]]] = None
     quality_requirements: Optional[QualityRequirements] = None
     existing_question_ids: Optional[set] = None
+    time_horizon_hints: Optional[List[str]] = None
 
 
 @dataclass
@@ -130,6 +131,7 @@ class SourceCoordinator:
             category_filter=request.category_filter,
             quality_requirements=request.quality_requirements,
             existing_question_ids=request.existing_question_ids,
+            time_horizon_hints=request.time_horizon_hints,
         )
 
         if result.success and result.questions:

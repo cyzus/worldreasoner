@@ -58,6 +58,7 @@ class NewsBasedRunner(QuestionSourceRunner):
         category_filter: Optional[Union[Dict[str, int], List[str]]] = None,
         quality_requirements: Optional[QualityRequirements] = None,
         existing_question_ids: Optional[set] = None,
+        time_horizon_hints: Optional[List[str]] = None,
     ) -> CollectionResult:
         """Collect questions from news sources.
 
@@ -69,6 +70,7 @@ class NewsBasedRunner(QuestionSourceRunner):
             category_filter: Dict mapping categories to number still needed
             quality_requirements: Quality constraints
             existing_question_ids: Set of existing IDs to skip
+            time_horizon_hints: Priority time horizons needed (e.g., ["medium"])
 
         Returns:
             CollectionResult with questions from news sources
@@ -169,6 +171,7 @@ class NewsBasedRunner(QuestionSourceRunner):
                 db_path=self.db_path,
                 type_hints=type_filter,  # Tell agent which types we need
                 category_hints=category_filter,  # Tell agent which categories we need
+                time_horizon_hints=time_horizon_hints,  # Tell agent which time horizons we need
                 existing_question_ids=existing_question_ids,  # Skip duplicates early
                 target_count=count,  # Tell stage exactly how many questions we need
             )

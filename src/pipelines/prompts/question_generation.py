@@ -258,6 +258,7 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
         require_ground_truth: bool = True,
         type_hints: Optional[List[str]] = None,
         category_hints: Optional[List[str]] = None,
+        time_horizon_hints: Optional[List[str]] = None,
         description_preview_length: int = None,  # DEPRECATED: Use content_preview_length
     ) -> str:
         """Generate instruction for question generation.
@@ -313,7 +314,8 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
 
         # Build priority guidance from hints
         priority_guidance = self.build_priority_guidance(
-            type_hints=type_hints, category_hints=category_hints
+            type_hints=type_hints, category_hints=category_hints,
+            time_horizon_hints=time_horizon_hints,
         )
 
         # Select appropriate template based on mode
@@ -357,6 +359,7 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
         require_ground_truth: bool = True,
         type_hints: Optional[List[str]] = None,
         category_hints: Optional[List[str]] = None,
+        time_horizon_hints: Optional[List[str]] = None,
     ) -> str:
         """Generate instruction for question generation from ARTICLES.
 
@@ -430,7 +433,8 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
 
         # Add priority guidance
         priority_guidance = self.build_priority_guidance(
-            type_hints=type_hints, category_hints=category_hints
+            type_hints=type_hints, category_hints=category_hints,
+            time_horizon_hints=time_horizon_hints,
         )
         if priority_guidance:
             instruction_body = instruction_body + priority_guidance

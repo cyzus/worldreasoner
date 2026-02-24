@@ -8,14 +8,36 @@ from collections import defaultdict
 from pydantic import BaseModel, Field
 
 from src.domain.models import Question
-from src.config.collection_goal import CollectionGoal
+from src.config.collection_goal import CollectionGoal, TimeHorizon
 from src.utils.logging import logger
+
+
+def classify_question_time_horizon(question: Question) -> str:
+    """Classify a question's time horizon based on its temporal span.
+
+    Uses estimated_start_time and resolution_date to determine the
+    forecasting time horizon. Falls back to 'unknown' if dates are missing.
+
+    Args:
+        question: Question to classify
+
+    Returns:
+        TimeHorizon value string (short/medium/long) or 'unknown'
+    """
+    if question.estimated_start_time and question.resolution_date:
+        delta = question.resolution_date - question.estimated_start_time
+        days = delta.total_seconds() / 86400
+        if days < 0:
+            return "unknown"
+        return TimeHorizon.classify(days).value
+    return "unknown"
 
 
 class CollectionProgress(BaseModel):
     """Tracks progress toward collection goal.
 
-    Monitors questions collected by type, category, source, and quality metrics.
+    Monitors questions collected by type, category, source, time horizon,
+    and quality metrics.
     """
 
     model_config = {"arbitrary_types_allowed": True}
@@ -23,6 +45,7 @@ class CollectionProgress(BaseModel):
     by_type: Dict[str, int] = Field(default_factory=lambda: defaultdict(int))
     by_category: Dict[str, int] = Field(default_factory=lambda: defaultdict(int))
     by_source: Dict[str, int] = Field(default_factory=lambda: defaultdict(int))
+    by_time_horizon: Dict[str, int] = Field(default_factory=lambda: defaultdict(int))
     total: int = 0
 
     # Quality metrics
@@ -57,6 +80,10 @@ class CollectionProgress(BaseModel):
         # Use the source field from the question directly
         source = question.source if question.source else "unknown"
         self.by_source[source] += 1
+
+        # Update time horizon distribution
+        horizon = classify_question_time_horizon(question)
+        self.by_time_horizon[horizon] += 1
 
         # Update quality metrics
         if question.resolution_criteria:
@@ -107,10 +134,13 @@ class CollectionProgress(BaseModel):
         # Recalculate distributions from filtered questions
         by_type = {}
         by_category = {}
+        by_time_horizon = {}
         for q in questions:
             # Store as enum for consistent comparison
             by_type[q.question_type] = by_type.get(q.question_type, 0) + 1
             by_category[q.domain] = by_category.get(q.domain, 0) + 1
+            horizon = classify_question_time_horizon(q)
+            by_time_horizon[horizon] = by_time_horizon.get(horizon, 0) + 1
 
         # Check type distribution (exact minimums)
         for qtype, minimum in goal.type_distribution.items():
@@ -125,6 +155,14 @@ class CollectionProgress(BaseModel):
             if actual < minimum:
                 logger.debug(f"Category '{category}' not met: {actual}/{minimum}")
                 return False
+
+        # Check time horizon distribution (if specified)
+        if goal.time_horizon_distribution:
+            for horizon, minimum in goal.time_horizon_distribution.items():
+                actual = by_time_horizon.get(horizon.value if hasattr(horizon, 'value') else horizon, 0)
+                if actual < minimum:
+                    logger.debug(f"Time horizon '{horizon}' not met: {actual}/{minimum}")
+                    return False
 
         logger.info("Goal met!")
         return True
@@ -172,12 +210,34 @@ class CollectionProgress(BaseModel):
             goal: Target collection goal
 
         Returns:
-            Dict with 'types' and 'categories' gaps
+            Dict with 'types', 'categories', and 'time_horizons' gaps
         """
         return {
             "types": self.get_type_gaps(goal),
             "categories": self.get_category_gaps(goal),
+            "time_horizons": self.get_time_horizon_gaps(goal),
         }
+
+    def get_time_horizon_gaps(self, goal: CollectionGoal) -> Dict[str, int]:
+        """Identify gaps in time horizon distribution.
+
+        Args:
+            goal: Target collection goal
+
+        Returns:
+            Dict mapping time horizons to number needed
+        """
+        if not goal.time_horizon_distribution:
+            return {}
+
+        gaps = {}
+        for horizon, target in goal.time_horizon_distribution.items():
+            horizon_key = horizon.value if hasattr(horizon, 'value') else horizon
+            actual = self.by_time_horizon.get(horizon_key, 0)
+            gap = max(0, target - actual)
+            if gap > 0:
+                gaps[horizon_key] = gap
+        return gaps
 
     def get_completion_percentage(self, goal: CollectionGoal) -> float:
         """Calculate overall completion percentage.
@@ -213,6 +273,9 @@ class CollectionProgress(BaseModel):
             "by_category": dict(self.by_category),
             "category_targets": goal.category_distribution,
             "category_gaps": self.get_category_gaps(goal),
+            "by_time_horizon": dict(self.by_time_horizon),
+            "time_horizon_targets": goal.time_horizon_distribution or {},
+            "time_horizon_gaps": self.get_time_horizon_gaps(goal),
             "by_source": dict(self.by_source),
             "avg_difficulty": round(self.avg_difficulty, 2),
             "questions_with_criteria": self.questions_with_criteria,
@@ -241,6 +304,12 @@ class CollectionProgress(BaseModel):
         for category, count in summary["by_category"].items():
             target = summary["category_targets"].get(category, 0)
             logger.info(f"  {category:15} {count:3}/{target:3}")
+
+        if summary.get("time_horizon_targets"):
+            logger.info("By Time Horizon:")
+            for horizon, count in summary["by_time_horizon"].items():
+                target = summary["time_horizon_targets"].get(horizon, 0)
+                logger.info(f"  {horizon:15} {count:3}/{target:3}")
 
         logger.info("By Source:")
         for source, count in summary["by_source"].items():
@@ -271,6 +340,7 @@ class CollectionProgress(BaseModel):
         self.by_type.clear()
         self.by_category.clear()
         self.by_source.clear()
+        self.by_time_horizon.clear()
         self.total = 0
         self.avg_difficulty = 0.0
         self.questions_with_criteria = 0

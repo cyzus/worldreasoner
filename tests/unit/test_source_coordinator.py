@@ -260,6 +260,7 @@ async def test_source_request_with_filters(mock_runner, sample_question):
         category_filter={"tech": 3, "politics": 2},
         quality_requirements=None,
         existing_question_ids={"q_old_1", "q_old_2"},
+        time_horizon_hints=None,
     )
 
 

@@ -45,7 +45,9 @@ class BaseAgent:
         # Initialize LLM model
         self.llm_model = LiteLLMModel(
             model_id=self.config.llm.model,
-            **self.config.llm.model_dump(exclude={"model", "embedding_model"}),
+            **self.config.llm.model_dump(
+                exclude={"model", "embedding_model"}, exclude_none=True
+            ),
         )
 
         # Create appropriate agent type
@@ -54,7 +56,7 @@ class BaseAgent:
             "model": self.llm_model,
             "tools": tools or [],
             "max_steps": max_steps,
-            "stream_outputs": True,
+            "stream_outputs": False,  # Disabled: streaming causes code block termination loops (smolagents #1872)
             **kwargs,
         }
 

@@ -89,6 +89,22 @@ class PolymarketRunner(QuestionSourceRunner):
         self.client = PolymarketClient()
         self.parser = MarketParser(require_ground_truth=require_ground_truth)
 
+    def _infer_domain_from_tags(self, event: Dict[str, Any]) -> Optional[Domain]:
+        """Infer domain from event tags by matching against DOMAIN_TO_TAG_SLUGS.
+        
+        Returns the first matching Domain, or None if no match found.
+        """
+        event_tags = {tag.get("slug") for tag in event.get("tags", []) if tag.get("slug")}
+        if not event_tags:
+            return None
+        
+        for domain, slugs in self.DOMAIN_TO_TAG_SLUGS.items():
+            if domain == Domain.GENERAL:
+                continue  # Skip "all" catch-all
+            if any(slug in event_tags for slug in slugs):
+                return domain
+        return None
+
     async def _fetch_markets_by_category(
         self,
         category_filter: Optional[Union[Dict[str, int], List[str]]],
@@ -382,6 +398,7 @@ class PolymarketRunner(QuestionSourceRunner):
         category_filter: Optional[Union[Dict[str, int], List[str]]] = None,
         quality_requirements: Optional[QualityRequirements] = None,
         existing_question_ids: Optional[set] = None,
+        time_horizon_hints: Optional[List[str]] = None,
     ) -> CollectionResult:
         """Collect questions from Polymarket.
 
@@ -391,6 +408,7 @@ class PolymarketRunner(QuestionSourceRunner):
             category_filter: Dict mapping categories to number still needed
             quality_requirements: Quality constraints
             existing_question_ids: Set of existing IDs to skip
+            time_horizon_hints: Priority time horizons (used for post-filtering)
 
         Returns:
             CollectionResult with Polymarket questions
@@ -464,6 +482,26 @@ class PolymarketRunner(QuestionSourceRunner):
             logger.info(
                 f"Filtered from {len(questions)} down to {len(filtered)} questions after applying type/category/quality filters"
             )
+
+            # Apply time horizon post-filtering if hints provided
+            if time_horizon_hints and filtered:
+                from src.pipelines.question.progress import classify_question_time_horizon
+                before_horizon = len(filtered)
+                horizon_filtered = [
+                    q for q in filtered
+                    if classify_question_time_horizon(q) in time_horizon_hints
+                ]
+                if horizon_filtered:
+                    logger.info(
+                        f"Time horizon filter: {before_horizon} -> {len(horizon_filtered)} "
+                        f"(keeping {time_horizon_hints})"
+                    )
+                    filtered = horizon_filtered
+                else:
+                    logger.warning(
+                        f"No questions match time horizons {time_horizon_hints}, "
+                        f"keeping all {len(filtered)} questions"
+                    )
 
             # Smart sampling by type and/or category if filters specified
             if (type_filter or category_filter) and len(filtered) > count:
@@ -577,6 +615,12 @@ class PolymarketRunner(QuestionSourceRunner):
             for event in events_list:
                 # Parse event structure
                 mqs = self._parse_event_structure(event, quality_requirements)
+                # Infer domain from event tags for the non-category-filtered path
+                for mq in mqs:
+                    if not (mq.metadata and mq.metadata.get("known_domain")):
+                        inferred = self._infer_domain_from_tags(event)
+                        if inferred:
+                            mq.metadata["known_domain"] = inferred.value
                 questions.extend(mqs)
 
             logger.info(

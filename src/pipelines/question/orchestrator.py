@@ -287,6 +287,7 @@ class QuestionCollectionOrchestrator:
                     category_filter=analysis.category_gaps
                     if analysis.category_gaps
                     else None,
+                    time_horizon_hints=analysis.time_horizon_gaps_list or None,
                     quality_requirements=self.goal.quality,
                     existing_question_ids=self.existing_question_ids,
                 )
@@ -428,9 +429,10 @@ class QuestionCollectionOrchestrator:
         missing = {
             "types": analysis.type_gaps,
             "categories": analysis.category_gaps,
+            "time_horizons": analysis.time_horizon_gaps,
         }
 
-        if missing["types"] or missing["categories"]:
+        if missing["types"] or missing["categories"] or missing["time_horizons"]:
             logger.info("Missing items report:")
 
             if missing["types"]:
@@ -448,5 +450,12 @@ class QuestionCollectionOrchestrator:
                     target = self.goal.category_distribution.get(cat, 0)
                     collected = target - count
                     logger.info(f"  {cat:15} {collected:3}/{target:3} ({count} short)")
+
+            if missing["time_horizons"]:
+                logger.info("Missing time horizons:")
+                for horizon, count in missing["time_horizons"].items():
+                    target = (self.goal.time_horizon_distribution or {}).get(horizon, 0)
+                    collected = target - count
+                    logger.info(f"  {horizon:15} {collected:3}/{target:3} ({count} short)")
 
         return missing
