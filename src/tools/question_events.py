@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from src.tools.database_mixin import DatabaseAwareTool
 from src.tools.output_models import QuestionEventsOutput
-from src.domain.models import Event, Question
+from src.domain.models import Event, Question, ReviewStatus
 from src.utils.logging import logger
 from src.utils.schema_helper import pydantic_to_output_schema
 
@@ -90,12 +90,26 @@ class QuestionEventsTool(DatabaseAwareTool):
         if question.related_event_ids:
             event_ids.update(question.related_event_ids)
 
-        # Fetch all events
+        # Fetch all events (excluding rejected ones)
         events = []
+        rejected_count = 0
         for event_id in event_ids:
             event = self.db.get(Event, event_id)
             if event:
+                review_val = (
+                    event.review_status.value
+                    if hasattr(event.review_status, "value")
+                    else event.review_status
+                )
+                if review_val == "rejected":
+                    rejected_count += 1
+                    continue
                 events.append(event)
+
+        if rejected_count:
+            logger.debug(
+                f"Excluded {rejected_count} rejected events for question {self.question_id}"
+            )
 
         logger.debug(
             f"Found {len(events)} total events for question {self.question_id}"
@@ -115,6 +129,9 @@ class QuestionEventsTool(DatabaseAwareTool):
                 "predicted_date": event.predicted_date.isoformat()
                 if event.predicted_date
                 else None,
+                "review_status": event.review_status.value
+                if hasattr(event.review_status, "value")
+                else event.review_status,
             }
 
             if include_descriptions:

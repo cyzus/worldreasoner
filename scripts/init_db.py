@@ -12,9 +12,9 @@ try:
 except ImportError:
     PydanticUndefined = object()
 
-def init_db():
-    print("Initializing/Migrating database...")
-    db = GenericDatabase("worldreasoner.db")
+def init_db(db_path: str = "worldreasoner.db"):
+    print(f"Initializing/Migrating database: {db_path}")
+    db = GenericDatabase(db_path)
     
     # 1. Initialize tables (creates if not exist)
     try:
@@ -94,4 +94,8 @@ def init_db():
         print(f"Error verifying tables: {e}")
 
 if __name__ == "__main__":
-    init_db()
+    import argparse
+    parser = argparse.ArgumentParser(description="Initialize/migrate database")
+    parser.add_argument("--db", default="worldreasoner.db", help="Database path")
+    args = parser.parse_args()
+    init_db(args.db)

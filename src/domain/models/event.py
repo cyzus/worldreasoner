@@ -50,6 +50,15 @@ class OutcomeScenario(str, Enum):
     DISCOVERED = "discovered"  # Edge-case outcomes created outside normal flow
 
 
+class ReviewStatus(str, Enum):
+    """Human review status for agent-generated events."""
+
+    PENDING = "pending"  # Not yet reviewed (default)
+    APPROVED = "approved"  # Verified as accurate
+    REJECTED = "rejected"  # Inaccurate or hallucinated
+    REVISED = "revised"  # Approved after manual correction
+
+
 @register_model(
     "events",
     indexes=[
@@ -59,6 +68,7 @@ class OutcomeScenario(str, Enum):
         "extracted_for_question_id",
         "is_outcome",
         "outcome_scenario",
+        "review_status",
     ],
 )
 class Event(BaseModel):
@@ -135,6 +145,16 @@ class Event(BaseModel):
     is_actual_outcome: Optional[bool] = Field(
         None,
         description="True if this outcome actually occurred (set after resolution)",
+    )
+
+    # Human review
+    review_status: ReviewStatus = Field(
+        default=ReviewStatus.PENDING,
+        description="Human review status (pending/approved/rejected/revised)",
+    )
+    review_note: Optional[str] = Field(
+        None,
+        description="Optional reviewer note explaining approval/rejection reason",
     )
 
     # Audit
