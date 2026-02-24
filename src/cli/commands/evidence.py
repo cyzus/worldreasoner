@@ -172,12 +172,15 @@ def run(
 
     else:
         # Non-interactive selection with filters
+        # When --sample is used, fetch all matching questions first so
+        # stratified sampling has the full pool to draw from
+        effective_limit = limit if sample is None else 10000
         questions_to_process = selector.select_questions(
             source=source,
             domain=domain,
             resolved_only=resolved_only,
             has_evidence=has_evidence if not has_evidence else None,
-            limit=limit,
+            limit=effective_limit,
             multi_select=True,
         )
 
