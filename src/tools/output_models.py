@@ -82,6 +82,10 @@ class EventOutput(BaseModel):
     status: str = Field(description="Processing status (created/updated/existing)")
     occurred_date: Optional[str] = Field(default=None, description="When event occurred")
     event_type: Optional[str] = Field(default=None, description="Type of event")
+    warnings: Optional[List[str]] = Field(
+        default=None,
+        description="Validation warnings about date accuracy or other issues. Review these and correct events if needed.",
+    )
 
 
 class EventDetailsOutput(BaseModel):

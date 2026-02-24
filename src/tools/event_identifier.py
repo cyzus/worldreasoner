@@ -112,6 +112,12 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
 
         self.db = GenericDatabase(db_path) if db_path else None
 
+        # Ensure required tables exist (prevents "no such table" errors on fresh DBs)
+        if self.db:
+            from src.domain.models.event_outcome_impact import EventOutcomeImpact
+            self.db.create_table(Event)
+            self.db.create_table(EventOutcomeImpact)
+
         self.similarity_threshold = similarity_threshold
         self.deduplicate = deduplicate
         self.time_window_days = time_window_days
@@ -159,12 +165,14 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
 
         # Parse article IDs
         article_ids = []
+        article_date_warnings = []
         if source_article_ids:
             article_ids = [aid.strip() for aid in source_article_ids.split(",")]
             if self.db is not None:
                 # Verify article IDs exist in database
                 missing_ids = []
                 invalid_date_articles = []
+                article_dates = []
                 for aid in article_ids:
                     article = self.db.get(Article, aid)
                     if article is None:
@@ -174,6 +182,7 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
                         article_date = article.published_date
                         if article_date and event_date:
                             article_date = ensure_timezone_aware(article_date)
+                            article_dates.append(article_date)
                             if article_date < event_date:
                                 invalid_date_articles.append(
                                     f"{aid} (article: {article_date.isoformat()}, event: {event_date.isoformat()})"
@@ -192,6 +201,25 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
                         error="invalid_article_dates",
                         invalid_articles=invalid_date_articles,
                     )
+
+                # Date proximity check: flag if event date is implausibly far from source articles
+                if article_dates and event_date:
+                    closest_article_date = min(article_dates, key=lambda d: abs((d - event_date).total_seconds()))
+                    gap_days = abs((closest_article_date - event_date).days)
+                    if gap_days > 30:
+                        article_date_warnings.append(
+                            f"DATE ACCURACY WARNING: Event date ({event_date.strftime('%Y-%m-%d')}) is {gap_days} days "
+                            f"from the closest source article date ({closest_article_date.strftime('%Y-%m-%d')}). "
+                            f"This is unusual - events are typically reported within days of occurring. "
+                            f"Please verify the event date is extracted from the article content, not inferred."
+                        )
+                    # Check if all source articles are far in the future from the event
+                    earliest_article = min(article_dates)
+                    if (earliest_article - event_date).days > 90:
+                        article_date_warnings.append(
+                            f"DATE ACCURACY WARNING: All source articles are published 90+ days after this event. "
+                            f"The event date may be incorrect. Verify against article text."
+                        )
 
         else:
             return self.error_response(
@@ -260,7 +288,7 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
             is_new=is_new,
             updated_articles=updated_articles,
             time_window_validation=time_window_validation,
-
+            article_date_warnings=article_date_warnings,
             impact_results=impact_results,
         )
 
@@ -597,7 +625,7 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
         is_new: bool,
         updated_articles: bool = False,
         time_window_validation: dict = None,
-
+        article_date_warnings: List[str] = None,
         impact_results: List[dict] = None,
     ) -> str:
         """Format event response as JSON.
@@ -607,7 +635,7 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
             is_new: Whether this is a newly created event
             updated_articles: Whether existing event was updated with new articles
             time_window_validation: Optional validation warnings about event date
-
+            article_date_warnings: Optional warnings about date proximity to source articles
             impact_results: Optional outcome impact recording results
 
         Returns:
@@ -618,14 +646,31 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
             if is_new
             else ("updated" if updated_articles else "reused_existing")
         )
-        
-        # Add warnings to status if present
-        if time_window_validation:
+
+        # Collect all warnings to surface to agent
+        all_warnings = []
+        if time_window_validation and "warnings" in time_window_validation:
+            all_warnings.extend(time_window_validation["warnings"])
+            if "recommendation" in time_window_validation:
+                all_warnings.append(time_window_validation["recommendation"])
+        if article_date_warnings:
+            all_warnings.extend(article_date_warnings)
+
+        if all_warnings:
             status_msg = f"{status_msg}_with_warnings"
+
+        # Format occurred_date for agent visibility
+        event_date_str = None
+        if event.occurred_date:
+            event_date_str = event.occurred_date.isoformat()
+        elif event.predicted_date:
+            event_date_str = event.predicted_date.isoformat()
 
         return EventOutput(
             id=event.id,
             title=event.title,
             domain=event.domain.value if hasattr(event.domain, "value") else str(event.domain),
             status=status_msg,
+            occurred_date=event_date_str,
+            warnings=all_warnings if all_warnings else None,
         )

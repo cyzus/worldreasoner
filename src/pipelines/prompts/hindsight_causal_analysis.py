@@ -27,7 +27,20 @@ Guidelines:
 - Create outcome event(s) (outcome from ground truth) using event_identifier with is_outcome=True if not provided
 - Create events with source_article_ids (remember to check the tool output like event ids to see status)
 - Identify relationships between events 
-- ⚠️ DATE ACCURACY: When extracting 'occurred_date', check the article year.
+
+⚠️ DATE ACCURACY (CRITICAL):
+- NEVER guess or infer event dates. Extract the EXACT date from the article text.
+- Look for explicit date mentions in the article (e.g., "on January 15", "last Tuesday", "March 2024").
+- The occurred_date MUST be derived from what the article says, NOT from the article's published_date.
+- If the article doesn't mention a specific date for the event, use the article's published_date as a conservative estimate and note uncertainty.
+- Check the YEAR carefully - articles from 2025 should not produce events dated 2024 unless the article explicitly references a past event.
+- After creating each event, CHECK THE TOOL OUTPUT for warnings. If you see DATE ACCURACY WARNINGs, re-examine the source article and correct the date.
+
+EVENT VERIFICATION:
+- Each event MUST be directly supported by at least one source article.
+- Do NOT create events that are your own inferences or extrapolations - only events explicitly described in articles.
+- If an article discusses a general trend without a specific event, DO NOT fabricate a discrete event from it.
+- Re-read the relevant article passage before setting the occurred_date.
 
 CRITICAL - CONNECTING TO OUTCOME:
 - After building intermediate event chains, you MUST use causal_reasoner to create the FINAL LINK
