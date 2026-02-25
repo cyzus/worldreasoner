@@ -20,7 +20,7 @@ from src.domain.evaluation.conditions import (
     get_conditions,
 )
 from src.domain.evaluation.evaluator import ForecastEvaluator, EvaluationResult
-from src.domain.models import Forecast, Question
+from src.domain.models import Article, Event, Forecast, Question
 from src.pipelines.prompts.forecast import get_forecast_instructions
 from src.utils.llm_utils import get_knowledge_cutoff_date
 from src.utils.logging import logger
@@ -134,6 +134,39 @@ class AutoBenchmarkService:
                 if (q.domain.value if hasattr(q.domain, "value") else str(q.domain))
                 == domain
             ]
+
+        # Filter by minimum evidence (articles + events)
+        if min_context_items > 0:
+            all_articles = self.db.get_many(Article)
+            all_events = self.db.get_many(Event)
+
+            # Count articles per question
+            article_counts: Dict[str, int] = {}
+            for a in all_articles:
+                qid = a.collected_for_question_id
+                if qid:
+                    article_counts[qid] = article_counts.get(qid, 0) + 1
+
+            # Count events per question
+            event_counts: Dict[str, int] = {}
+            for e in all_events:
+                qid = e.extracted_for_question_id
+                if qid:
+                    event_counts[qid] = event_counts.get(qid, 0) + 1
+
+            before_count = len(questions)
+            questions = [
+                q
+                for q in questions
+                if article_counts.get(q.id, 0) + event_counts.get(q.id, 0)
+                >= min_context_items
+            ]
+            filtered_count = before_count - len(questions)
+            if filtered_count > 0:
+                logger.info(
+                    f"Filtered {filtered_count} questions with < {min_context_items} "
+                    f"evidence items ({len(questions)} remaining)"
+                )
 
         if max_questions:
             questions = questions[:max_questions]

@@ -80,6 +80,11 @@ def run(
         "--resume",
         help="Skip already-completed triples",
     ),
+    min_evidence: int = typer.Option(
+        3,
+        "--min-evidence",
+        help="Minimum articles+events required per question (0 to include all)",
+    ),
     output_dir: str = typer.Option(
         "benchmarks",
         "--output-dir",
@@ -133,6 +138,7 @@ def run(
     )
     questions = service.get_resolved_questions(
         question_ids=question_ids,
+        min_context_items=min_evidence,
         max_questions=max_questions,
         source=source,
         domain=domain,
