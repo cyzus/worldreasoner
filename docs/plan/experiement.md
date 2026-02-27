@@ -100,6 +100,9 @@ Running the script multiple times against the same `--db` file will:
 - time coverage
 - 3+ depths
 
+### Event Verification
+
+`wr evidence review --db experiment.db --sample 30`
 
 
 ## Evaluation Setup
@@ -129,6 +132,7 @@ Each condition represents a unique combination of search mode, causal tools, and
 | 3 | Search-Enabled | `search_enabled` | `container` | No | No | 15 | LLM + article search via MCP, no causal structure |
 | 4 | WorldReasoner | `worldreasoner` | `container` | Yes | No | 25 | Full system: search + causal reasoning tools |
 | 5 | Oracle | `oracle` | `container` | Yes | Yes | 25 | Full system with near-resolution-date info (upper bound) |
+| 6 | Real-Time | `real_time` | `real_time` | Yes | No | 25 | Full system using real-time live internet access |
 
 List conditions at any time:
 ```bash
@@ -273,6 +277,7 @@ Run conditions in order of cost (cheapest first) so you can validate the setup e
 3. **`search_enabled`** — Requires MCP server + search index
 4. **`worldreasoner`** — Requires MCP server + search index + event graph
 5. **`oracle`** — Most expensive, uses near-resolution information
+6. **`real_time`** — Uses live search engines, ignores clock simulation overrides
 
 ```bash
 # Step-by-step evaluation
@@ -282,6 +287,7 @@ wr benchmark run --db experiment.db -c structured_scenario -y
 wr benchmark run --db experiment.db -c search_enabled -y
 wr benchmark run --db experiment.db -c worldreasoner -y
 wr benchmark run --db experiment.db -c oracle -y
+wr benchmark run --db experiment.db -c real_time -y
 ```
 
 ### Individual Forecasting (Development / Debugging)

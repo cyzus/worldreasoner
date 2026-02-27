@@ -60,20 +60,26 @@ class ForecastSubmissionService(ServiceBase):
             else:
                 parsed_prediction = prediction
         except ValueError as e:
+            options_text = ""
+            if question.question_type == QuestionType.MCQ and question.options:
+                options_text = f" Valid options are: {question.options}"
             return (
                 False,
                 None,
-                f"Invalid prediction format for {question.question_type.value}: {e}",
+                f"Invalid prediction format for {question.question_type.value}: {e}.{options_text}",
             )
 
-        # Validate prediction using question's validation method
         if not question.validate_prediction(parsed_prediction):
+            options_text = ""
+            if question.question_type == QuestionType.MCQ and question.options:
+                options_text = f" Valid options are: {question.options}"
+                
             return (
                 False,
                 None,
                 (
                     f"Invalid prediction format for question type {question.question_type.value}. "
-                    f"Expected format: {question.question_type.value}"
+                    f"Expected format: {question.question_type.value}.{options_text}"
                 ),
             )
 

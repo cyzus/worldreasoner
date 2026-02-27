@@ -18,6 +18,7 @@ class ConditionName(str, Enum):
     SEARCH_ENABLED = "search_enabled"
     WORLDREASONER = "worldreasoner"
     ORACLE = "oracle"
+    REAL_TIME = "real_time"
 
 
 @dataclass(frozen=True)
@@ -88,6 +89,15 @@ EXPERIMENT_CONDITIONS: Dict[ConditionName, ExperimentCondition] = {
         is_oracle=True,
         max_steps=25,
         description="Full system with near-resolution-date information access",
+    ),
+    ConditionName.REAL_TIME: ExperimentCondition(
+        name=ConditionName.REAL_TIME,
+        display_name="Real-Time Search Agent",
+        mode="real_time",
+        enable_causal_tools=True,
+        is_oracle=False, # We use the live internet instead of MCP temporally restricted internet
+        max_steps=25,
+        description="Full system using real-time live internet search tools",
     ),
 }
 

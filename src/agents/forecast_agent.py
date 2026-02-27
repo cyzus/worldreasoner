@@ -39,7 +39,6 @@ class ForecastAgent(BaseAgent):
         # Auto-configure for real-time mode
         if mode == "real_time":
             simulated_date = datetime.now(timezone.utc).isoformat()
-            db_path = None  # Use main database for real-time forecasts
 
         # Generate session ID for tracking causal reasoning across requests
         session_id = f"sess_{question.id}_{int(datetime.now(timezone.utc).timestamp())}_{uuid.uuid4().hex[:8]}"
