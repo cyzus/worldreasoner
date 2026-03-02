@@ -29,6 +29,10 @@ class LLMConfig(BaseModel):
         default="gemini/gemini-embedding-001",
         description="LiteLLM embedding model identifier",
     )
+    review_model: Optional[str] = Field(
+        default=None,
+        description="LiteLLM model identifier for event review (optional)",
+    )
     temperature: float = Field(
         default=1.0, ge=0.0, le=2.0, description="Sampling temperature"
     )

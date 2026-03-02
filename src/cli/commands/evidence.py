@@ -27,7 +27,7 @@ from src.cli.core.question_manager import QuestionManager
 from src.cli.core.pipeline_runner import PipelineRunner, PipelineType, PipelineProgress
 from src.domain.models import Question, Event, Article, ReviewStatus
 from src.domain.event_review_service import EventReviewService, EventReviewReport
-from src.config.app import LLMConfig
+from src.config.settings import get_config
 from src.utils.logging import logger
 
 app = typer.Typer(help="Evidence pipeline commands")
@@ -965,9 +965,9 @@ def auto_review(
     """
     db = GenericDatabase(db_path)
 
-    llm_config = LLMConfig()
+    llm_config = get_config().llm
     if model:
-        llm_config.model = model
+        llm_config = llm_config.model_copy(update={"review_model": model})
 
     service = EventReviewService(db, llm_config=llm_config)
     service.criteria.min_events = min_events

@@ -13,6 +13,7 @@ from src.domain.service_base import ServiceBase
 from src.llm import LiteLLMClient
 from src.config.app import LLMConfig
 from src.utils.logging import logger
+from src.config.settings import get_config
 
 console = Console()
 
@@ -75,9 +76,12 @@ class EventReviewService(ServiceBase):
         """
         super().__init__(db)
         if llm_config is None:
-            llm_config = LLMConfig()
+            llm_config = get_config().llm
+        if llm_config.review_model:
+            llm_config = llm_config.model_copy(update={"model": llm_config.review_model})
         if review_model:
             llm_config = llm_config.model_copy(update={"model": review_model})
+        print(f"Using review model: {llm_config.model}")
         self.llm_client = LiteLLMClient(llm_config)
         self.criteria = EventReviewCriteria()
 
