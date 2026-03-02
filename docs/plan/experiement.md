@@ -102,7 +102,13 @@ Running the script multiple times against the same `--db` file will:
 
 ### Event Verification
 
-`wr evidence review --db experiment.db --sample 30`
+```bash
+# Manual review (interactive)
+wr evidence review --db experiment.db --sample 30
+
+# Auto-review using LLM (recommended for speed)
+wr evidence auto-review --db experiment.db --sample 30
+```
 
 
 ## Evaluation Setup
@@ -164,8 +170,11 @@ Before running the evaluation:
    # Collect evidence (stratified sample or full)
    wr evidence run --db experiment.db --sample 50
 
-   # Review events for accuracy
+   # Review events for accuracy (manual - interactive)
    wr evidence review --db experiment.db --sample 30
+
+   # OR Auto-review using LLM (faster, recommended)
+   wr evidence auto-review --db experiment.db --sample 30
    ```
 
 3. **Search index built** — Required for `container` mode conditions (3, 4, 5):

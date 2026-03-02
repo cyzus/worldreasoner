@@ -26,6 +26,8 @@ from src.cli.core.question_selector import QuestionSelector
 from src.cli.core.question_manager import QuestionManager
 from src.cli.core.pipeline_runner import PipelineRunner, PipelineType, PipelineProgress
 from src.domain.models import Question, Event, Article, ReviewStatus
+from src.domain.event_review_service import EventReviewService, EventReviewReport
+from src.config.app import LLMConfig
 from src.utils.logging import logger
 
 app = typer.Typer(help="Evidence pipeline commands")
@@ -882,3 +884,403 @@ def _stratified_sample(
     # Final shuffle so domains aren't grouped together
     rng.shuffle(result)
     return result
+
+
+@app.command()
+def auto_review(
+    question_ids: Optional[List[str]] = typer.Option(
+        None,
+        "--question",
+        "-q",
+        help="Specific question ID(s) to auto-review events for",
+    ),
+    db_path: str = typer.Option(
+        "worldreasoner.db",
+        "--db",
+        help="Path to the database",
+    ),
+    sample: Optional[int] = typer.Option(
+        None,
+        "--sample",
+        "-n",
+        help="Auto-review a random sample of N questions (default: all pending)",
+    ),
+    seed: Optional[int] = typer.Option(
+        None,
+        "--seed",
+        help="Random seed for reproducible sampling",
+    ),
+    model: Optional[str] = typer.Option(
+        None,
+        "--model",
+        "-m",
+        help="LLM model to use for review (default: gemini-2.5-flash)",
+    ),
+    min_events: int = typer.Option(
+        10,
+        "--min-events",
+        help="Minimum number of events required for criteria",
+    ),
+    min_depth: int = typer.Option(
+        1,
+        "--min-depth",
+        help="Minimum causal depth required for criteria",
+    ),
+    skip_criteria: bool = typer.Option(
+        False,
+        "--skip-criteria",
+        help="Skip criteria filtering (review all questions regardless of criteria)",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Skip confirmation prompt",
+    ),
+):
+    """Automatically review agent-generated events using LLM.
+
+    This command uses an LLM to verify event accuracy, temporal validity,
+    and relevance. Events are approved or rejected based on LLM judgment.
+
+    By default, only questions that meet criteria are reviewed:
+    - At least 10 approved events
+    - At least 3 causal depth
+    - Time coverage (multiple event dates)
+
+    Use --skip-criteria to review all questions regardless of criteria.
+
+    Examples:
+        # Auto-review questions meeting criteria (default)
+        wr evidence auto-review --db experiment.db
+
+        # Auto-review ALL questions (skip criteria filter)
+        wr evidence auto-review --skip-criteria --db experiment.db
+
+        # Auto-review specific question
+        wr evidence auto-review -q q_abc123 --db experiment.db
+
+        # Custom criteria
+        wr evidence auto-review --min-events 15 --min-depth 4
+    """
+    db = GenericDatabase(db_path)
+
+    llm_config = LLMConfig()
+    if model:
+        llm_config.model = model
+
+    service = EventReviewService(db, llm_config=llm_config)
+    service.criteria.min_events = min_events
+    service.criteria.min_depth = min_depth
+
+    if question_ids:
+        if not yes:
+            console.print(
+                f"[yellow]About to auto-review events for {len(question_ids)} question(s).[/yellow]"
+            )
+            confirm = Prompt.ask("Continue?", choices=["y", "n"], default="n")
+            if confirm.lower() != "y":
+                console.print("[red]Aborted.[/red]")
+                raise typer.Exit(0)
+
+        for qid in question_ids:
+            console.print(f"\n[bold]Reviewing: {qid}[/bold]")
+            report = asyncio.run(service.review_events_for_question(qid))
+
+            _display_review_report(report, console)
+
+    else:
+        pending_events = db.get_many(Event, filters={"review_status": "pending"})
+        unique_questions = set(e.extracted_for_question_id for e in pending_events if e.extracted_for_question_id)
+        total_pending_questions = len(unique_questions)
+        total_pending_events = len(pending_events)
+        
+        if total_pending_questions == 0:
+            console.print("[green]No pending events to review.[/green]")
+            raise typer.Exit(0)
+
+        if not sample:
+            sample = total_pending_questions
+
+        if not yes:
+            console.print(
+                f"[yellow]About to auto-review up to {sample} question(s) "
+                f"({total_pending_questions} questions, {total_pending_events} events total).[/yellow]"
+            )
+            confirm = Prompt.ask("Continue?", choices=["y", "n"], default="n")
+            if confirm.lower() != "y":
+                console.print("[red]Aborted.[/red]")
+                raise typer.Exit(0)
+
+        console.print(f"\n[bold]Running auto-review on {sample} question(s)...[/bold]\n")
+
+        # Get question IDs first for progress tracking
+        pending_events = db.get_many(Event, filters={"review_status": "pending"})
+        unique_questions = list(set(e.extracted_for_question_id for e in pending_events if e.extracted_for_question_id))
+        
+        if not skip_criteria:
+            filtered = []
+            for qid in unique_questions:
+                if service._question_meets_criteria_fast(qid):
+                    filtered.append(qid)
+            unique_questions = filtered
+
+        if seed is not None:
+            import random
+            random.seed(seed)
+            random.shuffle(unique_questions)
+
+        if sample and sample < len(unique_questions):
+            unique_questions = unique_questions[:sample]
+
+        total_questions = len(unique_questions)
+        
+        reports = []
+        for idx, qid in enumerate(unique_questions, 1):
+            console.print(f"[bold]Question {idx}/{total_questions}:[/bold] {qid}")
+            report = asyncio.run(service.review_events_for_question(qid))
+            reports.append(report)
+            console.print(f"  → {report.approved_events}/{report.total_events} approved, {'✓' if report.meets_criteria else '✗'} criteria")
+
+        total_approved = 0
+        total_rejected = 0
+        total_events = 0
+
+        for report in reports:
+            total_approved += report.approved_events
+            total_rejected += report.rejected_events
+            total_events += report.total_events
+
+        table = Table(title="Auto-Review Summary")
+        table.add_column("Question ID", style="cyan")
+        table.add_column("Events", justify="right")
+        table.add_column("Approved", justify="right", style="green")
+        table.add_column("Rejected", justify="right", style="red")
+        table.add_column("Meets Criteria", justify="center")
+
+        for report in reports:
+            table.add_row(
+                report.question_id,
+                str(report.total_events),
+                str(report.approved_events),
+                str(report.rejected_events),
+                "✓" if report.meets_criteria else "✗",
+            )
+
+        console.print(table)
+
+        console.print(
+            f"\n[bold]Total:[/bold] {total_events} events reviewed, "
+            f"[green]{total_approved}[/green] approved, "
+            f"[red]{total_rejected}[/red] rejected"
+        )
+
+
+def _display_review_report(report: "EventReviewReport", console: Console):
+    """Display a single review report."""
+    status_color = "green" if report.meets_criteria else "yellow"
+    status_icon = "✓" if report.meets_criteria else "✗"
+
+    console.print(f"\n[bold]Question:[/bold] {report.question_id}")
+    console.print(
+        f"[{status_color}]{status_icon}[/{status_color}] "
+        f"{report.approved_events}/{report.total_events} events approved"
+    )
+
+    if report.criteria_met:
+        criteria_str = ", ".join(
+            f"{k}: {'✓' if v else '✗'}" for k, v in report.criteria_met.items()
+        )
+        console.print(f"  Criteria: {criteria_str}")
+
+    console.print(f"  {report.overall_assessment}")
+
+
+@app.command()
+def list_rejected(
+    db_path: str = typer.Option(
+        "worldreasoner.db",
+        "--db",
+        help="Path to the database",
+    ),
+    limit: int = typer.Option(
+        50,
+        "--limit",
+        "-n",
+        help="Maximum number of rejected events to show",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Show full reason for each event",
+    ),
+    event_id: Optional[str] = typer.Option(
+        None,
+        "--event",
+        "-e",
+        help="Show full details for a specific event ID",
+    ),
+):
+    """List all rejected events with reasons.
+
+    Examples:
+        wr evidence list-rejected --db experiment.db
+        wr evidence list-rejected --db experiment.db --limit 20
+        wr evidence list-rejected --db experiment.db --verbose
+        wr evidence list-rejected -e evt_123abc
+    """
+    from rich.table import Table
+
+    db = GenericDatabase(db_path)
+    console = Console()
+
+    # Show specific event details
+    if event_id:
+        event = db.get(Event, event_id)
+        if not event:
+            console.print(f"[red]Event {event_id} not found[/red]")
+            raise typer.Exit(1)
+
+        if event.review_status.value != "rejected":
+            console.print(f"[yellow]Event {event_id} is not rejected (status: {event.review_status})[/yellow]")
+            raise typer.Exit(0)
+
+        console.print("\n[bold]Event Details[/bold]")
+        console.print(f"ID: {event.id}")
+        console.print(f"Title: {event.title}")
+        console.print(f"Question: {event.extracted_for_question_id}")
+        console.print(f"Description: {event.description}")
+        console.print("\n[bold]Review Note:[/bold]")
+        console.print(event.review_note or "No reason")
+        raise typer.Exit(0)
+
+    rejected = db.get_many(Event, filters={"review_status": "rejected"})
+
+    if not rejected:
+        console.print("[green]No rejected events found.[/green]")
+        raise typer.Exit(0)
+
+    if limit:
+        rejected = rejected[:limit]
+
+    console = Console(width=120)
+
+    if verbose:
+        for event in rejected:
+            reason = event.review_note or "No reason"
+            if reason.startswith("LLM Review:"):
+                reason = reason[11:]
+            console.print(f"\n[cyan]{event.id}[/cyan] | {event.extracted_for_question_id}")
+            console.print(f"  Title: {event.title}")
+            console.print(f"  Reason: {reason}")
+        console.print(f"\n[dim]Showing {len(rejected)} rejected events[/dim]")
+        raise typer.Exit(0)
+
+    table = Table(title=f"Rejected Events ({len(rejected)} shown)", expand=True)
+    table.add_column("Event ID", style="cyan", width=22)
+    table.add_column("Question", style="dim", width=28)
+    table.add_column("Title", width=32)
+    table.add_column("Reason", width=80)
+
+    for event in rejected:
+        reason = event.review_note or "No reason"
+        if reason.startswith("LLM Review:"):
+            reason = reason[11:]
+
+        table.add_row(
+            event.id[:20] + ".." if len(event.id) > 22 else event.id,
+            (event.extracted_for_question_id or "N/A")[:26],
+            event.title[:30] + ".." if len(event.title) > 32 else event.title,
+            reason[:78] + ".." if len(reason) > 80 else reason,
+        )
+
+    console.print(table)
+    console.print(f"\n[dim]Showing {len(rejected)} of {len(rejected)} rejected events[/dim]")
+    console.print("[dim]Use --verbose or -v to see full reasons, or -e <id> for specific event[/dim]")
+
+
+@app.command()
+def reset(
+    db_path: str = typer.Option(
+        "worldreasoner.db",
+        "--db",
+        help="Path to the database",
+    ),
+    status: str = typer.Option(
+        "all",
+        "--status",
+        "-s",
+        help="Reset events with specific status: all, approved, rejected",
+    ),
+    question_ids: Optional[List[str]] = typer.Option(
+        None,
+        "--question",
+        "-q",
+        help="Reset only events for specific question(s)",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Skip confirmation prompt",
+    ),
+):
+    """Reset event review status to pending.
+
+    Examples:
+        # Reset all events to pending
+        wr evidence reset --db experiment.db
+
+        # Reset only rejected events
+        wr evidence reset --status rejected
+
+        # Reset for specific question
+        wr evidence reset -q q_abc123
+
+        # Reset approved events only
+        wr evidence reset --status approved
+    """
+    db = GenericDatabase(db_path)
+
+    if question_ids:
+        all_events = []
+        for qid in question_ids:
+            events = db.get_many(Event, filters={"extracted_for_question_id": qid})
+            all_events.extend(events)
+    else:
+        all_events = db.get_many(Event)
+
+    # Filter by status
+    to_reset = []
+    for e in all_events:
+        if status == "all":
+            if e.review_status != ReviewStatus.PENDING:
+                to_reset.append(e)
+        elif status == "approved":
+            if e.review_status == ReviewStatus.APPROVED:
+                to_reset.append(e)
+        elif status == "rejected":
+            if e.review_status == ReviewStatus.REJECTED:
+                to_reset.append(e)
+
+    if not to_reset:
+        console.print("[green]No events to reset.[/green]")
+        raise typer.Exit(0)
+
+    if not yes:
+        console.print(f"[yellow]About to reset {len(to_reset)} events to pending.[/yellow]")
+        confirm = Prompt.ask("Continue?", choices=["y", "n"], default="n")
+        if confirm.lower() != "y":
+            console.print("[red]Aborted.[/red]")
+            raise typer.Exit(0)
+
+    count = 0
+    for e in to_reset:
+        e.review_status = ReviewStatus.PENDING
+        e.review_note = None
+        e.updated_at = datetime.now(timezone.utc)
+        db.save(Event, e)
+        count += 1
+
+    console.print(f"[green]Reset {count} events to pending.[/green]")
