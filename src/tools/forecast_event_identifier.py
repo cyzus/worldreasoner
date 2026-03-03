@@ -49,14 +49,14 @@ class ForecastEventIdentifierTool(Tool):
     inputs = {
         "title": {"type": "string", "description": "Short event title"},
         "description": {"type": "string", "description": "Detailed event description"},
+        "occurred_date": {
+            "type": "string",
+            "description": "When event occurred (ISO 8601 WITH timezone, e.g. 2025-11-27T14:30:00Z)",
+        },
         "domain": {
             "type": "string",
             "description": "Event domain (optional, defaults to 'general' if invalid)",
             "nullable": True,
-        },
-        "occurred_date": {
-            "type": "string",
-            "description": "When event occurred (ISO 8601 WITH timezone, e.g. 2025-11-27T14:30:00Z)",
         },
         "event_type": {
             "type": "string",
@@ -107,7 +107,7 @@ class ForecastEventIdentifierTool(Tool):
         domain: Optional[str] = None,
         event_type: Optional[str] = None,
         source_article_ids: Optional[str] = None,
-    ) -> str:
+    ) -> ForecastEventOutput:
         """Identify event and save to forecast database.
 
         Args:
@@ -119,7 +119,7 @@ class ForecastEventIdentifierTool(Tool):
             source_article_ids: Optional comma-separated article IDs
 
         Returns:
-            JSON string with event details
+            ForecastEventOutput with event details
         """
         try:
             # Parse and validate with fallback
