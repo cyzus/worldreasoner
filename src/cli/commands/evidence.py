@@ -983,11 +983,13 @@ def auto_review(
                 console.print("[red]Aborted.[/red]")
                 raise typer.Exit(0)
 
-        for qid in question_ids:
-            console.print(f"\n[bold]Reviewing: {qid}[/bold]")
-            report = asyncio.run(service.review_events_for_question(qid))
-
-            _display_review_report(report, console)
+        async def process_questions():
+            for qid in question_ids:
+                console.print(f"\n[bold]Reviewing: {qid}[/bold]")
+                report = await service.review_events_for_question(qid)
+                _display_review_report(report, console)
+        
+        asyncio.run(process_questions())
 
     else:
         pending_events = db.get_many(Event, filters={"review_status": "pending"})
@@ -1035,12 +1037,16 @@ def auto_review(
 
         total_questions = len(unique_questions)
         
-        reports = []
-        for idx, qid in enumerate(unique_questions, 1):
-            console.print(f"[bold]Question {idx}/{total_questions}:[/bold] {qid}")
-            report = asyncio.run(service.review_events_for_question(qid))
-            reports.append(report)
-            console.print(f"  → {report.approved_events}/{report.total_events} approved, {'✓' if report.meets_criteria else '✗'} criteria")
+        async def process_questions():
+            reports = []
+            for idx, qid in enumerate(unique_questions, 1):
+                console.print(f"[bold]Question {idx}/{total_questions}:[/bold] {qid}")
+                report = await service.review_events_for_question(qid)
+                reports.append(report)
+                console.print(f"  → {report.approved_events}/{report.total_events} approved, {'✓' if report.meets_criteria else '✗'} criteria")
+            return reports
+
+        reports = asyncio.run(process_questions())
 
         total_approved = 0
         total_rejected = 0
