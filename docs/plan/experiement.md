@@ -100,6 +100,13 @@ Running the script multiple times against the same `--db` file will:
 - time coverage
 - 3+ depths
 
+
+### Collection
+
+```bash
+wr evidence run --db experiment.db
+```
+
 ### Event Verification
 
 ```bash
