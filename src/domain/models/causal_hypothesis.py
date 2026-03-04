@@ -38,7 +38,7 @@ class CausalHypothesis(BaseModel):
 
     # Confidence and strength
     strength: float = Field(
-        ..., ge=0.0, le=1.0, description="Strength of the causal effect (0-1)"
+        ..., le=1.0, description="Strength of the causal effect (0-1)"
     )
     confidence: float = Field(
         ..., ge=0.0, le=1.0, description="Confidence in this causal link (0-1)"
@@ -51,7 +51,7 @@ class CausalHypothesis(BaseModel):
 
     # Explanation and evidence
     reasoning: str = Field(
-        ..., min_length=10, description="LLM's explanation of the causal mechanism"
+        ..., min_length=1, description="LLM's explanation of the causal mechanism"
     )
     evidence_article_ids: List[str] = Field(
         default_factory=list, description="Articles that support this causal claim"

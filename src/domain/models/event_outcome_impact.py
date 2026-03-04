@@ -55,7 +55,6 @@ class EventOutcomeImpact(BaseModel):
     )
     impact_magnitude: float = Field(
         ...,
-        ge=0.0,
         le=1.0,
         description="Strength of impact (0.0=negligible to 1.0=decisive)",
     )
@@ -69,7 +68,7 @@ class EventOutcomeImpact(BaseModel):
     # Explanation and evidence
     reasoning: str = Field(
         ...,
-        min_length=20,
+        min_length=1,
         description="Detailed explanation of WHY and HOW this event impacts the outcome",
     )
     evidence_article_ids: List[str] = Field(

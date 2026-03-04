@@ -95,30 +95,29 @@ export const useGraphTraversal = (questions) => {
             const MIN_IMPACT_CONFIDENCE = 0.55
             const CONFIDENCE_EXPONENT = 1.5
 
-            for (const outcome of outcomes) {
+            const impactResults = await Promise.all(outcomes.map(async (outcome) => {
+                try {
+                    const impacts = await fetchOutcomeImpacts(outcome.id);
+                    return { outcome, impacts };
+                } catch (err) {
+                    console.warn(`Failed to fetch impacts for outcome ${outcome.id}:`, err);
+                    return { outcome, impacts: [] };
+                }
+            }));
+
+            for (const { outcome, impacts } of impactResults) {
                 const isActualOutcome = actualOutcomeIds.has(outcome.id)
                 const outcomeSign = isActualOutcome ? 1 : -1
 
-                let impacts = []
-                try {
-                    impacts = await fetchOutcomeImpacts(outcome.id)
-                } catch (err) {
-                    console.warn(`Failed to fetch impacts for outcome ${outcome.id}:`, err)
-                    continue
-                }
-
                 impacts.forEach(impact => {
-                    const sourceNode = nodeById.get(impact.source_id)
+                    const sourceNode = nodeById.get(impact.source_id || impact.event_id) // Support both naming conventions
                     if (!sourceNode) return
 
-                    const direction = impact.properties?.impact_direction
-                    const magnitude = Number(impact.properties?.impact_magnitude ?? impact.weight ?? 0)
-                    const confidence = Number(impact.properties?.confidence ?? 1.0)
+                    const direction = impact.impact_direction || impact.properties?.impact_direction
+                    const magnitude = Number(impact.impact_magnitude ?? impact.properties?.impact_magnitude ?? impact.weight ?? 0)
+                    const confidence = Number(impact.confidence ?? impact.properties?.confidence ?? 1.0)
                     if (!Number.isFinite(confidence) || confidence < MIN_IMPACT_CONFIDENCE) return
 
-                    // Confidence-aware weighting:
-                    // - low-confidence impacts are filtered out
-                    // - remaining impacts are weighted non-linearly by confidence
                     const confidenceWeight = Math.pow(Math.max(0, Math.min(1, confidence)), CONFIDENCE_EXPONENT)
                     const strength = Math.max(0, magnitude) * confidenceWeight
 
@@ -128,8 +127,6 @@ export const useGraphTraversal = (questions) => {
                     else if (direction === 'mixed' || direction === 'neutral') impactToOutcomeSign = 0
                     else return
 
-                    // Reframe impact relative to actual outcome.
-                    // Positive impact on non-actual outcome should count as negative (red), and vice versa.
                     const contribution = impactToOutcomeSign * outcomeSign * strength
 
                     const current = nodeScores.get(sourceNode.id) || { score: 0, positive: 0, negative: 0 }

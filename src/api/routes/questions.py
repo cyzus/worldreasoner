@@ -1656,7 +1656,9 @@ async def get_question_articles(
         articles = db.get_many(Article, filters={"collected_for_question_id": question_id})
 
         # Sort by published_date
-        articles.sort(key=lambda a: a.published_date or datetime.min)
+        from datetime import timezone
+        aware_min = datetime.min.replace(tzinfo=timezone.utc)
+        articles.sort(key=lambda a: a.published_date or aware_min)
 
         logger.info(f"Found {len(articles)} articles for question {question_id}")
         return articles
