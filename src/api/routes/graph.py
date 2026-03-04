@@ -7,8 +7,8 @@ from typing import Optional
 from datetime import datetime
 from fastapi import APIRouter, Query, HTTPException, Depends
 
-from backend.services.graph import GraphQuery, GraphData, SQLiteGraphService
-from backend.api.routes.database import get_current_db_path
+from src.services.graph import GraphQuery, GraphData, SQLiteGraphService
+from src.api.routes.database import get_current_db_path
 from src.utils.logging import logger
 
 

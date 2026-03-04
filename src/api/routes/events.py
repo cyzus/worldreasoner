@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from src.core.database import GenericDatabase
 from src.domain.models import Event, Article, Question
-from backend.api.routes.database import get_current_db_path
+from src.api.routes.database import get_current_db_path
 from src.utils.logging import logger
 
 

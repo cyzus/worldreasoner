@@ -12,7 +12,7 @@ from src.core.database import GenericDatabase
 from src.domain.models import Question, CausalHypothesis, Article
 from src.domain.models.domain import Domain
 from src.domain.models.question import QuestionType
-from backend.api.routes.database import get_current_db_path
+from src.api.routes.database import get_current_db_path
 from src.utils.logging import logger
 from src.utils.polymarket import get_price_history_for_market
 from src.utils.article_analysis import analyze_article_coverage
@@ -1404,7 +1404,7 @@ async def get_causal_path_analysis(
         Causal path analysis with statistics and event-level details
     """
     try:
-        from backend.services.causal_path_analyzer import CausalPathAnalyzer
+        from src.services.causal_path_analyzer import CausalPathAnalyzer
 
         logger.info(f"Analyzing causal paths for question {question_id}")
 

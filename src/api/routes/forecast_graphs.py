@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from src.core.database import GenericDatabase
 from src.domain.models.forecast_graph import ForecastEvent, ForecastHypothesis
-from backend.api.routes.database import get_current_db_path
+from src.api.routes.database import get_current_db_path
 
 router = APIRouter()
 

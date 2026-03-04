@@ -30,7 +30,7 @@ def main():
     logger.info(f"Starting WorldReasoner API server on {args.host}:{args.port}")
 
     uvicorn.run(
-        "backend.api.app:create_app",
+        "src.api.app:create_app",
         host=args.host,
         port=args.port,
         reload=args.reload,
