@@ -54,12 +54,12 @@ Repository = "https://github.com/cyzus/worldreasoner"
 Issues = "https://github.com/cyzus/worldreasoner/issues"
 
 [project.scripts]
-worldreasoner = "backend.server:main"
+worldreasoner = "src.server:main"
 worldreasoner-mcp-forecast = "src.mcp_forecasting_server:main"
 wr = "src.cli.main:cli"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src", "backend"]
+packages = ["src"]
 
 [tool.uv]
 # Use copy mode instead of hardlinks (fixes Windows/cross-filesystem issues)
