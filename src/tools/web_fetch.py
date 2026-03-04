@@ -77,14 +77,22 @@ class WebFetchTool(Tool):
                 CrawlerRunConfig,
                 CacheMode,
             )
+            from crawl4ai.content_filter_strategy import PruningContentFilter
+            from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 
             # Configure browser (headless, timeout)
             browser_config = BrowserConfig(headless=True, verbose=False)
+
+            # Use PruningContentFilter to strip noise and get clean fit_markdown
+            md_generator = DefaultMarkdownGenerator(
+                content_filter=PruningContentFilter(threshold=0.45, threshold_type="fixed")
+            )
 
             # Configure crawler run (bypass cache, set timeout)
             crawler_config = CrawlerRunConfig(
                 cache_mode=CacheMode.BYPASS,
                 page_timeout=timeout * 1000,  # Convert to milliseconds
+                markdown_generator=md_generator,
             )
 
             # Fetch the page using context manager
@@ -107,11 +115,20 @@ class WebFetchTool(Tool):
                     "author": result.metadata.get("author", ""),
                 }
 
+            # Extract clean markdown: prefer fit_markdown (noise-filtered), fall back to raw_markdown
+            md = result.markdown
+            if hasattr(md, "fit_markdown") and md.fit_markdown:
+                clean_markdown = md.fit_markdown
+            elif hasattr(md, "raw_markdown") and md.raw_markdown:
+                clean_markdown = md.raw_markdown
+            else:
+                clean_markdown = str(md) if md else ""
+
             # Build response
             response = {
                 "url": result.url,
                 "title": result.metadata.get("title", "") if result.metadata else "",
-                "markdown": result.markdown or "",
+                "markdown": clean_markdown,
                 "metadata": metadata,
                 "success": True,
             }
