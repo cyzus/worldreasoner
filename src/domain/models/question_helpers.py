@@ -1,12 +1,98 @@
 """Helper functions for Question model temporal analysis."""
 
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from typing import Optional, Tuple, List
 from .question import Question
 from .event import Event
 from .article import Article
 from src.utils.logging import logger
 from src.utils.database_helpers import ensure_database
+
+
+class ForecastSlot(str, Enum):
+    """Named positions within a question's forecast window.
+
+    Each slot maps to a fraction of the window span measured from window_start:
+
+        window_start ──── early ──── mid ──── late ──── window_end
+                      20%         50%        80%
+
+    Using fractional positions (rather than fixed day-offsets) ensures
+    consistent relative difficulty across short-, medium-, and long-range
+    questions.
+    """
+
+    EARLY = "early"  # 20% into window — plenty of context missing
+    MID = "mid"      # 50% into window — balanced (default)
+    LATE = "late"    # 80% into window — most context available
+
+
+#: Mapping from ForecastSlot to fraction of window elapsed from window_start.
+SLOT_FRACTIONS: dict = {
+    ForecastSlot.EARLY: 0.20,
+    ForecastSlot.MID:   0.50,
+    ForecastSlot.LATE:  0.80,
+}
+
+
+def get_forecast_date_for_slot(
+    question: Question,
+    slot: ForecastSlot = ForecastSlot.MID,
+    db=None,
+    min_context_items: int = 0,
+) -> dict:
+    """Return a simulated date at a fractional position within the forecast window.
+
+    This replaces the old fixed ``offset_days_before_resolution`` approach.
+    The resulting difficulty is proportionally consistent across all time
+    horizons: ``mid`` on a 7-day window and ``mid`` on a 180-day window both
+    mean "forecast from halfway through the available context period".
+
+    Args:
+        question: The forecast question.
+        slot: Named position within the window (EARLY / MID / LATE).
+        db: Database instance for fetching context items.
+        min_context_items: Minimum context items needed to open the window
+            (0 = open as soon as any context is available).
+
+    Returns:
+        dict with keys:
+            - ``simulated_date``: The chosen datetime.
+            - ``window_start``: When the forecast window opens.
+            - ``window_end``: When the forecast window closes (just before resolution).
+            - ``slot``: The slot name used (string).
+            - ``horizon_days``: Total number of days in the forecast window.
+
+    Raises:
+        ValueError: If the window cannot be computed (e.g. no context available).
+
+    Example:
+        >>> setup = get_forecast_date_for_slot(question, ForecastSlot.MID, db=db)
+        >>> agent = ForecastAgent(question, simulated_date=setup['simulated_date'])
+    """
+    window_start, window_end = calculate_forecast_context_window(
+        question, db=db, min_context_items=min_context_items
+    )
+
+    span = window_end - window_start
+    fraction = SLOT_FRACTIONS[slot]
+    simulated_date = window_start + span * fraction
+
+    logger.info(
+        f"Forecast slot '{slot.value}' for question {question.id}: "
+        f"simulated_date={simulated_date.date()} "
+        f"(window {window_start.date()} → {window_end.date()}, "
+        f"{span.days}d span, {fraction*100:.0f}% elapsed)"
+    )
+
+    return {
+        "simulated_date": simulated_date,
+        "window_start": window_start,
+        "window_end": window_end,
+        "slot": slot.value,
+        "horizon_days": span.days,
+    }
 
 
 def calculate_forecast_context_window(

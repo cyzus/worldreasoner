@@ -55,10 +55,10 @@ def run(
         "-c",
         help="Condition name(s) (repeatable, defaults to all 6)",
     ),
-    offset_days: int = typer.Option(
-        0,
-        "--offset-days",
-        help="Days before resolution date for simulated date",
+    slot: str = typer.Option(
+        "mid",
+        "--slot",
+        help="Simulated date position within forecast window: early (20%), mid (50%), late (80%)",
     ),
     max_questions: Optional[int] = typer.Option(
         None,
@@ -139,7 +139,7 @@ def run(
     console.print(f"  Models: {', '.join(model_list)}")
     console.print(f"  Questions: {len(questions)}")
     console.print(f"  Total runs: {total_triples}")
-    console.print(f"  Offset days: {offset_days}")
+    console.print(f"  Slot: {slot}")
     console.print(f"  Resume: {resume}")
     console.print(f"  Output: {output_dir}/")
 
@@ -177,7 +177,7 @@ def run(
                 questions=questions,
                 models=model_list,
                 conditions=conditions,
-                offset_days=offset_days,
+                slot=slot,
                 on_progress=on_progress,
                 resume=resume,
             )

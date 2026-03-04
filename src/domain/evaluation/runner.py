@@ -6,6 +6,7 @@ import logging
 
 from src.core.database import GenericDatabase
 from src.domain.models import Question, Forecast
+from src.domain.models.question_helpers import ForecastSlot, get_forecast_date_for_slot
 from src.agents.factory import AgentFactory
 from src.domain.evaluation.evaluator import ForecastEvaluator
 
@@ -40,7 +41,7 @@ class BenchmarkRunner:
         self,
         question: Question,
         knowledge_cutoff: str,
-        offset_days: int = 0,
+        slot: str = "mid",
         min_context_items: int = 3,
         max_steps: int = 15,
         mode: str = "container",
@@ -48,10 +49,16 @@ class BenchmarkRunner:
     ) -> Dict[str, Any]:
         """Run forecast on a single question and evaluate."""
         try:
-            # Prepare forecast
-            forecast_setup = question.prepare_forecast(
+            # Prepare forecast via slot-based date selection
+            try:
+                forecast_slot = ForecastSlot(slot)
+            except ValueError:
+                forecast_slot = ForecastSlot.MID
+
+            forecast_setup = get_forecast_date_for_slot(
+                question,
+                slot=forecast_slot,
                 db=self.db,
-                offset_days_before_resolution=offset_days,
                 min_context_items=min_context_items,
             )
 
@@ -109,7 +116,7 @@ class BenchmarkRunner:
         self,
         questions: List[Question],
         knowledge_cutoff: str,
-        offset_days: int = 0,
+        slot: str = "mid",
         min_context_items: int = 3,
         max_steps: int = 15,
         mode: str = "container",
@@ -132,7 +139,7 @@ class BenchmarkRunner:
             result = self.run_single_forecast(
                 question=question,
                 knowledge_cutoff=knowledge_cutoff,
-                offset_days=offset_days,
+                slot=slot,
                 min_context_items=min_context_items,
                 max_steps=max_steps,
                 mode=mode,
@@ -165,7 +172,7 @@ class BenchmarkRunner:
                 "model": self.config.llm.model,
                 "max_steps": max_steps,
                 "knowledge_cutoff": knowledge_cutoff,
-                "offset_days": offset_days,
+                "slot": slot,
                 "mode": mode,
             },
             "results": {

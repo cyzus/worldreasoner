@@ -65,10 +65,10 @@ def run(
         "--enable-causal-tools",
         help="Enable causal reasoning tools (identify events, create causal links, inspect graph)",
     ),
-    offset_days: int = typer.Option(
-        7,
-        "--offset-days",
-        help="Days before resolution date to use as forecast time",
+    slot: str = typer.Option(
+        "mid",
+        "--slot",
+        help="Simulated date position within forecast window: early (20%), mid (50%), late (80%)",
     ),
     db_path: str = db_option(),
 ):
@@ -131,7 +131,7 @@ def run(
     console.print(f"  Model: {model or 'default'}")
     console.print(f"  Mode: {mode}")
     console.print(f"  Causal tools: {'enabled' if enable_causal_tools else 'disabled'}")
-    console.print(f"  Offset days: {offset_days}")
+    console.print(f"  Slot: {slot}")
 
     if not typer.confirm("\nRun forecast?"):
         raise typer.Exit(0)
@@ -148,7 +148,7 @@ def run(
                 model,
                 mode,
                 enable_causal_tools,
-                offset_days,
+                slot,
             )
         )
 
@@ -170,7 +170,7 @@ async def _run_forecast_async(
     model: Optional[str] = None,
     mode: str = "container",
     enable_causal_tools: bool = False,
-    offset_days: int = 7,
+    slot: str = "mid",
 ):
     """Execute forecast on questions using PipelineRunner."""
     runner = PipelineRunner(db_path=db_path)
@@ -202,7 +202,7 @@ async def _run_forecast_async(
             model=model,
             mode=mode,
             enable_causal_tools=enable_causal_tools,
-            offset_days=offset_days,
+            slot=slot,
         )
 
     return result

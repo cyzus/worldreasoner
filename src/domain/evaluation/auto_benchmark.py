@@ -21,6 +21,10 @@ from src.domain.evaluation.conditions import (
 )
 from src.domain.evaluation.evaluator import ForecastEvaluator, EvaluationResult
 from src.domain.models import Article, Event, Forecast, Question
+from src.domain.models.question_helpers import (
+    ForecastSlot,
+    get_forecast_date_for_slot,
+)
 from src.pipelines.prompts.forecast import get_forecast_instructions
 from src.utils.llm_utils import get_knowledge_cutoff_date
 from src.utils.logging import logger
@@ -177,26 +181,40 @@ class AutoBenchmarkService:
         self,
         question: Question,
         condition: ExperimentCondition,
-        offset_days: int = 0,
+        slot: str = "mid",
     ) -> datetime:
         """Compute the simulated date for a forecast.
 
         For oracle conditions, uses resolution_date - 1 day.
-        For others, uses prepare_forecast() with offset_days.
+        For others, uses get_forecast_date_for_slot() with the given slot.
         """
         if condition.is_oracle:
             return question.resolution_date - timedelta(days=1)
 
         try:
-            forecast_setup = question.prepare_forecast(
+            forecast_slot = ForecastSlot(slot)
+        except ValueError:
+            logger.warning(
+                f"Unknown slot '{slot}', falling back to 'mid'. "
+                f"Valid options: {[s.value for s in ForecastSlot]}"
+            )
+            forecast_slot = ForecastSlot.MID
+
+        try:
+            setup = get_forecast_date_for_slot(
+                question,
+                slot=forecast_slot,
                 db=self.db,
-                offset_days_before_resolution=offset_days,
                 min_context_items=0,
             )
-            return forecast_setup["simulated_date"]
+            return setup["simulated_date"]
         except (ValueError, KeyError):
-            # Fallback: use resolution_date - offset_days
-            return question.resolution_date - timedelta(days=max(offset_days, 1))
+            # Fallback: use resolution_date - 1 day
+            logger.warning(
+                f"Could not compute slot-based date for question {question.id}, "
+                "falling back to resolution_date - 1 day"
+            )
+            return question.resolution_date - timedelta(days=1)
 
     def _run_single(
         self,
@@ -204,7 +222,7 @@ class AutoBenchmarkService:
         question: Question,
         model_name: str,
         knowledge_cutoff: str,
-        offset_days: int = 0,
+        slot: str = "mid",
     ) -> Dict[str, Any]:
         """Run a single (condition, model, question) triple.
 
@@ -214,7 +232,7 @@ class AutoBenchmarkService:
         from src.agents.forecast_agent import ForecastAgent
 
         simulated_date = self._compute_simulated_date(
-            question, condition, offset_days
+            question, condition, slot
         )
 
         # Create config copy with overridden model
@@ -399,7 +417,7 @@ class AutoBenchmarkService:
         questions: List[Question],
         models: List[str],
         conditions: Optional[List[ExperimentCondition]] = None,
-        offset_days: int = 0,
+        slot: str = "mid",
         on_progress: Optional[Callable[[AutoBenchmarkProgress], None]] = None,
         resume: bool = False,
     ) -> AutoBenchmarkResult:
@@ -409,7 +427,7 @@ class AutoBenchmarkService:
             questions: Questions to benchmark
             models: Model IDs to test
             conditions: Conditions to run (defaults to all 5)
-            offset_days: Days before resolution for simulated date
+            slot: Window position for simulated date — 'early' (20%), 'mid' (50%), 'late' (80%)
             on_progress: Progress callback
             resume: Skip already-completed triples
 
@@ -485,7 +503,7 @@ class AutoBenchmarkService:
                         question=question,
                         model_name=model_name,
                         knowledge_cutoff=knowledge_cutoff,
-                        offset_days=offset_days,
+                        slot=slot,
                     )
                     raw_results[cond_name][model_name].append(result)
 
@@ -524,7 +542,7 @@ class AutoBenchmarkService:
                 "conditions": [c.name.value for c in conditions],
                 "models": models,
                 "question_count": len(questions),
-                "offset_days": offset_days,
+                "slot": slot,
                 "resume": resume,
             },
             condition_results=condition_results,

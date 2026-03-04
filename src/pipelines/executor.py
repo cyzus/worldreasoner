@@ -748,7 +748,7 @@ class PipelineExecutor:
         question_ids: List[str],
         on_progress: Optional[Callable],
         model: Optional[str] = None,
-        offset_days: int = 7,
+        slot: str = "mid",
         mode: str = "container",
         enable_causal_tools: bool = False,
         min_context_items: int = 3,
@@ -757,6 +757,7 @@ class PipelineExecutor:
         """Run forecasting on questions."""
         from src.agents.forecast_agent import ForecastAgent
         from src.utils.llm_utils import get_knowledge_cutoff_date
+        from src.domain.models.question_helpers import ForecastSlot, get_forecast_date_for_slot
 
         results = PipelineResult([], [], [], 0.0)
 
@@ -789,10 +790,16 @@ class PipelineExecutor:
 
                 logger.info(f"Running forecast on question: {qid}")
 
-                # Determine simulated date and knowledge cutoff
-                forecast_setup = question.prepare_forecast(
+                # Determine simulated date via slot-based approach
+                try:
+                    forecast_slot = ForecastSlot(slot)
+                except ValueError:
+                    forecast_slot = ForecastSlot.MID
+
+                forecast_setup = get_forecast_date_for_slot(
+                    question,
+                    slot=forecast_slot,
                     db=self.db,
-                    offset_days_before_resolution=offset_days,
                     min_context_items=min_context_items,
                 )
 
@@ -980,7 +987,7 @@ class PipelineExecutor:
                 questions=questions,
                 models=models,
                 conditions=conditions,
-                offset_days=kwargs.get("offset_days", 0),
+                slot=kwargs.get("slot", "mid"),
                 on_progress=progress_adapter,
                 resume=kwargs.get("resume", False),
             )
