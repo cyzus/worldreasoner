@@ -325,15 +325,26 @@ class SQLiteGraphService(GraphService):
                 continue
 
             # Filter by direction
-            if impact_direction and impact.impact_direction.value != impact_direction:
-                continue
+            if impact_direction:
+                current_direction = (
+                    impact.impact_direction.value
+                    if hasattr(impact.impact_direction, "value")
+                    else str(impact.impact_direction)
+                )
+                if current_direction != impact_direction:
+                    continue
 
             filtered_impacts.append(impact)
 
         # Convert impacts to graph edges
         edges = []
         for impact in filtered_impacts:
-            edge_type = f"impact_{impact.impact_direction.value}"
+            direction_val = (
+                impact.impact_direction.value
+                if hasattr(impact.impact_direction, "value")
+                else str(impact.impact_direction)
+            )
+            edge_type = f"impact_{direction_val}"
 
             edges.append(
                 GraphEdge(
@@ -358,7 +369,7 @@ class SQLiteGraphService(GraphService):
                         else None,
                     },
                     weight=impact.impact_magnitude,
-                    label=f"{impact.impact_direction.value} impact",
+                    label=f"{direction_val} impact",
                 )
             )
 
@@ -508,8 +519,9 @@ class SQLiteGraphService(GraphService):
         return GraphNode(
             id=event.id,
             label=event.title,
-            node_type=event.domain or "unknown",
+            node_type="event",
             properties={
+                "domain": event.domain or "unknown",
                 "description": event.description,
                 "occurred_date": event.occurred_date.isoformat()
                 if event.occurred_date

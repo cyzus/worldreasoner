@@ -361,3 +361,10 @@ export async function fetchBenchmarkConditions() {
   const response = await axios.get(`${API_BASE_URL}/benchmark/conditions`)
   return response.data
 }
+/**
+ * Fetch all articles collected for a specific question
+ */
+export async function fetchQuestionArticles(questionId) {
+  const response = await axios.get(`${API_BASE_URL}/questions/${questionId}/articles`)
+  return response.data
+}

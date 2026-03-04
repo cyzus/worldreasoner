@@ -39,16 +39,10 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
     if (!isExpanded) return
     if (!priceHistory || typeof priceHistory !== 'object' || Object.keys(priceHistory).length === 0) return
 
-    // Clear previous chart
-    const svg = select(svgRef.current)
-    svg.selectAll('*').remove()
-
     // Base Margins
     const margin = { top: 40, right: 150, bottom: 50, left: 60 }
-    const innerWidth = width - margin.left - margin.right
 
-    // Prepare data - flatten price history for all tokens
-    // NOTE: Polymarket timestamps are in SECONDS, multiply by 1000 for JavaScript Date
+    // Memoize the data flattening so it doesn't run on pure D3 paints
     const allData = []
     const tokenIds = Object.keys(priceHistory)
 
@@ -57,7 +51,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
       if (Array.isArray(history)) {
         history.forEach(point => {
           allData.push({
-            timestamp: point.t * 1000,  // Convert seconds to milliseconds
+            timestamp: point.t * 1000,
             price: point.p,
             tokenId: tokenId,
             outcome: outcomes[idx] || `Outcome ${idx + 1}`
@@ -65,6 +59,10 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
         })
       }
     })
+
+    const svg = select(svgRef.current)
+    svg.selectAll('*').remove()
+    const innerWidth = width - margin.left - margin.right
 
     if (allData.length === 0) {
       // Show "No data" message
@@ -81,8 +79,11 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
 
     // Create X scale first to calculate event positions
     const xExtent = extent(allData, d => d.timestamp)
+    const xScaleDomain = [new Date(xExtent[0]), new Date(xExtent[1])]
+
+    // Performance Optimization: We only create the xScale once the domain is calculated
     const xScale = scaleTime()
-      .domain([new Date(xExtent[0]), new Date(xExtent[1])])
+      .domain(xScaleDomain)
       .range([0, innerWidth])
 
     // Calculate event stacking to adjust top margin
@@ -94,7 +95,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
       eventsInTimeRange = events.filter(event => {
         if (!event.occurred_date && !event.predicted_date) return false
         const eventDate = new Date(event.occurred_date || event.predicted_date)
-        return eventDate >= xScale.domain()[0] && eventDate <= xScale.domain()[1]
+        return eventDate >= xScaleDomain[0] && eventDate <= xScaleDomain[1]
       })
 
       // Sort by date/position

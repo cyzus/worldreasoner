@@ -1629,3 +1629,42 @@ async def delete_question(
 
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
+@router.get("/{question_id}/articles")
+async def get_question_articles(
+    question_id: str,
+    db: GenericDatabase = Depends(get_database),
+):
+    """Get all articles collected for a specific question.
+
+    Args:
+        question_id: Question identifier
+
+    Returns:
+        List of articles collected for this question, sorted by date
+    """
+    try:
+        from src.domain.models import Article
+
+        # Verify question exists
+        question = db.get(Question, question_id)
+        if not question:
+            raise HTTPException(
+                status_code=404, detail=f"Question {question_id} not found"
+            )
+
+        # Get all articles for this question
+        articles = db.get_many(Article, filters={"collected_for_question_id": question_id})
+
+        # Sort by published_date
+        articles.sort(key=lambda a: a.published_date or datetime.min)
+
+        logger.info(f"Found {len(articles)} articles for question {question_id}")
+        return articles
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch question articles: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))

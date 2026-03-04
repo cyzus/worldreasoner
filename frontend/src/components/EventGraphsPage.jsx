@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
-import ControlPanel from './ControlPanel'
 import QuestionList from './QuestionList'
-import CanvasTimelineGraph from './CanvasTimelineGraph'
 import EventDetails from './EventDetails'
+import CaseStudyView from './CaseStudyView'
+import CanvasTimelineGraph from './CanvasTimelineGraph'
 
 import TimeSeriesChart from './TimeSeriesChart'
 import ForecastGraph from './ForecastGraph'
@@ -41,6 +41,7 @@ function EventGraphsPage({
   timeFilter,
 }) {
   const [nestedTab, setNestedTab] = useState('questions') // 'questions', 'statistics', 'controls'
+  const [presentationMode, setPresentationMode] = useState('casestudy') // 'casestudy' or 'graph'
 
   // Outcome impacts toggle (from graph store)
   const includeOutcomes = useGraphStore(state => state.includeOutcomes)
@@ -69,7 +70,6 @@ function EventGraphsPage({
 
   return (
     <div className="event-graphs-page page-container">
-      {/* Nested tabs */}
       <div className="nested-tabs">
         <button
           className={`nested-tab ${nestedTab === 'questions' ? 'active' : ''}`}
@@ -83,28 +83,12 @@ function EventGraphsPage({
         >
           📊 Statistics
         </button>
-        <button
-          className={`nested-tab ${nestedTab === 'controls' ? 'active' : ''}`}
-          onClick={() => setNestedTab('controls')}
-        >
-          ⚙️ Controls
-        </button>
       </div>
 
       {/* Main layout with sidebar and graph */}
       <div className="page-content">
         <div className="page-sidebar">
           <div className="scroll-container">
-            {nestedTab === 'controls' && (
-              <ControlPanel
-                filters={filters}
-                onFilterChange={onFilterChange}
-                onRefresh={onRefresh}
-                loading={loading}
-                forceSettings={forceSettings}
-                onForceChange={setForceSettings}
-              />
-            )}
 
             {nestedTab === 'statistics' && (
               <div style={{ padding: '12px', color: '#868e96', fontStyle: 'italic', textAlign: 'center', marginTop: '50px' }}>
@@ -119,7 +103,7 @@ function EventGraphsPage({
                 onQuestionSelect={(questionId) => {
                   onQuestionFilter(questionId)
                 }}
-                onClose={() => setNestedTab('controls')}
+                onClose={() => { }} /* Controls are removed so no-op on close */
                 onQuestionUpdated={onQuestionUpdated}
                 onQuestionDeleted={onQuestionDeleted}
               />
@@ -132,8 +116,47 @@ function EventGraphsPage({
             <QuestionStatistics questions={questions} />
           ) : (
             <>
-              {/* Forecast controls - show when question is selected */}
+              {/* Top Bar for Graph/Case Study Toggle */}
               {selectedQuestionId && (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  marginBottom: '16px'
+                }}>
+                  <div className="view-toggle-group" style={{ display: 'flex', border: '1px solid #ced4da', borderRadius: '4px', overflow: 'hidden' }}>
+                    <button
+                      onClick={() => setPresentationMode('graph')}
+                      style={{
+                        padding: '8px 16px',
+                        backgroundColor: presentationMode === 'graph' ? '#e9ecef' : '#fff',
+                        border: 'none',
+                        borderRight: '1px solid #ced4da',
+                        cursor: 'pointer',
+                        fontWeight: presentationMode === 'graph' ? '600' : 'normal',
+                        color: '#495057'
+                      }}
+                    >
+                      🕸️ Interactive Graph
+                    </button>
+                    <button
+                      onClick={() => setPresentationMode('casestudy')}
+                      style={{
+                        padding: '8px 16px',
+                        backgroundColor: presentationMode === 'casestudy' ? '#e9ecef' : '#fff',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontWeight: presentationMode === 'casestudy' ? '600' : 'normal',
+                        color: '#495057'
+                      }}
+                    >
+                      📚 Case Study View
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Forecast controls - show when question is selected */}
+              {selectedQuestionId && presentationMode === 'graph' && (
                 <div style={{
                   display: 'flex',
                   gap: '16px',
@@ -276,106 +299,132 @@ function EventGraphsPage({
               )}
 
               {/* Article Coverage Analysis */}
-              {selectedQuestionId && (
+              {selectedQuestionId && presentationMode === 'graph' && (
                 <div style={{ flexShrink: 0 }}>
                   <ArticleCoverage questionId={selectedQuestionId} />
                 </div>
               )}
 
-              {/* Graph display area */}
-              <div style={{
-                flex: '0 0 auto',
-                display: 'flex',
-                gap: '16px',
-                flexDirection: graphView === 'both' ? 'row' : 'column',
-                flexWrap: graphView === 'both' ? 'wrap' : 'nowrap',
-                minHeight: '500px',
-                height: '60vh',
-                marginBottom: '16px'
-              }}>
-                {/* Evidence collection graph */}
-                {(graphView === 'evidence' || graphView === 'both') && (
-                  <div className="graph-container" style={{
-                    flex: 1,
-                    minWidth: graphView === 'both' ? 'min(400px, 100%)' : '0',
-                    minHeight: 0,
-                    overflow: 'hidden',
-                    display: 'flex',
-                    flexDirection: 'column'
-                  }}>
-                    <div style={{ padding: '12px 16px', borderBottom: '1px solid #eee', background: '#fff' }}>
-                      <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
-                        Evidence Timeline
-                      </h4>
+              {/* Main Content Area (Graph or Case Study) */}
+              {!selectedQuestionId ? (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: '500px',
+                  height: '60vh',
+                  backgroundColor: '#f8f9fa',
+                  border: '1px dashed #dee2e6',
+                  borderRadius: '8px',
+                  color: '#6c757d',
+                  flexDirection: 'column',
+                  marginBottom: '16px'
+                }}>
+                  <div style={{ fontSize: '48px', marginBottom: '16px' }}>👈</div>
+                  <h3 style={{ margin: '0 0 8px 0', color: '#495057' }}>Select a Question</h3>
+                  <p style={{ margin: 0 }}>Choose a question from the sidebar to view its Case Study and details</p>
+                </div>
+              ) : presentationMode === 'casestudy' ? (
+                <CaseStudyView
+                  graphData={graphData}
+                  forecasts={forecasts}
+                  selectedQuestion={questions.find(q => q.id === selectedQuestionId)}
+                />
+              ) : (
+                <div style={{
+                  flex: '0 0 auto',
+                  display: 'flex',
+                  gap: '16px',
+                  flexDirection: graphView === 'both' ? 'row' : 'column',
+                  flexWrap: graphView === 'both' ? 'wrap' : 'nowrap',
+                  minHeight: '500px',
+                  height: '60vh',
+                  marginBottom: '16px'
+                }}>
+                  {/* Evidence collection graph */}
+                  {(graphView === 'evidence' || graphView === 'both') && (
+                    <div className="graph-container" style={{
+                      flex: 1,
+                      minWidth: graphView === 'both' ? 'min(400px, 100%)' : '0',
+                      minHeight: 0,
+                      overflow: 'hidden',
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}>
+                      <div style={{ padding: '12px 16px', borderBottom: '1px solid #eee', background: '#fff' }}>
+                        <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
+                          Evidence Timeline
+                        </h4>
+                      </div>
+                      <div className="graph-main" style={{ flex: 1, position: 'relative' }}>
+                        {loading && <div className="loading">Loading graph...</div>}
+                        {error && <div className="error">{error}</div>}
+                        {!loading && !error && (
+                          <>
+                            <CanvasTimelineGraph
+                              key={`evidence-${graphView}-${selectedQuestionId || 'none'}`}
+                              graphData={graphData}
+                              onNodeClick={onNodeClick}
+                              selectedNode={selectedNode}
+                              timeFilter={timeFilter}
+                            />
+
+
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div className="graph-main" style={{ flex: 1, position: 'relative' }}>
-                      {loading && <div className="loading">Loading graph...</div>}
-                      {error && <div className="error">{error}</div>}
-                      {!loading && !error && (
-                        <>
-                          <CanvasTimelineGraph
-                            key={`evidence-${graphView}-${selectedQuestionId || 'none'}`}
-                            graphData={graphData}
+                  )}
+
+                  {/* Forecast reasoning graph */}
+                  {(graphView === 'forecast' || graphView === 'both') && (
+                    <div className="graph-container" style={{
+                      flex: 1,
+                      minWidth: graphView === 'both' ? 'min(400px, 100%)' : '0',
+                      minHeight: 0,
+                      overflow: 'hidden',
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}>
+                      <div style={{ padding: '12px 16px', borderBottom: '1px solid #eee', background: '#fff' }}>
+                        <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
+                          Forecast Reasoning Timeline
+                        </h4>
+                      </div>
+                      <div className="graph-main" style={{ flex: 1, position: 'relative' }}>
+                        {loadingForecastGraph && (
+                          <div className="loading">Loading forecast graph...</div>
+                        )}
+                        {!loadingForecastGraph && forecastGraphData && (
+                          <ForecastGraph
+                            key={`forecast-${graphView}-${selectedQuestionId || 'none'}`}
+                            graphData={forecastGraphData}
                             onNodeClick={onNodeClick}
                             selectedNode={selectedNode}
-                            timeFilter={timeFilter}
                           />
-
-
-                        </>
-                      )}
+                        )}
+                        {!loadingForecastGraph && !forecastGraphData && (
+                          <div style={{
+                            padding: '40px',
+                            textAlign: 'center',
+                            color: '#6c757d',
+                            backgroundColor: '#f8f9fa',
+                            height: '100%',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'center'
+                          }}>
+                            <p>No causal reasoning graph available.</p>
+                            <p style={{ fontSize: '13px', color: '#adb5bd', marginTop: '8px' }}>
+                              Run a forecast with "Causal Reasoning" enabled.
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
-
-                {/* Forecast reasoning graph */}
-                {(graphView === 'forecast' || graphView === 'both') && (
-                  <div className="graph-container" style={{
-                    flex: 1,
-                    minWidth: graphView === 'both' ? 'min(400px, 100%)' : '0',
-                    minHeight: 0,
-                    overflow: 'hidden',
-                    display: 'flex',
-                    flexDirection: 'column'
-                  }}>
-                    <div style={{ padding: '12px 16px', borderBottom: '1px solid #eee', background: '#fff' }}>
-                      <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
-                        Forecast Reasoning Timeline
-                      </h4>
-                    </div>
-                    <div className="graph-main" style={{ flex: 1, position: 'relative' }}>
-                      {loadingForecastGraph && (
-                        <div className="loading">Loading forecast graph...</div>
-                      )}
-                      {!loadingForecastGraph && forecastGraphData && (
-                        <ForecastGraph
-                          key={`forecast-${graphView}-${selectedQuestionId || 'none'}`}
-                          graphData={forecastGraphData}
-                          onNodeClick={onNodeClick}
-                          selectedNode={selectedNode}
-                        />
-                      )}
-                      {!loadingForecastGraph && !forecastGraphData && (
-                        <div style={{
-                          padding: '40px',
-                          textAlign: 'center',
-                          color: '#6c757d',
-                          backgroundColor: '#f8f9fa',
-                          height: '100%',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'center'
-                        }}>
-                          <p>No causal reasoning graph available.</p>
-                          <p style={{ fontSize: '13px', color: '#adb5bd', marginTop: '8px' }}>
-                            Run a forecast with "Causal Reasoning" enabled.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )} {/* End of presentation mode conditionally rendered block */}
 
 
 
