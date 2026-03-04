@@ -41,14 +41,32 @@ function CaseStudyView({
       });
 
       const impactPromises = outcomeNodes.map(node =>
-        fetchOutcomeImpacts(node.id).then(data => ({ id: node.id, data }))
+        fetchOutcomeImpacts(node.id).then(data => ({ id: node.id, title: node.title || node.name || node.properties?.title, data }))
       );
 
       Promise.all(impactPromises)
         .then(results => {
-          const newImpacts = {};
-          results.forEach(r => { newImpacts[r.id] = r.data; });
-          setImpacts(newImpacts);
+          const bySource = {};
+          results.forEach(r => {
+            const outcomeId = r.id;
+            const outcomeTitle = r.title || 'Unknown Outcome';
+
+            r.data.forEach(imp => {
+              const sourceId = imp.source_id || imp.event_id;
+              if (!bySource[sourceId]) bySource[sourceId] = [];
+
+              bySource[sourceId].push({
+                outcomeId,
+                outcomeTitle,
+                impact_direction: imp.impact_direction || imp.properties?.impact_direction,
+                impact_magnitude: imp.impact_magnitude ?? imp.properties?.impact_magnitude ?? imp.weight ?? 0,
+                confidence: imp.confidence ?? imp.properties?.confidence ?? 1.0,
+                reasoning: imp.reasoning || imp.properties?.reasoning,
+                articleIds: imp.evidence_article_ids || imp.properties?.evidence_article_ids || []
+              });
+            });
+          });
+          setImpacts(bySource);
         })
         .catch(err => console.error("Failed to fetch impacts:", err))
         .finally(() => setLoadingImpacts(false));
@@ -78,6 +96,25 @@ function CaseStudyView({
       setLoadingGraph(false);
     }
   };
+
+  // 1.5 Create article lookup map for evidence links
+  const articleMap = useMemo(() => {
+    const map = {};
+    fetchedArticles.forEach(a => { map[a.id] = a; });
+    // Also include articles from graphData if they exist as nodes
+    (graphData?.nodes || []).forEach(n => {
+      const isArticle = n.node_type === 'article' || n.properties?.type === 'article' || n.properties?.type === 'Article';
+      if (isArticle && !map[n.id]) {
+        map[n.id] = {
+          id: n.id,
+          title: n.title || n.name || n.properties?.title || 'Unknown Article',
+          source: n.source || n.properties?.source || 'Original Source',
+          published_date: n.date || n.properties?.date || n.properties?.published_date
+        };
+      }
+    });
+    return map;
+  }, [fetchedArticles, graphData?.nodes]);
 
   // 2. Process Articles (Information Stream) - Merge graph articles with fetched articles
   const articles = useMemo(() => {
@@ -263,13 +300,40 @@ function CaseStudyView({
                         <tr className="cs-row-details">
                           <td colSpan="3">
                             <div className="cs-details-content">
-                              <p><strong>Description:</strong> {event.description || event.properties?.description || 'No description available.'}</p>
+                              <div className="cs-details-header">
+                                <p><strong>Description:</strong> {event.description || event.properties?.description || 'No description available.'}</p>
+
+                                {/* Event Source Evidence */}
+                                <div className="cs-evidence-section">
+                                  <span className="cs-evidence-label">Source Evidence:</span>
+                                  <div className="cs-evidence-links">
+                                    {Array.from(new Set([
+                                      ...(event.article_ids || []),
+                                      ...(event.properties?.article_ids || []),
+                                      event.source_article_id,
+                                      event.properties?.source_article_id
+                                    ])).filter(Boolean).map(id => {
+                                      const art = articleMap[id];
+                                      return (
+                                        <a key={id} href={`#art-${id}`} className="cs-evidence-pill" title={art?.title}>
+                                          {art ? `${art.source || 'Source'}: ${art.title.substring(0, 30)}...` : `Doc ${id.substring(0, 6)}`}
+                                        </a>
+                                      );
+                                    })}
+                                    {(!event.article_ids?.length && !event.properties?.article_ids?.length && !event.source_article_id) &&
+                                      <span className="cs-no-evidence">No direct sources linked.</span>
+                                    }
+                                  </div>
+                                </div>
+                              </div>
+
                               {outcomeImpacts.length > 0 && (
                                 <div className="cs-impact-details">
                                   <h4>Impact Analysis</h4>
                                   {outcomeImpacts.map((imp, idx) => (
                                     <div key={idx} className="cs-impact-item">
                                       <div className="cs-impact-meta">
+                                        <span className="cs-impact-on">Affects <strong>{imp.outcomeTitle}</strong></span>
                                         <span className={`cs-impact-badge cs-impact-${imp.impact_direction}`}>
                                           {imp.impact_direction} ({Math.round(imp.impact_magnitude * 100)}%)
                                         </span>
@@ -278,6 +342,23 @@ function CaseStudyView({
                                         </span>
                                       </div>
                                       <p className="cs-impact-reasoning">{imp.reasoning}</p>
+
+                                      {/* Impact Evidence Articles */}
+                                      {imp.articleIds?.length > 0 && (
+                                        <div className="cs-impact-evidence">
+                                          <span className="cs-evidence-label">Evidence for this impact:</span>
+                                          <div className="cs-evidence-links">
+                                            {imp.articleIds.map(id => {
+                                              const art = articleMap[id];
+                                              return (
+                                                <a key={id} href={`#art-${id}`} className="cs-evidence-pill cs-pill-sm">
+                                                  {art ? art.title.substring(0, 40) + '...' : `Evidence ${id.substring(0, 6)}`}
+                                                </a>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
                                   ))}
                                 </div>
@@ -311,7 +392,7 @@ function CaseStudyView({
               const summary = article.summary || article.properties?.summary;
 
               return (
-                <div key={article.id} className="cs-timeline-item">
+                <div key={article.id} id={`art-${article.id}`} className="cs-timeline-item">
                   <div className="cs-timeline-date">{formatDate(dateStr)}</div>
                   <div className="cs-timeline-content">
                     <div className="cs-article-header">
