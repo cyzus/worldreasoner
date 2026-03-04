@@ -205,22 +205,36 @@ def _get_context_from_mcp(ctx: Context) -> ForecastContext:
     )
 
 
-def _get_hybrid_search(db_path: Optional[str] = None) -> HybridSearch:
-    """Get a HybridSearch instance for the given database.
-
-    Args:
-        db_path: Optional database path (uses global hybrid_search if None)
-
-    Returns:
-        HybridSearch instance
-    """
+def _get_db(db_path: Optional[str] = None) -> GenericDatabase:
+    """Get a GenericDatabase instance for the given database."""
     if db_path and db_path != db.db_path:
-        # Different database requested - create new HybridSearch instance
+        logger.debug(f"Creating GenericDatabase for custom database: {db_path}")
+        return GenericDatabase(db_path)
+    return db
+
+
+def _get_hybrid_search(db_path: Optional[str] = None) -> HybridSearch:
+    """Get a HybridSearch instance for the given database."""
+    if db_path and db_path != db.db_path:
         logger.debug(f"Creating HybridSearch for custom database: {db_path}")
         return HybridSearch(db_path)
-    else:
-        # Use global hybrid_search instance
-        return hybrid_search
+    return hybrid_search
+
+
+def _get_article_service(
+    db_instance: GenericDatabase, forecast_context: ForecastContext
+) -> ArticleOperationsService:
+    """Get an ArticleOperationsService instance for the given database and context.
+
+    Args:
+        db_instance: Database instance
+        forecast_context: Forecast context
+
+    Returns:
+        ArticleOperationsService instance
+    """
+    search_engine = _get_hybrid_search(forecast_context.db_path)
+    return ArticleOperationsService(db_instance, search_engine)
 
 
 # ============================================================================
@@ -242,6 +256,11 @@ def get_question(ctx: Context) -> str:
     try:
         # Get context
         forecast_context = _get_context_from_mcp(ctx)
+        
+        # Get appropriate database
+        db_instance = _get_db(forecast_context.db_path)
+        
+        # Load question using service (optionally passing db)
         question = context_service.get_question_for_context(forecast_context)
 
         result = {
@@ -308,11 +327,11 @@ async def temporal_search_articles(
         # Get context
         forecast_context = _get_context_from_mcp(ctx)
 
-        # Get appropriate HybridSearch instance (handles per-request database switching)
-        search_engine = _get_hybrid_search(forecast_context.db_path)
+        # Get appropriate database
+        db_instance = _get_db(forecast_context.db_path)
 
-        # Create article service with appropriate search engine
-        article_ops = ArticleOperationsService(db, search_engine)
+        # Create article service with appropriate database and search engine
+        article_ops = _get_article_service(db_instance, forecast_context)
 
         # Perform search
         articles = await article_ops.search_articles(
@@ -369,9 +388,15 @@ def fetch_article(ctx: Context, article_id: str) -> str:
         # Get context
         forecast_context = _get_context_from_mcp(ctx)
 
+        # Get appropriate database
+        db_instance = _get_db(forecast_context.db_path)
+
+        # Create article service with appropriate database
+        article_ops = _get_article_service(db_instance, forecast_context)
+
         # Fetch article using service
         try:
-            article = article_service.fetch_article(
+            article = article_ops.fetch_article(
                 article_id, forecast_context.simulated_date
             )
         except ValueError as e:
@@ -441,9 +466,12 @@ def identify_forecast_event(
 
         from src.tools.forecast_event_identifier import ForecastEventIdentifierTool
 
+        # Get appropriate database
+        db_instance = _get_db(forecast_context.db_path)
+
         tool = ForecastEventIdentifierTool(
-            question_db_path=db.db_path,
-            forecast_db_path=forecast_context.db_path or db.db_path,
+            question_db_path=db_instance.db_path,
+            forecast_db_path=forecast_context.db_path or db_instance.db_path,
             session_id=forecast_context.session_id,
         )
 

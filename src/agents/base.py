@@ -42,9 +42,11 @@ class BaseAgent:
         self.runs_dir = Path(runs_dir) if runs_dir else Path("logs/agent_runs")
         self._last_usage: Optional[UsageMetrics] = None
 
-        # Initialize LLM model
+        # Initialize LLM model.
+        # num_retries is forwarded natively by LiteLLMModel to every litellm call.
         self.llm_model = LiteLLMModel(
             model_id=self.config.llm.model,
+            num_retries=3,
             **self.config.llm.model_dump(
                 exclude={"model", "embedding_model"}, exclude_none=True
             ),

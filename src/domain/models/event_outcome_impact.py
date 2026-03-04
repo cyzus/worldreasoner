@@ -56,7 +56,7 @@ class EventOutcomeImpact(BaseModel):
     impact_magnitude: float = Field(
         ...,
         le=1.0,
-        description="Strength of impact (0.0=negligible to 1.0=decisive)",
+        description="Strength of impact (-1.0 to 1.0)",
     )
     confidence: float = Field(
         ...,

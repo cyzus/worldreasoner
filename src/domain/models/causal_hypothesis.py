@@ -38,7 +38,7 @@ class CausalHypothesis(BaseModel):
 
     # Confidence and strength
     strength: float = Field(
-        ..., le=1.0, description="Strength of the causal effect (0-1)"
+        ..., le=1.0, description="Strength of the causal effect (-1 to 1)"
     )
     confidence: float = Field(
         ..., ge=0.0, le=1.0, description="Confidence in this causal link (0-1)"
