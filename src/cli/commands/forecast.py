@@ -17,6 +17,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from src.core.database import GenericDatabase
+from src.cli.core.options import db_option, source_option, domain_option, limit_option
 from src.cli.core.question_selector import QuestionSelector
 from src.cli.core.pipeline_runner import PipelineRunner, PipelineType, PipelineProgress
 from src.domain.models import Question
@@ -40,29 +41,14 @@ def run(
         "-i",
         help="Interactively select a question",
     ),
-    source: Optional[str] = typer.Option(
-        None,
-        "--source",
-        "-s",
-        help="Filter by question source (e.g., polymarket)",
-    ),
-    domain: Optional[str] = typer.Option(
-        None,
-        "--domain",
-        "-d",
-        help="Filter by domain (e.g., politics, technology)",
-    ),
+    source: Optional[str] = source_option(),
+    domain: Optional[str] = domain_option(),
     has_evidence: bool = typer.Option(
         False,
         "--has-evidence",
         help="Only select from questions with evidence",
     ),
-    limit: int = typer.Option(
-        50,
-        "--limit",
-        "-n",
-        help="Maximum number of questions to display for selection",
-    ),
+    limit: int = limit_option(),
     model: Optional[str] = typer.Option(
         None,
         "--model",
@@ -84,11 +70,7 @@ def run(
         "--offset-days",
         help="Days before resolution date to use as forecast time",
     ),
-    db_path: str = typer.Option(
-        "worldreasoner.db",
-        "--db",
-        help="Path to the database",
-    ),
+    db_path: str = db_option(),
 ):
     """Run forecast on a question.
 
@@ -255,24 +237,9 @@ def batch(
         "-q",
         help="Specific question ID(s) to forecast (can be repeated)",
     ),
-    source: Optional[str] = typer.Option(
-        None,
-        "--source",
-        "-s",
-        help="Filter by question source",
-    ),
-    domain: Optional[str] = typer.Option(
-        None,
-        "--domain",
-        "-d",
-        help="Filter by domain",
-    ),
-    limit: int = typer.Option(
-        20,
-        "--limit",
-        "-n",
-        help="Maximum number of questions to process",
-    ),
+    source: Optional[str] = source_option(),
+    domain: Optional[str] = domain_option(),
+    limit: int = limit_option(default=20),
     model: Optional[str] = typer.Option(
         None,
         "--model",
@@ -289,11 +256,7 @@ def batch(
         "--enable-causal-tools",
         help="Enable causal reasoning tools",
     ),
-    db_path: str = typer.Option(
-        "worldreasoner.db",
-        "--db",
-        help="Path to the database",
-    ),
+    db_path: str = db_option(),
 ):
     """Run forecasts on multiple questions (batch mode).
 

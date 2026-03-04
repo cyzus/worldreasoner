@@ -18,6 +18,7 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
+from src.cli.core.options import db_option, source_option, domain_option, yes_option
 from src.core.database import GenericDatabase
 from src.domain.evaluation.auto_benchmark import (
     AutoBenchmarkProgress,
@@ -52,7 +53,7 @@ def run(
         None,
         "--condition",
         "-c",
-        help="Condition name(s) (repeatable, defaults to all 5)",
+        help="Condition name(s) (repeatable, defaults to all 6)",
     ),
     offset_days: int = typer.Option(
         0,
@@ -65,16 +66,8 @@ def run(
         "-n",
         help="Limit number of questions",
     ),
-    source: Optional[str] = typer.Option(
-        None,
-        "--source",
-        help="Filter by question source",
-    ),
-    domain: Optional[str] = typer.Option(
-        None,
-        "--domain",
-        help="Filter by domain",
-    ),
+    source: Optional[str] = source_option(),
+    domain: Optional[str] = domain_option(),
     resume: bool = typer.Option(
         False,
         "--resume",
@@ -90,21 +83,12 @@ def run(
         "--output-dir",
         help="Output directory for results",
     ),
-    db_path: str = typer.Option(
-        "worldreasoner.db",
-        "--db",
-        help="Database path",
-    ),
-    yes: bool = typer.Option(
-        False,
-        "--yes",
-        "-y",
-        help="Skip confirmation prompt",
-    ),
+    db_path: str = db_option(),
+    yes: bool = yes_option(),
 ):
     """Run auto-benchmark across conditions, models, and questions.
 
-    Runs all 5 experimental conditions (or a subset) across one or more
+    Runs all 6 experimental conditions (or a subset) across one or more
     models and all resolved questions, producing comparative results.
 
     Examples:

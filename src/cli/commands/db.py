@@ -14,9 +14,9 @@ import json
 
 from src.core.database import GenericDatabase
 from src.core.hybrid_search import HybridSearch
-from src.cli.core.question_manager import QuestionManager, QuestionFilter
+from src.cli.core.options import db_option, json_option, limit_option, domain_option, get_db_and_manager
+from src.cli.ui.displays import display_question_list, display_question_detail
 from src.cli.ui.tables import (
-    display_question_table,
     display_event_table,
     display_article_table,
 )
@@ -28,16 +28,9 @@ app = typer.Typer(help="Database management commands")
 console = Console()
 
 
-def get_db_and_manager(db_path: str):
-    """Helper to create database and manager instances."""
-    db = GenericDatabase(db_path)
-    manager = QuestionManager(db)
-    return db, manager
-
-
 @app.command()
 def stats(
-    db_path: str = typer.Option("worldreasoner.db", "--db", "-d", help="Database path"),
+    db_path: str = db_option(),
 ):
     """Show database statistics."""
     _, manager = get_db_and_manager(db_path)
@@ -58,28 +51,18 @@ def stats(
 @app.command("list")
 def list_items(
     item_type: str = typer.Argument(..., help="Type: questions, events, articles"),
-    domain: Optional[str] = typer.Option(
-        None, "--domain", "-d", help="Filter by domain"
-    ),
-    limit: int = typer.Option(50, "--limit", "-n", help="Maximum results to show"),
+    domain: Optional[str] = domain_option(),
+    limit: int = limit_option(),
     show_related: bool = typer.Option(
         False, "--related", "-r", help="Show related entity counts"
     ),
-    db_path: str = typer.Option("worldreasoner.db", "--db", help="Database path"),
+    db_path: str = db_option(),
 ):
     """List database items with filtering."""
     db, manager = get_db_and_manager(db_path)
 
     if item_type == "questions":
-        # Use shared UI component for consistent display
-        filter_obj = QuestionFilter(domain=domain)
-        questions = manager.query_questions(filter_obj, limit=limit)
-
-        # Calculate evidence map if needed (or pass None if we don't want to show it,
-        # but consistent display is better)
-        evidence_map = manager.get_evidence_status(questions)
-
-        display_question_table(questions, evidence_map, console)
+        display_question_list(manager, console, domain=domain, limit=limit)
         return
 
     elif item_type == "events":
@@ -99,52 +82,14 @@ def list_items(
 def show(
     item_type: str = typer.Argument(..., help="Type: question, event"),
     item_id: str = typer.Argument(..., help="Item ID"),
-    db_path: str = typer.Option("worldreasoner.db", "--db", help="Database path"),
-    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+    db_path: str = db_option(),
+    json_output: bool = json_option(),
 ):
     """Show detailed information about an item."""
     db, manager = get_db_and_manager(db_path)
 
     if item_type == "question":
-        result = manager.show_question(item_id)
-        if not result:
-            console.print(f"[red]Question {item_id} not found[/red]")
-            raise typer.Exit(1)
-
-        if json_output:
-            rprint(json.dumps(result, indent=2, default=str))
-        else:
-            q = result["question"]
-            console.print(
-                Panel(
-                    f"[bold cyan]{q['question_text']}[/bold cyan]",
-                    title=f"Question {item_id}",
-                )
-            )
-            console.print(f"\n[bold]Domain:[/bold] {q['domain']}")
-            console.print(f"[bold]Type:[/bold] {q['question_type']}")
-            console.print(
-                f"[bold]Quality Score:[/bold] {q.get('quality_score', 'N/A')}"
-            )
-            console.print(
-                f"[bold]Resolution Date:[/bold] {q.get('resolution_date', 'N/A')}"
-            )
-            console.print(f"[bold]Ground Truth:[/bold] {q.get('ground_truth', 'N/A')}")
-
-            console.print("\n[bold]Related Entities:[/bold]")
-            console.print(f"  Events: {len(result['events'])}")
-            console.print(f"  Articles: {result['article_count']}")
-            console.print(f"  Causal Hypotheses: {len(result['causal_hypotheses'])}")
-
-            if result["causal_hypotheses"]:
-                console.print("\n[bold]Causal Hypotheses:[/bold]")
-                for h in result["causal_hypotheses"][:5]:
-                    console.print(
-                        f"  - {h['source_event_id']} -> {h['target_event_id']}"
-                    )
-                    console.print(
-                        f"    {h['relation_type']} (confidence: {h['confidence']:.2f})"
-                    )
+        display_question_detail(manager, console, item_id, json_output=json_output)
 
     elif item_type == "event":
         event = db.get(Event, item_id)
@@ -175,8 +120,8 @@ def show(
 def analyze(
     item_type: str = typer.Argument(..., help="Type: question"),
     item_id: str = typer.Argument(..., help="Item ID"),
-    db_path: str = typer.Option("worldreasoner.db", "--db", help="Database path"),
-    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+    db_path: str = db_option(),
+    json_output: bool = json_option(),
 ):
     """Analyze cascade impact of deleting an item."""
     _, manager = get_db_and_manager(db_path)
@@ -239,7 +184,7 @@ def delete(
         True, "--cascade/--no-cascade", help="Delete related entities"
     ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview without deleting"),
-    db_path: str = typer.Option("worldreasoner.db", "--db", help="Database path"),
+    db_path: str = db_option(),
 ):
     """Delete an item from the database."""
     _, manager = get_db_and_manager(db_path)
@@ -277,7 +222,7 @@ def clear_evidence(
         True, "--cascade/--no-cascade", help="Delete related data"
     ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview without deleting"),
-    db_path: str = typer.Option("worldreasoner.db", "--db", help="Database path"),
+    db_path: str = db_option(),
 ):
     """Remove evidence data for a question (keeps the question itself).
 
@@ -324,7 +269,7 @@ def update(
     item_id: str = typer.Argument(..., help="Item ID"),
     field: str = typer.Option(..., "--field", "-f", help="Field to update"),
     value: str = typer.Option(..., "--value", "-v", help="New value"),
-    db_path: str = typer.Option("worldreasoner.db", "--db", help="Database path"),
+    db_path: str = db_option(),
 ):
     """Update a field on an item."""
     _, manager = get_db_and_manager(db_path)
@@ -346,7 +291,7 @@ def update(
 
 @app.command("build-index")
 def build_index(
-    db_path: str = typer.Option("worldreasoner.db", "--db", "-d", help="Database path"),
+    db_path: str = db_option(),
     model: Optional[str] = typer.Option(
         None, "--model", "-m", help="Embedding model (default: from config)"
     ),

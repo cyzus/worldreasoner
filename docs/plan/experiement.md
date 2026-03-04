@@ -115,7 +115,7 @@ wr evidence auto-review --db experiment.db --sample 30
 
 ### LLM Models
 
-6 models × 5 conditions × 300 questions = **9,000 runs**
+6 models × 6 conditions × 300 questions = **10,800 runs**
 
 | Model | LiteLLM ID | Role |
 |-------|-----------|------|
@@ -128,7 +128,7 @@ wr evidence auto-review --db experiment.db --sample 30
 
 ### Experimental Conditions
 
-The evaluation ablation study uses 5 conditions defined in `src/domain/evaluation/conditions.py`.
+The evaluation ablation study uses 6 conditions defined in `src/domain/evaluation/conditions.py`.
 Each condition represents a unique combination of search mode, causal tools, and information access.
 
 | # | Condition | CLI Name | Mode | Causal Tools | Oracle | Max Steps | Description |
@@ -179,7 +179,7 @@ Before running the evaluation:
 
 3. **Search index built** — Required for `container` mode conditions (3, 4, 5):
    ```bash
-   python scripts/build_search_index.py --db experiment.db
+   wr db build-index --db experiment.db
    ```
 
 4. **MCP forecasting server running** — Required for `container` mode conditions:

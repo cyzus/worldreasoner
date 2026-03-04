@@ -22,6 +22,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from src.core.database import GenericDatabase
+from src.cli.core.options import db_option, source_option, domain_option, limit_option, sample_option, seed_option, yes_option, get_db_and_manager
 from src.cli.core.question_selector import QuestionSelector
 from src.cli.core.question_manager import QuestionManager
 from src.cli.core.pipeline_runner import PipelineRunner, PipelineType, PipelineProgress
@@ -48,18 +49,8 @@ def run(
         "-i",
         help="Interactively select questions",
     ),
-    source: Optional[str] = typer.Option(
-        None,
-        "--source",
-        "-s",
-        help="Filter by question source (e.g., polymarket)",
-    ),
-    domain: Optional[str] = typer.Option(
-        None,
-        "--domain",
-        "-d",
-        help="Filter by domain (e.g., politics, technology)",
-    ),
+    source: Optional[str] = source_option(),
+    domain: Optional[str] = domain_option(),
     resolved_only: bool = typer.Option(
         False,
         "--resolved",
@@ -70,12 +61,7 @@ def run(
         "--has-evidence",
         help="Only process questions with existing evidence",
     ),
-    limit: int = typer.Option(
-        50,
-        "--limit",
-        "-n",
-        help="Maximum number of questions to process",
-    ),
+    limit: int = limit_option(),
     force_reprocess: bool = typer.Option(
         False,
         "--force",
@@ -98,21 +84,9 @@ def run(
         "--min-depth",
         help="Minimum graph depth for adaptive pipeline",
     ),
-    db_path: str = typer.Option(
-        "worldreasoner.db",
-        "--db",
-        help="Path to the database",
-    ),
-    sample: Optional[int] = typer.Option(
-        None,
-        "--sample",
-        help="Process a random sample of N questions from the filtered set",
-    ),
-    seed: Optional[int] = typer.Option(
-        None,
-        "--seed",
-        help="Random seed for reproducible sampling",
-    ),
+    db_path: str = db_option(),
+    sample: Optional[int] = sample_option(),
+    seed: Optional[int] = seed_option(),
 ):
     """Run evidence pipeline on selected questions.
 
@@ -358,11 +332,16 @@ def _display_pipeline_results(result):
 
 @app.command()
 def clear(
-    question_ids: List[str] = typer.Option(
-        ...,
+    question_ids: Optional[List[str]] = typer.Option(
+        None,
         "--question",
         "-q",
         help="Question ID(s) to clear evidence for (can be repeated)",
+    ),
+    all_questions: bool = typer.Option(
+        False,
+        "--all",
+        help="Clear evidence for ALL questions in the database",
     ),
     cascade: bool = typer.Option(
         True,
@@ -374,11 +353,7 @@ def clear(
         "--dry-run",
         help="Show what would be deleted without making changes",
     ),
-    db_path: str = typer.Option(
-        "worldreasoner.db",
-        "--db",
-        help="Path to the database",
-    ),
+    db_path: str = db_option(),
 ):
     """Clear evidence data for questions.
 
@@ -389,13 +364,23 @@ def clear(
         wr evidence clear -q q_abc123
         wr evidence clear -q q_1 -q q_2 -q q_3 --cascade
         wr evidence clear -q q_abc123 --dry-run
+        wr evidence clear --all --db experiment.db
     """
-    if not question_ids:
-        console.print("[red]Please provide at least one question ID[/red]")
-        raise typer.Exit(1)
+    db, manager = get_db_and_manager(db_path)
 
-    db = GenericDatabase(db_path)
-    manager = QuestionManager(db)
+    if all_questions:
+        all_qs = db.get_many(Question)
+        question_ids = [q.id for q in all_qs]
+        if not question_ids:
+            console.print("[yellow]No questions found in database[/yellow]")
+            raise typer.Exit(0)
+        console.print(
+            f"[yellow]About to clear evidence for ALL {len(question_ids)} questions[/yellow]"
+        )
+
+    if not question_ids:
+        console.print("[red]Please provide --question/-q or --all[/red]")
+        raise typer.Exit(1)
 
     console.print(f"\n[bold]Clear evidence for {len(question_ids)} question(s)[/bold]")
     console.print(f"  Cascade: {cascade}")
@@ -567,11 +552,7 @@ def review(
         "-s",
         help="Filter by review status: pending, approved, rejected, revised, all",
     ),
-    db_path: str = typer.Option(
-        "worldreasoner.db",
-        "--db",
-        help="Path to the database",
-    ),
+    db_path: str = db_option(),
     summary_only: bool = typer.Option(
         False,
         "--summary",
@@ -582,17 +563,8 @@ def review(
         "--auto-approve-outcomes",
         help="Auto-approve outcome events (pre-generated Yes/No events)",
     ),
-    sample: Optional[int] = typer.Option(
-        None,
-        "--sample",
-        "-n",
-        help="Review a random sample of N events (default: review all)",
-    ),
-    seed: Optional[int] = typer.Option(
-        None,
-        "--seed",
-        help="Random seed for reproducible sampling",
-    ),
+    sample: Optional[int] = sample_option(),
+    seed: Optional[int] = seed_option(),
 ):
     """Interactively review agent-generated events for accuracy.
 
@@ -894,22 +866,9 @@ def auto_review(
         "-q",
         help="Specific question ID(s) to auto-review events for",
     ),
-    db_path: str = typer.Option(
-        "worldreasoner.db",
-        "--db",
-        help="Path to the database",
-    ),
-    sample: Optional[int] = typer.Option(
-        None,
-        "--sample",
-        "-n",
-        help="Auto-review a random sample of N questions (default: all pending)",
-    ),
-    seed: Optional[int] = typer.Option(
-        None,
-        "--seed",
-        help="Random seed for reproducible sampling",
-    ),
+    db_path: str = db_option(),
+    sample: Optional[int] = sample_option(),
+    seed: Optional[int] = seed_option(),
     model: Optional[str] = typer.Option(
         None,
         "--model",
@@ -931,12 +890,7 @@ def auto_review(
         "--skip-criteria",
         help="Skip criteria filtering (review all questions regardless of criteria)",
     ),
-    yes: bool = typer.Option(
-        False,
-        "--yes",
-        "-y",
-        help="Skip confirmation prompt",
-    ),
+    yes: bool = yes_option(),
 ):
     """Automatically review agent-generated events using LLM.
 
@@ -1104,17 +1058,8 @@ def _display_review_report(report: "EventReviewReport", console: Console):
 
 @app.command()
 def list_rejected(
-    db_path: str = typer.Option(
-        "worldreasoner.db",
-        "--db",
-        help="Path to the database",
-    ),
-    limit: int = typer.Option(
-        50,
-        "--limit",
-        "-n",
-        help="Maximum number of rejected events to show",
-    ),
+    db_path: str = db_option(),
+    limit: int = limit_option(),
     verbose: bool = typer.Option(
         False,
         "--verbose",
@@ -1208,11 +1153,7 @@ def list_rejected(
 
 @app.command()
 def reset(
-    db_path: str = typer.Option(
-        "worldreasoner.db",
-        "--db",
-        help="Path to the database",
-    ),
+    db_path: str = db_option(),
     status: str = typer.Option(
         "all",
         "--status",
@@ -1225,12 +1166,7 @@ def reset(
         "-q",
         help="Reset only events for specific question(s)",
     ),
-    yes: bool = typer.Option(
-        False,
-        "--yes",
-        "-y",
-        help="Skip confirmation prompt",
-    ),
+    yes: bool = yes_option(),
 ):
     """Reset event review status to pending.
 

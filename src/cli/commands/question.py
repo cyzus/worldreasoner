@@ -1,21 +1,118 @@
-"""Question collection commands for WorldReasoner CLI.
+"""Question collection and query commands for WorldReasoner CLI.
 
 Provides commands to collect questions from various sources including
-Polymarket, news sources, and goal-oriented orchestration.
+Polymarket, news sources, and goal-oriented orchestration, as well as
+list/show/search/status commands for querying stored questions.
 """
 
 import asyncio
 from pathlib import Path
+from typing import Optional
+
 import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from src.config.collection_goal import CollectionGoal
+from src.cli.core.options import db_option, source_option, domain_option, limit_option, json_option, get_db_and_manager
+from src.cli.ui.displays import display_question_list, display_question_detail, display_question_stats
 from src.utils.logging import logger
 
-app = typer.Typer(help="Question collection commands")
+app = typer.Typer(help="Question management and collection commands")
 console = Console()
+
+
+# =============================================================================
+# Query Commands
+# =============================================================================
+
+
+@app.command("list")
+def list_questions(
+    db_path: str = db_option(),
+    domain: Optional[str] = domain_option(),
+    limit: int = limit_option(),
+):
+    """List questions with filtering.
+
+    Examples:
+        wr question list
+        wr question list --domain politics --limit 20
+        wr question list --db experiment.db
+    """
+    _, manager = get_db_and_manager(db_path)
+    display_question_list(manager, console, domain=domain, limit=limit)
+
+
+@app.command()
+def show(
+    item_id: str = typer.Argument(..., help="Question ID"),
+    db_path: str = db_option(),
+    json_output: bool = json_option(),
+):
+    """Show detailed information about a question.
+
+    Examples:
+        wr question show q_abc123
+        wr question show q_abc123 --json
+        wr question show q_abc123 --db experiment.db
+    """
+    _, manager = get_db_and_manager(db_path)
+    display_question_detail(manager, console, item_id, json_output=json_output)
+
+
+@app.command()
+def status(
+    db_path: str = db_option(),
+):
+    """Show question-focused statistics.
+
+    Examples:
+        wr question status
+        wr question status --db experiment.db
+    """
+    _, manager = get_db_and_manager(db_path)
+    display_question_stats(manager, console)
+
+
+@app.command()
+def search(
+    text: str = typer.Argument(..., help="Search text to match against questions"),
+    db_path: str = db_option(),
+    domain: Optional[str] = domain_option(),
+    limit: int = limit_option(default=20),
+):
+    """Search questions by text (keyword match).
+
+    Examples:
+        wr question search "election"
+        wr question search "bitcoin" --domain finance
+        wr question search "climate" --db experiment.db --limit 10
+    """
+    from src.cli.core.question_manager import QuestionFilter
+    from src.cli.ui.tables import display_question_table
+
+    _, manager = get_db_and_manager(db_path)
+
+    filter_obj = QuestionFilter(domain=domain)
+    questions = manager.query_questions(filter_obj, limit=500)
+
+    # Keyword filter on question text
+    search_lower = text.lower()
+    matched = [q for q in questions if search_lower in q.question_text.lower()][:limit]
+
+    if not matched:
+        console.print(f"[yellow]No questions matching '{text}'[/yellow]")
+        raise typer.Exit(0)
+
+    evidence_map = manager.get_evidence_status(matched)
+    display_question_table(matched, evidence_map, console)
+
+
+# =============================================================================
+# Collection Commands
+# =============================================================================
 
 
 @app.command()
@@ -26,11 +123,7 @@ def goal(
         "-g",
         help="Path to collection goal YAML config",
     ),
-    db_path: str = typer.Option(
-        "worldreasoner.db",
-        "--db",
-        help="Path to the database",
-    ),
+    db_path: str = db_option(),
     sources_config: str = typer.Option(
         "config/sources.yaml",
         "--sources",
@@ -87,18 +180,18 @@ def goal(
 
     # Load and display goal
     try:
-        goal = CollectionGoal.from_yaml(str(goal_path))
-        goal.validate_distributions()
+        goal_obj = CollectionGoal.from_yaml(str(goal_path))
+        goal_obj.validate_distributions()
     except Exception as e:
         console.print(f"[red]Failed to load goal config: {e}[/red]")
         raise typer.Exit(1)
 
     # Display goal summary
     console.print("\n[bold cyan]Collection Goal[/bold cyan]")
-    console.print(f"  Target: {goal.total_questions} questions")
-    console.print(f"  Types: {dict(goal.type_distribution)}")
-    console.print(f"  Categories: {dict(goal.category_distribution)}")
-    console.print(f"  Require resolved: {goal.require_ground_truth}")
+    console.print(f"  Target: {goal_obj.total_questions} questions")
+    console.print(f"  Types: {dict(goal_obj.type_distribution)}")
+    console.print(f"  Categories: {dict(goal_obj.category_distribution)}")
+    console.print(f"  Require resolved: {goal_obj.require_ground_truth}")
 
     # Display enabled sources
     sources_enabled = []
@@ -124,7 +217,7 @@ def goal(
         result = asyncio.run(
             _run_goal_collection_async(
                 goal_path=str(goal_path),
-                goal=goal,
+                goal=goal_obj,
                 db_path=db_path,
                 sources_config=sources_config,
                 enable_polymarket=not no_polymarket,
@@ -135,7 +228,7 @@ def goal(
         )
 
         # Display results
-        _display_collection_results(result, goal)
+        _display_collection_results(result, goal_obj)
 
         if result.failure_count > 0:
             raise typer.Exit(1)
