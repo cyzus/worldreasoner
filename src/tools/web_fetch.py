@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from smolagents import Tool
 from src.utils.schema_helper import pydantic_to_output_schema
 from src.tools.output_models import WebFetchOutput
@@ -33,6 +33,8 @@ class WebFetchTool(Tool):
     Args:
         url (str): The URL to fetch content from
         timeout (int, optional): Maximum time to wait in seconds. Default: 30
+        timestamp (str, optional): Target timestamp for historical versions (Wayback Machine). 
+            Format: ISO string or YYYYMMDDhhmmss.
     
     Returns:
         str: JSON string containing:
@@ -51,6 +53,11 @@ class WebFetchTool(Tool):
             "description": "Timeout in seconds (default: 30)",
             "nullable": True,
         },
+        "timestamp": {
+            "type": "string", 
+            "description": "Optional timestamp (YYYYMMDDhhmmss) to fetch from Internet Archive",
+            "nullable": True
+        }
     }
     output_type = "object"
     output_schema = pydantic_to_output_schema(WebFetchOutput)
@@ -96,22 +103,82 @@ class WebFetchTool(Tool):
         except Exception:
             return None
 
-    async def _fetch_async(self, url: str, timeout: int = 30) -> Dict[str, Any]:
+    async def _archive_fetch_async(self, url: str, timestamp: Optional[str] = None) -> Optional[str]:
+        """Check Internet Archive for a snapshot.
+        
+        Args:
+            url: URL to fetch
+            timestamp: Target timestamp (YYYYMMDDhhmmss). If None, defaults to latest.
+            
+        Returns:
+            The raw snapshot URL if found, else None
+        """
+        try:
+            import httpx
+            # If no timestamp provided, we omit it to get the 'latest'
+            query_ts = ""
+            if timestamp:
+                # Clean timestamp to YYYYMMDD style for API
+                query_ts = timestamp.replace("-", "").replace(":", "").replace("T", "").split(".")[0]
+            
+            api_url = f"http://archive.org/wayback/available?url={url}"
+            if query_ts:
+                 api_url += f"&timestamp={query_ts}"
+            
+            async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+                resp = await client.get(api_url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    closest = data.get("archived_snapshots", {}).get("closest")
+                    if closest and closest.get("available"):
+                        snapshot_url = closest["url"]
+                        snapshot_ts = closest["timestamp"]
+                        # The 'id_' suffix gives us raw HTML without the Wayback toolbar
+                        return snapshot_url.replace(f"/{snapshot_ts}/", f"/{snapshot_ts}id_/")
+        except Exception:
+            pass
+        return None
+
+    async def _fetch_async(self, url: str, timeout: int = 30, timestamp: Optional[str] = None) -> Dict[str, Any]:
         """Async implementation of web fetching with hybrid strategy.
 
         Args:
             url: URL to fetch
             timeout: Timeout in seconds
+            timestamp: Optional timestamp for historical fetch
 
         Returns:
             Dictionary with fetched content and metadata
         """
-        # 1. Try Fast Fetch first (AI-friendly)
-        fast_result = await self._fast_fetch_async(url, timeout=min(timeout, 10))
-        if fast_result:
-            return fast_result
+        # 1. Option A: Explicit Archive Fetch (Handled first if timestamp is provided)
+        effective_url = url
+        is_archived = False
+        method = "live_fast"
+        
+        if timestamp:
+            archive_url = await self._archive_fetch_async(url, timestamp)
+            if archive_url:
+                effective_url = archive_url
+                is_archived = True
+                method = "archive_explicit"
 
-        # 2. Fallback to Robust Fetch with crawl4ai
+        # 2. Option B: Live Fast Fetch (AI-friendly headers)
+        if not is_archived:
+            fast_result = await self._fast_fetch_async(url, timeout=min(timeout, 10))
+            if fast_result:
+                return fast_result
+            
+            # 3. Option C: Smart Archive Fallback (If fast fetch failed/blocked)
+            # Try latest snapshot from Wayback Machine as it's cleaner than a browser
+            archive_url = await self._archive_fetch_async(url)
+            if archive_url:
+                effective_url = archive_url
+                is_archived = True
+                method = "archive_fallback_latest"
+                # If we've switched to an archived URL, we should definitely try to fetch it.
+                # Since Wayback 'id_' URLs are raw HTML, we still need crawl4ai for extraction.
+
+        # 4. Final Option: Robust Fetch with crawl4ai (Live browser)
         try:
             from crawl4ai import (
                 AsyncWebCrawler,
@@ -161,19 +228,20 @@ class WebFetchTool(Tool):
             """
 
             # Configure crawler run (bypass cache, set timeout, magic mode)
+            # For Archive URLs, we disable 'magic' and complex waiting as they can break on Wayback wrappers
             crawler_config = CrawlerRunConfig(
                 cache_mode=CacheMode.BYPASS,
                 page_timeout=timeout * 1000,
                 markdown_generator=md_generator,
-                magic=True,
-                js_code=js_bypass,
-                wait_for="body:not(.wizard):not(.consent-page)",
-                delay_before_return_html=2.0
+                magic=not is_archived, # Disable magic for Archive URLs to avoid script interference
+                js_code=js_bypass if not is_archived else None,
+                wait_for="body:not(.wizard):not(.consent-page)" if not is_archived else None,
+                delay_before_return_html=2.0 if not is_archived else 0.5
             )
 
             # Fetch the page using context manager
             async with AsyncWebCrawler(config=browser_config) as crawler:
-                result = await crawler.arun(url, config=crawler_config)
+                result = await crawler.arun(effective_url, config=crawler_config)
 
             if not result.success:
                 return {
@@ -189,17 +257,19 @@ class WebFetchTool(Tool):
                     "description": result.metadata.get("description", ""),
                     "keywords": result.metadata.get("keywords", ""),
                     "author": result.metadata.get("author", ""),
-                    "method": "robust_fetch_crawl4ai"
+                    "method": method if is_archived else "robust_fetch_crawl4ai",
+                    "is_archived": is_archived,
+                    "original_url": url if is_archived else None
                 }
 
             # Extract clean markdown: prefer fit_markdown (noise-filtered), fall back to raw_markdown
-            md = result.markdown
-            if hasattr(md, "fit_markdown") and md.fit_markdown:
-                clean_markdown = md.fit_markdown
-            elif hasattr(md, "raw_markdown") and md.raw_markdown:
-                clean_markdown = md.raw_markdown
+            md_content = result.markdown
+            if hasattr(md_content, "fit_markdown") and md_content.fit_markdown:
+                clean_markdown = md_content.fit_markdown
+            elif hasattr(md_content, "raw_markdown") and md_content.raw_markdown:
+                clean_markdown = md_content.raw_markdown
             else:
-                clean_markdown = str(md) if md else ""
+                clean_markdown = str(md_content) if md_content else ""
 
             # Build response
             response = {
@@ -225,12 +295,13 @@ class WebFetchTool(Tool):
                 "error": f"Error fetching URL: {str(e)}",
             }
 
-    def forward(self, url: str, timeout: int = 30) -> WebFetchOutput:
+    def forward(self, url: str, timeout: int = 30, timestamp: Optional[str] = None) -> WebFetchOutput:
         """Fetch web page content.
 
         Args:
             url: URL to fetch
             timeout: Maximum time to wait in seconds
+            timestamp: Optional timestamp for historical fetch
 
         Returns:
             WebFetchOutput Pydantic model with fetched content
@@ -246,7 +317,7 @@ class WebFetchTool(Tool):
                 new_loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(new_loop)
                 try:
-                    return new_loop.run_until_complete(self._fetch_async(url, timeout))
+                    return new_loop.run_until_complete(self._fetch_async(url, timeout, timestamp))
                 finally:
                     new_loop.close()
 
@@ -255,7 +326,7 @@ class WebFetchTool(Tool):
                 result = future.result()
         except RuntimeError:
             # No event loop running, safe to create one
-            result = asyncio.run(self._fetch_async(url, timeout))
+            result = asyncio.run(self._fetch_async(url, timeout, timestamp))
 
         # Convert dict result to Pydantic model
         return WebFetchOutput(
@@ -267,17 +338,18 @@ class WebFetchTool(Tool):
             error=result.get("error"),
         )
 
-    async def forward_async(self, url: str, timeout: int = 30) -> WebFetchOutput:
+    async def forward_async(self, url: str, timeout: int = 30, timestamp: Optional[str] = None) -> WebFetchOutput:
         """Async version of forward for use in async contexts.
 
         Args:
             url: URL to fetch
             timeout: Maximum time to wait in seconds
+            timestamp: Optional timestamp for historical fetch
 
         Returns:
             WebFetchOutput Pydantic model with fetched content
         """
-        result = await self._fetch_async(url, timeout)
+        result = await self._fetch_async(url, timeout, timestamp)
         # Convert dict result to Pydantic model
         return WebFetchOutput(
             url=result.get("url", url),
