@@ -60,8 +60,44 @@ class WebFetchTool(Tool):
         super().__init__()
         self._crawler = None
 
+    async def _fast_fetch_async(self, url: str, timeout: int = 10) -> Dict[str, Any]:
+        """Try a fast fetch with AI-friendly headers.
+        
+        Args:
+            url: URL to fetch
+            timeout: Timeout in seconds
+            
+        Returns:
+            Dictionary with content if successful, else None
+        """
+        try:
+            import httpx
+            headers = {
+                "Accept": "text/markdown, text/plain, */*",
+                "User-Agent": "MyAI-Agent/1.0 (Hybrid Fetch Controller)",
+            }
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+                response = await client.get(url, headers=headers)
+                
+                # If we got markdown back directly, great!
+                content_type = response.headers.get("Content-Type", "").lower()
+                if response.status_code == 200 and ("markdown" in content_type or "text/plain" in content_type):
+                    return {
+                        "url": str(response.url),
+                        "title": "", # Hard to get without parsing
+                        "markdown": response.text,
+                        "metadata": {"method": "fast_fetch_markdown"},
+                        "success": True,
+                    }
+                
+                # If it's HTML, we should check if it's a simple page or a wall
+                # For now, if we get HTML, we might still prefer crawl4ai for cleaning
+                return None
+        except Exception:
+            return None
+
     async def _fetch_async(self, url: str, timeout: int = 30) -> Dict[str, Any]:
-        """Async implementation of web fetching.
+        """Async implementation of web fetching with hybrid strategy.
 
         Args:
             url: URL to fetch
@@ -70,6 +106,12 @@ class WebFetchTool(Tool):
         Returns:
             Dictionary with fetched content and metadata
         """
+        # 1. Try Fast Fetch first (AI-friendly)
+        fast_result = await self._fast_fetch_async(url, timeout=min(timeout, 10))
+        if fast_result:
+            return fast_result
+
+        # 2. Fallback to Robust Fetch with crawl4ai
         try:
             from crawl4ai import (
                 AsyncWebCrawler,
@@ -80,19 +122,53 @@ class WebFetchTool(Tool):
             from crawl4ai.content_filter_strategy import PruningContentFilter
             from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 
-            # Configure browser (headless, timeout)
-            browser_config = BrowserConfig(headless=True, verbose=False)
+            # Configure browser with stealth and random UA for robust fallback
+            browser_config = BrowserConfig(
+                headless=True, 
+                verbose=False,
+                user_agent_mode="random",
+                enable_stealth=True
+            )
 
             # Use PruningContentFilter to strip noise and get clean fit_markdown
             md_generator = DefaultMarkdownGenerator(
                 content_filter=PruningContentFilter(threshold=0.45, threshold_type="fixed")
             )
 
-            # Configure crawler run (bypass cache, set timeout)
+            # JS to bypass common consent walls (like Yahoo)
+            js_bypass = """
+            const bypassConsent = () => {
+                const agreeButtons = [
+                    'button[name="agree"]', // Yahoo
+                    '#L2AGLb', // Google
+                    '.consent-give', // Common
+                    'button:contains("Accept all")',
+                    'button:contains("Agree")'
+                ];
+                for (const selector of agreeButtons) {
+                    try {
+                        const btn = document.querySelector(selector);
+                        if (btn) {
+                            console.log("Found consent button: " + selector);
+                            btn.click();
+                            return true;
+                        }
+                    } catch (e) {}
+                }
+                return false;
+            };
+            bypassConsent();
+            """
+
+            # Configure crawler run (bypass cache, set timeout, magic mode)
             crawler_config = CrawlerRunConfig(
                 cache_mode=CacheMode.BYPASS,
-                page_timeout=timeout * 1000,  # Convert to milliseconds
+                page_timeout=timeout * 1000,
                 markdown_generator=md_generator,
+                magic=True,
+                js_code=js_bypass,
+                wait_for="body:not(.wizard):not(.consent-page)",
+                delay_before_return_html=2.0
             )
 
             # Fetch the page using context manager
@@ -113,6 +189,7 @@ class WebFetchTool(Tool):
                     "description": result.metadata.get("description", ""),
                     "keywords": result.metadata.get("keywords", ""),
                     "author": result.metadata.get("author", ""),
+                    "method": "robust_fetch_crawl4ai"
                 }
 
             # Extract clean markdown: prefer fit_markdown (noise-filtered), fall back to raw_markdown
