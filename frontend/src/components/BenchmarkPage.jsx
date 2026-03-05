@@ -17,7 +17,7 @@ const BenchmarkPage = () => {
   const [models, setModels] = useState(['gemini/gemini-2.5-flash']);
   const [newModel, setNewModel] = useState('');
   const [maxQuestions, setMaxQuestions] = useState(10);
-  const [offsetDays, setOffsetDays] = useState(7);
+  const [slot, setSlot] = useState('mid');
   const [source, setSource] = useState('all');
   const [domain, setDomain] = useState('all');
   const [resume, setResume] = useState(false);
@@ -126,7 +126,7 @@ const BenchmarkPage = () => {
         conditions: selectedConditions,
         models,
         max_questions: maxQuestions,
-        offset_days: offsetDays,
+        slot,
         resume,
       };
       if (source !== 'all') config.source = source;
@@ -392,14 +392,15 @@ const BenchmarkPage = () => {
                   </div>
 
                   <div className="config-item">
-                    <label>Offset Days</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="365"
-                      value={offsetDays}
-                      onChange={(e) => setOffsetDays(parseInt(e.target.value) || 0)}
-                    />
+                    <label>Forecast Slot</label>
+                    <select
+                      value={slot}
+                      onChange={(e) => setSlot(e.target.value)}
+                    >
+                      <option value="early">Early — 20% into window (harder)</option>
+                      <option value="mid">Mid — 50% into window (default)</option>
+                      <option value="late">Late — 80% into window (easier)</option>
+                    </select>
                   </div>
 
                   <div className="config-item">

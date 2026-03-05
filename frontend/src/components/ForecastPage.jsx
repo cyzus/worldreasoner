@@ -29,7 +29,7 @@ const ForecastPage = ({
   // Forecast configuration state (matches backend pipeline_runner.py parameters)
   const [forecastConfig, setForecastConfig] = useState({
     model: null,
-    offset_days: 7,
+    slot: 'mid',
     mode: 'container',
     enable_causal_tools: false,
     min_context_items: 3
@@ -291,18 +291,26 @@ const ForecastPage = ({
 
                   <div className="config-item">
                     <label>
-                      Offset Days
+                      Forecast Slot
                       <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#888', marginLeft: '4px' }}>
-                        - Days before question close date
+                        - Position within forecast window
                       </span>
                     </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="365"
-                      value={forecastConfig.offset_days}
-                      onChange={(e) => setForecastConfig({ ...forecastConfig, offset_days: parseInt(e.target.value) || 0 })}
-                    />
+                    <select
+                      value={forecastConfig.slot}
+                      onChange={(e) => setForecastConfig({ ...forecastConfig, slot: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '8px',
+                        borderRadius: '4px',
+                        border: '1px solid #ddd',
+                        fontSize: '14px'
+                      }}
+                    >
+                      <option value="early">Early — 20% into window (harder)</option>
+                      <option value="mid">Mid — 50% into window (default)</option>
+                      <option value="late">Late — 80% into window (easier)</option>
+                    </select>
                   </div>
 
                   <div className="config-item">

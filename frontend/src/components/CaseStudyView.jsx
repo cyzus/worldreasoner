@@ -1,4 +1,5 @@
 import React, { useMemo, useEffect, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { fetchQuestionArticles, fetchOutcomeImpacts, fetchForecastGraph } from '../api/graphApi';
 import './CaseStudyView.css';
 
@@ -18,6 +19,7 @@ function CaseStudyView({
   const [activeForecastGraph, setActiveForecastGraph] = useState(null);
   const [loadingGraph, setLoadingGraph] = useState(false);
   const [expandedRows, setExpandedRows] = useState(new Set());
+  const [expandedArticles, setExpandedArticles] = useState(new Set());
 
   // 1. Fetch articles and impacts when question changes
   useEffect(() => {
@@ -84,6 +86,13 @@ function CaseStudyView({
     setExpandedRows(newExpanded);
   };
 
+  const toggleArticle = (id) => {
+    const newExpanded = new Set(expandedArticles);
+    if (newExpanded.has(id)) newExpanded.delete(id);
+    else newExpanded.add(id);
+    setExpandedArticles(newExpanded);
+  };
+
   const handleViewForecastGraph = async (forecastId) => {
     setLoadingGraph(true);
     try {
@@ -109,7 +118,8 @@ function CaseStudyView({
           id: n.id,
           title: n.title || n.name || n.properties?.title || 'Unknown Article',
           source: n.source || n.properties?.source || 'Original Source',
-          published_date: n.date || n.properties?.date || n.properties?.published_date
+          published_date: n.date || n.properties?.date || n.properties?.published_date,
+          url: n.url || n.properties?.url
         };
       }
     });
@@ -225,8 +235,8 @@ function CaseStudyView({
                   </div>
                 )}
                 {fc.rationale && (
-                  <div className="cs-fc-rationale">
-                    {fc.rationale}
+                  <div className="cs-fc-rationale markdown-body">
+                    <ReactMarkdown>{fc.rationale}</ReactMarkdown>
                   </div>
                 )}
                 <div className="cs-fc-footer">
@@ -315,7 +325,14 @@ function CaseStudyView({
                                     ])).filter(Boolean).map(id => {
                                       const art = articleMap[id];
                                       return (
-                                        <a key={id} href={`#art-${id}`} className="cs-evidence-pill" title={art?.title}>
+                                        <a
+                                          key={id}
+                                          href={art?.url || `#art-${id}`}
+                                          target={art?.url ? "_blank" : "_self"}
+                                          rel={art?.url ? "noopener noreferrer" : ""}
+                                          className="cs-evidence-pill"
+                                          title={art?.title}
+                                        >
                                           {art ? `${art.source || 'Source'}: ${art.title.substring(0, 30)}...` : `Doc ${id.substring(0, 6)}`}
                                         </a>
                                       );
@@ -341,7 +358,9 @@ function CaseStudyView({
                                           Confidence: {Math.round(imp.confidence * 100)}%
                                         </span>
                                       </div>
-                                      <p className="cs-impact-reasoning">{imp.reasoning}</p>
+                                      <div className="cs-impact-reasoning markdown-body">
+                                        <ReactMarkdown>{imp.reasoning}</ReactMarkdown>
+                                      </div>
 
                                       {/* Impact Evidence Articles */}
                                       {imp.articleIds?.length > 0 && (
@@ -351,7 +370,13 @@ function CaseStudyView({
                                             {imp.articleIds.map(id => {
                                               const art = articleMap[id];
                                               return (
-                                                <a key={id} href={`#art-${id}`} className="cs-evidence-pill cs-pill-sm">
+                                                <a
+                                                  key={id}
+                                                  href={art?.url || `#art-${id}`}
+                                                  target={art?.url ? "_blank" : "_self"}
+                                                  rel={art?.url ? "noopener noreferrer" : ""}
+                                                  className="cs-evidence-pill cs-pill-sm"
+                                                >
                                                   {art ? art.title.substring(0, 40) + '...' : `Evidence ${id.substring(0, 6)}`}
                                                 </a>
                                               );
@@ -395,14 +420,19 @@ function CaseStudyView({
                 <div key={article.id} id={`art-${article.id}`} className="cs-timeline-item">
                   <div className="cs-timeline-date">{formatDate(dateStr)}</div>
                   <div className="cs-timeline-content">
-                    <div className="cs-article-header">
+                    <div
+                      className="cs-article-header"
+                      onClick={() => toggleArticle(article.id)}
+                      style={{ cursor: 'pointer' }}
+                    >
                       <span className="cs-article-source">{source}</span>
                       <h4 className="cs-article-title">{title}</h4>
+                      <span className={`cs-expand-icon ${expandedArticles.has(article.id) ? 'open' : ''}`}>▼</span>
                     </div>
-                    {summary && (
-                      <p className="cs-article-summary">
-                        {summary.substring(0, 200)}{summary.length > 200 ? '...' : ''}
-                      </p>
+                    {summary && expandedArticles.has(article.id) && (
+                      <div className="cs-article-summary markdown-body">
+                        <ReactMarkdown>{summary}</ReactMarkdown>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -440,7 +470,9 @@ function CaseStudyView({
                           <span className="cs-hyp-arrow">⎯⎯ {hyp.relation_type} ({Math.round(hyp.strength * 100)}%) ⎯→</span>
                           <span className="cs-hyp-node">{tgt?.title || hyp.target_event_id}</span>
                         </div>
-                        <p className="cs-hyp-reasoning">{hyp.reasoning}</p>
+                        <div className="cs-hyp-reasoning markdown-body">
+                          <ReactMarkdown>{hyp.reasoning}</ReactMarkdown>
+                        </div>
                       </div>
                     );
                   })

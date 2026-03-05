@@ -538,6 +538,8 @@ class SQLiteGraphService(GraphService):
                 "extracted_for_question_id": getattr(
                     event, "extracted_for_question_id", None
                 ),
+                "article_ids": getattr(event, "article_ids", []),
+                "source_article_id": getattr(event, "source_article_id", None),
             },
             size=getattr(event, "importance", 1.0),
             color=self._domain_to_color(event.domain),
