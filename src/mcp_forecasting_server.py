@@ -445,7 +445,7 @@ def identify_forecast_event(
     domain: str = None,
     event_type: str = None,
     source_article_ids: str = None,
-) -> str:
+) -> dict:
     """Identify event for forecast reasoning.
 
     Use this tool to identify and record events that are relevant to your forecast.
@@ -459,7 +459,7 @@ def identify_forecast_event(
         source_article_ids: Optional comma-separated article IDs
 
     Returns:
-        JSON string with event details
+        Event details with status (created or reused)
     """
     try:
         forecast_context = _get_context_from_mcp(ctx)
@@ -477,10 +477,10 @@ def identify_forecast_event(
 
         return tool.forward(
             title, description, domain, occurred_date, event_type, source_article_ids
-        )
+        ).model_dump()
     except Exception as e:
         logger.error(f"Error identifying forecast event: {e}")
-        return json.dumps({"error": str(e)})
+        return {"error": str(e)}
 
 
 @mcp.tool()
@@ -493,7 +493,7 @@ def create_forecast_causal_link(
     confidence: float,
     reasoning: str,
     evidence_article_ids: str = "",
-) -> str:
+) -> dict:
     """Create causal link for forecast reasoning.
 
     Use this tool to record causal relationships between events during forecasting.
@@ -508,7 +508,7 @@ def create_forecast_causal_link(
         evidence_article_ids: Optional comma-separated article IDs
 
     Returns:
-        JSON confirmation with hypothesis ID
+        Hypothesis details with ID and relation
     """
     try:
         forecast_context = _get_context_from_mcp(ctx)
@@ -528,10 +528,10 @@ def create_forecast_causal_link(
             confidence,
             reasoning,
             evidence_article_ids,
-        )
+        ).model_dump()
     except Exception as e:
         logger.error(f"Error creating forecast causal link: {e}")
-        return json.dumps({"error": str(e)})
+        return {"error": str(e)}
 
 
 @mcp.tool()

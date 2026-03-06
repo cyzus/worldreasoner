@@ -4,7 +4,6 @@ This tool reads from the question database for deduplication and writes
 ForecastEvent instances to the forecast database.
 """
 
-import json
 from typing import Optional
 from datetime import datetime
 

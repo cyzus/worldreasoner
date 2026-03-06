@@ -4,8 +4,6 @@ This tool creates causal links during forecasting and saves them as
 ForecastHypothesis instances in the forecast database.
 """
 
-import json
-
 from smolagents import Tool
 from src.domain.models.forecast_graph import ForecastHypothesis
 from src.domain.models.event import CausalRelationType
@@ -102,7 +100,7 @@ class ForecastCausalReasonerTool(Tool):
         confidence: float,
         reasoning: str,
         evidence_article_ids: str = "",
-    ) -> str:
+    ) -> ForecastHypothesisOutput:
         """Create causal link and save to forecast database.
 
         Args:
@@ -115,7 +113,7 @@ class ForecastCausalReasonerTool(Tool):
             evidence_article_ids: Comma-separated article IDs
 
         Returns:
-            JSON confirmation with hypothesis ID
+            ForecastHypothesisOutput with hypothesis details
         """
         try:
             # Validate relation type
@@ -139,7 +137,6 @@ class ForecastCausalReasonerTool(Tool):
                 return ForecastHypothesisOutput(
                     status="error", hypothesis_id="error", relation="", strength=0.0, confidence=0.0
                 )
-
             # Parse article IDs
             article_ids = [
                 aid.strip() for aid in evidence_article_ids.split(",") if aid.strip()
