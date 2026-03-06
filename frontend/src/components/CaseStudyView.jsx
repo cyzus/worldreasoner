@@ -52,6 +52,9 @@ function CaseStudyView({
           results.forEach(r => {
             const outcomeId = r.id;
             const outcomeTitle = r.title || 'Unknown Outcome';
+            // Look up the outcome node to get its scenario type
+            const outcomeNode = outcomeNodes.find(n => n.id === outcomeId);
+            const outcomeScenario = outcomeNode?.properties?.outcome_scenario || '';
 
             r.data.forEach(imp => {
               const sourceId = imp.source_id || imp.event_id;
@@ -60,6 +63,7 @@ function CaseStudyView({
               bySource[sourceId].push({
                 outcomeId,
                 outcomeTitle,
+                outcomeScenario,
                 impact_direction: imp.impact_direction || imp.properties?.impact_direction,
                 impact_magnitude: imp.impact_magnitude ?? imp.properties?.impact_magnitude ?? imp.weight ?? 0,
                 confidence: imp.confidence ?? imp.properties?.confidence ?? 1.0,
@@ -201,6 +205,16 @@ function CaseStudyView({
     });
   }, [graphData]);
 
+  // Derive which outcome scenario matches the question's ground truth
+  const groundTruthScenario = useMemo(() => {
+    const rawTruth = selectedQuestion?.ground_truth;
+    if (rawTruth == null || rawTruth === '') return null;
+    const normalized = String(rawTruth).trim().replace(/^"+|"+$/g, '').toLowerCase();
+    if (['yes', 'true', '1'].includes(normalized)) return 'positive_resolution';
+    if (['no', 'false', '0'].includes(normalized)) return 'negative_resolution';
+    return null;
+  }, [selectedQuestion?.ground_truth]);
+
   // Format Date cleanly
   const formatDate = (dateString) => {
     if (!dateString) return 'Unknown Date';
@@ -216,6 +230,12 @@ function CaseStudyView({
       <div className="cs-section">
         <h3 className="cs-section-title">📊 Forecast Comparison</h3>
         <p className="cs-section-subtitle">How different evaluation conditions performed on this question</p>
+        {selectedQuestion?.ground_truth != null && selectedQuestion.ground_truth !== '' && (
+          <div className="cs-ground-truth-banner">
+            <span className="cs-badge-ground-truth">✓ Ground Truth</span>
+            <span className="cs-ground-truth-value">{String(selectedQuestion.ground_truth)}</span>
+          </div>
+        )}
 
         {!forecasts || forecasts.length === 0 ? (
           <div className="cs-empty">No forecasts available for this question.</div>
@@ -274,14 +294,47 @@ function CaseStudyView({
               <tbody>
                 {events.map(event => {
                   const isOutcome = event.isOutcome || event.properties?.is_outcome || event.properties?.is_actual_outcome;
+                  const isGroundTruth = isOutcome && (
+                    event.properties?.is_actual_outcome === true ||
+                    (groundTruthScenario && event.properties?.outcome_scenario === groundTruthScenario)
+                  );
                   const dateStr = event.occurred_date || event.predicted_date || event.properties?.occurred_date || event.properties?.predicted_date;
                   const title = event.title || event.name || event.properties?.title || 'Unnamed Event';
                   const titleStr = title.length > 100 ? title.substring(0, 100) + '...' : title;
 
-                  // Extract impact if available
-                  const impactDirection = event.impact_direction || event.properties?.impact_direction || 'mixed';
-                  const isExpanded = expandedRows.has(event.id);
+                  // Compute overall impact direction from outcome impacts.
+                  // Normalize complementary outcomes (positive_resolution / negative_resolution):
+                  // a Positive impact on the "Yes" outcome and a Negative impact on the "No" outcome
+                  // are the same signal and should NOT be labelled "Mixed".
+                  const computeNetDirection = (impacts) => {
+                    if (!impacts || impacts.length === 0) return null;
+                    const normalized = impacts
+                      .map(imp => {
+                        const dir = imp.impact_direction;
+                        if (!dir || dir === 'neutral') return null;
+                        const scenario = imp.outcomeScenario || '';
+                        const isNegative = scenario === 'negative_resolution' ||
+                          (imp.outcomeTitle || '').trim().toLowerCase().startsWith('no ');
+                        // Flip the direction for negative-resolution outcomes so both
+                        // complementary impacts are expressed in the same frame.
+                        if (isNegative) {
+                          if (dir === 'positive') return 'negative';
+                          if (dir === 'negative') return 'positive';
+                        }
+                        return dir;
+                      })
+                      .filter(Boolean);
+                    if (normalized.length === 0) return null;
+                    if (normalized.every(d => d === 'positive')) return 'positive';
+                    if (normalized.every(d => d === 'negative')) return 'negative';
+                    return 'mixed';
+                  };
                   const outcomeImpacts = impacts[event.id] || [];
+                  const impactDirection =
+                    computeNetDirection(outcomeImpacts) ||
+                    event.impact_direction ||
+                    event.properties?.impact_direction;
+                  const isExpanded = expandedRows.has(event.id);
 
                   return (
                     <React.Fragment key={event.id}>
@@ -294,12 +347,13 @@ function CaseStudyView({
                         <td className="cs-td-main">
                           <div className="cs-event-title">
                             {isOutcome && <span className="cs-badge-outcome">OUTCOME</span>}
+                            {isGroundTruth && <span className="cs-badge-ground-truth">✓ Ground Truth</span>}
                             {titleStr}
                             <span className={`cs-expand-icon ${isExpanded ? 'open' : ''}`}>▼</span>
                           </div>
                         </td>
                         <td className="cs-td-impact">
-                          {!isOutcome && (
+                          {!isOutcome && impactDirection && (
                             <span className={`cs-impact-badge cs-impact-${impactDirection}`}>
                               {impactDirection}
                             </span>

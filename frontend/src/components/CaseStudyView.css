@@ -146,6 +146,36 @@
   vertical-align: middle;
 }
 
+.cs-badge-ground-truth {
+  background-color: #22c55e;
+  color: white;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: bold;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.cs-ground-truth-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+}
+
+.cs-ground-truth-value {
+  font-weight: 700;
+  color: #15803d;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 /* Impact Badges */
 .cs-impact-badge {
   display: inline-block;
