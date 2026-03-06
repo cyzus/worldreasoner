@@ -8,16 +8,15 @@ from dataclasses import asdict
 from fastapi import APIRouter, Query, HTTPException, Depends
 
 from src.core.database import GenericDatabase
-from src.config import get_config
 from src.domain.question_monitor_service import QuestionMonitorService
+from src.api.routes.database import get_current_db_path
 
 router = APIRouter()
 
 
 def get_database():
     """Dependency to get database instance."""
-    cfg = get_config()
-    return GenericDatabase(cfg.database.db_path)
+    return GenericDatabase(get_current_db_path())
 
 
 def get_monitor_service(

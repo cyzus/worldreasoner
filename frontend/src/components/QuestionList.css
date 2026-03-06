@@ -99,11 +99,15 @@
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 8px;
+  min-width: 0;
+  gap: 6px;
 }
 
 .question-item-badges {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .badge {
@@ -146,6 +150,9 @@
   line-height: 1.5;
   color: #333;
   margin-bottom: 8px;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
 }
 
 .question-item-meta {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
     useEvidenceNeeds,
     useModelStats,
@@ -24,74 +24,6 @@ const QuestionMonitor = ({ activeJobs = [] }) => {
             }
         }
     })
-
-    // Auto-collect state
-    const [autoCollect, setAutoCollect] = useState(() => {
-        const saved = localStorage.getItem('monitor_auto_collect')
-        return saved === 'true'
-    })
-    const autoCollectRef = useRef(null)
-
-    // Persist auto-collect preference
-    useEffect(() => {
-        localStorage.setItem('monitor_auto_collect', autoCollect)
-    }, [autoCollect])
-
-    // Cleanup pending submissions once they appear in active jobs
-    useEffect(() => {
-        collectingQuestions.forEach(id => {
-            if (pendingSubmissionIds.current.has(id)) {
-                pendingSubmissionIds.current.delete(id)
-            }
-        })
-    }, [collectingQuestions])
-
-    // Track pending submissions to prevent race conditions with auto-collect
-    const pendingSubmissionIds = useRef(new Set())
-
-    // Auto-collect logic
-    useEffect(() => {
-        if (autoCollect) {
-            const checkAndCollect = async () => {
-                // Only collect if we have needs, aren't loading, and aren't already collecting active batch
-                if (!needsLoading && evidenceNeeds && evidenceNeeds.length > 0 && !collectingAll) {
-                    // Filter out questions that are already starting collection or pending submission
-                    const candidates = evidenceNeeds.filter(q =>
-                        !collectingQuestions.has(q.id) &&
-                        !pendingSubmissionIds.current.has(q.id)
-                    )
-
-                    if (candidates.length > 0) {
-                        console.log(`[Auto-Collect] Triggering collection for ${candidates.length} items`)
-                        // Add to pending immediately to prevent double-submit
-                        candidates.forEach(q => pendingSubmissionIds.current.add(q.id))
-
-                        try {
-                            await handleCollectAll(true, candidates)
-                        } catch (e) {
-                            // If failed, remove from pending so they can be retried
-                            candidates.forEach(q => pendingSubmissionIds.current.delete(q.id))
-                        }
-                    }
-                }
-            }
-
-            // Check immediately on enable/update
-            checkAndCollect()
-
-            // And then interval
-            autoCollectRef.current = setInterval(checkAndCollect, 10000) // Check every 10s
-        } else {
-            if (autoCollectRef.current) {
-                clearInterval(autoCollectRef.current)
-                autoCollectRef.current = null
-            }
-        }
-
-        return () => {
-            if (autoCollectRef.current) clearInterval(autoCollectRef.current)
-        }
-    }, [autoCollect, needsLoading, evidenceNeeds, collectingAll, activeJobs]) // added activeJobs dependency
 
     // Helper to safely format dates
     const formatDate = (dateString) => {
@@ -136,13 +68,7 @@ const QuestionMonitor = ({ activeJobs = [] }) => {
                 batches.push(allIds.slice(i, i + BATCH_SIZE))
             }
 
-            console.log(`[Auto-Collect] Starting ${batches.length} batches for ${allIds.length} questions`)
-
-            // Submit batches sequentially to ensure order, but they will run in parallel on backend
-            // depending on backend capacity. 
-            // We use Promise.all to fire them rapidly if we wanted true parallel submission,
-            // but sequential loop is safer for rate limiting. 
-            // Let's do Promise.all for "parallel submission" as requested.
+            // Submit batches in parallel
 
             const results = await Promise.allSettled(
                 batches.map(batchIds => startPipeline(batchIds, 'adaptive_evidence'))
@@ -206,19 +132,6 @@ const QuestionMonitor = ({ activeJobs = [] }) => {
                                 <h3 className="card-title" style={{ margin: 0 }}>Pending Evidence Collection ({evidenceNeeds.length})</h3>
 
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                    {/* Auto Collect Toggle */}
-                                    <label className="auto-collect-toggle" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={autoCollect}
-                                            onChange={(e) => setAutoCollect(e.target.checked)}
-                                            style={{ width: '1.25rem', height: '1.25rem' }}
-                                        />
-                                        <span style={{ fontWeight: 500, color: autoCollect ? '#2563eb' : '#4b5563' }}>
-                                            Auto-Collect {autoCollect ? '(ON)' : '(OFF)'}
-                                        </span>
-                                    </label>
-
                                     {evidenceNeeds.length > 0 && (
                                         <button
                                             className="action-btn"
@@ -230,7 +143,7 @@ const QuestionMonitor = ({ activeJobs = [] }) => {
                                                 textDecoration: 'none'
                                             }}
                                             onClick={() => handleCollectAll(false)}
-                                            disabled={collectingAll || autoCollect}
+                                            disabled={collectingAll}
                                         >
                                             {collectingAll ? 'Starting Batch...' : 'Collect All'}
                                         </button>
