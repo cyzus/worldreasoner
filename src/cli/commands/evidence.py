@@ -316,13 +316,11 @@ def _display_pipeline_results(result):
         table = Table(show_header=True, header_style="bold cyan")
         table.add_column("Question ID")
         table.add_column("Articles", justify="right")
-        table.add_column("Hypotheses", justify="right")
 
         for item in result.processed:
             table.add_row(
                 item["id"],
                 str(item.get("articles", 0)),
-                str(item.get("hypotheses", 0)),
             )
         console.print(table)
 
