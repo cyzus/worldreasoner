@@ -13,7 +13,7 @@ from datetime import datetime
 
 from smolagents import Tool
 from src.utils.schema_helper import pydantic_to_output_schema
-from src.tools.output_models import RssFetchOutput, RssFeedItem
+from src.tools.base.output_models import RssFetchOutput, RssFeedItem
 
 
 class RssFetchTool(Tool):

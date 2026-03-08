@@ -3,11 +3,11 @@
 from typing import Optional, Dict, List, Set
 from collections import defaultdict
 
-from src.tools.database_mixin import DatabaseAwareTool
+from src.tools.base.database_mixin import DatabaseAwareTool
 from src.domain.models import CausalHypothesis, Event
 from src.utils.graph_visualization import GraphVisualizer
-from src.core.temporal_filter_service import TemporalFilterService
-from src.utils.event_analysis import (
+from src.services.temporal_filter_service import TemporalFilterService
+from src.analysis.event_analysis import (
     analyze_event_timeline,
     identify_event_gaps,
     calculate_event_temporal_quality,
@@ -92,7 +92,7 @@ class GraphInspectorTool(DatabaseAwareTool):
         question = self.db.get(Question, self.question_id)
 
         # Build graph structure and statistics using shared utility
-        from src.utils.graph_analysis import (
+        from src.analysis.graph_analysis import (
             analyze_graph_structure,
             resolve_target_event_id,
         )
@@ -312,7 +312,7 @@ RECOMMENDATION:
         
         # Determine target if not passed
         if not target_event_id and question:
-            from src.utils.graph_analysis import resolve_target_event_id
+            from src.analysis.graph_analysis import resolve_target_event_id
             target_event_id = resolve_target_event_id(question, self.db)
         
         if target_event_id and target_event_id in events:

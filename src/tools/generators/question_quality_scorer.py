@@ -7,14 +7,14 @@ from pydantic import BaseModel, Field
 from smolagents.tools import Tool
 from src.core.collectors import ResultCollector
 from src.domain.models.question import Question
-from src.llm import LiteLLMClient
+from src.core.llm import LiteLLMClient
 from src.config import get_config
 from src.pipelines.prompts.question_quality import (
     QUESTION_QUALITY_ASSESSMENT_PROMPT,
 )
 from src.utils.logging import logger
 from src.utils.schema_helper import pydantic_to_output_schema
-from src.tools.output_models import QuestionQualityOutput
+from src.tools.base.output_models import QuestionQualityOutput
 
 
 class QualityAssessment(BaseModel):

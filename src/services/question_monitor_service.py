@@ -15,8 +15,8 @@ from src.domain.models.question import Question
 from src.domain.models.forecast import Forecast, ForecastMode
 from src.domain.models.causal_hypothesis import CausalHypothesis
 from src.domain.models.article import Article
-from src.domain.service_base import ServiceBase
-from src.utils.graph_analysis import calculate_graph_quality
+from src.services.service_base import ServiceBase
+from src.analysis.graph_analysis import calculate_graph_quality
 
 
 @dataclass
@@ -188,7 +188,7 @@ class QuestionMonitorService(ServiceBase):
         graph_depth = 0
         if question_hypotheses:
             question = self.db.get(Question, question_id)
-            from src.utils.graph_analysis import resolve_target_event_id
+            from src.analysis.graph_analysis import resolve_target_event_id
             target_event_id = resolve_target_event_id(question, self.db, question_hypotheses)
 
             if target_event_id:

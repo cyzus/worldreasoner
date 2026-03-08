@@ -93,7 +93,7 @@ class WebSearchTool(Tool):
 
         # Initialize article collector if enabled
         if self.auto_collect_enabled:
-            from src.tools.article_collector import ArticleCollectorTool
+            from src.tools.collectors.article_collector import ArticleCollectorTool
 
             self.article_collector = ArticleCollectorTool(
                 db=self.db,

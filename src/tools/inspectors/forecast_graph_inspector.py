@@ -4,7 +4,7 @@ This tool allows the forecasting agent to inspect the causal graph
 it has built during its reasoning process.
 """
 
-from src.tools.database_mixin import DatabaseAwareTool
+from src.tools.base.database_mixin import DatabaseAwareTool
 from typing import Dict, List, Set
 from collections import defaultdict
 

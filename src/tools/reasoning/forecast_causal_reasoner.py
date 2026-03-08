@@ -12,7 +12,7 @@ from src.utils.logging import logger
 from src.utils.id_generator import generate_forecast_hypothesis_id
 from src.utils.enums import enum_to_list
 from src.utils.schema_helper import pydantic_to_output_schema
-from src.tools.output_models import ForecastHypothesisOutput
+from src.tools.base.output_models import ForecastHypothesisOutput
 
 
 class ForecastCausalReasonerTool(Tool):

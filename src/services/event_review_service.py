@@ -9,8 +9,8 @@ from rich.console import Console
 from src.core.database import GenericDatabase
 from src.domain.models import Event, Article, Question, ReviewStatus
 from src.domain.models.causal_hypothesis import CausalHypothesis
-from src.domain.service_base import ServiceBase
-from src.llm import LiteLLMClient
+from src.services.service_base import ServiceBase
+from src.core.llm import LiteLLMClient
 from src.config.app import LLMConfig
 from src.utils.logging import logger
 from src.config.settings import get_config

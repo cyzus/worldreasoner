@@ -2,9 +2,9 @@
 
 from typing import Optional, List, Dict
 
-from src.tools.database_mixin import DatabaseAwareTool
+from src.tools.base.database_mixin import DatabaseAwareTool
 from src.domain.models import Article, Question
-from src.utils.article_analysis import (
+from src.analysis.article_analysis import (
     filter_articles_by_time_window,
     analyze_timeline,
     analyze_sources,

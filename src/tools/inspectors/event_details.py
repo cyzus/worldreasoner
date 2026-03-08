@@ -1,9 +1,9 @@
 """Tool for retrieving full event details and linked article content."""
 
 from typing import List, Optional, TYPE_CHECKING
-from src.tools.database_mixin import DatabaseAwareTool
-from src.tools.base import ToolResponseMixin
-from src.tools.output_models import EventDetailsOutput
+from src.tools.base.database_mixin import DatabaseAwareTool
+from src.tools.base.base import ToolResponseMixin
+from src.tools.base.output_models import EventDetailsOutput
 from src.domain.models import Event, Article
 from src.utils.schema_helper import pydantic_to_output_schema
 

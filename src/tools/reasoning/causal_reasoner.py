@@ -9,8 +9,8 @@ from src.domain.models import CausalHypothesis, CausalRelationType, Event
 from src.core.collectors import ResultCollector
 from src.utils.enums import enum_to_list
 from src.utils.schema_helper import pydantic_to_output_schema
-from src.tools.base import ToolResponseMixin
-from src.tools.output_models import HypothesisOutput
+from src.tools.base.base import ToolResponseMixin
+from src.tools.base.output_models import HypothesisOutput
 
 
 class CausalReasonerTool(Tool, ToolResponseMixin):

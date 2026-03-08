@@ -11,8 +11,8 @@ from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
 from src.utils.logging import logger
 from src.utils.similarity import SimilarityMatcher
 from src.utils.schema_helper import pydantic_to_output_schema
-from src.tools.base import CollectorAwareTool, ToolResponseMixin
-from src.tools.output_models import EventOutput
+from src.tools.base.base import CollectorAwareTool, ToolResponseMixin
+from src.tools.base.output_models import EventOutput
 
 
 # Default similarity threshold for event deduplication

@@ -38,7 +38,7 @@ def get_evidence_window(
     )
 
     # Delegate to new service
-    from src.core.temporal_filter_service import TemporalFilterService
+    from src.services.temporal_filter_service import TemporalFilterService
 
     return TemporalFilterService.get_evidence_window(
         resolution_date, estimated_start_time, fallback_window_days
@@ -78,7 +78,7 @@ def filter_articles_by_time_window(
     )
 
     # Delegate to new service
-    from src.core.temporal_filter_service import TemporalFilterService
+    from src.services.temporal_filter_service import TemporalFilterService
 
     window_start, window_end = TemporalFilterService.get_evidence_window(
         resolution_date, estimated_start_time, fallback_window_days

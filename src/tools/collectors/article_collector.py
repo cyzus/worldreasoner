@@ -12,9 +12,9 @@ from src.utils.enums import enum_to_list, parse_domain
 from src.utils.id_generator import generate_article_id
 from src.utils.date_utils import parse_iso_datetime
 from src.utils.schema_helper import pydantic_to_output_schema
-from src.tools.web_fetch import WebFetchTool
-from src.tools.base import CollectorAwareTool
-from src.tools.output_models import ArticleOutput
+from src.tools.collectors.web_fetch import WebFetchTool
+from src.tools.base.base import CollectorAwareTool
+from src.tools.base.output_models import ArticleOutput
 
 
 

@@ -2,8 +2,8 @@ import json
 from typing import Optional
 from datetime import datetime, timezone
 
-from src.tools.database_mixin import DatabaseAwareTool
-from src.tools.output_models import QuestionArticlesOutput
+from src.tools.base.database_mixin import DatabaseAwareTool
+from src.tools.base.output_models import QuestionArticlesOutput
 from src.domain.models import Article
 from src.utils.logging import logger
 from src.utils.schema_helper import pydantic_to_output_schema

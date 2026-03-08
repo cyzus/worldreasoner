@@ -72,12 +72,12 @@ from src.core.hybrid_search import HybridSearch
 from src.domain.models import Forecast
 from src.utils.logging import logger
 from src.utils.serialization import serialize_domain
-from src.utils.graph_analysis import resolve_target_event_id
+from src.analysis.graph_analysis import resolve_target_event_id
 
 # Import services
-from src.domain.forecast_context_service import ForecastContextService, ForecastContext
-from src.domain.article_operations_service import ArticleOperationsService
-from src.domain.forecast_submission_service import ForecastSubmissionService
+from src.services.forecast_context_service import ForecastContextService, ForecastContext
+from src.services.article_operations_service import ArticleOperationsService
+from src.services.forecast_submission_service import ForecastSubmissionService
 
 # Initialize MCP server
 mcp = FastMCP("worldreasoner-forecasting")
@@ -464,7 +464,7 @@ def identify_forecast_event(
     try:
         forecast_context = _get_context_from_mcp(ctx)
 
-        from src.tools.forecast_event_identifier import ForecastEventIdentifierTool
+        from src.tools.reasoning.forecast_event_identifier import ForecastEventIdentifierTool
 
         # Get appropriate database
         db_instance = _get_db(forecast_context.db_path)
@@ -513,7 +513,7 @@ def create_forecast_causal_link(
     try:
         forecast_context = _get_context_from_mcp(ctx)
 
-        from src.tools.forecast_causal_reasoner import ForecastCausalReasonerTool
+        from src.tools.reasoning.forecast_causal_reasoner import ForecastCausalReasonerTool
 
         tool = ForecastCausalReasonerTool(
             forecast_db_path=forecast_context.db_path or db.db_path,
@@ -546,7 +546,7 @@ def inspect_forecast_graph(ctx: Context) -> str:
     try:
         forecast_context = _get_context_from_mcp(ctx)
 
-        from src.tools.forecast_graph_inspector import ForecastGraphInspectorTool
+        from src.tools.inspectors.forecast_graph_inspector import ForecastGraphInspectorTool
 
         tool = ForecastGraphInspectorTool(
             forecast_db_path=forecast_context.db_path or db.db_path,

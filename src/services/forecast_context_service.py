@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Dict, Optional
 
 from src.domain.models import Question
-from src.domain.service_base import ServiceBase
+from src.services.service_base import ServiceBase
 from src.utils.date_utils import parse_flexible_datetime
 from src.utils.logging import logger
 

@@ -11,7 +11,7 @@ import sqlite3
 from src.domain.models import Question, Forecast
 from src.domain.models.question import QuestionType
 from src.domain.models.forecast import ForecastMode
-from src.domain.service_base import ServiceBase
+from src.services.service_base import ServiceBase
 from src.utils.logging import logger
 
 
