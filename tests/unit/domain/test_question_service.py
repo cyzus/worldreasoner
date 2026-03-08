@@ -170,7 +170,7 @@ class TestClearEvidence:
         self, service, sample_question, sample_article, sample_event, sample_hypothesis
     ):
         """Clear evidence removes articles, events, and hypotheses."""
-        service.clear_evidence(sample_question.id, cascade=True)
+        result = service.clear_evidence(sample_question.id, cascade=True)
 
         assert result["articles"] == 1
         assert result["events"] == 2  # evt_001 and evt_002

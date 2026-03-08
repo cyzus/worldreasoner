@@ -183,14 +183,6 @@ async def test_fill_gaps_quota_exceeded(sample_goal, coordinator, mock_runner):
         )
     )
 
-    # Setup progress with source1 already having 60 questions
-    
-    for i in range(60):
-        q = create_test_question(
-            id=f"q_{i}", question_type="binary", source_name="source1"
-        )
-        progress.add_question(q)
-
     # Create analysis
     analysis = GapAnalysis(type_gaps={"binary": 5}, category_gaps={}, total_needed=5)
 

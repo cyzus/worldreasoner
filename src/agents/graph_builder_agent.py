@@ -19,7 +19,7 @@ from src.tools import (
 )
 from src.tools.reasoning.propose_subgraph import ProposeSubgraphTool
 
-from .base import AgentFactory
+from .factory import AgentFactory
 
 
 class MarkGraphBuiltTool(Tool):

@@ -199,6 +199,12 @@ class QuestionService:
             if self.db.delete(EventOutcomeImpact, impact.id):
                 deleted["impacts"].append(impact.id)
 
+        # Reset graph fields so question can be reprocessed
+        question.causal_explanation = None
+        question.graph_built = False
+        question.graph_build_error = None
+        self.db.save(Question, question)
+
         logger.debug(
             f"Cleared evidence for {question_id}: "
             f"{len(deleted['articles'])} articles, {len(deleted['events'])} events, "
