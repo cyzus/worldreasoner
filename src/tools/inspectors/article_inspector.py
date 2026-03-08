@@ -162,7 +162,7 @@ ERROR: {error}
         builder = InspectorReportBuilder("ARTICLE COVERAGE INSPECTOR")
 
         # Overview
-        builder.add_kv("Question ID", self.question_id)
+        builder.add_kv("Question Title", question.question_text)
         builder.add_kv("Total Articles", len(articles))
         builder.add_time_window(
             question.resolution_date, question.estimated_start_time, indent=0
