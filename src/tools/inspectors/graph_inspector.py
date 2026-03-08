@@ -151,9 +151,15 @@ class GraphInspectorTool(DatabaseAwareTool):
         # Find orphan events (related to question but not in any hypothesis)
         orphan_event_ids = set()
         if question:
-            # Check outcome events
+            # Check outcome events - only flag non-ground-truth outcomes as orphans
+            # if they truly should be connected (i.e. the actual outcome)
             for oid in question.outcome_event_ids or []:
                 if oid not in event_ids:
+                    outcome_evt = self.db.get(Event, oid)
+                    # Skip non-actual outcome events for MCQ questions - they're
+                    # intentionally not connected (agent only builds chains for ground truth)
+                    if outcome_evt and outcome_evt.is_outcome and not outcome_evt.is_actual_outcome:
+                        continue
                     orphan_event_ids.add(oid)
             # Check legacy target event
             if question.target_event_id and question.target_event_id not in event_ids:

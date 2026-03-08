@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from src.core.database import GenericDatabase
 from src.domain.models import Question, Article, Event, CausalHypothesis
+from src.domain.models.event_outcome_impact import EventOutcomeImpact
 from src.utils.logging import logger
 
 
@@ -189,10 +190,17 @@ class QuestionService:
             if self.db.delete(Article, aid):
                 deleted["articles"].append(aid)
 
+        # Delete event outcome impacts for this question
+        impacts = self.db.get_many(EventOutcomeImpact, filters={"question_id": question_id})
+        deleted["impacts"] = []
+        for impact in impacts:
+            if self.db.delete(EventOutcomeImpact, impact.id):
+                deleted["impacts"].append(impact.id)
+
         logger.debug(
             f"Cleared evidence for {question_id}: "
             f"{len(deleted['articles'])} articles, {len(deleted['events'])} events, "
-            f"{len(deleted['causal_hypotheses'])} hypotheses"
+            f"{len(deleted['causal_hypotheses'])} hypotheses, {len(deleted['impacts'])} impacts"
         )
 
         # Return simple count dict
@@ -200,6 +208,7 @@ class QuestionService:
             "articles": len(deleted["articles"]),
             "events": len(deleted["events"]),
             "hypotheses": len(deleted["causal_hypotheses"]),
+            "impacts": len(deleted["impacts"]),
         }
 
     def delete_question(
