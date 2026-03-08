@@ -455,6 +455,8 @@ class QuestionCollectionOrchestrator:
                 for horizon, count in missing["time_horizons"].items():
                     target = (self.goal.time_horizon_distribution or {}).get(horizon, 0)
                     collected = target - count
-                    logger.info(f"  {horizon:15} {collected:3}/{target:3} ({count} short)")
+                    logger.info(
+                        f"  {horizon:15} {collected:3}/{target:3} ({count} short)"
+                    )
 
         return missing

@@ -24,7 +24,9 @@ class EventReviewCriteria(BaseModel):
     min_events: int = 10
     min_depth: int = 1  # Lowered default - causal links may not exist yet
     require_time_coverage: bool = True
-    check_factual_accuracy: bool = False  # Disabled by default - causal depth check is expensive
+    check_factual_accuracy: bool = (
+        False  # Disabled by default - causal depth check is expensive
+    )
     check_temporal_validity: bool = True
 
 
@@ -78,7 +80,9 @@ class EventReviewService(ServiceBase):
         if llm_config is None:
             llm_config = get_config().llm
         if llm_config.review_model:
-            llm_config = llm_config.model_copy(update={"model": llm_config.review_model})
+            llm_config = llm_config.model_copy(
+                update={"model": llm_config.review_model}
+            )
         if review_model:
             llm_config = llm_config.model_copy(update={"model": review_model})
         print(f"Using review model: {llm_config.model}")
@@ -131,7 +135,9 @@ class EventReviewService(ServiceBase):
         for idx, event in enumerate(events, 1):
             # Auto-approve outcome events (automatically generated Yes/No outcomes)
             if event.is_outcome:
-                logger.info(f"[{idx}/{total_events}] Auto-approving outcome event: {event.id}")
+                logger.info(
+                    f"[{idx}/{total_events}] Auto-approving outcome event: {event.id}"
+                )
                 event.review_status = ReviewStatus.APPROVED
                 event.review_note = "Auto-approved (outcome event)"
                 event.updated_at = datetime.now(timezone.utc)
@@ -207,7 +213,9 @@ class EventReviewService(ServiceBase):
                     skipped += 1
                     logger.info(f"Skipping {qid}: does not meet criteria")
             if skipped > 0:
-                console.print(f"[yellow]Skipped {skipped} questions that don't meet criteria[/yellow]")
+                console.print(
+                    f"[yellow]Skipped {skipped} questions that don't meet criteria[/yellow]"
+                )
             question_ids = filtered_ids
 
         if not question_ids:
@@ -216,6 +224,7 @@ class EventReviewService(ServiceBase):
 
         if seed is not None:
             import random
+
             random.seed(seed)
             random.shuffle(question_ids)
 
@@ -268,7 +277,8 @@ class EventReviewService(ServiceBase):
             result = json.loads(response)
         except json.JSONDecodeError:
             import re
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+
+            json_match = re.search(r"\{.*\}", response, re.DOTALL)
             if json_match:
                 try:
                     result = json.loads(json_match.group())
@@ -419,7 +429,9 @@ Provide your review as JSON:
 
         return {
             "min_events": has_enough_events,
-            "time_coverage": has_time_coverage if self.criteria.require_time_coverage else True,
+            "time_coverage": has_time_coverage
+            if self.criteria.require_time_coverage
+            else True,
             "min_depth": has_depth if self.criteria.check_factual_accuracy else True,
         }
 
@@ -484,9 +496,7 @@ Provide your review as JSON:
             return 1
 
         return 1 + max(
-            self._calculate_depth(
-                self.db.get(Event, h.source_event_id), visited.copy()
-            )
+            self._calculate_depth(self.db.get(Event, h.source_event_id), visited.copy())
             for h in incoming
             if self.db.get(Event, h.source_event_id)
         )

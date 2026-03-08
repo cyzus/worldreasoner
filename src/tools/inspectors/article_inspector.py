@@ -17,9 +17,6 @@ from src.tools.inspectors.formatting import (
     InspectorReportBuilder,
     format_inspector_header,
     format_time_window,
-    format_coverage_range,
-    render_monthly_bar_chart,
-    format_timeline_gaps,
 )
 
 
@@ -163,48 +160,46 @@ ERROR: {error}
     ) -> str:
         """Format the article analysis as visual text."""
         builder = InspectorReportBuilder("ARTICLE COVERAGE INSPECTOR")
-        
+
         # Overview
         builder.add_kv("Question ID", self.question_id)
         builder.add_kv("Total Articles", len(articles))
-        builder.add_time_window(question.resolution_date, question.estimated_start_time, indent=0)
+        builder.add_time_window(
+            question.resolution_date, question.estimated_start_time, indent=0
+        )
         builder.add_line()
 
         # Timeline section
         if timeline_data.get("has_dates"):
             builder.add_section_header("TIMELINE DISTRIBUTION")
-            
+
             # Coverage range
             earliest = timeline_data.get("earliest")
             if earliest:
                 builder.add_coverage_range(
-                    earliest, 
+                    earliest,
                     ensure_timezone_aware(question.resolution_date),
                     question.resolution_date,
                     question.estimated_start_time,
-                    item_type="Article"
+                    item_type="Article",
                 )
                 builder.add_line()
 
             # Monthly bar chart
             builder.add_monthly_bar_chart(
-                timeline_data.get("monthly", {}), 
-                item_type="Articles"
+                timeline_data.get("monthly", {}), item_type="Articles"
             )
 
         # Gaps section
         if gaps:
             builder.add_timeline_gaps(
-                gaps, 
-                min_gap_label=">7 days", 
-                max_display=5, 
-                compact=False
+                gaps, min_gap_label=">7 days", max_display=5, compact=False
             )
 
         # Source diversity
         builder.add_section_header("SOURCE DIVERSITY")
-        builder.add_kv("Unique Sources", source_data['unique_sources'], indent=2)
-        builder.add_kv("Unique Domains", source_data['unique_domains'], indent=2)
+        builder.add_kv("Unique Sources", source_data["unique_sources"], indent=2)
+        builder.add_kv("Unique Domains", source_data["unique_domains"], indent=2)
         builder.add_line()
         builder.add_line("Top Sources:", indent=2)
         for source, count in source_data["top_sources"]:
@@ -214,17 +209,19 @@ ERROR: {error}
         # Coverage quality
         builder.add_section_header("COVERAGE QUALITY")
         metrics = {
-            "Quality Score": quality['score'],
-            "Volume": quality['volume_score'],
-            "Diversity": quality['diversity_score'],
-            "Coverage": quality['coverage_score'],
+            "Quality Score": quality["score"],
+            "Volume": quality["volume_score"],
+            "Diversity": quality["diversity_score"],
+            "Coverage": quality["coverage_score"],
         }
         if timeline_data.get("has_dates"):
-            metrics.update({
-                "Distribution": quality['distribution_score'],
-                "Gap Severity": quality['gap_severity']
-            })
-            
+            metrics.update(
+                {
+                    "Distribution": quality["distribution_score"],
+                    "Gap Severity": quality["gap_severity"],
+                }
+            )
+
         builder.add_metrics(metrics)
         builder.add_line()
 

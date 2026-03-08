@@ -4,7 +4,7 @@ These utilities can be used by both backend tools and frontend API endpoints
 to analyze article collections.
 """
 
-from typing import List, Dict, Optional
+from typing import List, Dict
 from collections import defaultdict
 from datetime import datetime
 

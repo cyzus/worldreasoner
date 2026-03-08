@@ -92,7 +92,10 @@ class GapFiller:
             if needed_count <= 0:
                 continue
             can_serve_category = any(
-                [await runner.can_provide(category=category) for runner in self.sources.values()]
+                [
+                    await runner.can_provide(category=category)
+                    for runner in self.sources.values()
+                ]
             )
             if not can_serve_category:
                 logger.warning(
@@ -115,6 +118,7 @@ class GapFiller:
             if needed_count <= 0:
                 continue
             from src.config.collection_goal import TimeHorizon
+
             try:
                 th = TimeHorizon(horizon)
                 min_d, max_d = TimeHorizon.get_day_range(th)
@@ -142,7 +146,9 @@ class GapFiller:
             and not analysis.category_gaps
             and not analysis.time_horizon_gaps
         ):
-            logger.info(f"Filling total gap: {analysis.total_needed} questions (any type/category)")
+            logger.info(
+                f"Filling total gap: {analysis.total_needed} questions (any type/category)"
+            )
             questions = await self._collect_with_filters(
                 remaining=analysis.total_needed,
                 type_filter=None,

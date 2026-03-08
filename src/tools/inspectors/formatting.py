@@ -43,12 +43,12 @@ class InspectorReportBuilder:
         self,
         resolution_date: datetime,
         estimated_start_time: Optional[datetime],
-        indent: int = 0
+        indent: int = 0,
     ) -> "InspectorReportBuilder":
         """Add standardized time window display."""
         q_resolution = ensure_timezone_aware(resolution_date)
         prefix = " " * indent
-        
+
         if estimated_start_time:
             q_start = ensure_timezone_aware(estimated_start_time)
             self.lines.append(
@@ -57,8 +57,10 @@ class InspectorReportBuilder:
             window_days = (q_resolution - q_start).days
             self.lines.append(f"{prefix}- Window Span: {window_days} days")
         else:
-            self.lines.append(f"{prefix}- Resolution Date: {q_resolution.strftime('%Y-%m-%d')}")
-        
+            self.lines.append(
+                f"{prefix}- Resolution Date: {q_resolution.strftime('%Y-%m-%d')}"
+            )
+
         return self
 
     def add_coverage_range(
@@ -68,7 +70,7 @@ class InspectorReportBuilder:
         resolution_date: datetime,
         estimated_start_time: Optional[datetime],
         item_type: str = "Item",
-        indent: int = 0
+        indent: int = 0,
     ) -> "InspectorReportBuilder":
         """Add item coverage range info."""
         earliest = ensure_timezone_aware(earliest)
@@ -80,13 +82,17 @@ class InspectorReportBuilder:
             f"{prefix}- {item_type} Range: {earliest.strftime('%Y-%m-%d')} -> {latest.strftime('%Y-%m-%d')} ({span_days} days)"
         )
 
-        q_start = ensure_timezone_aware(estimated_start_time) if estimated_start_time else None
+        q_start = (
+            ensure_timezone_aware(estimated_start_time)
+            if estimated_start_time
+            else None
+        )
         if q_start and earliest > q_start:
             gap_days = (earliest - q_start).days
             self.lines.append(
                 f"{prefix}  - WARNING: Missing early coverage ({gap_days} days)"
             )
-        
+
         return self
 
     def add_monthly_bar_chart(
@@ -94,7 +100,7 @@ class InspectorReportBuilder:
         monthly_data: Dict[str, int],
         item_type: str = "Items",
         bar_width: int = 20,
-        indent: int = 0
+        indent: int = 0,
     ) -> "InspectorReportBuilder":
         """Add compact monthly distribution."""
         prefix = " " * indent
@@ -107,12 +113,12 @@ class InspectorReportBuilder:
 
         for month in sorted(monthly_data.keys()):
             count = monthly_data[month]
-            # Use smaller bar or just text for efficiency? 
+            # Use smaller bar or just text for efficiency?
             # Interactive text charts are good, but maybe keep it smaller.
             bar_len = int((count / max_count) * bar_width) if max_count > 0 else 0
             bar = "|" * bar_len
             self.lines.append(f"{prefix}  - {month}: {bar} ({count})")
-        
+
         return self
 
     def add_timeline_gaps(
@@ -121,7 +127,7 @@ class InspectorReportBuilder:
         min_gap_label: str,
         max_display: int = 5,
         compact: bool = True,
-        indent: int = 0
+        indent: int = 0,
     ) -> "InspectorReportBuilder":
         """Add timeline gaps section."""
         if not gaps:
@@ -131,18 +137,20 @@ class InspectorReportBuilder:
 
         prefix = " " * indent
         for gap in gaps[:max_display]:
-            start_str = gap['start'].strftime('%Y-%m-%d')
-            end_str = gap['end'].strftime('%Y-%m-%d')
-            days = gap['days']
-            self.lines.append(f"{prefix}  - GAP: {start_str} -> {end_str} ({days} days)")
-            
+            start_str = gap["start"].strftime("%Y-%m-%d")
+            end_str = gap["end"].strftime("%Y-%m-%d")
+            days = gap["days"]
+            self.lines.append(
+                f"{prefix}  - GAP: {start_str} -> {end_str} ({days} days)"
+            )
+
         return self
 
     def add_metrics(
         self,
         metrics: Dict[str, float],
         labels: Optional[Dict[str, str]] = None,
-        indent: int = 0
+        indent: int = 0,
     ) -> "InspectorReportBuilder":
         """Add aligned metric lines (compact)."""
         if not metrics:
@@ -154,10 +162,10 @@ class InspectorReportBuilder:
         for k, v in metrics.items():
             label = labels.get(k, k)
             if isinstance(v, (float, int)) and not isinstance(v, bool):
-                 self.lines.append(f"{prefix}- {label}: {v:.2f}")
+                self.lines.append(f"{prefix}- {label}: {v:.2f}")
             else:
-                 self.lines.append(f"{prefix}- {label}: {v}")
-            
+                self.lines.append(f"{prefix}- {label}: {v}")
+
         return self
 
     def build(self) -> str:
@@ -211,7 +219,9 @@ def format_coverage_range(
         q_start = ensure_timezone_aware(estimated_start_time)
         if earliest > q_start:
             gap_days = (earliest - q_start).days
-            lines.append(f"{indent}  - WARNING: Missing early coverage ({gap_days} days)")
+            lines.append(
+                f"{indent}  - WARNING: Missing early coverage ({gap_days} days)"
+            )
     return lines
 
 

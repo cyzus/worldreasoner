@@ -843,7 +843,8 @@ async def get_question_price_history(
         False, description="Include detected turning points in response"
     ),
     min_turning_point_change: float = Query(
-        5.0, description="Minimum change (percentage points) for turning point detection"
+        5.0,
+        description="Minimum change (percentage points) for turning point detection",
     ),
     db: GenericDatabase = Depends(get_database),
 ):
@@ -1040,8 +1041,12 @@ async def get_question_price_history(
 @router.get("/{question_id}/price_turning_points")
 async def get_price_turning_points(
     question_id: str,
-    min_change_pct: float = Query(5.0, description="Minimum price change for turning points (percentage points)"),
-    create_events: bool = Query(False, description="Create Event records from turning points"),
+    min_change_pct: float = Query(
+        5.0, description="Minimum price change for turning points (percentage points)"
+    ),
+    create_events: bool = Query(
+        False, description="Create Event records from turning points"
+    ),
     db: GenericDatabase = Depends(get_database),
 ):
     """Detect and return major turning points in the market price curve.
@@ -1063,7 +1068,10 @@ async def get_price_turning_points(
             "created_events": [...],  # Event IDs if create_events=True
         }
     """
-    from src.integrations.polymarket import analyze_price_curve, get_price_history_for_market
+    from src.integrations.polymarket import (
+        analyze_price_curve,
+        get_price_history_for_market,
+    )
     from src.domain.models import Event
 
     try:
@@ -1122,7 +1130,8 @@ async def get_price_turning_points(
         analysis = analyze_price_curve(
             primary_history,
             min_turning_point_change=min_change_pct,
-            min_sharp_movement_change=min_change_pct * 2,  # Sharp movements need bigger change
+            min_sharp_movement_change=min_change_pct
+            * 2,  # Sharp movements need bigger change
         )
 
         created_event_ids = []
@@ -1141,16 +1150,16 @@ async def get_price_turning_points(
 
                 # Generate event title based on turning point type
                 if tp["type"] == "peak":
-                    title = f"Market peak: {primary_outcome} reached {tp['price']*100:.1f}%"
+                    title = f"Market peak: {primary_outcome} reached {tp['price'] * 100:.1f}%"
                     description = (
-                        f"Market probability for '{primary_outcome}' peaked at {tp['price']*100:.1f}%, "
+                        f"Market probability for '{primary_outcome}' peaked at {tp['price'] * 100:.1f}%, "
                         f"rising {tp['change_before']:.1f}pp before reversing down {abs(tp['change_after']):.1f}pp. "
                         f"This turning point suggests a shift in market sentiment."
                     )
                 else:
-                    title = f"Market trough: {primary_outcome} dropped to {tp['price']*100:.1f}%"
+                    title = f"Market trough: {primary_outcome} dropped to {tp['price'] * 100:.1f}%"
                     description = (
-                        f"Market probability for '{primary_outcome}' reached a low of {tp['price']*100:.1f}%, "
+                        f"Market probability for '{primary_outcome}' reached a low of {tp['price'] * 100:.1f}%, "
                         f"dropping {abs(tp['change_before']):.1f}pp before recovering {tp['change_after']:.1f}pp. "
                         f"This turning point suggests a shift in market sentiment."
                     )
@@ -1177,7 +1186,9 @@ async def get_price_turning_points(
 
                 db.save(Event, event)
                 created_event_ids.append(event.id)
-                logger.info(f"Created turning point event: {event.id} ({tp['type']} at {event_time})")
+                logger.info(
+                    f"Created turning point event: {event.id} ({tp['type']} at {event_time})"
+                )
 
         logger.info(
             f"Price analysis complete for {question_id}: "
@@ -1197,6 +1208,7 @@ async def get_price_turning_points(
         raise
     except Exception as e:
         import traceback
+
         logger.error(f"Failed to analyze price curve: {e}")
         logger.error(f"Full traceback:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1418,6 +1430,7 @@ async def get_causal_path_analysis(
 
         # Check if question has a target event
         from src.analysis.graph_analysis import resolve_target_event_id
+
         resolved = resolve_target_event_id(question, db)
         if not resolved:
             return {
@@ -1473,9 +1486,7 @@ async def get_causal_path_analysis(
         event_ids = list(set(event_ids))  # Deduplicate
 
         # Get path information for each event
-        event_path_info = analyzer.get_path_for_events(
-            event_ids, resolved
-        )
+        event_path_info = analyzer.get_path_for_events(event_ids, resolved)
 
         logger.info(
             f"Found {stats['total_paths']} paths to target, "
@@ -1630,6 +1641,8 @@ async def delete_question(
 
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{question_id}/articles")
 async def get_question_articles(
     question_id: str,
@@ -1654,10 +1667,13 @@ async def get_question_articles(
             )
 
         # Get all articles for this question
-        articles = db.get_many(Article, filters={"collected_for_question_id": question_id})
+        articles = db.get_many(
+            Article, filters={"collected_for_question_id": question_id}
+        )
 
         # Sort by published_date
         from datetime import timezone
+
         aware_min = datetime.min.replace(tzinfo=timezone.utc)
         articles.sort(key=lambda a: a.published_date or aware_min)
 
@@ -1669,5 +1685,6 @@ async def get_question_articles(
     except Exception as e:
         logger.error(f"Failed to fetch question articles: {e}")
         import traceback
+
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))

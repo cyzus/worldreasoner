@@ -48,7 +48,9 @@ async def get_graph(
         None, description="Filter outcomes to specific question"
     ),
     # Limits
-    max_nodes: Optional[int] = Query(100, ge=1, le=10000),  # Increased to support larger graphs
+    max_nodes: Optional[int] = Query(
+        100, ge=1, le=10000
+    ),  # Increased to support larger graphs
     max_edges: Optional[int] = Query(500, ge=1, le=20000),  # Increased proportionally
     # Dependency injection
     graph_service: SQLiteGraphService = Depends(get_graph_service),

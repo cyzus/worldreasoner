@@ -97,7 +97,7 @@ class HindsightAgent(BaseAgent):
 
         # Causal analysis specialist (event creation, graph building, depth evaluation)
         # Tools get question_id for provenance tracking
-        causal_agent = CodeAgent(
+        _causal_agent = CodeAgent(
             model=llm_model,
             tools=[
                 QuestionArticlesTool(
@@ -133,7 +133,7 @@ class HindsightAgent(BaseAgent):
             description=GRAPH_AGENT_DESCRIPTION,
         )
 
-        managed_agents = [evidence_agent, causal_agent]
+        managed_agents = [evidence_agent]
 
         # Manager tools (high-level coordination)
         tools = tools + [

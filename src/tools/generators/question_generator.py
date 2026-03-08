@@ -239,7 +239,9 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
                             f"NEVER put future dates in ground_truth. If outcome is unknown, don't create this question."
                         )
                         return QuestionOutput(
-                            id="error", question_text=question_text, status=f"rejected: {error_msg}"
+                            id="error",
+                            question_text=question_text,
+                            status=f"rejected: {error_msg}",
                         )
 
         # CRITICAL VALIDATION: If ground_truth provided, resolution_reasoning must be provided
@@ -251,7 +253,9 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
                 "Example: 'Based on CoinMarketCap data showing BTC closed at $95,431 on Dec 31, 2024'"
             )
             return QuestionOutput(
-                id="error", question_text=question_text, status="rejected: ground_truth provided but resolution_reasoning missing"
+                id="error",
+                question_text=question_text,
+                status="rejected: ground_truth provided but resolution_reasoning missing",
             )
 
         # VALIDATION: If resolution_reasoning provided without ground_truth, reject
@@ -262,7 +266,9 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
                 "For unresolved questions, omit resolution_reasoning."
             )
             return QuestionOutput(
-                id="error", question_text=question_text, status="rejected: resolution_reasoning provided but ground_truth missing"
+                id="error",
+                question_text=question_text,
+                status="rejected: resolution_reasoning provided but ground_truth missing",
             )
 
         # Parse event IDs

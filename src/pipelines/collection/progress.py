@@ -159,9 +159,13 @@ class CollectionProgress(BaseModel):
         # Check time horizon distribution (if specified)
         if goal.time_horizon_distribution:
             for horizon, minimum in goal.time_horizon_distribution.items():
-                actual = by_time_horizon.get(horizon.value if hasattr(horizon, 'value') else horizon, 0)
+                actual = by_time_horizon.get(
+                    horizon.value if hasattr(horizon, "value") else horizon, 0
+                )
                 if actual < minimum:
-                    logger.debug(f"Time horizon '{horizon}' not met: {actual}/{minimum}")
+                    logger.debug(
+                        f"Time horizon '{horizon}' not met: {actual}/{minimum}"
+                    )
                     return False
 
         logger.info("Goal met!")

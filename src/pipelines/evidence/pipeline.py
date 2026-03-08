@@ -18,7 +18,7 @@ from src.pipelines.base import Pipeline, PipelineStageResult, PipelineStageStatu
 from src.pipelines.prompts import HindsightCausalAnalysisPrompts
 from src.config.pipeline import EvidencePipelineConfig
 from src.config import DatabaseConfig
-from src.domain.models import Question, Article, CausalHypothesis, Event
+from src.domain.models import Question, Article, CausalHypothesis
 from src.core.database import GenericDatabase
 from src.agents.hindsight_agent import HindsightAgent
 from src.utils.logging import logger
@@ -273,6 +273,7 @@ class EvidencePipeline(Pipeline):
 
             # 1b. Resolve target event (actual outcome) for the agent
             from src.analysis.graph_analysis import resolve_target_event_id
+
             resolved_target = resolve_target_event_id(question, db)
 
             # 2. Fetch market analysis (turning points + lead changes) for Polymarket questions
@@ -332,13 +333,17 @@ class EvidencePipeline(Pipeline):
                 # 8. Check Failure Conditions
                 status = "success"
                 failure_reason = None
-                
+
                 if article_metrics["score"] == 0.0:
                     status = "failed"
-                    failure_reason = "Article quality is zero (no/insufficient articles)"
+                    failure_reason = (
+                        "Article quality is zero (no/insufficient articles)"
+                    )
                 elif graph_metrics["score"] == 0.0:
                     status = "failed"
-                    failure_reason = "Graph quality is zero (no/insufficient causal hypotheses)"
+                    failure_reason = (
+                        "Graph quality is zero (no/insufficient causal hypotheses)"
+                    )
                 elif graph_metrics["max_depth"] < self.min_graph_depth:
                     status = "failed"
                     failure_reason = f"Graph depth ({graph_metrics['max_depth']}) below minimum ({self.min_graph_depth})"
@@ -379,9 +384,12 @@ class EvidencePipeline(Pipeline):
                     "failure_reason": str(e),
                 }
 
-    def _get_or_create_outcomes(self, question: Question, db: GenericDatabase) -> List[Any]:
+    def _get_or_create_outcomes(
+        self, question: Question, db: GenericDatabase
+    ) -> List[Any]:
         """Get existing outcome events or create default ones."""
         from src.services.outcome_event_service import OutcomeEventService
+
         outcome_service = OutcomeEventService(db)
         outcome_events = outcome_service.get_outcome_events_for_question(question.id)
 
@@ -389,11 +397,15 @@ class EvidencePipeline(Pipeline):
             outcome_events = outcome_service.auto_create_outcome_events(question)
             # Ensure actual outcome flags are correctly set for non-boolean ground truths.
             outcome_events = outcome_service.ensure_actual_outcome_alignment(question)
-            logger.info(f"[{question.id}] Auto-created {len(outcome_events)} outcome events")
+            logger.info(
+                f"[{question.id}] Auto-created {len(outcome_events)} outcome events"
+            )
         else:
             # Backfill legacy data where is_actual_outcome may be missing/incorrect.
             outcome_events = outcome_service.ensure_actual_outcome_alignment(question)
-            logger.debug(f"[{question.id}] Found {len(outcome_events)} existing outcome events")
+            logger.debug(
+                f"[{question.id}] Found {len(outcome_events)} existing outcome events"
+            )
         return outcome_events
 
     async def _fetch_market_analysis(self, question: Question) -> Dict[str, Any]:
@@ -422,7 +434,10 @@ class EvidencePipeline(Pipeline):
             return empty_result
 
         try:
-            from src.integrations.polymarket import get_price_history_for_market, analyze_price_curve
+            from src.integrations.polymarket import (
+                get_price_history_for_market,
+                analyze_price_curve,
+            )
 
             # Fetch price history
             price_history = await get_price_history_for_market(
@@ -475,20 +490,19 @@ class EvidencePipeline(Pipeline):
         all_hypotheses = db.get_many(CausalHypothesis)
 
         question_hypotheses = [
-            h for h in all_hypotheses
-            if question_id in h.discovered_by_question_ids
+            h for h in all_hypotheses if question_id in h.discovered_by_question_ids
         ]
 
         evidence_article_ids = set()
         for hyp in question_hypotheses:
             evidence_article_ids.update(hyp.evidence_article_ids)
 
-        evidence_articles = [
-            a for a in all_articles if a.id in evidence_article_ids
-        ]
+        evidence_articles = [a for a in all_articles if a.id in evidence_article_ids]
         return evidence_articles, question_hypotheses
 
-    def _calculate_article_metrics(self, articles: List[Article], question: Question) -> Dict[str, Any]:
+    def _calculate_article_metrics(
+        self, articles: List[Article], question: Question
+    ) -> Dict[str, Any]:
         """Calculate quality metrics for the collected articles."""
         if not articles:
             logger.warning(f"[{question.id}] No evidence articles - quality: 0.0")
@@ -504,9 +518,10 @@ class EvidencePipeline(Pipeline):
 
         coverage_start = (
             ensure_timezone_aware(question.estimated_start_time)
-            if question.estimated_start_time else None
+            if question.estimated_start_time
+            else None
         )
-        
+
         timeline_data = analyze_timeline(
             articles,
             question.resolution_date,
@@ -531,10 +546,10 @@ class EvidencePipeline(Pipeline):
         return {"score": quality_metrics["score"], "metrics": quality_metrics}
 
     def _calculate_graph_metrics(
-        self, 
-        hypotheses: List[CausalHypothesis], 
-        question: Question, 
-        db: GenericDatabase
+        self,
+        hypotheses: List[CausalHypothesis],
+        question: Question,
+        db: GenericDatabase,
     ) -> Dict[str, Any]:
         """Calculate quality metrics for the causal graph."""
         if not hypotheses:
@@ -543,11 +558,12 @@ class EvidencePipeline(Pipeline):
 
         # Resolve target event using shared utility
         from src.analysis.graph_analysis import resolve_target_event_id
+
         target_event_id = resolve_target_event_id(question, db, hypotheses)
-        
+
         # NOTE: No longer persisting target_event_id on question (deprecated).
         # Outcome events are managed via outcome_event_ids + is_actual_outcome.
-        
+
         # Fallback only if resolve_target_event_id returned None
         if not target_event_id:
             all_targets = set(h.target_event_id for h in hypotheses)
@@ -555,6 +571,7 @@ class EvidencePipeline(Pipeline):
                 target_event_id = list(all_targets)[0]
 
         from src.analysis.graph_analysis import calculate_graph_quality
+
         metrics = calculate_graph_quality(
             hypotheses=hypotheses,
             target_event_id=target_event_id,
@@ -566,9 +583,9 @@ class EvidencePipeline(Pipeline):
             f"(depth: {metrics['max_depth']})"
         )
         return {
-            "score": metrics['quality_score'],
-            "max_depth": metrics['max_depth'],
-            "metrics": metrics
+            "score": metrics["quality_score"],
+            "max_depth": metrics["max_depth"],
+            "metrics": metrics,
         }
 
     def _load_resolved_questions(self) -> List[Question]:

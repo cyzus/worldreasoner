@@ -131,11 +131,19 @@ class ForecastCausalReasonerTool(Tool):
             # Validate ranges
             if not (0.0 <= strength <= 1.0):
                 return ForecastHypothesisOutput(
-                    status="error", hypothesis_id="error", relation="", strength=0.0, confidence=0.0
+                    status="error",
+                    hypothesis_id="error",
+                    relation="",
+                    strength=0.0,
+                    confidence=0.0,
                 )
             if not (0.0 <= confidence <= 1.0):
                 return ForecastHypothesisOutput(
-                    status="error", hypothesis_id="error", relation="", strength=0.0, confidence=0.0
+                    status="error",
+                    hypothesis_id="error",
+                    relation="",
+                    strength=0.0,
+                    confidence=0.0,
                 )
             # Parse article IDs
             article_ids = [
@@ -171,5 +179,9 @@ class ForecastCausalReasonerTool(Tool):
         except Exception as e:
             logger.error(f"Error creating forecast causal link: {e}")
             return ForecastHypothesisOutput(
-                status="error", hypothesis_id="error", relation="", strength=0.0, confidence=0.0
+                status="error",
+                hypothesis_id="error",
+                relation="",
+                strength=0.0,
+                confidence=0.0,
             )

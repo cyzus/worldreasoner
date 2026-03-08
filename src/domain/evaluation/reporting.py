@@ -3,11 +3,13 @@
 from typing import Dict, Any
 from src.domain.evaluation.evaluator import EvaluationResult
 
+
 def print_header(title: str, width: int = 80):
     """Print a formatted header."""
     print("=" * width)
     print(title)
     print("=" * width)
+
 
 def print_evaluation_result(result: EvaluationResult, verbose: bool = False):
     """Print a single evaluation result.
@@ -33,6 +35,7 @@ def print_evaluation_result(result: EvaluationResult, verbose: bool = False):
         print("  Metadata:")
         for key, value in result.evaluation_metadata.items():
             print(f"    {key}: {value}")
+
 
 def print_summary_report(report: Dict[str, Any]):
     """Print a summary evaluation report.
@@ -71,6 +74,7 @@ def print_summary_report(report: Dict[str, Any]):
 
     print("\\n" + "=" * 80)
 
+
 def print_benchmark_report(report: Dict[str, Any]):
     """Print benchmark report to console.
 
@@ -86,7 +90,7 @@ def print_benchmark_report(report: Dict[str, Any]):
         model_info = report["model_info"]
         print(f"  Model: {model_info.get('model', 'Unknown')}")
         print(f"  Max Steps: {model_info.get('max_steps', 'N/A')}")
-        
+
     # Execution info
     if "benchmark_info" in report:
         print("\\nExecution Info:")

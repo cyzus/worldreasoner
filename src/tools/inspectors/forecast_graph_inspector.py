@@ -11,7 +11,10 @@ from collections import defaultdict
 from src.domain.models.forecast_graph import ForecastEvent, ForecastHypothesis
 from src.utils.logging import logger
 from src.analysis.graph_visualization import GraphVisualizer
-from src.tools.inspectors.formatting import format_inspector_header, format_section_header
+from src.tools.inspectors.formatting import (
+    format_inspector_header,
+    format_section_header,
+)
 
 
 class ForecastGraphInspectorTool(DatabaseAwareTool):

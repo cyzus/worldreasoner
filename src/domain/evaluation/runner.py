@@ -12,6 +12,7 @@ from src.domain.evaluation.evaluator import ForecastEvaluator
 
 logger = logging.getLogger(__name__)
 
+
 class BenchmarkRunner:
     """Runs benchmark evaluations on questions."""
 
@@ -45,7 +46,7 @@ class BenchmarkRunner:
         min_context_items: int = 3,
         max_steps: int = 15,
         mode: str = "container",
-        verbose: bool = False
+        verbose: bool = False,
     ) -> Dict[str, Any]:
         """Run forecast on a single question and evaluate."""
         try:
@@ -84,7 +85,11 @@ class BenchmarkRunner:
             # Get the submitted forecast
             forecasts = self.db.get_many(Forecast, filters={"question_id": question.id})
             if not forecasts:
-                return {"question_id": question.id, "status": "error", "error": "No forecast created"}
+                return {
+                    "question_id": question.id,
+                    "status": "error",
+                    "error": "No forecast created",
+                }
 
             forecast = max(forecasts, key=lambda f: f.timestamp)
 
@@ -109,7 +114,9 @@ class BenchmarkRunner:
             }
 
         except Exception as e:
-            logger.error(f"Error forecasting question {question.id}: {e}", exc_info=True)
+            logger.error(
+                f"Error forecasting question {question.id}: {e}", exc_info=True
+            )
             return {"question_id": question.id, "status": "error", "error": str(e)}
 
     def run_benchmark(
@@ -121,7 +128,7 @@ class BenchmarkRunner:
         max_steps: int = 15,
         mode: str = "container",
         model_name: Optional[str] = None,
-        verbose: bool = False
+        verbose: bool = False,
     ) -> Dict[str, Any]:
         """Run benchmark on a list of questions."""
         start_time = datetime.now(timezone.utc)
@@ -131,11 +138,11 @@ class BenchmarkRunner:
             self.config.llm.model = model_name
 
         print(f"Running benchmark on {len(questions)} questions...")
-        
+
         for i, question in enumerate(questions, 1):
             if verbose:
                 print(f"[{i}/{len(questions)}] Processing {question.id}...")
-            
+
             result = self.run_single_forecast(
                 question=question,
                 knowledge_cutoff=knowledge_cutoff,
@@ -143,7 +150,7 @@ class BenchmarkRunner:
                 min_context_items=min_context_items,
                 max_steps=max_steps,
                 mode=mode,
-                verbose=verbose
+                verbose=verbose,
             )
             results.append(result)
 
@@ -153,20 +160,26 @@ class BenchmarkRunner:
         # Generate report
         successful = [r for r in results if r["status"] == "success"]
         failed = [r for r in results if r["status"] == "error"]
-        
+
         accuracy = 0.0
         if successful:
             correct_count = sum(1 for r in successful if r["evaluation"]["is_correct"])
             accuracy = correct_count / len(successful)
 
-        brier_scores = [r["evaluation"]["brier_score"] for r in successful if r["evaluation"]["brier_score"] is not None]
+        brier_scores = [
+            r["evaluation"]["brier_score"]
+            for r in successful
+            if r["evaluation"]["brier_score"] is not None
+        ]
         avg_brier = sum(brier_scores) / len(brier_scores) if brier_scores else None
 
         return {
             "benchmark_info": {
                 "timestamp": end_time.isoformat(),
                 "duration_seconds": duration,
-                "questions_per_minute": (len(results) / duration * 60) if duration > 0 else 0,
+                "questions_per_minute": (len(results) / duration * 60)
+                if duration > 0
+                else 0,
             },
             "model_info": {
                 "model": self.config.llm.model,

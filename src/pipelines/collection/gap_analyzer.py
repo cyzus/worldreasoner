@@ -15,12 +15,19 @@ class GapAnalysis:
     type_gaps: Dict[str, int]  # qtype -> count needed
     category_gaps: Dict[str, int]  # category -> count needed
     total_needed: int
-    time_horizon_gaps: Dict[str, int] = field(default_factory=dict)  # horizon -> count needed
+    time_horizon_gaps: Dict[str, int] = field(
+        default_factory=dict
+    )  # horizon -> count needed
 
     @property
     def has_gaps(self) -> bool:
         """Check if any gaps exist."""
-        return bool(self.total_needed > 0 or self.type_gaps or self.category_gaps or self.time_horizon_gaps)
+        return bool(
+            self.total_needed > 0
+            or self.type_gaps
+            or self.category_gaps
+            or self.time_horizon_gaps
+        )
 
     @property
     def type_gaps_list(self) -> List[str]:
@@ -94,7 +101,7 @@ class GapAnalyzer:
         time_horizon_gaps_dict = {}
         if goal.time_horizon_distribution:
             for horizon, target in goal.time_horizon_distribution.items():
-                horizon_key = horizon.value if hasattr(horizon, 'value') else horizon
+                horizon_key = horizon.value if hasattr(horizon, "value") else horizon
                 actual = by_time_horizon.get(horizon_key, 0)
                 gap = max(0, target - actual)
                 if gap > 0:

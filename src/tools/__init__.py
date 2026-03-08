@@ -16,6 +16,8 @@ from .reasoning.record_outcome_impact import RecordOutcomeImpactTool
 from .reasoning.delete_event import DeleteEventTool
 from .reasoning.delete_hypothesis import DeleteHypothesisTool
 from .generators.question_events import QuestionEventsTool
+from .generators.save_explanation import SaveExplanationTool
+from .reasoning.propose_subgraph import ProposeSubgraphTool
 
 __all__ = [
     "ArticleCollectorTool",
@@ -34,4 +36,6 @@ __all__ = [
     "RecordOutcomeImpactTool",
     "DeleteEventTool",
     "DeleteHypothesisTool",
+    "SaveExplanationTool",
+    "ProposeSubgraphTool",
 ]

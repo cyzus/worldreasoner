@@ -6,9 +6,8 @@ so it can be passed to ArticleCollectorTool which will fetch full content.
 """
 
 import feedparser
-import json
 
-from typing import List, Dict, Any
+from typing import List
 from datetime import datetime
 
 from smolagents import Tool
@@ -74,12 +73,14 @@ class RssFetchTool(Tool):
                 "summary", entry.get("content", [{"value": ""}])[0].get("value", "")
             )
 
-            items.append(RssFeedItem(
-                title=title,
-                link=link,
-                published=published_iso,
-                summary=summary,
-            ))
+            items.append(
+                RssFeedItem(
+                    title=title,
+                    link=link,
+                    published=published_iso,
+                    summary=summary,
+                )
+            )
 
         return RssFetchOutput(
             feed_url=feed_url,

@@ -24,15 +24,15 @@ class ForecastSlot(str, Enum):
     """
 
     EARLY = "early"  # 20% into window — plenty of context missing
-    MID = "mid"      # 50% into window — balanced (default)
-    LATE = "late"    # 80% into window — most context available
+    MID = "mid"  # 50% into window — balanced (default)
+    LATE = "late"  # 80% into window — most context available
 
 
 #: Mapping from ForecastSlot to fraction of window elapsed from window_start.
 SLOT_FRACTIONS: dict = {
     ForecastSlot.EARLY: 0.20,
-    ForecastSlot.MID:   0.50,
-    ForecastSlot.LATE:  0.80,
+    ForecastSlot.MID: 0.50,
+    ForecastSlot.LATE: 0.80,
 }
 
 
@@ -83,7 +83,7 @@ def get_forecast_date_for_slot(
         f"Forecast slot '{slot.value}' for question {question.id}: "
         f"simulated_date={simulated_date.date()} "
         f"(window {window_start.date()} → {window_end.date()}, "
-        f"{span.days}d span, {fraction*100:.0f}% elapsed)"
+        f"{span.days}d span, {fraction * 100:.0f}% elapsed)"
     )
 
     return {

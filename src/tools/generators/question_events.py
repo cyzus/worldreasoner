@@ -1,12 +1,10 @@
 """Tool to retrieve events related to a question."""
 
-import json
 from typing import Optional
-from datetime import datetime, timezone
 
 from src.tools.base.database_mixin import DatabaseAwareTool
 from src.tools.base.output_models import QuestionEventsOutput
-from src.domain.models import Event, Question, ReviewStatus
+from src.domain.models import Event, Question
 from src.utils.logging import logger
 from src.tools.base.schema_helper import pydantic_to_output_schema
 
@@ -79,11 +77,11 @@ class QuestionEventsTool(DatabaseAwareTool):
 
         # Collect all event IDs related to this question
         event_ids = set()
-        
+
         # From outcome_event_ids
         if question.outcome_event_ids:
             event_ids.update(question.outcome_event_ids)
-        
+
         # Note: target_event_id (legacy) no longer read — outcome_event_ids covers it
 
         # From related_event_ids
@@ -135,12 +133,16 @@ class QuestionEventsTool(DatabaseAwareTool):
             }
 
             if include_descriptions:
-                event_data["description"] = event.description[:200] + "..." \
-                    if len(event.description) > 200 else event.description
+                event_data["description"] = (
+                    event.description[:200] + "..."
+                    if len(event.description) > 200
+                    else event.description
+                )
 
             if event.is_outcome:
-                event_data["outcome_scenario"] = event.outcome_scenario.value \
-                    if event.outcome_scenario else None
+                event_data["outcome_scenario"] = (
+                    event.outcome_scenario.value if event.outcome_scenario else None
+                )
                 event_data["is_actual_outcome"] = event.is_actual_outcome
                 outcome_events.append(event_data)
             else:
@@ -149,11 +151,11 @@ class QuestionEventsTool(DatabaseAwareTool):
         # Sort by date
         outcome_events.sort(
             key=lambda e: e.get("occurred_date") or e.get("predicted_date") or "",
-            reverse=True
+            reverse=True,
         )
         regular_events.sort(
             key=lambda e: e.get("occurred_date") or e.get("predicted_date") or "",
-            reverse=True
+            reverse=True,
         )
 
         # Highlight the actual outcome for easy identification
@@ -162,7 +164,6 @@ class QuestionEventsTool(DatabaseAwareTool):
             if oe.get("is_actual_outcome"):
                 actual_outcome_id = oe["id"]
                 break
-
 
         return QuestionEventsOutput(
             outcome_events=outcome_events,

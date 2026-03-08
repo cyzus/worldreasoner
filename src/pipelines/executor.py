@@ -53,11 +53,15 @@ class PipelineExecutor:
         if pipeline_type == PipelineType.COLLECTION:
             result = await self._run_collection(on_progress, **kwargs)
         elif pipeline_type == PipelineType.NEWS_COLLECTION:
-            result = await self._run_news_collection(on_progress, collection_config=kwargs)
+            result = await self._run_news_collection(
+                on_progress, collection_config=kwargs
+            )
         elif pipeline_type == PipelineType.EVIDENCE:
             result = await self._run_evidence(question_ids, on_progress, **kwargs)
         elif pipeline_type == PipelineType.ADAPTIVE_EVIDENCE:
-            result = await self._run_adaptive_evidence(question_ids, on_progress, **kwargs)
+            result = await self._run_adaptive_evidence(
+                question_ids, on_progress, **kwargs
+            )
         elif pipeline_type == PipelineType.FORECAST:
             result = await self._run_forecast(question_ids, on_progress, **kwargs)
         elif pipeline_type == PipelineType.EVALUATION:
@@ -138,10 +142,15 @@ class PipelineExecutor:
 
         Returns a skip-reason string if sufficient, None if processing is needed.
         """
-        from src.analysis.graph_analysis import resolve_target_event_id, calculate_graph_quality
+        from src.analysis.graph_analysis import (
+            resolve_target_event_id,
+            calculate_graph_quality,
+        )
 
         all_hypotheses = self.db.get_many(CausalHypothesis)
-        hypotheses = [h for h in all_hypotheses if question.id in h.discovered_by_question_ids]
+        hypotheses = [
+            h for h in all_hypotheses if question.id in h.discovered_by_question_ids
+        ]
 
         if not hypotheses:
             return None
@@ -180,7 +189,9 @@ class PipelineExecutor:
             elif index_stats["status"] == "no_articles":
                 logger.warning("No articles to index")
             else:
-                logger.error(f"Indexing failed: {index_stats.get('error', 'Unknown error')}")
+                logger.error(
+                    f"Indexing failed: {index_stats.get('error', 'Unknown error')}"
+                )
         except Exception as e:
             logger.error(f"Failed to auto-index articles: {e}")
 
@@ -640,7 +651,9 @@ class PipelineExecutor:
                     results.failed.append({"id": qid, "error": "Question not found"})
                     continue
 
-                skip_reason = self._check_sufficient_evidence(question, min_depth=min_graph_depth)
+                skip_reason = self._check_sufficient_evidence(
+                    question, min_depth=min_graph_depth
+                )
                 if skip_reason:
                     results.skipped.append({"id": qid, "reason": skip_reason})
                     continue
@@ -691,7 +704,10 @@ class PipelineExecutor:
         """Run forecasting on questions."""
         from src.agents.forecast_agent import ForecastAgent
         from src.core.llm import get_knowledge_cutoff_date
-        from src.domain.models.question_helpers import ForecastSlot, get_forecast_date_for_slot
+        from src.domain.models.question_helpers import (
+            ForecastSlot,
+            get_forecast_date_for_slot,
+        )
         from src.pipelines.prompts.forecast import get_forecast_instructions
 
         results = PipelineResult([], [], [], 0.0)

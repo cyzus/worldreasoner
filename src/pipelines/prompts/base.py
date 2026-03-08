@@ -143,6 +143,7 @@ class BasePromptGenerator(ABC, Generic[T]):
         if time_horizon_hints:
             # Provide specific day ranges for each horizon
             from src.config.collection_goal import TimeHorizon
+
             horizon_descriptions = []
             for h in time_horizon_hints:
                 try:

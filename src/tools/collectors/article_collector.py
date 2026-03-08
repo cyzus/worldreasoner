@@ -1,7 +1,6 @@
 """Article collection tool using web search for scraping."""
 
 import hashlib
-import json
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -15,7 +14,6 @@ from src.tools.base.schema_helper import pydantic_to_output_schema
 from src.tools.collectors.web_fetch import WebFetchTool
 from src.tools.base.base import CollectorAwareTool
 from src.tools.base.output_models import ArticleOutput
-
 
 
 class ArticleCollectorTool(CollectorAwareTool[Article]):
@@ -177,14 +175,16 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
                     source=existing.source,
                     status="already_exists",
                     word_count=existing.word_count,
-                    published_date=existing.published_date.isoformat() if existing.published_date else None,
+                    published_date=existing.published_date.isoformat()
+                    if existing.published_date
+                    else None,
                 )
 
         # STAGE 2: Fetch content (only if URL not found)
         # This avoids passing large content through the LLM
         try:
             web_output = self.web_visitor.forward(url)
-            
+
             # WebFetchTool returns WebFetchOutput object now
             if not web_output.success or not web_output.content:
                 # Return error as ArticleOutput
@@ -195,7 +195,7 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
                     url=url,
                     status=f"error: {error_msg}",
                 )
-            
+
             content = web_output.content
             if len(content.strip()) < 100:
                 return ArticleOutput(
@@ -257,7 +257,7 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         # Validate and convert domain
         domain_enum = parse_domain(domain, default=Domain.GENERAL)
         if domain_enum is None:
-             domain_enum = Domain.GENERAL
+            domain_enum = Domain.GENERAL
 
         # Generate unique ID
         article_id = generate_article_id(domain_enum, pub_date, len(self.seen_hashes))
@@ -310,7 +310,7 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         status_msg = "stored"
         if time_window_validation:
             status_msg = "stored_with_warnings"
-        
+
         return ArticleOutput(
             id=article.id,
             title=article.title,

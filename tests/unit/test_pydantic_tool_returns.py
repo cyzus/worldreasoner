@@ -63,16 +63,16 @@ def _validate_tool_return_type(tool_name: str, result, expected_type):
             # Convert to dict and back to validate
             result_dict = result.model_dump() if hasattr(result, 'model_dump') else result.dict()
             validated = expected_type(**result_dict)
-            print(f"✅ Pydantic validation passed")
+            print("✅ Pydantic validation passed")
             print(f"   Fields: {list(result_dict.keys())}")
             print(f"   Sample: {str(result)[:200]}")
             return True
     except ValidationError as e:
-        print(f"❌ FAILED: Pydantic validation error")
+        print("❌ FAILED: Pydantic validation error")
         print(f"   {e}")
         return False
     except Exception as e:
-        print(f"⚠️  WARNING: Unexpected error during validation")
+        print("⚠️  WARNING: Unexpected error during validation")
         print(f"   {e}")
         return False
 

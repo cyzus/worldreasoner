@@ -73,7 +73,7 @@ class ForecastSubmissionService(ServiceBase):
             options_text = ""
             if question.question_type == QuestionType.MCQ and question.options:
                 options_text = f" Valid options are: {question.options}"
-                
+
             return (
                 False,
                 None,

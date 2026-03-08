@@ -189,7 +189,10 @@ class QuestionMonitorService(ServiceBase):
         if question_hypotheses:
             question = self.db.get(Question, question_id)
             from src.analysis.graph_analysis import resolve_target_event_id
-            target_event_id = resolve_target_event_id(question, self.db, question_hypotheses)
+
+            target_event_id = resolve_target_event_id(
+                question, self.db, question_hypotheses
+            )
 
             if target_event_id:
                 quality_metrics = calculate_graph_quality(

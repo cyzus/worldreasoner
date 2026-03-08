@@ -103,7 +103,9 @@ class ForecastContextService(ServiceBase):
 
         # Generate session ID if not provided
         if not session_id:
-            session_id = f"session_{question_id}_{int(datetime.now(timezone.utc).timestamp())}"
+            session_id = (
+                f"session_{question_id}_{int(datetime.now(timezone.utc).timestamp())}"
+            )
             logger.warning(f"No session_id in headers, generated new one: {session_id}")
 
         return ForecastContext(

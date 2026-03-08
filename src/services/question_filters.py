@@ -27,9 +27,7 @@ def filter_questions_by_type(
         Filtered list of questions
     """
     logger.debug(f"Filtering by types: {allowed_types}")
-    logger.debug(
-        f"Question types in input: {set(q.question_type for q in questions)}"
-    )
+    logger.debug(f"Question types in input: {set(q.question_type for q in questions)}")
     return [q for q in questions if q.question_type in allowed_types]
 
 

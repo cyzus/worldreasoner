@@ -137,8 +137,10 @@ class GenericDatabase(Generic[T]):
     """
 
     def __init__(
-        self, db_path: str = "worldreasoner.db", cutoff_date: Optional[datetime] = None,
-        timeout: float = 30.0
+        self,
+        db_path: str = "worldreasoner.db",
+        cutoff_date: Optional[datetime] = None,
+        timeout: float = 30.0,
     ):
         """Initialize database connection.
 
@@ -186,14 +188,14 @@ class GenericDatabase(Generic[T]):
         # Skip for in-memory databases
         if str(self.db_path) == ":memory:" or self.db_path.name == ":memory:":
             return
-            
+
         if not self.db_path.exists():
             self.db_path.touch()
 
     @contextmanager
     def _get_connection(self):
         """Get database connection context manager.
-        
+
         If inside a batch() context, reuses the shared connection.
         Otherwise creates a new connection per operation.
         """
@@ -222,11 +224,11 @@ class GenericDatabase(Generic[T]):
     @contextmanager
     def batch(self):
         """Context manager for batching multiple operations in a single transaction.
-        
+
         Reuses a single connection and wraps all operations in a transaction.
         Commits on success, rolls back on error. Individual operation commits
         are deferred until the batch exits.
-        
+
         Usage:
             with db.batch():
                 db.save(Article, article1)

@@ -75,7 +75,10 @@ from src.utils.enums import serialize_domain
 from src.analysis.graph_analysis import resolve_target_event_id
 
 # Import services
-from src.services.forecast_context_service import ForecastContextService, ForecastContext
+from src.services.forecast_context_service import (
+    ForecastContextService,
+    ForecastContext,
+)
 from src.services.article_operations_service import ArticleOperationsService
 from src.services.forecast_submission_service import ForecastSubmissionService
 
@@ -256,10 +259,10 @@ def get_question(ctx: Context) -> str:
     try:
         # Get context
         forecast_context = _get_context_from_mcp(ctx)
-        
+
         # Get appropriate database
         db_instance = _get_db(forecast_context.db_path)
-        
+
         # Load question using service (optionally passing db)
         question = context_service.get_question_for_context(forecast_context)
 
@@ -464,7 +467,9 @@ def identify_forecast_event(
     try:
         forecast_context = _get_context_from_mcp(ctx)
 
-        from src.tools.reasoning.forecast_event_identifier import ForecastEventIdentifierTool
+        from src.tools.reasoning.forecast_event_identifier import (
+            ForecastEventIdentifierTool,
+        )
 
         # Get appropriate database
         db_instance = _get_db(forecast_context.db_path)
@@ -513,7 +518,9 @@ def create_forecast_causal_link(
     try:
         forecast_context = _get_context_from_mcp(ctx)
 
-        from src.tools.reasoning.forecast_causal_reasoner import ForecastCausalReasonerTool
+        from src.tools.reasoning.forecast_causal_reasoner import (
+            ForecastCausalReasonerTool,
+        )
 
         tool = ForecastCausalReasonerTool(
             forecast_db_path=forecast_context.db_path or db.db_path,
@@ -546,7 +553,9 @@ def inspect_forecast_graph(ctx: Context) -> str:
     try:
         forecast_context = _get_context_from_mcp(ctx)
 
-        from src.tools.inspectors.forecast_graph_inspector import ForecastGraphInspectorTool
+        from src.tools.inspectors.forecast_graph_inspector import (
+            ForecastGraphInspectorTool,
+        )
 
         tool = ForecastGraphInspectorTool(
             forecast_db_path=forecast_context.db_path or db.db_path,
@@ -763,5 +772,4 @@ Connection Metadata (provided by MCP client):
 
 
 if __name__ == "__main__":
-
     main()

@@ -43,8 +43,9 @@ class LiteLLMClient:
                 return response["choices"][0]["message"]["content"]
             # Empty choices — transient API hiccup
             if attempt < _EMPTY_CHOICES_MAX_RETRIES:
-                wait = _EMPTY_CHOICES_BACKOFF_BASE ** attempt
+                wait = _EMPTY_CHOICES_BACKOFF_BASE**attempt
                 from src.utils.logging import logger
+
                 logger.warning(
                     f"LLM returned empty choices (attempt {attempt + 1}/{_EMPTY_CHOICES_MAX_RETRIES}), "
                     f"retrying in {wait:.1f}s..."
@@ -68,12 +69,10 @@ class LiteLLMClient:
         """
         # Use provided model or default to config model
         embedding_model = model or self.llm_config.get("embedding_model")
-        
+
         # Add num_retries=3 for robustness
         response = await litellm.aembedding(
-            model=embedding_model, 
-            input=inputs,
-            num_retries=3
+            model=embedding_model, input=inputs, num_retries=3
         )
         return [item["embedding"] for item in response["data"]]
 

@@ -2,13 +2,12 @@
 
 import pytest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from src.domain.models.question_helpers import (
     ForecastSlot,
     SLOT_FRACTIONS,
     get_forecast_date_for_slot,
-    calculate_forecast_context_window,
 )
 from src.domain.models import Question
 from src.domain.models.question import QuestionType

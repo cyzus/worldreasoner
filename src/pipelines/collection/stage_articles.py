@@ -1,6 +1,5 @@
 """Article collection stage for Question Pipeline."""
 
-import json
 import asyncio
 from typing import List, Optional, Dict, Union
 from datetime import datetime

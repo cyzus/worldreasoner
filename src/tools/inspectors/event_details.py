@@ -1,6 +1,6 @@
 """Tool for retrieving full event details and linked article content."""
 
-from typing import List, Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 from src.tools.base.database_mixin import DatabaseAwareTool
 from src.tools.base.base import ToolResponseMixin
 from src.tools.base.output_models import EventDetailsOutput
@@ -112,10 +112,18 @@ class EventDetailsTool(DatabaseAwareTool, ToolResponseMixin):
             "title": event.title,
             "description": event.description,  # Full description
             "occurred_date": str(event.occurred_date) if event.occurred_date else None,
-            "predicted_date": str(event.predicted_date) if event.predicted_date else None,
-            "event_type": event.event_type.value if hasattr(event.event_type, "value") else event.event_type,
-            "domain": event.domain.value if hasattr(event.domain, "value") else event.domain,
-            "status": event.status.value if hasattr(event.status, "value") else event.status,
+            "predicted_date": str(event.predicted_date)
+            if event.predicted_date
+            else None,
+            "event_type": event.event_type.value
+            if hasattr(event.event_type, "value")
+            else event.event_type,
+            "domain": event.domain.value
+            if hasattr(event.domain, "value")
+            else event.domain,
+            "status": event.status.value
+            if hasattr(event.status, "value")
+            else event.status,
             "metadata": event.metadata,
             "tags": event.tags if hasattr(event, "tags") else [],
         }

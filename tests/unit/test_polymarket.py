@@ -375,7 +375,7 @@ async def test_real_market_turning_points():
         min_sharp_movement_change=10.0,
     )
 
-    logger.info(f"\nCurve Summary:")
+    logger.info("\nCurve Summary:")
     if analysis["summary"]:
         summary = analysis["summary"]
         logger.info(f"  Time range: {summary['time_range_days']:.1f} days")

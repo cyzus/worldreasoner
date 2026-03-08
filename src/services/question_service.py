@@ -191,7 +191,9 @@ class QuestionService:
                 deleted["articles"].append(aid)
 
         # Delete event outcome impacts for this question
-        impacts = self.db.get_many(EventOutcomeImpact, filters={"question_id": question_id})
+        impacts = self.db.get_many(
+            EventOutcomeImpact, filters={"question_id": question_id}
+        )
         deleted["impacts"] = []
         for impact in impacts:
             if self.db.delete(EventOutcomeImpact, impact.id):
@@ -300,7 +302,9 @@ class QuestionService:
         referencing_questions = [
             q.id
             for q in all_questions
-            if event_id in (q.outcome_event_ids or []) or q.target_event_id == event_id or event_id in (q.related_event_ids or [])
+            if event_id in (q.outcome_event_ids or [])
+            or q.target_event_id == event_id
+            or event_id in (q.related_event_ids or [])
         ]
 
         if referencing_questions:

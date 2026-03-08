@@ -7,7 +7,11 @@ from .orchestrator import QuestionCollectionOrchestrator, OrchestratorConfig
 from .runner_base import QuestionSourceRunner, CollectionResult
 from .runner_polymarket import PolymarketRunner
 from .runner_news import NewsBasedRunner
-from .stage_articles import ArticleSource, ArticleCollectionConfig, ArticleCollectionStage
+from .stage_articles import (
+    ArticleSource,
+    ArticleCollectionConfig,
+    ArticleCollectionStage,
+)
 from .stage_news_questions import NewsQuestionGenerationStage
 from .stage_quality import QuestionQualityRankingStage
 

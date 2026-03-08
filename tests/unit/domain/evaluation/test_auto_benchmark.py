@@ -6,14 +6,11 @@ from unittest.mock import MagicMock, patch
 
 from src.domain.evaluation.auto_benchmark import (
     AutoBenchmarkService,
-    AutoBenchmarkProgress,
     ConditionResult,
 )
 from src.domain.evaluation.conditions import (
     ConditionName,
-    ExperimentCondition,
     EXPERIMENT_CONDITIONS,
-    get_conditions,
 )
 
 

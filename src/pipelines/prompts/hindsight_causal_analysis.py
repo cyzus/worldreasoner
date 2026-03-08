@@ -93,17 +93,18 @@ MANAGER AGENT: Inspect the evidence/article collection yourself. If insufficient
 
 NOTE - if evidence collection constantly fails, there's no way you can build a event graph. You should keep trying until you get enough evidence.
 
-2. BUILD DEEP EVENT GRAPH WITH OUTCOME IMPACTS:
-   Call causal_analyzer to build deep event relationship graph:
-   - Target: {min_evidence_articles}+ events, {min_graph_depth}+ depth levels
-   - For each significant event, analyze its impact on outcome likelihood
-   - Record both positive and negative impacts (symmetric analysis)
-   - Draw relationship between events using causal_reasoner
-   - Use graph_inspector to verify quality, depth, and outcome impacts
-
-MANAGER AGENT: Inspect the event graph yourself. If insufficient, repeat step 2.
-
-3. EVALUATE & ITERATE step 1 or 2 based on your own assessment."""
+2. WRITE CAUSAL EXPLANATION:
+   With hindsight (ground truth: {ground_truth}), write a detailed NL explanation
+   of HOW the outcome came about based on your collected evidence. 
+   Follow the explanation format exactly:
+   - For each significant event: "Event Title occurred on YYYY-MM-DD [art_id]. Description..."
+   - Explicit causal language between events (e.g. "This caused/triggered [Next Event]")
+   - Outcome clearly identified: "This resulted in [OutcomeEventTitle], which is the actual outcome."
+   - Impact on each possible outcome: "Impact on Option A: positive - because..."
+   
+   Call save_explanation to store it. The GraphBuilderAgent will read this explanation later
+   to build the structured graph.
+"""
 
 
 class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
@@ -205,8 +206,12 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
         outcome_events_info = self._format_outcome_events(outcome_events)
 
         # Format market analysis section (turning points + lead changes)
-        market_turning_points_section = self._format_turning_points_section(turning_points, lead_changes)
-        turning_points_evidence_hint = self._format_turning_points_hint(turning_points, lead_changes)
+        market_turning_points_section = self._format_turning_points_section(
+            turning_points, lead_changes
+        )
+        turning_points_evidence_hint = self._format_turning_points_hint(
+            turning_points, lead_changes
+        )
 
         # Build the prompt
         return self.AGENT_TEMPLATE.format(
@@ -247,7 +252,9 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
 
         return "\n".join(lines)
 
-    def _format_turning_points_section(self, turning_points: list, lead_changes: list = None) -> str:
+    def _format_turning_points_section(
+        self, turning_points: list, lead_changes: list = None
+    ) -> str:
         """Format market turning points and lead changes as a prompt section.
 
         Args:
@@ -264,7 +271,9 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
             from datetime import datetime
 
             lines.append("\nLEAD CHANGES (when market prediction flipped):")
-            lines.append("These are moments when the favored outcome changed. CRITICAL events to investigate:")
+            lines.append(
+                "These are moments when the favored outcome changed. CRITICAL events to investigate:"
+            )
 
             for lc in lead_changes:
                 lc_time = datetime.fromtimestamp(lc["timestamp"])
@@ -281,7 +290,9 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
                 if lc.get("time_in_previous_state_hours"):
                     time_info = f" [was in previous state for {lc['time_in_previous_state_hours']:.1f}h]"
 
-                lines.append(f"- {lc_time.strftime('%Y-%m-%d %H:%M')}: {desc}{time_info}")
+                lines.append(
+                    f"- {lc_time.strftime('%Y-%m-%d %H:%M')}: {desc}{time_info}"
+                )
 
         # Format turning points
         if turning_points:
@@ -291,7 +302,9 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
                 lines.append("")  # Add spacing
 
             lines.append("TURNING POINTS (significant price reversals):")
-            lines.append("These are moments when market sentiment shifted significantly:")
+            lines.append(
+                "These are moments when market sentiment shifted significantly:"
+            )
 
             for tp in turning_points[:5]:  # Top 5 most significant
                 tp_time = datetime.fromtimestamp(tp["timestamp"])
@@ -312,7 +325,9 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
 
         return "\n".join(lines)
 
-    def _format_turning_points_hint(self, turning_points: list, lead_changes: list = None) -> str:
+    def _format_turning_points_hint(
+        self, turning_points: list, lead_changes: list = None
+    ) -> str:
         """Format evidence collection hint based on turning points and lead changes.
 
         Args:
@@ -349,11 +364,19 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
 
         lines = []
         if critical_dates:
-            lines.append(f"\n   CRITICAL DATES (lead changes - market prediction flipped): {', '.join(critical_dates)}")
-            lines.append("   These are the MOST IMPORTANT dates - find what news caused the market to flip its prediction.")
+            lines.append(
+                f"\n   CRITICAL DATES (lead changes - market prediction flipped): {', '.join(critical_dates)}"
+            )
+            lines.append(
+                "   These are the MOST IMPORTANT dates - find what news caused the market to flip its prediction."
+            )
 
         if priority_dates:
-            lines.append(f"\n   PRIORITY DATES (from turning points): {', '.join(priority_dates)}")
-            lines.append("   Search for news around these dates - they mark significant sentiment shifts.")
+            lines.append(
+                f"\n   PRIORITY DATES (from turning points): {', '.join(priority_dates)}"
+            )
+            lines.append(
+                "   Search for news around these dates - they mark significant sentiment shifts."
+            )
 
         return "\n".join(lines)

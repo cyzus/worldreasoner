@@ -31,20 +31,22 @@ def _detect_turning_points_local(
         current_price = current["p"]
         current_time = current["t"]
 
-        lookback_prices = [sorted_history[j]["p"] for j in range(i - effective_lookback, i)]
-        lookahead_prices = [sorted_history[j]["p"] for j in range(i + 1, i + effective_lookahead + 1)]
+        lookback_prices = [
+            sorted_history[j]["p"] for j in range(i - effective_lookback, i)
+        ]
+        lookahead_prices = [
+            sorted_history[j]["p"] for j in range(i + 1, i + effective_lookahead + 1)
+        ]
 
         first_lookback_price = sorted_history[i - effective_lookback]["p"]
         last_lookahead_price = sorted_history[i + effective_lookahead]["p"]
 
-        is_peak = (
-            current_price >= max(lookback_prices) and
-            current_price >= max(lookahead_prices)
+        is_peak = current_price >= max(lookback_prices) and current_price >= max(
+            lookahead_prices
         )
 
-        is_trough = (
-            current_price <= min(lookback_prices) and
-            current_price <= min(lookahead_prices)
+        is_trough = current_price <= min(lookback_prices) and current_price <= min(
+            lookahead_prices
         )
 
         if not (is_peak or is_trough):
@@ -111,7 +113,9 @@ def _detect_turning_points_pelt_bic(
         import numpy as np
         import ruptures as rpt
     except ImportError:
-        logger.warning("ruptures not installed; falling back to local turning-point detection")
+        logger.warning(
+            "ruptures not installed; falling back to local turning-point detection"
+        )
         return _detect_turning_points_local(
             sorted_history=sorted_history,
             min_change_pct=min_change_pct,
@@ -141,7 +145,7 @@ def _detect_turning_points_pelt_bic(
         sigma = 1e-6
 
     # BIC-style penalty for mean-shift segmentation (scaled for tuning).
-    penalty = max(1e-8, pelt_penalty_scale * np.log(max(n_points, 2)) * (sigma ** 2))
+    penalty = max(1e-8, pelt_penalty_scale * np.log(max(n_points, 2)) * (sigma**2))
 
     algo = rpt.Pelt(
         model="l2",
@@ -161,7 +165,7 @@ def _detect_turning_points_pelt_bic(
         if right_anchor - left_anchor < 2:
             continue
 
-        window_prices = prices[left_anchor:right_anchor + 1]
+        window_prices = prices[left_anchor : right_anchor + 1]
         peak_idx = int(left_anchor + int(np.argmax(window_prices)))
         trough_idx = int(left_anchor + int(np.argmin(window_prices)))
 
@@ -343,15 +347,17 @@ def detect_sharp_movements(
             if abs(change_pct) >= min_change_pct:
                 duration_hours = (end_time - start_time) / 3600
 
-                movements.append({
-                    "start_timestamp": start_time,
-                    "end_timestamp": end_time,
-                    "start_price": round(start_price, 4),
-                    "end_price": round(end_price, 4),
-                    "change_pct": round(change_pct, 2),
-                    "direction": "up" if change_pct > 0 else "down",
-                    "duration_hours": round(duration_hours, 2),
-                })
+                movements.append(
+                    {
+                        "start_timestamp": start_time,
+                        "end_timestamp": end_time,
+                        "start_price": round(start_price, 4),
+                        "end_price": round(end_price, 4),
+                        "change_pct": round(change_pct, 2),
+                        "direction": "up" if change_pct > 0 else "down",
+                        "duration_hours": round(duration_hours, 2),
+                    }
+                )
 
     # Remove overlapping movements, keeping the most significant
     if not movements:
@@ -366,7 +372,9 @@ def detect_sharp_movements(
         overlaps = False
         for existing in filtered:
             # Check if time ranges overlap significantly
-            overlap_start = max(movement["start_timestamp"], existing["start_timestamp"])
+            overlap_start = max(
+                movement["start_timestamp"], existing["start_timestamp"]
+            )
             overlap_end = min(movement["end_timestamp"], existing["end_timestamp"])
             if overlap_end > overlap_start:
                 # There's overlap - skip this one if less significant
@@ -443,20 +451,28 @@ def detect_lead_changes(
                 check_price = sorted_history[j]["p"]
                 if crossed_above and check_price >= threshold:
                     # Was above, find when it went below
-                    time_in_previous_state = (curr_time - sorted_history[j + 1]["t"]) / 3600
+                    time_in_previous_state = (
+                        curr_time - sorted_history[j + 1]["t"]
+                    ) / 3600
                     break
                 elif crossed_below and check_price < threshold:
                     # Was below, find when it went above
-                    time_in_previous_state = (curr_time - sorted_history[j + 1]["t"]) / 3600
+                    time_in_previous_state = (
+                        curr_time - sorted_history[j + 1]["t"]
+                    ) / 3600
                     break
 
-        lead_changes.append({
-            "timestamp": curr_time,
-            "price": round(curr_price, 4),
-            "direction": "above" if crossed_above else "below",
-            "previous_price": round(prev_price, 4),
-            "time_in_previous_state_hours": round(time_in_previous_state, 2) if time_in_previous_state else None,
-        })
+        lead_changes.append(
+            {
+                "timestamp": curr_time,
+                "price": round(curr_price, 4),
+                "direction": "above" if crossed_above else "below",
+                "previous_price": round(prev_price, 4),
+                "time_in_previous_state_hours": round(time_in_previous_state, 2)
+                if time_in_previous_state
+                else None,
+            }
+        )
 
         last_change_time = curr_time
 
@@ -514,7 +530,7 @@ def analyze_price_curve(
 
     # Volatility (standard deviation)
     variance = sum((p - avg_price) ** 2 for p in prices) / len(prices)
-    volatility = variance ** 0.5
+    volatility = variance**0.5
 
     # Time range
     time_range_seconds = sorted_history[-1]["t"] - sorted_history[0]["t"]
@@ -522,8 +538,8 @@ def analyze_price_curve(
 
     # Trend (compare first 10% to last 10%)
     n = len(prices)
-    first_segment = prices[:max(1, n // 10)]
-    last_segment = prices[-(max(1, n // 10)):]
+    first_segment = prices[: max(1, n // 10)]
+    last_segment = prices[-(max(1, n // 10)) :]
     avg_first = sum(first_segment) / len(first_segment)
     avg_last = sum(last_segment) / len(last_segment)
 
@@ -781,16 +797,18 @@ async def analyze_question_price_curve(
             event_time = datetime.fromtimestamp(tp["timestamp"], tz=timezone.utc)
 
             if tp["type"] == "peak":
-                title = f"Market peak: {primary_outcome} reached {tp['price']*100:.1f}%"
+                title = (
+                    f"Market peak: {primary_outcome} reached {tp['price'] * 100:.1f}%"
+                )
                 description = (
-                    f"Market probability for '{primary_outcome}' peaked at {tp['price']*100:.1f}%, "
+                    f"Market probability for '{primary_outcome}' peaked at {tp['price'] * 100:.1f}%, "
                     f"rising {tp['change_before']:.1f}pp before reversing down {abs(tp['change_after']):.1f}pp. "
                     f"This turning point indicates a significant shift in market sentiment."
                 )
             else:
-                title = f"Market trough: {primary_outcome} dropped to {tp['price']*100:.1f}%"
+                title = f"Market trough: {primary_outcome} dropped to {tp['price'] * 100:.1f}%"
                 description = (
-                    f"Market probability for '{primary_outcome}' reached a low of {tp['price']*100:.1f}%, "
+                    f"Market probability for '{primary_outcome}' reached a low of {tp['price'] * 100:.1f}%, "
                     f"dropping {abs(tp['change_before']):.1f}pp before recovering {tp['change_after']:.1f}pp. "
                     f"This turning point indicates a significant shift in market sentiment."
                 )

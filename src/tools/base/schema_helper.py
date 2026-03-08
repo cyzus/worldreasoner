@@ -16,7 +16,7 @@ Usage:
         output_schema = pydantic_to_output_schema(MyToolOutput)
 """
 
-from typing import Type, Dict, Any, get_type_hints
+from typing import Type, Dict, Any
 from pydantic import BaseModel
 
 

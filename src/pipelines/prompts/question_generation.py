@@ -314,7 +314,8 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
 
         # Build priority guidance from hints
         priority_guidance = self.build_priority_guidance(
-            type_hints=type_hints, category_hints=category_hints,
+            type_hints=type_hints,
+            category_hints=category_hints,
             time_horizon_hints=time_horizon_hints,
         )
 
@@ -433,7 +434,8 @@ class QuestionGenerationPrompts(ContextualPromptGenerator[Event]):
 
         # Add priority guidance
         priority_guidance = self.build_priority_guidance(
-            type_hints=type_hints, category_hints=category_hints,
+            type_hints=type_hints,
+            category_hints=category_hints,
             time_horizon_hints=time_horizon_hints,
         )
         if priority_guidance:

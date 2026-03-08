@@ -234,7 +234,6 @@ class TemporalGateway:
 
         # Check identified events if database provided
         if db is not None and forecast.identified_events:
-
             for event_id in forecast.identified_events:
                 event = db.get(Event, event_id)
 
@@ -303,8 +302,8 @@ class TemporalGateway:
 
 
 # Module-level ContextVar for async/thread-safe temporal state
-_temporal_cutoff_var: contextvars.ContextVar[Optional[datetime]] = contextvars.ContextVar(
-    "temporal_cutoff", default=None
+_temporal_cutoff_var: contextvars.ContextVar[Optional[datetime]] = (
+    contextvars.ContextVar("temporal_cutoff", default=None)
 )
 
 

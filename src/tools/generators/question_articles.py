@@ -1,4 +1,3 @@
-import json
 from typing import Optional
 from datetime import datetime, timezone
 
@@ -74,10 +73,14 @@ class QuestionArticlesTool(DatabaseAwareTool):
             QuestionArticlesOutput: Pydantic model with paginated article list
         """
         if not self.question_id:
-            return QuestionArticlesOutput(articles=[], total=0, limit=limit, offset=offset)
+            return QuestionArticlesOutput(
+                articles=[], total=0, limit=limit, offset=offset
+            )
 
         if not self.db:
-            return QuestionArticlesOutput(articles=[], total=0, limit=limit, offset=offset)
+            return QuestionArticlesOutput(
+                articles=[], total=0, limit=limit, offset=offset
+            )
 
         # Find articles collected for this question
         all_articles = self.db.get_many(Article)
@@ -130,7 +133,6 @@ class QuestionArticlesTool(DatabaseAwareTool):
                     "word_count": article.word_count,
                 }
             )
-
 
         return QuestionArticlesOutput(
             articles=articles_data,

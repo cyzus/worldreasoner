@@ -4,7 +4,14 @@ import json
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from src.domain.models import Article, Event, EventType, EventStatus, Domain, OutcomeScenario
+from src.domain.models import (
+    Article,
+    Event,
+    EventType,
+    EventStatus,
+    Domain,
+    OutcomeScenario,
+)
 from src.utils.enums import enum_to_list, parse_domain, parse_event_type
 from src.domain.models.id_generator import generate_event_id
 from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
@@ -39,7 +46,7 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
     """
 
     name = "event_identifier"
-    description = f"""Stores identified event data into structured Event format.
+    description = """Stores identified event data into structured Event format.
 
     Use this tool AFTER you've analyzed articles and identified specific events.
     Call this tool once for EACH event you identify (not all at once).
@@ -94,6 +101,8 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
         deduplicate: bool = True,
         time_window_days: int = 60,
         question_id: Optional[str] = None,
+        alias_registry=None,
+        staging: bool = False,
     ):
         """Initialize the event identifier.
 
@@ -115,6 +124,7 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
         # Ensure required tables exist (prevents "no such table" errors on fresh DBs)
         if self.db:
             from src.domain.models.event_outcome_impact import EventOutcomeImpact
+
             self.db.create_table(Event)
             self.db.create_table(EventOutcomeImpact)
 
@@ -123,6 +133,8 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
         self.time_window_days = time_window_days
         self.question_id = question_id  # Provenance context
         self._matcher: Optional[SimilarityMatcher] = None
+        self.alias_registry = alias_registry
+        self.staging = staging
 
         # Initialize similarity matcher if database available
         if self.db:
@@ -266,8 +278,6 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
                 is_outcome=is_outcome,
             )
             is_new = True
-
-
 
         # Handle outcome impacts if provided
         impact_results = []
@@ -657,11 +667,27 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
         elif event.predicted_date:
             event_date_str = event.predicted_date.isoformat()
 
+        # Generate alias if registry is provided
+        alias_val = None
+        if getattr(self, "alias_registry", None):
+            alias_val = self.alias_registry.generate_alias(event.title, event.id)
+
+        actual_outcome_id = None
+        if self.db and getattr(self, "question_id", None):
+            # Try to find the actual outcome event for this question
+            events = self.db.get_many(Event)
+            for e in events:
+                if getattr(e, "extracted_for_question_id", None) == self.question_id and getattr(e, "is_outcome", False) and getattr(e, "is_actual_outcome", False):
+                    actual_outcome_id = e.id
+                    break
+
         return EventOutput(
             id=event.id,
+            alias=alias_val,
             title=event.title,
             domain=event.domain.value if hasattr(event.domain, "value") else str(event.domain),
             status=status_msg,
             occurred_date=event_date_str,
             warnings=all_warnings if all_warnings else None,
+            actual_outcome_event_id=actual_outcome_id,
         )

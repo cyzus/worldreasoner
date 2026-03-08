@@ -152,7 +152,13 @@ class ForecastEventIdentifierTool(Tool):
                 logger.info(f"Reused existing event: {existing.id}")
                 return ForecastEventOutput(
                     status="reused",
-                    event={"id": forecast_event.id, "title": forecast_event.title, "domain": forecast_event.domain.value if hasattr(forecast_event.domain, "value") else forecast_event.domain},
+                    event={
+                        "id": forecast_event.id,
+                        "title": forecast_event.title,
+                        "domain": forecast_event.domain.value
+                        if hasattr(forecast_event.domain, "value")
+                        else forecast_event.domain,
+                    },
                 )
 
             # Create new ForecastEvent

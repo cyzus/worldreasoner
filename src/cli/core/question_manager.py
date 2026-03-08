@@ -133,6 +133,7 @@ class QuestionManager:
             }
             if show_related:
                 from src.analysis.graph_analysis import resolve_target_event_id
+
                 item["target_event_id"] = resolve_target_event_id(q, self.db)
                 item["related_event_count"] = len(q.related_event_ids)
             results.append(item)

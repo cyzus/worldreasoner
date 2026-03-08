@@ -15,8 +15,18 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from src.config.collection_goal import CollectionGoal
-from src.cli.core.options import db_option, source_option, domain_option, limit_option, json_option, get_db_and_manager
-from src.cli.ui.displays import display_question_list, display_question_detail, display_question_stats
+from src.cli.core.options import (
+    db_option,
+    domain_option,
+    limit_option,
+    json_option,
+    get_db_and_manager,
+)
+from src.cli.ui.displays import (
+    display_question_list,
+    display_question_detail,
+    display_question_stats,
+)
 from src.utils.logging import logger
 
 app = typer.Typer(help="Question management and collection commands")

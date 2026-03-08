@@ -94,7 +94,9 @@ class PolymarketRunner(QuestionSourceRunner):
 
         Returns the first matching Domain, or None if no match found.
         """
-        event_tags = {tag.get("slug") for tag in event.get("tags", []) if tag.get("slug")}
+        event_tags = {
+            tag.get("slug") for tag in event.get("tags", []) if tag.get("slug")
+        }
         if not event_tags:
             return None
 
@@ -486,9 +488,11 @@ class PolymarketRunner(QuestionSourceRunner):
             # Apply time horizon post-filtering if hints provided
             if time_horizon_hints and filtered:
                 from .progress import classify_question_time_horizon
+
                 before_horizon = len(filtered)
                 horizon_filtered = [
-                    q for q in filtered
+                    q
+                    for q in filtered
                     if classify_question_time_horizon(q) in time_horizon_hints
                 ]
                 if horizon_filtered:
@@ -822,7 +826,9 @@ class PolymarketRunner(QuestionSourceRunner):
 
         # Log options for debugging
         if mq.options:
-            logger.debug(f"Mapping market {mq.market_id} with {len(mq.options)} options")
+            logger.debug(
+                f"Mapping market {mq.market_id} with {len(mq.options)} options"
+            )
 
         return Question(
             id=f"polymarket_{mq.market_id}",

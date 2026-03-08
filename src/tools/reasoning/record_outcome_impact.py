@@ -12,9 +12,10 @@ from src.tools.base.base import ToolResponseMixin
 from src.tools.base.output_models import OutcomeImpactOutput
 from src.utils.logging import logger
 
+
 class RecordOutcomeImpactTool(Tool, ToolResponseMixin):
     """Tool to record how a specific event affects the likelihood of a given outcome.
-    
+
     This replaces the JSON string in event_identifier with a native typed tool.
     """
 
@@ -27,24 +28,27 @@ class RecordOutcomeImpactTool(Tool, ToolResponseMixin):
 
     inputs = {
         "event_id": {"type": "string", "description": "ID of the event"},
-        "outcome_event_id": {"type": "string", "description": "ID of the outcome event"},
+        "outcome_event_id": {
+            "type": "string",
+            "description": "ID of the outcome event",
+        },
         "direction": {
-            "type": "string", 
+            "type": "string",
             "description": "positive (makes outcome more likely), negative (less likely), or neutral",
-            "enum": ["positive", "negative", "neutral"]
+            "enum": ["positive", "negative", "neutral"],
         },
         "magnitude": {
             "type": "number",
-            "description": "How strong is this impact? (0.0 to 1.0)"
+            "description": "How strong is this impact? (0.0 to 1.0)",
         },
         "confidence": {
             "type": "number",
-            "description": "How confident are you in this assessment? (0.0 to 1.0)"
+            "description": "How confident are you in this assessment? (0.0 to 1.0)",
         },
         "reasoning": {
             "type": "string",
-            "description": "Explanation of why the event impacts the outcome this way"
-        }
+            "description": "Explanation of why the event impacts the outcome this way",
+        },
     }
     output_type = "object"
     output_schema = pydantic_to_output_schema(OutcomeImpactOutput)
@@ -53,10 +57,11 @@ class RecordOutcomeImpactTool(Tool, ToolResponseMixin):
         """Initialize the tool."""
         super().__init__()
         self.question_id = question_id
-        
+
         from src.core.database import GenericDatabase
+
         self.db = GenericDatabase(db_path) if db_path else None
-        
+
         if self.db:
             self.db.create_table(EventOutcomeImpact)
             self.db.create_table(Event)
@@ -71,15 +76,13 @@ class RecordOutcomeImpactTool(Tool, ToolResponseMixin):
         reasoning: str,
     ) -> OutcomeImpactOutput:
         """Record an outcome impact.
-        
+
         Returns:
             JSON confirmation with impact ID
         """
         if not self.db:
             return OutcomeImpactOutput(
-                status="error",
-                impact_id="error",
-                error="Database is not initialized."
+                status="error", impact_id="error", error="Database is not initialized."
             )
 
         # Validate events exist
@@ -88,15 +91,15 @@ class RecordOutcomeImpactTool(Tool, ToolResponseMixin):
             return OutcomeImpactOutput(
                 status="error",
                 impact_id="error",
-                error=f"event_id '{event_id}' not found. Create it first with event_identifier."
+                error=f"event_id '{event_id}' not found. Create it first with event_identifier.",
             )
-            
+
         outcome = self.db.get(Event, outcome_event_id)
         if not outcome:
             return OutcomeImpactOutput(
                 status="error",
                 impact_id="error",
-                error=f"outcome_event_id '{outcome_event_id}' not found."
+                error=f"outcome_event_id '{outcome_event_id}' not found.",
             )
 
         # Parse direction
@@ -106,7 +109,7 @@ class RecordOutcomeImpactTool(Tool, ToolResponseMixin):
             return OutcomeImpactOutput(
                 status="error",
                 impact_id="error",
-                error=f"Invalid direction '{direction}'. Must be positive, negative, or neutral."
+                error=f"Invalid direction '{direction}'. Must be positive, negative, or neutral.",
             )
 
         # Clamp values
@@ -116,10 +119,10 @@ class RecordOutcomeImpactTool(Tool, ToolResponseMixin):
         # Create impact record
         impact_id = f"imp_{uuid.uuid4().hex[:8]}"
         current_time = datetime.now(timezone.utc)
-        
+
         # question_id is required
         qid = self.question_id or "unknown_question"
-        
+
         impact = EventOutcomeImpact(
             id=impact_id,
             event_id=event_id,
@@ -138,7 +141,4 @@ class RecordOutcomeImpactTool(Tool, ToolResponseMixin):
         self.db.save(EventOutcomeImpact, impact)
         logger.debug(f"Recorded outcome impact {impact_id}")
 
-        return OutcomeImpactOutput(
-            status="recorded",
-            impact_id=impact_id
-        )
+        return OutcomeImpactOutput(status="recorded", impact_id=impact_id)

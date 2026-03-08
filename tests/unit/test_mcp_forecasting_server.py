@@ -9,7 +9,6 @@ we test via the underlying function references stored on the FunctionTool.fn att
 
 import json
 import pytest
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch, AsyncMock
 

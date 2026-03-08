@@ -72,6 +72,8 @@ class ArticleRetrievalTool(DatabaseAwareTool, ToolResponseMixin):
             url=article.url,
             content=article.content,  # Full content!
             source=article.source,
-            published_date=article.published_date.isoformat() if article.published_date else None,
+            published_date=article.published_date.isoformat()
+            if article.published_date
+            else None,
             word_count=article.word_count,
         )

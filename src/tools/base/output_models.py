@@ -10,7 +10,6 @@ These models serve as:
 """
 
 from typing import List, Optional, Dict, Any
-from datetime import datetime
 from pydantic import BaseModel, Field
 
 
@@ -77,10 +76,16 @@ class EventOutput(BaseModel):
     """Output model for EventIdentifierTool."""
 
     id: str = Field(description="Event ID")
+    alias: Optional[str] = Field(
+        default=None,
+        description="Short semantic label for the event (e.g., E1:KhameneiDeath)",
+    )
     title: str = Field(description="Event title")
     domain: str = Field(description="Event domain (tech, finance, etc.)")
     status: str = Field(description="Processing status (created/updated/existing)")
-    occurred_date: Optional[str] = Field(default=None, description="When event occurred")
+    occurred_date: Optional[str] = Field(
+        default=None, description="When event occurred"
+    )
     event_type: Optional[str] = Field(default=None, description="Type of event")
     warnings: Optional[List[str]] = Field(
         default=None,
@@ -139,7 +144,10 @@ class OutcomeImpactOutput(BaseModel):
 
     status: str = Field(description="Operation status (recorded/error)")
     impact_id: str = Field(description="ID of created impact record")
-    error: Optional[str] = Field(default=None, description="Error message if status is error")
+    error: Optional[str] = Field(
+        default=None, description="Error message if status is error"
+    )
+
 
 # =============================================================================
 # Hypothesis / Causal Reasoner Tools
@@ -151,12 +159,22 @@ class HypothesisOutput(BaseModel):
 
     status: str = Field(description="Operation status (created/updated/error)")
     hypothesis_id: str = Field(description="ID of created hypothesis")
+    source_alias: Optional[str] = Field(
+        default=None, description="Alias of the source event"
+    )
+    target_alias: Optional[str] = Field(
+        default=None, description="Alias of the target event"
+    )
     relation: str = Field(description="Formatted relation string")
     strength: float = Field(description="Causal strength 0.0-1.0")
     confidence: float = Field(description="Confidence level 0.0-1.0")
     evidence_count: int = Field(default=0, description="Number of evidence articles")
-    outcome_connected: Optional[bool] = Field(default=None, description="Whether the target event is the actual outcome")
-    error: Optional[str] = Field(default=None, description="Error message if status is error")
+    outcome_connected: Optional[bool] = Field(
+        default=None, description="Whether the target event is the actual outcome"
+    )
+    error: Optional[str] = Field(
+        default=None, description="Error message if status is error"
+    )
 
 
 class ForecastHypothesisOutput(BaseModel):
@@ -167,6 +185,35 @@ class ForecastHypothesisOutput(BaseModel):
     relation: str = Field(description="Formatted relation string")
     strength: float = Field(description="Causal strength 0.0-1.0")
     confidence: float = Field(description="Confidence level 0.0-1.0")
+
+
+# =============================================================================
+# Graph Builder Tools
+# =============================================================================
+
+
+class SaveExplanationOutput(BaseModel):
+    """Output model for SaveExplanationTool."""
+
+    status: str = Field(description="Operation status")
+    question_id: str = Field(description="ID of the question")
+    message: str = Field(description="Status message")
+
+
+class SubgraphOutput(BaseModel):
+    """Output model for ProposeSubgraphTool."""
+
+    status: str = Field(description="Operation status")
+    events_created: int = Field(description="Number of events successfully created")
+    edges_created: int = Field(
+        description="Number of causal edges successfully created"
+    )
+    failed_items: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Items that failed to create with reasons"
+    )
+    alias_map: Dict[str, str] = Field(
+        default_factory=dict, description="Map of aliases to generated IDs"
+    )
 
 
 # =============================================================================
@@ -204,7 +251,9 @@ class QualityScore(BaseModel):
 class QuestionQualityOutput(BaseModel):
     """Output model for QuestionQualityScorerTool."""
 
-    scores: List[Dict[str, Any]] = Field(description="List of quality scores per question")
+    scores: List[Dict[str, Any]] = Field(
+        description="List of quality scores per question"
+    )
     overall_quality: str = Field(description="Overall quality assessment")
 
 
@@ -220,7 +269,9 @@ class WebFetchOutput(BaseModel):
     content: str = Field(description="Page content")
     title: Optional[str] = Field(default=None, description="Page title")
     links: Optional[List[str]] = Field(default=None, description="Extracted links")
-    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata")
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None, description="Additional metadata"
+    )
     success: bool = Field(default=True, description="Fetch success status")
     error: Optional[str] = Field(default=None, description="Error message")
 

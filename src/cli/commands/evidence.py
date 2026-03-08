@@ -22,9 +22,17 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from src.core.database import GenericDatabase
-from src.cli.core.options import db_option, source_option, domain_option, limit_option, sample_option, seed_option, yes_option, get_db_and_manager
+from src.cli.core.options import (
+    db_option,
+    source_option,
+    domain_option,
+    limit_option,
+    sample_option,
+    seed_option,
+    yes_option,
+    get_db_and_manager,
+)
 from src.cli.core.question_selector import QuestionSelector
-from src.cli.core.question_manager import QuestionManager
 from src.cli.core.pipeline_runner import PipelineRunner, PipelineType, PipelineProgress
 from src.domain.models import Question, Event, Article, ReviewStatus
 from src.services.event_review_service import EventReviewService, EventReviewReport
@@ -173,13 +181,12 @@ def run(
             )
             # Show domain breakdown
             from collections import Counter
+
             domain_counts = Counter(
                 q.domain.value if hasattr(q.domain, "value") else q.domain
                 for q in questions_to_process
             )
-            breakdown = ", ".join(
-                f"{d}={c}" for d, c in sorted(domain_counts.items())
-            )
+            breakdown = ", ".join(f"{d}={c}" for d, c in sorted(domain_counts.items()))
             console.print(
                 f"[bold]Stratified sample: {len(questions_to_process)} of {total_available} questions"
                 + (f" (seed={seed})" if seed is not None else "")
@@ -746,7 +753,13 @@ def _show_review_summary(events: List[Event], db: GenericDatabase) -> None:
     for event in events:
         qid = event.extracted_for_question_id or "(no question)"
         if qid not in by_question:
-            by_question[qid] = {"pending": 0, "approved": 0, "rejected": 0, "revised": 0, "total": 0}
+            by_question[qid] = {
+                "pending": 0,
+                "approved": 0,
+                "rejected": 0,
+                "revised": 0,
+                "total": 0,
+            }
         status_val = (
             event.review_status.value
             if hasattr(event.review_status, "value")
@@ -797,7 +810,9 @@ def _print_review_stats(reviewed: dict) -> None:
     if total_decided > 0:
         rate = reviewed["approved"] / total_decided * 100
         style = "green" if rate >= 70 else "yellow" if rate >= 40 else "red"
-        console.print(f"\n  [{style}]Approval rate: {rate:.0f}% ({reviewed['approved']}/{total_decided})[/{style}]")
+        console.print(
+            f"\n  [{style}]Approval rate: {rate:.0f}% ({reviewed['approved']}/{total_decided})[/{style}]"
+        )
 
 
 def _stratified_sample(
@@ -942,15 +957,19 @@ def auto_review(
                 console.print(f"\n[bold]Reviewing: {qid}[/bold]")
                 report = await service.review_events_for_question(qid)
                 _display_review_report(report, console)
-        
+
         asyncio.run(process_questions())
 
     else:
         pending_events = db.get_many(Event, filters={"review_status": "pending"})
-        unique_questions = set(e.extracted_for_question_id for e in pending_events if e.extracted_for_question_id)
+        unique_questions = set(
+            e.extracted_for_question_id
+            for e in pending_events
+            if e.extracted_for_question_id
+        )
         total_pending_questions = len(unique_questions)
         total_pending_events = len(pending_events)
-        
+
         if total_pending_questions == 0:
             console.print("[green]No pending events to review.[/green]")
             raise typer.Exit(0)
@@ -968,12 +987,20 @@ def auto_review(
                 console.print("[red]Aborted.[/red]")
                 raise typer.Exit(0)
 
-        console.print(f"\n[bold]Running auto-review on {sample} question(s)...[/bold]\n")
+        console.print(
+            f"\n[bold]Running auto-review on {sample} question(s)...[/bold]\n"
+        )
 
         # Get question IDs first for progress tracking
         pending_events = db.get_many(Event, filters={"review_status": "pending"})
-        unique_questions = list(set(e.extracted_for_question_id for e in pending_events if e.extracted_for_question_id))
-        
+        unique_questions = list(
+            set(
+                e.extracted_for_question_id
+                for e in pending_events
+                if e.extracted_for_question_id
+            )
+        )
+
         if not skip_criteria:
             filtered = []
             for qid in unique_questions:
@@ -983,6 +1010,7 @@ def auto_review(
 
         if seed is not None:
             import random
+
             random.seed(seed)
             random.shuffle(unique_questions)
 
@@ -990,14 +1018,16 @@ def auto_review(
             unique_questions = unique_questions[:sample]
 
         total_questions = len(unique_questions)
-        
+
         async def process_questions():
             reports = []
             for idx, qid in enumerate(unique_questions, 1):
                 console.print(f"[bold]Question {idx}/{total_questions}:[/bold] {qid}")
                 report = await service.review_events_for_question(qid)
                 reports.append(report)
-                console.print(f"  → {report.approved_events}/{report.total_events} approved, {'✓' if report.meets_criteria else '✗'} criteria")
+                console.print(
+                    f"  → {report.approved_events}/{report.total_events} approved, {'✓' if report.meets_criteria else '✗'} criteria"
+                )
             return reports
 
         reports = asyncio.run(process_questions())
@@ -1094,7 +1124,9 @@ def list_rejected(
             raise typer.Exit(1)
 
         if event.review_status.value != "rejected":
-            console.print(f"[yellow]Event {event_id} is not rejected (status: {event.review_status})[/yellow]")
+            console.print(
+                f"[yellow]Event {event_id} is not rejected (status: {event.review_status})[/yellow]"
+            )
             raise typer.Exit(0)
 
         console.print("\n[bold]Event Details[/bold]")
@@ -1122,7 +1154,9 @@ def list_rejected(
             reason = event.review_note or "No reason"
             if reason.startswith("LLM Review:"):
                 reason = reason[11:]
-            console.print(f"\n[cyan]{event.id}[/cyan] | {event.extracted_for_question_id}")
+            console.print(
+                f"\n[cyan]{event.id}[/cyan] | {event.extracted_for_question_id}"
+            )
             console.print(f"  Title: {event.title}")
             console.print(f"  Reason: {reason}")
         console.print(f"\n[dim]Showing {len(rejected)} rejected events[/dim]")
@@ -1147,8 +1181,12 @@ def list_rejected(
         )
 
     console.print(table)
-    console.print(f"\n[dim]Showing {len(rejected)} of {len(rejected)} rejected events[/dim]")
-    console.print("[dim]Use --verbose or -v to see full reasons, or -e <id> for specific event[/dim]")
+    console.print(
+        f"\n[dim]Showing {len(rejected)} of {len(rejected)} rejected events[/dim]"
+    )
+    console.print(
+        "[dim]Use --verbose or -v to see full reasons, or -e <id> for specific event[/dim]"
+    )
 
 
 @app.command()
@@ -1211,7 +1249,9 @@ def reset(
         raise typer.Exit(0)
 
     if not yes:
-        console.print(f"[yellow]About to reset {len(to_reset)} events to pending.[/yellow]")
+        console.print(
+            f"[yellow]About to reset {len(to_reset)} events to pending.[/yellow]"
+        )
         confirm = Prompt.ask("Continue?", choices=["y", "n"], default="n")
         if confirm.lower() != "y":
             console.print("[red]Aborted.[/red]")
