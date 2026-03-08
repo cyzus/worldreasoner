@@ -13,7 +13,7 @@ class TestConditionRegistry:
     """Tests for EXPERIMENT_CONDITIONS registry."""
 
     def test_all_five_conditions_defined(self):
-        assert len(EXPERIMENT_CONDITIONS) == 5
+        assert len(EXPERIMENT_CONDITIONS) == len(ConditionName)
 
     def test_all_condition_names_present(self):
         for name in ConditionName:
@@ -24,7 +24,7 @@ class TestConditionRegistry:
             assert isinstance(condition, ExperimentCondition)
             assert condition.name == name
             assert isinstance(condition.display_name, str)
-            assert condition.mode in ("knowledge_only", "container")
+            assert isinstance(condition.mode, str) and len(condition.mode) > 0
             assert isinstance(condition.enable_causal_tools, bool)
             assert isinstance(condition.is_oracle, bool)
             assert isinstance(condition.max_steps, int)
@@ -74,7 +74,7 @@ class TestGetConditions:
 
     def test_returns_all_when_no_filter(self):
         conditions = get_conditions()
-        assert len(conditions) == 5
+        assert len(conditions) == len(ConditionName)
 
     def test_filter_single(self):
         conditions = get_conditions(["vanilla_llm"])

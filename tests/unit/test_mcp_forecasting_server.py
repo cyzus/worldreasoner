@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch, AsyncMock
 
-from src.domain.forecast_context_service import ForecastContext
+from src.services.forecast_context_service import ForecastContext
 from src.domain.models import Question, Article
 from src.domain.models.question import QuestionType
 from src.utils.enums import Domain
@@ -104,7 +104,7 @@ class TestGetContextFromMcp:
 
     def test_returns_cached_context(self, forecast_context, mock_ctx):
         """Should return context from ContextVar if available."""
-        from src.mcp_forecasting_server import _get_context_from_mcp, _current_context
+        from src.api.mcp_forecasting_server import _get_context_from_mcp, _current_context
 
         token = _current_context.set(forecast_context)
         try:
@@ -116,7 +116,7 @@ class TestGetContextFromMcp:
 
     def test_raises_when_no_context(self, mock_ctx):
         """Should raise ValueError when no context available."""
-        from src.mcp_forecasting_server import _get_context_from_mcp, _current_context
+        from src.api.mcp_forecasting_server import _get_context_from_mcp, _current_context
 
         token = _current_context.set(None)
         try:
@@ -136,8 +136,8 @@ class TestGetQuestionTool:
 
     def test_returns_question_details(self, mock_ctx, forecast_context, test_question):
         """Should return question details with temporal context."""
-        from src.mcp_forecasting_server import get_question, _current_context
-        import src.mcp_forecasting_server as server
+        from src.api.mcp_forecasting_server import get_question, _current_context
+        import src.api.mcp_forecasting_server as server
 
         fn = _get_tool_fn(get_question)
 
@@ -163,7 +163,7 @@ class TestGetQuestionTool:
 
     def test_returns_error_on_missing_context(self, mock_ctx):
         """Should return error JSON when context missing."""
-        from src.mcp_forecasting_server import get_question, _current_context
+        from src.api.mcp_forecasting_server import get_question, _current_context
 
         fn = _get_tool_fn(get_question)
 
@@ -186,74 +186,86 @@ class TestFetchArticleTool:
 
     def test_returns_article_content(self, mock_ctx, forecast_context, test_article):
         """Should return article content within temporal window."""
-        from src.mcp_forecasting_server import fetch_article, _current_context
-        import src.mcp_forecasting_server as server
+        from src.api.mcp_forecasting_server import fetch_article, _current_context
+        import src.api.mcp_forecasting_server as server
 
         fn = _get_tool_fn(fetch_article)
 
         token = _current_context.set(forecast_context)
-        mock_article_service = Mock()
-        mock_article_service.fetch_article.return_value = test_article
-        original = server.article_service
-        server.article_service = mock_article_service
+        original_db = server.db
+        server.db = Mock()
+        server.db.db_path = "test.db"
 
-        try:
-            result = fn(mock_ctx, "art_001")
-            data = json.loads(result)
+        with patch("src.api.mcp_forecasting_server.ArticleOperationsService") as MockArticleOps:
+            mock_ops = Mock()
+            mock_ops.fetch_article.return_value = test_article
+            MockArticleOps.return_value = mock_ops
 
-            assert data["id"] == "art_001"
-            assert data["title"] == "Inflation Report Q1 2024"
-            assert "content" in data
-            mock_article_service.fetch_article.assert_called_once_with(
-                "art_001", forecast_context.simulated_date
-            )
-        finally:
-            _current_context.reset(token)
-            server.article_service = original
+            try:
+                result = fn(mock_ctx, "art_001")
+                data = json.loads(result)
+
+                assert data["id"] == "art_001"
+                assert data["title"] == "Inflation Report Q1 2024"
+                assert "content" in data
+                mock_ops.fetch_article.assert_called_once_with(
+                    "art_001", forecast_context.simulated_date
+                )
+            finally:
+                _current_context.reset(token)
+                server.db = original_db
 
     def test_returns_error_for_missing_article(self, mock_ctx, forecast_context):
         """Should return error when article not found."""
-        from src.mcp_forecasting_server import fetch_article, _current_context
-        import src.mcp_forecasting_server as server
+        from src.api.mcp_forecasting_server import fetch_article, _current_context
+        import src.api.mcp_forecasting_server as server
 
         fn = _get_tool_fn(fetch_article)
 
         token = _current_context.set(forecast_context)
-        mock_article_service = Mock()
-        mock_article_service.fetch_article.return_value = None
-        original = server.article_service
-        server.article_service = mock_article_service
+        original_db = server.db
+        server.db = Mock()
+        server.db.db_path = "test.db"
 
-        try:
-            result = fn(mock_ctx, "nonexistent")
-            data = json.loads(result)
-            assert "error" in data
-        finally:
-            _current_context.reset(token)
-            server.article_service = original
+        with patch("src.api.mcp_forecasting_server.ArticleOperationsService") as MockArticleOps:
+            mock_ops = Mock()
+            mock_ops.fetch_article.return_value = None
+            MockArticleOps.return_value = mock_ops
+
+            try:
+                result = fn(mock_ctx, "nonexistent")
+                data = json.loads(result)
+                assert "error" in data
+            finally:
+                _current_context.reset(token)
+                server.db = original_db
 
     def test_returns_error_for_future_article(self, mock_ctx, forecast_context):
         """Should return error when article is after simulated date."""
-        from src.mcp_forecasting_server import fetch_article, _current_context
-        import src.mcp_forecasting_server as server
+        from src.api.mcp_forecasting_server import fetch_article, _current_context
+        import src.api.mcp_forecasting_server as server
 
         fn = _get_tool_fn(fetch_article)
 
         token = _current_context.set(forecast_context)
-        mock_article_service = Mock()
-        mock_article_service.fetch_article.side_effect = ValueError(
-            "Article published after simulated date"
-        )
-        original = server.article_service
-        server.article_service = mock_article_service
+        original_db = server.db
+        server.db = Mock()
+        server.db.db_path = "test.db"
 
-        try:
-            result = fn(mock_ctx, "art_future")
-            data = json.loads(result)
-            assert "error" in data
-        finally:
-            _current_context.reset(token)
-            server.article_service = original
+        with patch("src.api.mcp_forecasting_server.ArticleOperationsService") as MockArticleOps:
+            mock_ops = Mock()
+            mock_ops.fetch_article.side_effect = ValueError(
+                "Article published after simulated date"
+            )
+            MockArticleOps.return_value = mock_ops
+
+            try:
+                result = fn(mock_ctx, "art_future")
+                data = json.loads(result)
+                assert "error" in data
+            finally:
+                _current_context.reset(token)
+                server.db = original_db
 
 
 # ---------------------------------------------------------------------------
@@ -267,8 +279,8 @@ class TestTemporalSearchArticlesTool:
     @pytest.mark.asyncio
     async def test_search_returns_articles(self, mock_ctx, forecast_context, test_article):
         """Should return search results filtered by simulated date."""
-        from src.mcp_forecasting_server import temporal_search_articles, _current_context
-        import src.mcp_forecasting_server as server
+        from src.api.mcp_forecasting_server import temporal_search_articles, _current_context
+        import src.api.mcp_forecasting_server as server
 
         fn = _get_tool_fn(temporal_search_articles)
 
@@ -282,7 +294,7 @@ class TestTemporalSearchArticlesTool:
         server.hybrid_search = mock_hs
 
         with patch(
-            "src.mcp_forecasting_server.ArticleOperationsService"
+            "src.api.mcp_forecasting_server.ArticleOperationsService"
         ) as MockArticleOps:
             mock_ops_instance = AsyncMock()
             mock_ops_instance.search_articles = AsyncMock(return_value=[test_article])
@@ -303,8 +315,8 @@ class TestTemporalSearchArticlesTool:
     @pytest.mark.asyncio
     async def test_search_empty_results(self, mock_ctx, forecast_context):
         """Should return empty list when no articles match."""
-        from src.mcp_forecasting_server import temporal_search_articles, _current_context
-        import src.mcp_forecasting_server as server
+        from src.api.mcp_forecasting_server import temporal_search_articles, _current_context
+        import src.api.mcp_forecasting_server as server
 
         fn = _get_tool_fn(temporal_search_articles)
 
@@ -316,7 +328,7 @@ class TestTemporalSearchArticlesTool:
         server.hybrid_search = Mock()
 
         with patch(
-            "src.mcp_forecasting_server.ArticleOperationsService"
+            "src.api.mcp_forecasting_server.ArticleOperationsService"
         ) as MockArticleOps:
             mock_ops_instance = AsyncMock()
             mock_ops_instance.search_articles = AsyncMock(return_value=[])
@@ -345,8 +357,8 @@ class TestSubmitForecastTool:
         self, mock_ctx, forecast_context, test_question
     ):
         """Should submit and confirm a valid binary forecast."""
-        from src.mcp_forecasting_server import submit_forecast, _current_context
-        import src.mcp_forecasting_server as server
+        from src.api.mcp_forecasting_server import submit_forecast, _current_context
+        import src.api.mcp_forecasting_server as server
         from src.domain.models import Forecast
 
         fn = _get_tool_fn(submit_forecast)
@@ -400,8 +412,8 @@ class TestSubmitForecastTool:
         self, mock_ctx, forecast_context, test_question
     ):
         """Should return error for invalid prediction value."""
-        from src.mcp_forecasting_server import submit_forecast, _current_context
-        import src.mcp_forecasting_server as server
+        from src.api.mcp_forecasting_server import submit_forecast, _current_context
+        import src.api.mcp_forecasting_server as server
 
         fn = _get_tool_fn(submit_forecast)
 
@@ -453,8 +465,8 @@ class TestGetHybridSearch:
 
     def test_returns_global_when_no_path(self):
         """Should return global hybrid_search when no db_path specified."""
-        from src.mcp_forecasting_server import _get_hybrid_search
-        import src.mcp_forecasting_server as server
+        from src.api.mcp_forecasting_server import _get_hybrid_search
+        import src.api.mcp_forecasting_server as server
 
         mock_hs = Mock()
         original = server.hybrid_search
@@ -468,8 +480,8 @@ class TestGetHybridSearch:
 
     def test_returns_global_when_same_path(self):
         """Should return global hybrid_search when path matches."""
-        from src.mcp_forecasting_server import _get_hybrid_search
-        import src.mcp_forecasting_server as server
+        from src.api.mcp_forecasting_server import _get_hybrid_search
+        import src.api.mcp_forecasting_server as server
 
         mock_hs = Mock()
         mock_db = Mock()

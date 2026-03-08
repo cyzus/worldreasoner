@@ -4,7 +4,7 @@ import pytest
 from datetime import datetime, timezone
 from unittest.mock import Mock
 
-from src.domain.forecast_context_service import ForecastContextService, ForecastContext
+from src.services.forecast_context_service import ForecastContextService, ForecastContext
 from src.domain.models import Question
 from src.domain.models.question import QuestionType
 from src.utils.enums import Domain
@@ -228,9 +228,9 @@ class TestGetQuestionForContext:
         service = ForecastContextService(db)
 
         # Mock GenericDatabase constructor in service_base where get_db is defined
-        import src.domain.service_base
+        import src.services.service_base
 
-        original_db = src.domain.service_base.GenericDatabase
+        original_db = src.services.service_base.GenericDatabase
 
         custom_db = Mock()
         question = Question(
@@ -249,7 +249,7 @@ class TestGetQuestionForContext:
                 return custom_db
             return db
 
-        src.domain.service_base.GenericDatabase = mock_db_constructor
+        src.services.service_base.GenericDatabase = mock_db_constructor
 
         try:
             context = ForecastContext(
@@ -266,7 +266,7 @@ class TestGetQuestionForContext:
             assert result == question
             custom_db.get.assert_called_once_with(Question, "q123")
         finally:
-            src.domain.service_base.GenericDatabase = original_db
+            src.services.service_base.GenericDatabase = original_db
 
     def test_get_question_not_found(self):
         """Should raise ValueError if question not found."""

@@ -513,7 +513,7 @@ class PipelineExecutor:
                         h for h in all_hypotheses if qid in h.discovered_by_question_ids
                     ]
                     if hypotheses:
-                        from src.utils.graph_analysis import resolve_target_event_id, calculate_graph_quality
+                        from src.analysis.graph_analysis import resolve_target_event_id, calculate_graph_quality
                         target = resolve_target_event_id(question, self.db, hypotheses)
                         metrics = calculate_graph_quality(hypotheses, target)
                         graph_depth = metrics["max_depth"]
@@ -655,7 +655,7 @@ class PipelineExecutor:
                     h for h in all_hypotheses if qid in h.discovered_by_question_ids
                 ]
                 if hypotheses:
-                    from src.utils.graph_analysis import resolve_target_event_id, calculate_graph_quality
+                    from src.analysis.graph_analysis import resolve_target_event_id, calculate_graph_quality
                     target = resolve_target_event_id(question, self.db, hypotheses)
                     metrics = calculate_graph_quality(hypotheses, target)
                     graph_depth = metrics["max_depth"]
@@ -1021,7 +1021,7 @@ class PipelineExecutor:
         Returns:
             Dict with cleared/failed lists
         """
-        from src.domain.question_service import QuestionService
+        from src.services.question_service import QuestionService
 
         service = QuestionService(self.db)
         results = {"cleared": [], "failed": []}

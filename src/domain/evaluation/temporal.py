@@ -29,7 +29,7 @@ class TemporalAnalyzer:
                 if event and event.occurred_date:
                     timeline.append((ensure_aware(event.occurred_date), "event", event.id))
 
-        from src.utils.graph_analysis import resolve_target_event_id
+        from src.analysis.graph_analysis import resolve_target_event_id
         resolved_target = resolve_target_event_id(question, self.db)
         if resolved_target:
             event = self.db.get(Event, resolved_target)

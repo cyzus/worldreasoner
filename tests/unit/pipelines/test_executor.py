@@ -179,7 +179,7 @@ class TestClearEvidence:
     @pytest.mark.asyncio
     async def test_clear_evidence_success(self, executor):
         """Clear evidence delegates to QuestionService."""
-        from src.domain.question_service import QuestionService
+        from src.services.question_service import QuestionService
 
         with patch.object(QuestionService, "clear_evidence") as mock_clear:
             mock_clear.return_value = {"articles": 5, "events": 3, "hypotheses": 2}
@@ -193,7 +193,7 @@ class TestClearEvidence:
     @pytest.mark.asyncio
     async def test_clear_evidence_handles_errors(self, executor):
         """Clear evidence handles errors gracefully."""
-        from src.domain.question_service import QuestionService
+        from src.services.question_service import QuestionService
 
         with patch.object(QuestionService, "clear_evidence") as mock_clear:
             # First call succeeds, second fails

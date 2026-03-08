@@ -14,7 +14,7 @@ import json
 import aiohttp
 from datetime import datetime
 from src.utils.logging import logger
-from src.utils.polymarket import (
+from src.integrations.polymarket import (
     get_price_history,
     get_price_history_for_market,
     detect_turning_points,

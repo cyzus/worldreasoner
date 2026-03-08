@@ -4,7 +4,7 @@ import pytest
 import yaml
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
-from src.tools.rss_fetch import RssFetchTool
+from src.tools.collectors.rss_fetch import RssFetchTool
 from src.pipelines.stages.article_collection import (
     ArticleCollectionStage,
     ArticleCollectionConfig,

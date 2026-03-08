@@ -4,7 +4,7 @@ import pytest
 import tempfile
 import os
 
-from src.tools.database_mixin import DatabaseAwareTool
+from src.tools.base.database_mixin import DatabaseAwareTool
 from src.core.database import GenericDatabase
 from src.domain.models import Article
 from src.domain.models.domain import Domain

@@ -6,12 +6,12 @@ from typing import List, Optional, Dict, Union
 from datetime import datetime
 from pydantic import BaseModel
 
-from ..base import PipelineStage, PipelineStageResult
+from src.pipelines.base import PipelineStage, PipelineStageResult
 from src.domain.models import Article
 from src.agents.factory import AgentFactory
 from src.tools import ArticleCollectorTool, RssFetchTool
 from src.core.collectors import ResultCollector
-from ..prompts import ArticleCollectionPrompts
+from src.pipelines.prompts import ArticleCollectionPrompts
 from src.utils.logging import logger
 from src.utils.usage_tracking import UsageTracker, log_usage
 

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Query, HTTPException, Depends
 
 from src.core.database import GenericDatabase
 from src.config import get_config
-from src.domain.question_monitor_service import QuestionMonitorService
+from src.services.question_monitor_service import QuestionMonitorService
 
 router = APIRouter()
 

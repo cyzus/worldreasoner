@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from src.core.database import GenericDatabase
 from src.config.pipeline import EvidenceSatisfactionConfig
-from src.domain.question_monitor_service import (
+from src.services.question_monitor_service import (
     QuestionMonitorService,
 )
 from src.domain.models.question import Question, QuestionType

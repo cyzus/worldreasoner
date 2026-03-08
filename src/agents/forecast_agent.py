@@ -88,8 +88,8 @@ class ForecastAgent(BaseAgent):
             forecast_tools = [t for t in forecast_tools if t.name in allowed]
         elif mode == "real_time":
             # Real-time: base tools + optionally causal tools + web tools
-            from src.tools.web_search import WebSearchTool
-            from src.tools.web_fetch import WebFetchTool
+            from src.tools.collectors.web_search import WebSearchTool
+            from src.tools.collectors.web_fetch import WebFetchTool
 
             allowed = base_tool_names.copy()
             if enable_causal_tools:

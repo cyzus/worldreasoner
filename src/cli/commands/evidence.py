@@ -27,7 +27,7 @@ from src.cli.core.question_selector import QuestionSelector
 from src.cli.core.question_manager import QuestionManager
 from src.cli.core.pipeline_runner import PipelineRunner, PipelineType, PipelineProgress
 from src.domain.models import Question, Event, Article, ReviewStatus
-from src.domain.event_review_service import EventReviewService, EventReviewReport
+from src.services.event_review_service import EventReviewService, EventReviewReport
 from src.config.settings import get_config
 from src.utils.logging import logger
 

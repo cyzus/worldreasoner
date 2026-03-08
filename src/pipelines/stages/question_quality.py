@@ -6,8 +6,8 @@ import asyncio
 from ...config.pipeline import QuestionQualityConfig
 from ...core.collectors import ResultCollector
 from ...domain.models.question import Question
-from ...tools.question_quality_scorer import QuestionQualityScorer, QualityAssessment
-from ..base import PipelineStage
+from ...tools.generators.question_quality_scorer import QuestionQualityScorer, QualityAssessment
+from src.pipelines.base import PipelineStage
 from src.utils.logging import logger
 
 

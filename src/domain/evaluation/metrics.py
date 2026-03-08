@@ -9,7 +9,7 @@ This module implements standard forecasting metrics:
 import math
 from typing import Any, Dict, Optional
 from src.domain.models.question import QuestionType
-from src.llm import LiteLLMClient
+from src.core.llm import LiteLLMClient
 from src.config import get_config
 
 

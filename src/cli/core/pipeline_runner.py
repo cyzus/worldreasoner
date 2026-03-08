@@ -10,7 +10,7 @@ from src.config import get_config, Config
 from src.core.database import GenericDatabase
 from src.pipelines.executor import PipelineExecutor
 from src.pipelines.types import PipelineType, PipelineProgress, PipelineResult
-from src.domain.question_service import QuestionService
+from src.services.question_service import QuestionService
 from src.utils.logging import logger
 
 

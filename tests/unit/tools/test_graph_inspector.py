@@ -1,6 +1,6 @@
 
 import pytest
-from src.tools.graph_inspector import GraphInspectorTool
+from src.tools.inspectors.graph_inspector import GraphInspectorTool
 from src.domain.models import Question, Event, CausalHypothesis, EventType, Domain, CausalRelationType
 from datetime import datetime, timezone
 

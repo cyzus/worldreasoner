@@ -70,7 +70,7 @@ async def test_orchestrator_with_quality_ranking(persistent_test_db_path):
     )
 
     # Mock the quality scorer to avoid actual LLM calls
-    from src.tools.question_quality_scorer import QualityAssessment
+    from src.tools.generators.question_quality_scorer import QualityAssessment
 
     async def mock_forward(questions):
         for q in questions:

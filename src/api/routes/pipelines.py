@@ -255,7 +255,7 @@ async def clear_questions_evidence(request: ClearEvidenceRequest):
 
     This removes causal hypotheses and optionally cascades to orphaned events.
     """
-    from src.domain.question_service import QuestionService
+    from src.services.question_service import QuestionService
 
     db = GenericDatabase(get_current_db_path())
     service = QuestionService(db)

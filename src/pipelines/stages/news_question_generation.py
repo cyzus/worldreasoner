@@ -3,13 +3,13 @@
 from typing import List, Optional
 from datetime import datetime, timezone
 
-from ..base import PipelineStage
+from src.pipelines.base import PipelineStage
 from src.domain.models import Article, Question
 from src.config.pipeline import QuestionPipelineConfig
 from src.agents.factory import AgentFactory
 from src.tools import QuestionGeneratorTool, ArticleRetrievalTool
 from src.core.collectors import ResultCollector
-from ..prompts import QuestionGenerationPrompts
+from src.pipelines.prompts import QuestionGenerationPrompts
 from src.utils.logging import logger
 from src.utils.usage_tracking import UsageTracker, log_usage
 

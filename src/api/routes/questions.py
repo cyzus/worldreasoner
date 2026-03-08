@@ -14,8 +14,8 @@ from src.domain.models.domain import Domain
 from src.domain.models.question import QuestionType
 from src.api.routes.database import get_current_db_path
 from src.utils.logging import logger
-from src.utils.polymarket import get_price_history_for_market
-from src.utils.article_analysis import analyze_article_coverage
+from src.integrations.polymarket import get_price_history_for_market
+from src.analysis.article_analysis import analyze_article_coverage
 from src.config.collection_goal import QualityRequirements
 
 
@@ -1002,7 +1002,7 @@ async def get_question_price_history(
 
         # Optionally include turning points analysis
         if include_turning_points and price_history:
-            from src.utils.polymarket import analyze_price_curve
+            from src.integrations.polymarket import analyze_price_curve
 
             # Analyze the first token (primary outcome)
             first_token_id = clob_token_ids[0]
@@ -1064,7 +1064,7 @@ async def get_price_turning_points(
             "created_events": [...],  # Event IDs if create_events=True
         }
     """
-    from src.utils.polymarket import analyze_price_curve, get_price_history_for_market
+    from src.integrations.polymarket import analyze_price_curve, get_price_history_for_market
     from src.domain.models import Event
 
     try:
@@ -1233,7 +1233,7 @@ async def get_article_coverage(
             )
 
         # Get articles for this question and filter by time window
-        from src.utils.article_analysis import filter_articles_by_time_window
+        from src.analysis.article_analysis import filter_articles_by_time_window
         from src.utils.date_utils import ensure_timezone_aware
 
         all_articles = db.get_many(Article)
@@ -1416,7 +1416,7 @@ async def get_causal_path_analysis(
             )
 
         # Check if question has a target event
-        from src.utils.graph_analysis import resolve_target_event_id
+        from src.analysis.graph_analysis import resolve_target_event_id
         resolved = resolve_target_event_id(question, db)
         if not resolved:
             return {

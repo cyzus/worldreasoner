@@ -4,7 +4,7 @@ import pytest
 from datetime import datetime, timezone
 
 from src.core.database import GenericDatabase
-from src.domain.question_service import QuestionService
+from src.services.question_service import QuestionService
 from src.domain.models import Question, Article, Event, CausalHypothesis
 from src.domain.models import (
     QuestionType,

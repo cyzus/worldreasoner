@@ -58,34 +58,38 @@ class TestComputeSimulatedDate:
         expected = question.resolution_date - timedelta(days=1)
         assert result == expected
 
-    def test_non_oracle_uses_prepare_forecast(self):
+    def test_non_oracle_uses_slot(self):
+        service = AutoBenchmarkService.__new__(AutoBenchmarkService)
+        service.db = MagicMock()
+
+        question = _make_question()
+        vanilla_condition = EXPERIMENT_CONDITIONS[ConditionName.VANILLA_LLM]
+        expected_date = question.resolution_date - timedelta(days=14)
+
+        with patch(
+            "src.domain.evaluation.auto_benchmark.get_forecast_date_for_slot",
+            return_value={"simulated_date": expected_date},
+        ) as mock_get_slot:
+            result = service._compute_simulated_date(question, vanilla_condition, slot="mid")
+
+            mock_get_slot.assert_called_once()
+            assert result == expected_date
+
+    def test_fallback_on_slot_error(self):
         service = AutoBenchmarkService.__new__(AutoBenchmarkService)
         service.db = MagicMock()
 
         question = _make_question()
         vanilla_condition = EXPERIMENT_CONDITIONS[ConditionName.VANILLA_LLM]
 
-        result = service._compute_simulated_date(question, vanilla_condition, offset_days=7)
+        with patch(
+            "src.domain.evaluation.auto_benchmark.get_forecast_date_for_slot",
+            side_effect=ValueError("No context"),
+        ):
+            result = service._compute_simulated_date(question, vanilla_condition, slot="mid")
 
-        question.prepare_forecast.assert_called_once_with(
-            db=service.db,
-            offset_days_before_resolution=7,
-            min_context_items=0,
-        )
-        expected = question.resolution_date - timedelta(days=7)
-        assert result == expected
-
-    def test_fallback_on_prepare_forecast_error(self):
-        service = AutoBenchmarkService.__new__(AutoBenchmarkService)
-        service.db = MagicMock()
-
-        question = _make_question()
-        question.prepare_forecast.side_effect = ValueError("No context")
-
-        vanilla_condition = EXPERIMENT_CONDITIONS[ConditionName.VANILLA_LLM]
-        result = service._compute_simulated_date(question, vanilla_condition, offset_days=5)
-
-        expected = question.resolution_date - timedelta(days=5)
+        # Fallback: resolution_date - 1 day
+        expected = question.resolution_date - timedelta(days=1)
         assert result == expected
 
 

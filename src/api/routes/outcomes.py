@@ -9,7 +9,7 @@ from fastapi import APIRouter, Query, HTTPException, Depends
 from src.services.graph import GraphNode, GraphEdge, SQLiteGraphService
 from src.api.routes.database import get_current_db_path
 from src.core.database import GenericDatabase
-from src.domain.outcome_event_service import OutcomeEventService
+from src.services.outcome_event_service import OutcomeEventService
 from src.utils.logging import logger
 
 

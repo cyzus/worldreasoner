@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from src.core.database import GenericDatabase
 from src.agents.hindsight_agent import HindsightAgent
 from src.domain.models import Question, QuestionType, Domain
-from src.domain.outcome_event_service import OutcomeEventService
+from src.services.outcome_event_service import OutcomeEventService
 from src.pipelines.prompts.hindsight_causal_analysis import HindsightCausalAnalysisPrompts
 
 async def run_evidence_demo(args):

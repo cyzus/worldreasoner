@@ -14,7 +14,7 @@ import asyncio
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
 
-from ..base import Pipeline, PipelineStageResult, PipelineStageStatus
+from src.pipelines.base import Pipeline, PipelineStageResult, PipelineStageStatus
 from src.pipelines.prompts import HindsightCausalAnalysisPrompts
 from src.config.pipeline import EvidencePipelineConfig
 from src.config import DatabaseConfig
@@ -272,7 +272,7 @@ class EvidencePipeline(Pipeline):
             outcome_events = self._get_or_create_outcomes(question, db)
 
             # 1b. Resolve target event (actual outcome) for the agent
-            from src.utils.graph_analysis import resolve_target_event_id
+            from src.analysis.graph_analysis import resolve_target_event_id
             resolved_target = resolve_target_event_id(question, db)
 
             # 2. Fetch market analysis (turning points + lead changes) for Polymarket questions
@@ -381,7 +381,7 @@ class EvidencePipeline(Pipeline):
 
     def _get_or_create_outcomes(self, question: Question, db: GenericDatabase) -> List[Any]:
         """Get existing outcome events or create default ones."""
-        from src.domain.outcome_event_service import OutcomeEventService
+        from src.services.outcome_event_service import OutcomeEventService
         outcome_service = OutcomeEventService(db)
         outcome_events = outcome_service.get_outcome_events_for_question(question.id)
 
@@ -422,7 +422,7 @@ class EvidencePipeline(Pipeline):
             return empty_result
 
         try:
-            from src.utils.polymarket import get_price_history_for_market, analyze_price_curve
+            from src.integrations.polymarket import get_price_history_for_market, analyze_price_curve
 
             # Fetch price history
             price_history = await get_price_history_for_market(
@@ -494,7 +494,7 @@ class EvidencePipeline(Pipeline):
             logger.warning(f"[{question.id}] No evidence articles - quality: 0.0")
             return {"score": 0.0, "metrics": {}}
 
-        from src.utils.article_analysis import (
+        from src.analysis.article_analysis import (
             analyze_timeline,
             analyze_sources,
             identify_gaps,
@@ -542,7 +542,7 @@ class EvidencePipeline(Pipeline):
             return {"score": 0.0, "max_depth": 0}
 
         # Resolve target event using shared utility
-        from src.utils.graph_analysis import resolve_target_event_id
+        from src.analysis.graph_analysis import resolve_target_event_id
         target_event_id = resolve_target_event_id(question, db, hypotheses)
         
         # NOTE: No longer persisting target_event_id on question (deprecated).
@@ -554,7 +554,7 @@ class EvidencePipeline(Pipeline):
             if all_targets:
                 target_event_id = list(all_targets)[0]
 
-        from src.utils.graph_analysis import calculate_graph_quality
+        from src.analysis.graph_analysis import calculate_graph_quality
         metrics = calculate_graph_quality(
             hypotheses=hypotheses,
             target_event_id=target_event_id,
@@ -743,7 +743,7 @@ class EvidencePipeline(Pipeline):
         Returns:
             Summary of deleted items with counts
         """
-        from src.domain.question_service import QuestionService
+        from src.services.question_service import QuestionService
 
         service = QuestionService(db)
         deleted = service.clear_evidence(question_id, cascade=True)

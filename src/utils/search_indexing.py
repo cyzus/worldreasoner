@@ -4,8 +4,8 @@ from typing import Optional
 
 from ..core.database import GenericDatabase
 from ..core.hybrid_search import HybridSearch
-from ..domain.models import Article
-from ..utils.logging import logger
+from src.domain.models import Article
+from src.utils.logging import logger
 
 
 async def auto_index_articles(

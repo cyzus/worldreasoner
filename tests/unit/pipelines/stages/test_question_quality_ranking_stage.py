@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 from src.domain.models.question import Question, QuestionType, Domain
 from src.pipelines.stages.question_quality import QuestionQualityRankingStage
 from src.config.pipeline import QuestionQualityConfig
-from src.tools.question_quality_scorer import QualityAssessment
+from src.tools.generators.question_quality_scorer import QualityAssessment
 from datetime import datetime, timezone
 
 

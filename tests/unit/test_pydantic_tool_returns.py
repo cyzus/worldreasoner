@@ -9,22 +9,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # Tool imports
-from src.tools.article_retrieval import ArticleRetrievalTool
-from src.tools.rss_fetch import RssFetchTool
-from src.tools.web_fetch import WebFetchTool
-from src.tools.event_details import EventDetailsTool
-from src.tools.article_collector import ArticleCollectorTool
-from src.tools.causal_reasoner import CausalReasonerTool
-from src.tools.question_articles import QuestionArticlesTool
-from src.tools.question_events import QuestionEventsTool
-from src.tools.forecast_causal_reasoner import ForecastCausalReasonerTool
-from src.tools.forecast_event_identifier import ForecastEventIdentifierTool
-from src.tools.event_identifier import EventIdentifierTool
-from src.tools.question_generator import QuestionGeneratorTool
-from src.tools.question_quality_scorer import QuestionQualityScorer
+from src.tools.inspectors.article_retrieval import ArticleRetrievalTool
+from src.tools.collectors.rss_fetch import RssFetchTool
+from src.tools.collectors.web_fetch import WebFetchTool
+from src.tools.inspectors.event_details import EventDetailsTool
+from src.tools.collectors.article_collector import ArticleCollectorTool
+from src.tools.reasoning.causal_reasoner import CausalReasonerTool
+from src.tools.generators.question_articles import QuestionArticlesTool
+from src.tools.generators.question_events import QuestionEventsTool
+from src.tools.reasoning.forecast_causal_reasoner import ForecastCausalReasonerTool
+from src.tools.reasoning.forecast_event_identifier import ForecastEventIdentifierTool
+from src.tools.reasoning.event_identifier import EventIdentifierTool
+from src.tools.generators.question_generator import QuestionGeneratorTool
+from src.tools.generators.question_quality_scorer import QuestionQualityScorer
 
 # Output model imports
-from src.tools.output_models import (
+from src.tools.base.output_models import (
     ArticleRetrievalOutput,
     RssFetchOutput,
     WebFetchOutput,
@@ -43,7 +43,7 @@ from src.tools.output_models import (
 from pydantic import ValidationError
 
 
-def test_tool_return_type(tool_name: str, result, expected_type):
+def _validate_tool_return_type(tool_name: str, result, expected_type):
     """Validate a tool's return value is correct Pydantic type."""
     print(f"\n{'='*60}")
     print(f"Testing {tool_name}")
@@ -91,7 +91,7 @@ def main():
         tool = RssFetchTool()
         # Use a known RSS feed
         result = tool.forward("https://hnrss.org/newest", max_items=2)
-        results["RssFetchTool"] = test_tool_return_type("RssFetchTool", result, RssFetchOutput)
+        results["RssFetchTool"] = _validate_tool_return_type("RssFetchTool", result, RssFetchOutput)
     except Exception as e:
         print(f"\n❌ RssFetchTool failed with error: {e}")
         results["RssFetchTool"] = False
@@ -100,7 +100,7 @@ def main():
     try:
         tool = WebFetchTool()
         result = tool.forward("https://example.com")
-        results["WebFetchTool"] = test_tool_return_type("WebFetchTool", result, WebFetchOutput)
+        results["WebFetchTool"] = _validate_tool_return_type("WebFetchTool", result, WebFetchOutput)
     except Exception as e:
         print(f"\n❌ WebFetchTool failed with error: {e}")
         results["WebFetchTool"] = False
@@ -110,7 +110,7 @@ def main():
         tool = ArticleRetrievalTool(db_path=test_db)
         # Test with non-existent ID to get error response
         result = tool.forward("test_article_id")
-        results["ArticleRetrievalTool"] = test_tool_return_type("ArticleRetrievalTool", result, ArticleRetrievalOutput)
+        results["ArticleRetrievalTool"] = _validate_tool_return_type("ArticleRetrievalTool", result, ArticleRetrievalOutput)
     except Exception as e:
         print(f"\n❌ ArticleRetrievalTool failed with error: {e}")
         results["ArticleRetrievalTool"] = False
@@ -119,7 +119,7 @@ def main():
     try:
         tool = EventDetailsTool(db_path=test_db)
         result = tool.forward("test_event_id")
-        results["EventDetailsTool"] = test_tool_return_type("EventDetailsTool", result, EventDetailsOutput)
+        results["EventDetailsTool"] = _validate_tool_return_type("EventDetailsTool", result, EventDetailsOutput)
     except Exception as e:
         print(f"\n❌ EventDetailsTool failed with error: {e}")
         results["EventDetailsTool"] = False
@@ -134,7 +134,7 @@ def main():
             published_date=datetime.now(timezone.utc).isoformat(),
             domain="technology"
         )
-        results["ArticleCollectorTool"] = test_tool_return_type("ArticleCollectorTool", result, ArticleOutput)
+        results["ArticleCollectorTool"] = _validate_tool_return_type("ArticleCollectorTool", result, ArticleOutput)
     except Exception as e:
         print(f"\n❌ ArticleCollectorTool failed with error: {e}")
         results["ArticleCollectorTool"] = False
@@ -151,7 +151,7 @@ def main():
             reasoning="Test reasoning",
             evidence_article_ids="art1,art2"
         )
-        results["CausalReasonerTool"] = test_tool_return_type("CausalReasonerTool", result, HypothesisOutput)
+        results["CausalReasonerTool"] = _validate_tool_return_type("CausalReasonerTool", result, HypothesisOutput)
     except Exception as e:
         print(f"\n❌ CausalReasonerTool failed with error: {e}")
         results["CausalReasonerTool"] = False
@@ -160,7 +160,7 @@ def main():
     try:
         tool = QuestionArticlesTool(db_path=test_db, question_id="test_q")
         result = tool.forward(limit=10)
-        results["QuestionArticlesTool"] = test_tool_return_type("QuestionArticlesTool", result, QuestionArticlesOutput)
+        results["QuestionArticlesTool"] = _validate_tool_return_type("QuestionArticlesTool", result, QuestionArticlesOutput)
     except Exception as e:
         print(f"\n❌ QuestionArticlesTool failed with error: {e}")
         results["QuestionArticlesTool"] = False
@@ -169,7 +169,7 @@ def main():
     try:
         tool = QuestionEventsTool(db_path=test_db, question_id="test_q")
         result = tool.forward()
-        results["QuestionEventsTool"] = test_tool_return_type("QuestionEventsTool", result, QuestionEventsOutput)
+        results["QuestionEventsTool"] = _validate_tool_return_type("QuestionEventsTool", result, QuestionEventsOutput)
     except Exception as e:
         print(f"\n❌ QuestionEventsTool failed with error: {e}")
         results["QuestionEventsTool"] = False
@@ -186,7 +186,7 @@ def main():
             reasoning="Test forecast reasoning",
             evidence_article_ids="art1"
         )
-        results["ForecastCausalReasonerTool"] = test_tool_return_type("ForecastCausalReasonerTool", result, ForecastHypothesisOutput)
+        results["ForecastCausalReasonerTool"] = _validate_tool_return_type("ForecastCausalReasonerTool", result, ForecastHypothesisOutput)
     except Exception as e:
         print(f"\n❌ ForecastCausalReasonerTool failed with error: {e}")
         results["ForecastCausalReasonerTool"] = False
@@ -200,7 +200,7 @@ def main():
             domain="technology",
             occurred_date=datetime.now(timezone.utc).isoformat()
         )
-        results["ForecastEventIdentifierTool"] = test_tool_return_type("ForecastEventIdentifierTool", result, ForecastEventOutput)
+        results["ForecastEventIdentifierTool"] = _validate_tool_return_type("ForecastEventIdentifierTool", result, ForecastEventOutput)
     except Exception as e:
         print(f"\n❌ ForecastEventIdentifierTool failed with error: {e}")
         results["ForecastEventIdentifierTool"] = False
@@ -215,7 +215,7 @@ def main():
             source_article_ids="art1,art2",
             occurred_date=datetime.now(timezone.utc).isoformat()
         )
-        results["EventIdentifierTool"] = test_tool_return_type("EventIdentifierTool", result, EventOutput)
+        results["EventIdentifierTool"] = _validate_tool_return_type("EventIdentifierTool", result, EventOutput)
     except Exception as e:
         print(f"\n❌ EventIdentifierTool failed with error: {e}")
         results["EventIdentifierTool"] = False
@@ -231,7 +231,7 @@ def main():
             resolution_date="2025-12-31T23:59:59Z",
             resolution_criteria="Based on CoinMarketCap closing price"
         )
-        results["QuestionGeneratorTool"] = test_tool_return_type("QuestionGeneratorTool", result, QuestionOutput)
+        results["QuestionGeneratorTool"] = _validate_tool_return_type("QuestionGeneratorTool", result, QuestionOutput)
     except Exception as e:
         print(f"\n❌ QuestionGeneratorTool failed with error: {e}")
         results["QuestionGeneratorTool"] = False
@@ -252,7 +252,7 @@ def main():
         tool = QuestionQualityScorer()
         # Run async function
         result = asyncio.run(tool.forward([test_question]))
-        results["QuestionQualityScorer"] = test_tool_return_type("QuestionQualityScorer", result, QuestionQualityOutput)
+        results["QuestionQualityScorer"] = _validate_tool_return_type("QuestionQualityScorer", result, QuestionQualityOutput)
     except Exception as e:
         print(f"\n❌ QuestionQualityScorer failed with error: {e}")
         results["QuestionQualityScorer"] = False

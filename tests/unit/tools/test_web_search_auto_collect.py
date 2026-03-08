@@ -1,16 +1,16 @@
 """Test auto-collection feature in WebSearchTool."""
 
+import logging
 import pytest
 from datetime import datetime
-from unittest.mock import Mock, patch
-from src.tools.web_search import WebSearchTool
+from unittest.mock import Mock
+from src.tools.collectors.web_search import WebSearchTool
 
 
 @pytest.fixture
 def mock_db():
     """Mock database for testing."""
-    db = Mock()
-    return db
+    return Mock()
 
 
 @pytest.fixture
@@ -61,127 +61,97 @@ def test_auto_collect_with_missing_dates(
     mock_db, mock_question, sample_search_results, caplog
 ):
     """Test that articles without publishedDate are properly skipped."""
-    import logging
-
     caplog.set_level(logging.DEBUG)
 
-    # Mock the database get method to return our question
     mock_db.get.return_value = mock_question
+    mock_collector_instance = Mock()
 
-    # Create a mock article collector (patch at import location)
-    with patch("src.tools.article_collector.ArticleCollectorTool") as MockCollector:
-        mock_collector_instance = Mock()
-        MockCollector.return_value = mock_collector_instance
+    tool = WebSearchTool(
+        db_path=None,
+        collector=None,
+        question_id="test_question_123",
+        auto_collect_enabled=False,
+        max_auto_collect=5,
+        domain="general",
+    )
 
-        # Initialize WebSearchTool with auto-collect enabled
-        tool = WebSearchTool(
-            db_path=None,
-            collector=None,
-            question_id="test_question_123",
-            auto_collect_enabled=False,  # We'll manually enable for testing
-            max_auto_collect=5,
-            domain="general",
-        )
+    tool.db = mock_db
+    tool.question_id = mock_question.id
+    tool.question = mock_question
+    tool.auto_collect_enabled = True
+    tool.question_resolution_date = mock_question.resolution_date
+    tool.article_collector = mock_collector_instance
 
-        # Manually set up for testing
-        tool.db = mock_db
-        tool.question_id = mock_question.id
-        tool.question = mock_question
-        tool.auto_collect_enabled = True
-        tool.question_resolution_date = mock_question.resolution_date
-        tool.article_collector = mock_collector_instance
+    summary = tool._auto_collect_articles(sample_search_results)
 
-        # Run auto-collection
-        summary = tool._auto_collect_articles(sample_search_results)
+    print("\n" + "=" * 60)
+    print("Auto-collection summary:")
+    print(summary)
+    print("=" * 60)
 
-        # Print the summary and logs for debugging
-        print("\n" + "=" * 60)
-        print("Auto-collection summary:")
-        print(summary)
-        print("=" * 60)
+    if caplog.text:
+        print("\nCaptured logs:")
+        print(caplog.text)
 
-        # Check logs for errors
-        if caplog.text:
-            print("\nCaptured logs:")
-            print(caplog.text)
+    assert "skipped" in summary.lower()
+    assert "no date" in summary.lower()
+    assert mock_collector_instance.forward.call_count == 1
 
-        # Verify the summary shows skipped articles
-        assert "skipped" in summary.lower()
-        assert "no date" in summary.lower()
-
-        # Only 1 article has a date, so only 1 should be collected
-        assert mock_collector_instance.forward.call_count == 1
-
-        # Verify the call was made with the correct article
-        call_args = mock_collector_instance.forward.call_args
-        assert call_args.kwargs["url"] == sample_search_results[0]["url"]
-        assert call_args.kwargs["title"] == sample_search_results[0]["title"]
+    call_args = mock_collector_instance.forward.call_args
+    assert call_args.kwargs["url"] == sample_search_results[0]["url"]
+    assert call_args.kwargs["title"] == sample_search_results[0]["title"]
 
 
 def test_auto_collect_with_invalid_date_format(mock_db, mock_question, caplog):
     """Test error handling when publishedDate has an invalid format."""
-    import logging
-
     caplog.set_level(logging.DEBUG)
 
-    # Create a result with a malformed date
     results_with_bad_date = [
         {
             "title": "Test Article",
             "url": "https://example.com/article",
             "content": "Test content",
             "engines": ["test"],
-            "publishedDate": "invalid-date-format",  # Bad date format
+            "publishedDate": "invalid-date-format",
         }
     ]
 
     mock_db.get.return_value = mock_question
+    mock_collector_instance = Mock()
 
-    with patch("src.tools.article_collector.ArticleCollectorTool") as MockCollector:
-        mock_collector_instance = Mock()
-        MockCollector.return_value = mock_collector_instance
+    tool = WebSearchTool(
+        db_path=None,
+        collector=None,
+        question_id="test_question_123",
+        auto_collect_enabled=False,
+        max_auto_collect=5,
+        domain="general",
+    )
 
-        tool = WebSearchTool(
-            db_path=None,
-            collector=None,
-            question_id="test_question_123",
-            auto_collect_enabled=False,
-            max_auto_collect=5,
-            domain="general",
-        )
+    tool.db = mock_db
+    tool.question_id = mock_question.id
+    tool.question = mock_question
+    tool.auto_collect_enabled = True
+    tool.question_resolution_date = mock_question.resolution_date
+    tool.article_collector = mock_collector_instance
 
-        tool.db = mock_db
-        tool.question_id = mock_question.id
-        tool.question = mock_question
-        tool.auto_collect_enabled = True
-        tool.question_resolution_date = mock_question.resolution_date
-        tool.article_collector = mock_collector_instance
+    summary = tool._auto_collect_articles(results_with_bad_date)
 
-        # Run auto-collection
-        summary = tool._auto_collect_articles(results_with_bad_date)
+    print("\n" + "=" * 60)
+    print("Auto-collection summary (bad date):")
+    print(summary)
+    print("=" * 60)
 
-        print("\n" + "=" * 60)
-        print("Auto-collection summary (bad date):")
-        print(summary)
-        print("=" * 60)
-
-        if caplog.text:
-            print("\nCaptured logs (should show error):")
-            print(caplog.text)
-
-        # Invalid dates fall back to current time (datetime.now(timezone.utc))
-        # which is after the resolution date (2026-01-01), so skipped as "after_resolution"
-        assert "after resolution" in summary.lower()
-        assert mock_collector_instance.forward.call_count == 0
+    # Invalid dates fall back to current time (datetime.now(timezone.utc))
+    # which is after the resolution date (2026-01-01), so skipped as "after_resolution"
+    assert "after resolution" in summary.lower()
+    assert mock_collector_instance.forward.call_count == 0
 
 
 def test_auto_collect_with_date_after_resolution(mock_db, mock_question, caplog):
     """Test that articles published after resolution date are skipped."""
-    import logging
-
     caplog.set_level(logging.DEBUG)
 
-    # Create a result with date after resolution
     results_future = [
         {
             "title": "Future Article",
@@ -193,40 +163,34 @@ def test_auto_collect_with_date_after_resolution(mock_db, mock_question, caplog)
     ]
 
     mock_db.get.return_value = mock_question
+    mock_collector_instance = Mock()
 
-    with patch("src.tools.article_collector.ArticleCollectorTool") as MockCollector:
-        mock_collector_instance = Mock()
-        MockCollector.return_value = mock_collector_instance
+    tool = WebSearchTool(
+        db_path=None,
+        collector=None,
+        question_id="test_question_123",
+        auto_collect_enabled=False,
+        max_auto_collect=5,
+        domain="general",
+    )
 
-        tool = WebSearchTool(
-            db_path=None,
-            collector=None,
-            question_id="test_question_123",
-            auto_collect_enabled=False,
-            max_auto_collect=5,
-            domain="general",
-        )
+    tool.db = mock_db
+    tool.question_id = mock_question.id
+    tool.question = mock_question
+    tool.auto_collect_enabled = True
+    tool.question_resolution_date = mock_question.resolution_date
+    tool.article_collector = mock_collector_instance
 
-        tool.db = mock_db
-        tool.question_id = mock_question.id
-        tool.question = mock_question
-        tool.auto_collect_enabled = True
-        tool.question_resolution_date = mock_question.resolution_date
-        tool.article_collector = mock_collector_instance
+    summary = tool._auto_collect_articles(results_future)
 
-        # Run auto-collection
-        summary = tool._auto_collect_articles(results_future)
+    print("\n" + "=" * 60)
+    print("Auto-collection summary (future date):")
+    print(summary)
+    print("=" * 60)
 
-        print("\n" + "=" * 60)
-        print("Auto-collection summary (future date):")
-        print(summary)
-        print("=" * 60)
-
-        # Should be skipped as "after_resolution"
-        assert "after resolution" in summary.lower()
-        assert mock_collector_instance.forward.call_count == 0
+    assert "after resolution" in summary.lower()
+    assert mock_collector_instance.forward.call_count == 0
 
 
 if __name__ == "__main__":
-    # Run tests with verbose output
     pytest.main([__file__, "-v", "-s"])

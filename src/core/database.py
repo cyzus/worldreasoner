@@ -573,7 +573,7 @@ class GenericDatabase(Generic[T]):
 
             # Apply temporal filtering if gateway exists
             if self.gateway is not None:
-                from ..domain.models import Article, Event
+                from src.domain.models import Article, Event
 
                 if model == Article:
                     if not self.gateway.is_article_accessible(instance):
@@ -600,7 +600,7 @@ class GenericDatabase(Generic[T]):
         Returns:
             List of model instances (temporally filtered if gateway active)
         """
-        from ..domain.models import Article, Event
+        from src.domain.models import Article, Event
 
         table_name = _registry.get_table_name(model)
         filters = filters or {}

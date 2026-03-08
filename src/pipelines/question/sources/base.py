@@ -139,7 +139,7 @@ class QuestionSourceRunner(ABC):
             Enhanced questions with updated domain and category
         """
         from src.domain.models.domain import Domain
-        from src.llm import LiteLLMClient
+        from src.core.llm import LiteLLMClient
         from src.config import get_config
         from src.pipelines.prompts import QuestionCategorizationPrompts
         from src.utils.llm_utils import parse_json_response

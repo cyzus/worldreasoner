@@ -13,8 +13,8 @@ class WebAgent(BaseAgent):
         is_code: bool = False,
     ):
         # Lazy import to avoid circular dependency
-        from src.tools.web_fetch import WebFetchTool
-        from src.tools.web_search import WebSearchTool
+        from src.tools.collectors.web_fetch import WebFetchTool
+        from src.tools.collectors.web_search import WebSearchTool
 
         # Create a new list with web tools
         web_tools = [WebSearchTool(), WebFetchTool()]

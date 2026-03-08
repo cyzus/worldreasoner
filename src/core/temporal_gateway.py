@@ -9,11 +9,11 @@ from datetime import datetime
 from typing import List, Optional, TYPE_CHECKING
 from dataclasses import dataclass
 
-from ..utils.logging import logger
-from .temporal_filter_service import TemporalFilterService
+from src.utils.logging import logger
+from src.services.temporal_filter_service import TemporalFilterService
 
 if TYPE_CHECKING:
-    from ..domain.models import Article, Event, Question, Forecast
+    from src.domain.models import Article, Event, Question, Forecast
 
 
 @dataclass
@@ -196,7 +196,7 @@ class TemporalGateway:
         Returns:
             ValidationResult with valid flag and error messages
         """
-        from ..domain.models import Article, Event
+        from src.domain.models import Article, Event
 
         result = ValidationResult(valid=True, errors=[], warnings=[])
 
@@ -269,7 +269,7 @@ class TemporalGateway:
         Returns:
             List of article IDs that pass temporal check
         """
-        from ..domain.models import Article
+        from src.domain.models import Article
 
         accessible = []
 
@@ -290,7 +290,7 @@ class TemporalGateway:
         Returns:
             List of event IDs that pass temporal check
         """
-        from ..domain.models import Event
+        from src.domain.models import Event
 
         accessible = []
 
