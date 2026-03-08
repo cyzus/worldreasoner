@@ -151,15 +151,9 @@ class GraphInspectorTool(DatabaseAwareTool):
         # Find orphan events (related to question but not in any hypothesis)
         orphan_event_ids = set()
         if question:
-            # Check outcome events - only flag non-ground-truth outcomes as orphans
-            # if they truly should be connected (i.e. the actual outcome)
+            # Check outcome events
             for oid in question.outcome_event_ids or []:
                 if oid not in event_ids:
-                    outcome_evt = self.db.get(Event, oid)
-                    # Skip non-actual outcome events for MCQ questions - they're
-                    # intentionally not connected (agent only builds chains for ground truth)
-                    if outcome_evt and outcome_evt.is_outcome and not outcome_evt.is_actual_outcome:
-                        continue
                     orphan_event_ids.add(oid)
             # Check legacy target event
             if question.target_event_id and question.target_event_id not in event_ids:
@@ -434,19 +428,24 @@ RECOMMENDATION:
             
             for event_id, event in orphan_events.items():
                 if event:
-                    desc = self._truncate(event.description, 55)
-                    builder.add_line(f"🔴 {desc}", indent=2)
-                    builder.add_line(f"ID: {event_id}", indent=5)
-                    if event.occurred_date:
-                        builder.add_line(f"Date: {event.occurred_date}", indent=5)
+                    desc = self._truncate(event.title, 55)
+                    
+                    if getattr(event, "is_outcome", False):
+                        if getattr(event, "is_actual_outcome", False):
+                            builder.add_line(f"🔴 {desc} [ACTUAL OUTCOME]", indent=2)
+                            builder.add_line(f"ID: {event_id}", indent=5)
+                            builder.add_line(f"→ Fix: call causal_reasoner with target_event_id='{event_id}' to connect your last intermediate event to this outcome.", indent=5)
+                        else:
+                            builder.add_line(f"🔴 {desc} [non-ground-truth outcome]", indent=2)
+                            builder.add_line(f"ID: {event_id}", indent=5)
+                            builder.add_line("→ No connection needed (not the actual outcome).", indent=5)
+                    else:
+                        builder.add_line(f"🔴 {desc}", indent=2)
+                        builder.add_line(f"ID: {event_id}", indent=5)
+                        builder.add_line(f"→ Fix: consider if this event belongs in the graph. If so, call causal_reasoner to connect it.", indent=5)
                 else:
                     builder.add_line(f"🔴 {event_id} (event not found)", indent=2)
                 builder.add_line()
-            
-            builder.add_line("RECOMMENDATION:")
-            builder.add_line("→ Consider creating relational hypotheses linking these events", indent=2)
-            builder.add_line("→ Use causal_reasoner tool to establish relationships", indent=2)
-            builder.add_line()
 
         # Causal chains section
         builder.add_section_header("RELATIONAL CHAINS (Root → Target)")

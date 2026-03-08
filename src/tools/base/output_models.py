@@ -86,6 +86,10 @@ class EventOutput(BaseModel):
         default=None,
         description="Validation warnings about date accuracy or other issues. Review these and correct events if needed.",
     )
+    actual_outcome_event_id: Optional[str] = Field(
+        default=None,
+        description="ID of the actual ground-truth outcome event (if known/available)",
+    )
 
 
 class EventDetailsOutput(BaseModel):
@@ -130,6 +134,13 @@ class QuestionEventsOutput(BaseModel):
     total: int = Field(description="Total events count")
 
 
+class OutcomeImpactOutput(BaseModel):
+    """Output model for RecordOutcomeImpactTool."""
+
+    status: str = Field(description="Operation status (recorded/error)")
+    impact_id: str = Field(description="ID of created impact record")
+    error: Optional[str] = Field(default=None, description="Error message if status is error")
+
 # =============================================================================
 # Hypothesis / Causal Reasoner Tools
 # =============================================================================
@@ -138,12 +149,14 @@ class QuestionEventsOutput(BaseModel):
 class HypothesisOutput(BaseModel):
     """Output model for CausalReasonerTool."""
 
-    status: str = Field(description="Operation status (created/updated)")
+    status: str = Field(description="Operation status (created/updated/error)")
     hypothesis_id: str = Field(description="ID of created hypothesis")
     relation: str = Field(description="Formatted relation string")
     strength: float = Field(description="Causal strength 0.0-1.0")
     confidence: float = Field(description="Confidence level 0.0-1.0")
     evidence_count: int = Field(default=0, description="Number of evidence articles")
+    outcome_connected: Optional[bool] = Field(default=None, description="Whether the target event is the actual outcome")
+    error: Optional[str] = Field(default=None, description="Error message if status is error")
 
 
 class ForecastHypothesisOutput(BaseModel):

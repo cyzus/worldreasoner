@@ -102,7 +102,7 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
         confidence: float,
         reasoning: str,
         evidence_article_ids: str = "",
-    ) -> str:
+    ) -> HypothesisOutput:
         """Record a causal hypothesis with supporting evidence.
 
         Args:
@@ -120,12 +120,41 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
         # Use default question_id if not provided or empty
         question_id = self.default_question_id
 
+        if self.db is not None:
+            source_event = self.db.get(Event, source_event_id)
+            if not source_event:
+                return HypothesisOutput(
+                    status="error",
+                    hypothesis_id="error",
+                    relation=f"{source_event_id} causes {target_event_id}",
+                    strength=0.0,
+                    confidence=0.0,
+                    error=f"source_event_id '{source_event_id}' not found. Create it first with event_identifier."
+                )
+            
+            target_event = self.db.get(Event, target_event_id)
+            if not target_event:
+                return HypothesisOutput(
+                    status="error",
+                    hypothesis_id="error",
+                    relation=f"{source_event_id} causes {target_event_id}",
+                    strength=0.0,
+                    confidence=0.0,
+                    error=f"target_event_id '{target_event_id}' not found. Create it first with event_identifier."
+                )
+
         # Validate and parse relation type
         try:
             relation = CausalRelationType(relation_type.lower())
         except ValueError:
-            # Default to CAUSES if invalid
-            relation = CausalRelationType.CAUSES
+            return HypothesisOutput(
+                status="error",
+                hypothesis_id="error",
+                relation=f"{source_event_id} causes {target_event_id}",
+                strength=0.0,
+                confidence=0.0,
+                error=f"Invalid relation_type '{relation_type}'. Valid: {[r.value for r in CausalRelationType]}"
+            )
 
         # Parse evidence article IDs
         evidence_ids = []
@@ -140,12 +169,26 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
 
         # Validate chronology - source must occur before target
         if not self._validate_chronology(source_event_id, target_event_id):
+            source_date = self._get_event_occurred_date(source_event_id)
+            target_date = self._get_event_occurred_date(target_event_id)
             return HypothesisOutput(
                 status="error",
                 hypothesis_id="error",
                 relation=f"{source_event_id} causes {target_event_id}",
                 strength=0.0,
                 confidence=0.0,
+                error=f"Chronology violation: source event occurred {source_date}, target event occurred {target_date}. Cause must precede effect."
+            )
+
+        # Validate DAG
+        if not self._validate_dag(source_event_id, target_event_id):
+            return HypothesisOutput(
+                status="error",
+                hypothesis_id="error",
+                relation=f"{source_event_id} causes {target_event_id}",
+                strength=0.0,
+                confidence=0.0,
+                error=f"Cycle detected: Adding this relation would create a causal loop. Target event '{target_event_id}' is already an ancestor of source event '{source_event_id}'."
             )
 
         # Generate unique hypothesis ID
@@ -183,6 +226,14 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
 
             logger.debug(f"Hypothesis {hypothesis_id} persisted to database")
 
+        # Check connectivity to actual outcome
+        outcome_connected = False
+        if self.db is not None:
+            # Re-fetch target_event just in case (already fetched above)
+            target_event_obj = self.db.get(Event, target_event_id)
+            if target_event_obj and getattr(target_event_obj, "is_actual_outcome", False):
+                outcome_connected = True
+
         # Return HypothesisOutput Pydantic model
         return HypothesisOutput(
             status="recorded",
@@ -190,9 +241,10 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
             relation=f"{source_event_id} {relation.value} {target_event_id}",
             strength=strength,
             confidence=confidence,
+            outcome_connected=outcome_connected,
         )
 
-    def _generate_hypothesis_id(self, question_id: str) -> str:
+    def _generate_hypothesis_id(self, question_id: str) -> HypothesisOutput:
         """Generate unique hypothesis ID.
 
         Args:
@@ -241,3 +293,39 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
             return True
 
         return source_date <= target_date
+
+    def _validate_dag(self, source_event_id: str, target_event_id: str) -> bool:
+        """Validate that adding this edge does not create a causal cycle.
+        
+        A cycle occurs if the target event is already an ancestor of the source event.
+        Returns True if the DAG is valid (no cycle), False if a cycle is detected.
+        """
+        if self.db is None:
+            return True  # Cannot validate without DB
+            
+        # Get all hypotheses to traverse the graph
+        all_hypotheses = self.db.get_many(CausalHypothesis)
+        
+        # Build adjacency list for reverse graph (child -> parents)
+        # We want to traverse upwards from source to see if we reach target
+        parents = {}
+        for h in all_hypotheses:
+            if h.target_event_id not in parents:
+                parents[h.target_event_id] = []
+            parents[h.target_event_id].append(h.source_event_id)
+            
+        # BFS or DFS upwards from source_event_id
+        visited = set()
+        queue = [source_event_id]
+        
+        while queue:
+            current = queue.pop(0)
+            if current == target_event_id:
+                return False  # Target is an ancestor of Source -> Cycle!
+                
+            if current not in visited:
+                visited.add(current)
+                if current in parents:
+                    queue.extend(parents[current])
+                    
+        return True

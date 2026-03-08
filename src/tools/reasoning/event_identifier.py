@@ -202,23 +202,14 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
                         invalid_articles=invalid_date_articles,
                     )
 
-                # Date proximity check: flag if event date is implausibly far from source articles
+                # Date proximity check: flag only if ALL source articles are published before the event date
+                # which is genuinely impossible (an article cannot report an event that hasn't happened yet)
                 if article_dates and event_date:
-                    closest_article_date = min(article_dates, key=lambda d: abs((d - event_date).total_seconds()))
-                    gap_days = abs((closest_article_date - event_date).days)
-                    if gap_days > 30:
+                    latest_article = max(article_dates)
+                    if latest_article.date() < event_date.date():
                         article_date_warnings.append(
-                            f"DATE ACCURACY WARNING: Event date ({event_date.strftime('%Y-%m-%d')}) is {gap_days} days "
-                            f"from the closest source article date ({closest_article_date.strftime('%Y-%m-%d')}). "
-                            f"This is unusual - events are typically reported within days of occurring. "
-                            f"Please verify the event date is extracted from the article content, not inferred."
-                        )
-                    # Check if all source articles are far in the future from the event
-                    earliest_article = min(article_dates)
-                    if (earliest_article - event_date).days > 90:
-                        article_date_warnings.append(
-                            f"DATE ACCURACY WARNING: All source articles are published 90+ days after this event. "
-                            f"The event date may be incorrect. Verify against article text."
+                            f"DATE ACCURACY WARNING: All source articles were published before the event date ({event_date.strftime('%Y-%m-%d')}). "
+                            f"This is impossible. Please verify the event date."
                         )
 
         else:

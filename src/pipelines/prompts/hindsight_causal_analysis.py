@@ -22,7 +22,8 @@ Specialist agent for building deep event graphs and analyzing outcome impacts.
 
 Guidelines:
 - Call get_question_articles to get article IDs
-- Call get_question_events to see existing events and OUTCOME events (use actual_outcome_event_id for final links)
+- Call get_question_events to see existing events and OUTCOME events (look for is_actual_outcome=True in the list)
+- When you use event_identifier, its response will now include actual_outcome_event_id. Use this ID for your final causal links.
 - If outcomes are provided, use EventDetailsTool to understand them
 - Create outcome event(s) (outcome from ground truth) using event_identifier with is_outcome=True if not provided
 - Create events with source_article_ids (remember to check the tool output like event ids to see status)
@@ -51,7 +52,8 @@ CRITICAL - CONNECTING TO OUTCOME:
 
 OUTCOME IMPACT ANALYSIS:
 - For each significant event, assess its impact on BOTH outcomes (Yes/No or all MCQ options)
-- Use event_identifier with outcome_impacts parameter to record impacts:
+- Use the record_outcome_impact tool to record impacts (do NOT use the deprecated outcome_impacts parameter on event_identifier):
+  - Call record_outcome_impact for EACH outcome the event impacts
   - direction: "positive" (increases likelihood) or "negative" (decreases likelihood)
   - magnitude: 0.0-1.0 (0.5=moderate, 0.7+=strong, 1.0=decisive)
   - confidence: 0.0-1.0 (your certainty in this assessment)
@@ -62,6 +64,7 @@ OUTCOME IMPACT ANALYSIS:
 FINAL VERIFICATION:
 - Use graph_inspector to check the quality, depth, and outcome impacts
 - If Max Depth is 0, you have NOT connected to the outcome - go back and add the final link!
+- If you made a mistake (created an event with wrong dates or created a circular link), use delete_event or delete_hypothesis to prune the bad data.
 """
 
 MANAGER_AGENT_DESCRIPTION = """Your task: Make a comprehensive event analysis for this question with hindsight.

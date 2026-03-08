@@ -12,6 +12,9 @@ from .reasoning.causal_reasoner import CausalReasonerTool
 from .inspectors.graph_inspector import GraphInspectorTool
 from .inspectors.article_inspector import ArticleInspectorTool
 from .generators.question_articles import QuestionArticlesTool
+from .reasoning.record_outcome_impact import RecordOutcomeImpactTool
+from .reasoning.delete_event import DeleteEventTool
+from .reasoning.delete_hypothesis import DeleteHypothesisTool
 from .generators.question_events import QuestionEventsTool
 
 __all__ = [
@@ -28,4 +31,7 @@ __all__ = [
     "ArticleInspectorTool",
     "QuestionArticlesTool",
     "QuestionEventsTool",
+    "RecordOutcomeImpactTool",
+    "DeleteEventTool",
+    "DeleteHypothesisTool",
 ]

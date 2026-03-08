@@ -4,14 +4,20 @@ from src.agents.base import BaseAgent
 from src.config import Config, get_config
 from smolagents import CodeAgent, LiteLLMModel
 from src.tools import (
+    # Evidence
     ArticleRetrievalTool,
     ArticleCollectorTool,
     WebFetchTool,
     WebSearchTool,
+    # Graph and Reasoning
     EventDetailsTool,
     EventIdentifierTool,
     CausalReasonerTool,
     GraphInspectorTool,
+    RecordOutcomeImpactTool,
+    DeleteEventTool,
+    DeleteHypothesisTool,
+    # Inspector
     ArticleInspectorTool,
     QuestionArticlesTool,
     QuestionEventsTool,
@@ -107,6 +113,11 @@ class HindsightAgent(BaseAgent):
                 GraphInspectorTool(
                     db_path=db_path, question_id=question_id
                 ),  # Provenance-aware
+                RecordOutcomeImpactTool(
+                    db_path=db_path, question_id=question_id
+                ),  # Record outcome impact natively
+                DeleteEventTool(db_path=db_path),
+                DeleteHypothesisTool(db_path=db_path),
                 ArticleRetrievalTool(db_path=db_path),
                 ArticleInspectorTool(
                     db_path=db_path, question_id=question_id
