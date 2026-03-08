@@ -2,10 +2,9 @@
 
 from typing import Dict, List, Set, Optional
 
-from src.pipelines.question.sources.base import QuestionSourceRunner
+from .runner_base import QuestionSourceRunner
 from .gap_analyzer import GapAnalysis
-from .source_coordinator import SourceCoordinator, SourceRequest
-from .progress import CollectionProgress
+from .coordinator import SourceCoordinator, SourceRequest
 from src.config.collection_goal import CollectionGoal
 from src.domain.models import Question
 from src.utils.logging import logger
@@ -39,14 +38,12 @@ class GapFiller:
     async def fill_gaps(
         self,
         analysis: GapAnalysis,
-        progress: CollectionProgress,
         existing_question_ids: set,
     ) -> List[Question]:
         """Fill identified gaps through targeted collection.
 
         Args:
             analysis: Gap analysis identifying what's missing
-            progress: Current collection progress
             existing_question_ids: IDs to skip for deduplication
 
         Returns:
@@ -77,18 +74,16 @@ class GapFiller:
 
         # Fill type gaps
         for qtype, needed_count in analysis.type_gaps.items():
-            if needed_count <= 0:
+            if needed_count <= 0 or qtype in unsupported_types:
                 continue
-            if qtype in unsupported_types:
-                continue
-            questions = await self._fill_type_gap(
-                qtype=qtype,
-                needed_count=needed_count,
-                all_type_hints=analysis.type_gaps_list,
-                category_hints=analysis.category_gaps,
-                time_horizon_hints=analysis.time_horizon_gaps_list,
-                progress=progress,
+            logger.info(f"Filling type gap: {needed_count} '{qtype}' questions")
+            questions = await self._collect_with_filters(
+                remaining=needed_count,
+                type_filter=analysis.type_gaps_list,
+                category_filter=None,
                 existing_question_ids=existing_question_ids,
+                description=f"of type '{qtype}'",
+                time_horizon_hints=analysis.time_horizon_gaps_list or None,
             )
             collected_questions.extend(questions)
 
@@ -96,25 +91,22 @@ class GapFiller:
         for category, needed_count in analysis.category_gaps.items():
             if needed_count <= 0:
                 continue
-            # Skip categories that no source can serve
             can_serve_category = any(
-                [
-                    await runner.can_provide(category=category)
-                    for runner in self.sources.values()
-                ]
+                [await runner.can_provide(category=category) for runner in self.sources.values()]
             )
             if not can_serve_category:
                 logger.warning(
                     f"Skipping unsupported category gap '{category}' (no source can provide it)"
                 )
                 continue
-            questions = await self._fill_category_gap(
-                category=category,
-                needed_count=needed_count,
-                type_hints=analysis.type_gaps_list,
-                time_horizon_hints=analysis.time_horizon_gaps_list,
-                progress=progress,
+            logger.info(f"Filling category gap: {needed_count} '{category}' questions")
+            questions = await self._collect_with_filters(
+                remaining=needed_count,
+                type_filter=None,
+                category_filter={category: needed_count},
                 existing_question_ids=existing_question_ids,
+                description=f"in category '{category}'",
+                time_horizon_hints=analysis.time_horizon_gaps_list or None,
             )
             collected_questions.extend(questions)
 
@@ -122,30 +114,41 @@ class GapFiller:
         for horizon, needed_count in analysis.time_horizon_gaps.items():
             if needed_count <= 0:
                 continue
-            questions = await self._fill_time_horizon_gap(
-                horizon=horizon,
-                needed_count=needed_count,
-                type_hints=analysis.type_gaps_list,
-                category_hints=analysis.category_gaps_list,
-                progress=progress,
+            from src.config.collection_goal import TimeHorizon
+            try:
+                th = TimeHorizon(horizon)
+                min_d, max_d = TimeHorizon.get_day_range(th)
+                logger.info(
+                    f"Filling time horizon gap: {needed_count} '{horizon}' questions "
+                    f"({min_d}-{max_d} days resolution window)"
+                )
+            except ValueError:
+                logger.warning(f"Unknown time horizon '{horizon}', skipping")
+                continue
+            questions = await self._collect_with_filters(
+                remaining=needed_count,
+                type_filter=analysis.type_gaps_list or None,
+                category_filter=None,
                 existing_question_ids=existing_question_ids,
+                description=f"with '{horizon}' time horizon ({min_d}-{max_d} days)",
+                time_horizon_hints=[horizon],
             )
             collected_questions.extend(questions)
 
-        # If no specific gaps were identified but we still need questions for the total
+        # Fill total count if no specific distribution gaps remain
         if (
             analysis.total_needed > 0
             and not analysis.type_gaps
             and not analysis.category_gaps
             and not analysis.time_horizon_gaps
         ):
-            logger.info(
-                f"Filling total gap: need {analysis.total_needed} more questions to reach goal"
-            )
-            questions = await self._fill_total_gap(
-                needed_count=analysis.total_needed,
-                progress=progress,
+            logger.info(f"Filling total gap: {analysis.total_needed} questions (any type/category)")
+            questions = await self._collect_with_filters(
+                remaining=analysis.total_needed,
+                type_filter=None,
+                category_filter=None,
                 existing_question_ids=existing_question_ids,
+                description="(any type/category)",
             )
             collected_questions.extend(questions)
 
@@ -212,107 +215,6 @@ class GapFiller:
                 self.exhausted_sources.add(source_name)
 
         return collected
-
-    async def _fill_type_gap(
-        self,
-        qtype: str,
-        needed_count: int,
-        all_type_hints: List[str],
-        category_hints: Dict[str, int],
-        time_horizon_hints: Optional[List[str]],
-        progress: CollectionProgress,
-        existing_question_ids: set,
-    ) -> List[Question]:
-        """Fill gap for specific question type."""
-        logger.info(f"Filling type gap: {needed_count} '{qtype}' questions")
-        # Don't restrict by category when filling type gaps - fetch broadly
-        return await self._collect_with_filters(
-            remaining=needed_count,
-            type_filter=all_type_hints,
-            category_filter=None,  # No category restriction for type gaps
-            existing_question_ids=existing_question_ids,
-            description=f"of type '{qtype}'",
-            time_horizon_hints=time_horizon_hints,
-        )
-
-    async def _fill_category_gap(
-        self,
-        category: str,
-        needed_count: int,
-        type_hints: List[str],
-        time_horizon_hints: Optional[List[str]],
-        progress: CollectionProgress,
-        existing_question_ids: set,
-    ) -> List[Question]:
-        """Fill gap for specific category."""
-        logger.info(f"Filling category gap: {needed_count} '{category}' questions")
-        return await self._collect_with_filters(
-            remaining=needed_count,
-            type_filter=None,
-            category_filter={category: needed_count},
-            existing_question_ids=existing_question_ids,
-            description=f"in category '{category}'",
-            time_horizon_hints=time_horizon_hints,
-        )
-
-    async def _fill_time_horizon_gap(
-        self,
-        horizon: str,
-        needed_count: int,
-        type_hints: Optional[List[str]],
-        category_hints: Optional[List[str]],
-        progress: CollectionProgress,
-        existing_question_ids: set,
-    ) -> List[Question]:
-        """Fill gap for specific time horizon.
-
-        Args:
-            horizon: Time horizon to fill (short/medium/long)
-            needed_count: Number of questions needed for this horizon
-            type_hints: Priority question types
-            category_hints: Priority categories
-            progress: Current collection progress
-            existing_question_ids: IDs to skip for deduplication
-
-        Returns:
-            List of collected questions targeting the specified horizon
-        """
-        from src.config.collection_goal import TimeHorizon
-        try:
-            th = TimeHorizon(horizon)
-            min_d, max_d = TimeHorizon.get_day_range(th)
-            logger.info(
-                f"Filling time horizon gap: {needed_count} '{horizon}' questions "
-                f"({min_d}-{max_d} days resolution window)"
-            )
-        except ValueError:
-            logger.warning(f"Unknown time horizon '{horizon}', skipping")
-            return []
-
-        return await self._collect_with_filters(
-            remaining=needed_count,
-            type_filter=type_hints if type_hints else None,
-            category_filter=None,
-            existing_question_ids=existing_question_ids,
-            description=f"with '{horizon}' time horizon ({min_d}-{max_d} days)",
-            time_horizon_hints=[horizon],
-        )
-
-    async def _fill_total_gap(
-        self,
-        needed_count: int,
-        progress: CollectionProgress,
-        existing_question_ids: set,
-    ) -> List[Question]:
-        """Fill gap in total question count without specific type/category requirements."""
-        logger.info(f"Filling total gap: {needed_count} questions (any type/category)")
-        return await self._collect_with_filters(
-            remaining=needed_count,
-            type_filter=None,
-            category_filter=None,
-            existing_question_ids=existing_question_ids,
-            description="(any type/category)",
-        )
 
     def reset_exhausted(self):
         """Reset exhausted sources (for next iteration)."""

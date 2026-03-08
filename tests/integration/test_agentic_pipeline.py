@@ -2,8 +2,8 @@
 
 import asyncio
 from datetime import datetime, timedelta
-from src.pipelines.question.sources.news import NewsBasedRunner
-from src.pipelines.stages.article_collection import (
+from src.pipelines.collection.runner_news import NewsBasedRunner
+from src.pipelines.collection.stage_articles import (
     ArticleSource,
     ArticleCollectionConfig,
 )

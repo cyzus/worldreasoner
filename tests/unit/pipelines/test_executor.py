@@ -240,7 +240,7 @@ class TestHelperMethods:
 
     def test_create_news_runner(self, executor):
         """Create NewsBasedRunner with configuration."""
-        from src.pipelines.question.sources.news import NewsBasedRunner
+        from src.pipelines.collection.runner_news import NewsBasedRunner
 
         with patch.object(executor, "_load_article_sources") as mock_load:
             mock_load.return_value = []

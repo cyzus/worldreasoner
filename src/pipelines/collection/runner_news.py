@@ -1,17 +1,14 @@
 """News-based question source runner.
 
-Wraps the existing article → event → question pipeline as a question source.
+Wraps the existing article -> question pipeline as a question source.
 """
 
 from typing import List, Optional, Dict, Union
 
-from .base import QuestionSourceRunner, CollectionResult
+from .runner_base import QuestionSourceRunner, CollectionResult
 from src.config.collection_goal import QualityRequirements
-from src.pipelines.stages import (
-    ArticleCollectionStage,
-    ArticleCollectionConfig,
-    NewsQuestionGenerationStage,
-)
+from .stage_articles import ArticleCollectionStage, ArticleCollectionConfig
+from .stage_news_questions import NewsQuestionGenerationStage
 from src.config.pipeline import QuestionPipelineConfig
 from src.utils.logging import logger
 
@@ -62,7 +59,7 @@ class NewsBasedRunner(QuestionSourceRunner):
     ) -> CollectionResult:
         """Collect questions from news sources.
 
-        Runs the full article→event→question pipeline with filtering.
+        Runs the full article->event->question pipeline with filtering.
 
         Args:
             count: Target number of questions
@@ -215,7 +212,7 @@ class NewsBasedRunner(QuestionSourceRunner):
             # to QuestionGenerationStage. Just use them as-is (no slicing needed).
             final_questions = filtered_questions
 
-            # Note: Bidirectional event↔question links are now handled by BatchQuestionGeneratorTool
+            # Note: Bidirectional event<->question links are now handled by BatchQuestionGeneratorTool
             # The tool updates event.metadata['related_question_ids'] when creating questions
 
             return CollectionResult(

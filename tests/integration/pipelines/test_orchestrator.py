@@ -1,14 +1,14 @@
 """Integration tests for the QuestionCollectionOrchestrator."""
 
 import pytest
-from src.pipelines.question.orchestrator import (
+from src.pipelines.collection.orchestrator import (
     QuestionCollectionOrchestrator,
     OrchestratorConfig,
 )
 from src.config.collection_goal import CollectionGoal
 from src.domain.models.question import Question
 from src.core.database import GenericDatabase
-from src.pipelines.question.sources.base import QuestionSourceRunner, CollectionResult
+from src.pipelines.collection.runner_base import QuestionSourceRunner, CollectionResult
 from src.domain.models import Question, QuestionType, Domain
 from datetime import datetime, timezone
 from src.config.pipeline import QuestionQualityConfig

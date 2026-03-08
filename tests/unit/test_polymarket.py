@@ -21,7 +21,7 @@ from src.integrations.polymarket import (
     detect_sharp_movements,
     analyze_price_curve,
 )
-from src.pipelines.question.sources.markets import PolymarketRunner
+from src.pipelines.collection.runner_polymarket import PolymarketRunner
 from src.core.database import GenericDatabase
 
 

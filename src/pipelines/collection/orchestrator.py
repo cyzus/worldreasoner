@@ -10,12 +10,12 @@ from pydantic import BaseModel, Field
 
 from src.config.collection_goal import CollectionGoal
 from src.config.pipeline import QuestionQualityConfig
-from src.pipelines.question.sources.base import QuestionSourceRunner, CollectionResult
+from .runner_base import QuestionSourceRunner, CollectionResult
 from .progress import CollectionProgress
-from .source_coordinator import SourceCoordinator, SourceRequest
+from .coordinator import SourceCoordinator, SourceRequest
 from .gap_analyzer import GapAnalyzer
 from .gap_filler import GapFiller
-from ..stages.question_quality import QuestionQualityRankingStage
+from .stage_quality import QuestionQualityRankingStage
 from src.domain.models import Question
 from src.core.database import GenericDatabase
 from src.utils.logging import logger
@@ -323,7 +323,6 @@ class QuestionCollectionOrchestrator:
 
         gap_questions = await self.gap_filler.fill_gaps(
             analysis=analysis,
-            progress=self.progress,
             existing_question_ids=self.existing_question_ids,
         )
 

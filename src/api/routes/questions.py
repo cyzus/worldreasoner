@@ -156,7 +156,7 @@ async def search_polymarket(request: PolymarketSearchRequest):
     try:
         logger.info(f"Searching Polymarket for: '{request.query}'")
 
-        from src.pipelines.question.sources.polymarket_client import PolymarketClient
+        from src.integrations.polymarket_client import PolymarketClient
 
         client = PolymarketClient()
         results = await client.search_markets(
@@ -216,8 +216,7 @@ async def preview_questions(request: QuestionPreviewRequest):
         )
 
         # Initialize the appropriate source runner
-        from src.pipelines.question.sources.markets import PolymarketRunner
-        from src.pipelines.question.sources.news import NewsBasedRunner
+        from src.pipelines.collection import PolymarketRunner, NewsBasedRunner
 
         errors = []
         questions_list = []
@@ -317,7 +316,7 @@ async def preview_questions(request: QuestionPreviewRequest):
 
         elif request.source == "news":
             # Initialize runner with required configurations
-            from src.pipelines.stages import ArticleCollectionConfig, ArticleSource
+            from src.pipelines.collection import ArticleCollectionConfig, ArticleSource
             from src.config.pipeline import QuestionPipelineConfig
             from datetime import datetime, timedelta, timezone
             import yaml

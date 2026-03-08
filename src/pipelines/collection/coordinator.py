@@ -4,7 +4,7 @@ import asyncio
 from typing import Dict, List, Optional, Union
 from dataclasses import dataclass
 
-from src.pipelines.question.sources.base import QuestionSourceRunner, CollectionResult
+from .runner_base import QuestionSourceRunner, CollectionResult
 from src.config.collection_goal import QualityRequirements
 from src.utils.logging import logger
 

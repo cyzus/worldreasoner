@@ -4,7 +4,7 @@ import asyncio
 import time
 from datetime import datetime, timezone, timedelta
 
-from src.pipelines.stages.article_collection import (
+from src.pipelines.collection.stage_articles import (
     ArticleCollectionStage,
     ArticleCollectionConfig,
     ArticleSource,

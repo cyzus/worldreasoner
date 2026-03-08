@@ -2,11 +2,11 @@
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from src.pipelines.question.gap_filler import GapFiller
-from src.pipelines.question.gap_analyzer import GapAnalysis
-from src.pipelines.question.source_coordinator import SourceCoordinator
-from src.pipelines.question.progress import CollectionProgress
-from src.pipelines.question.sources.base import QuestionSourceRunner, CollectionResult
+from src.pipelines.collection.gap_filler import GapFiller
+from src.pipelines.collection.gap_analyzer import GapAnalysis
+from src.pipelines.collection.coordinator import SourceCoordinator
+from src.pipelines.collection.progress import CollectionProgress
+from src.pipelines.collection.runner_base import QuestionSourceRunner, CollectionResult
 from src.config.collection_goal import CollectionGoal
 from tests.conftest import create_test_question
 

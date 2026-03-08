@@ -9,9 +9,9 @@ from datetime import datetime, timezone
 import json
 from pydantic import BaseModel
 
-from .base import QuestionSourceRunner, CollectionResult
-from .polymarket_client import PolymarketClient
-from .market_parser import MarketParser
+from .runner_base import QuestionSourceRunner, CollectionResult
+from src.integrations.polymarket_client import PolymarketClient
+from src.integrations.polymarket_parser import MarketParser
 from src.domain.models import Question
 from src.domain.models.domain import Domain
 from src.domain.models.question import QuestionType
@@ -91,13 +91,13 @@ class PolymarketRunner(QuestionSourceRunner):
 
     def _infer_domain_from_tags(self, event: Dict[str, Any]) -> Optional[Domain]:
         """Infer domain from event tags by matching against DOMAIN_TO_TAG_SLUGS.
-        
+
         Returns the first matching Domain, or None if no match found.
         """
         event_tags = {tag.get("slug") for tag in event.get("tags", []) if tag.get("slug")}
         if not event_tags:
             return None
-        
+
         for domain, slugs in self.DOMAIN_TO_TAG_SLUGS.items():
             if domain == Domain.GENERAL:
                 continue  # Skip "all" catch-all
@@ -485,7 +485,7 @@ class PolymarketRunner(QuestionSourceRunner):
 
             # Apply time horizon post-filtering if hints provided
             if time_horizon_hints and filtered:
-                from src.pipelines.question.progress import classify_question_time_horizon
+                from .progress import classify_question_time_horizon
                 before_horizon = len(filtered)
                 horizon_filtered = [
                     q for q in filtered
