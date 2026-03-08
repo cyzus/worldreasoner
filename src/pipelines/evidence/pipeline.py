@@ -211,12 +211,12 @@ class EvidencePipeline(Pipeline):
                 f"Per-question processing complete: {successful_count} successful, {failed_count} failed"
             )
 
-            if not self.causal_hypotheses:
-                logger.error("No causal hypotheses generated - pipeline failed")
+            if not self.evidence_articles and len(failure_reasons) == len(self.resolved_questions):
+                logger.error("No evidence collected - pipeline failed")
                 error_message = (
                     "; ".join(failure_reasons)
                     if failure_reasons
-                    else "No causal hypotheses generated"
+                    else "No evidence generated"
                 )
                 failed_result = self._create_stage_result(
                     status=PipelineStageStatus.FAILED,

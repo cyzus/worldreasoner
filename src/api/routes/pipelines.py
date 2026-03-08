@@ -318,6 +318,40 @@ async def run_pipeline_job(
             on_progress=on_progress,
             **config,
         )
+        
+        # In decoupled V2 architecture, Evidence pipeline only extracts NL explanations.
+        # If we successfully ran the evidence pipeline, we should automatically trigger 
+        # the graph builder pipeline to build the structured graph.
+        if pipeline_type == PipelineType.EVIDENCE and len(result.processed) > 0:
+            job.message = f"Building graphs for {len(result.processed)} questions..."
+            job.updated_at = datetime.utcnow().isoformat()
+            try:
+                from src.pipelines.graph_builder.pipeline import GraphBuilderPipeline
+                from src.config.settings import get_settings
+                from src.core.database import GenericDatabase
+                from src.domain.models import Question
+                
+                db_path = get_current_db_path()
+                graph_pipeline = GraphBuilderPipeline(
+                    db_path=db_path,
+                    model_id=get_settings().default_model,
+                )
+                db = GenericDatabase(db_path)
+                
+                graph_success = 0
+                for item in result.processed:
+                    q = db.get(Question, item["id"])
+                    if q and q.causal_explanation:
+                        success = graph_pipeline._process_single_question(q)
+                        if success:
+                            graph_success += 1
+                            
+                job.results["graphs_built"] = graph_success
+                
+            except Exception as e:
+                logger.error(f"Auto graph builder failed: {e}")
+                # Don't fail the job if just the graph building failed, 
+                # they still got the evidence explanation.
 
         # Determine job status based on results
         # Determine job status based on results
