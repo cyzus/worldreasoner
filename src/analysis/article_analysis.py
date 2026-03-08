@@ -4,86 +4,11 @@ These utilities can be used by both backend tools and frontend API endpoints
 to analyze article collections.
 """
 
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 from collections import defaultdict
 from datetime import datetime
 
 from src.domain.models import Article
-
-
-def get_evidence_window(
-    resolution_date: datetime,
-    estimated_start_time: Optional[datetime] = None,
-    fallback_window_days: int = 365,
-) -> Tuple[Optional[datetime], datetime]:
-    """Calculate the evidence collection time window for a question.
-
-    DEPRECATED: Use TemporalFilterService.get_evidence_window instead.
-    This function is maintained for backward compatibility.
-
-    Args:
-        resolution_date: Question resolution date (end of window)
-        estimated_start_time: Optional question/market start time (preferred start)
-        fallback_window_days: Days to look back if no estimated_start_time (default: 365)
-
-    Returns:
-        Tuple of (window_start, window_end)
-    """
-    import warnings
-
-    warnings.warn(
-        "get_evidence_window is deprecated. Use TemporalFilterService.get_evidence_window",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
-    # Delegate to new service
-    from src.services.temporal_filter_service import TemporalFilterService
-
-    return TemporalFilterService.get_evidence_window(
-        resolution_date, estimated_start_time, fallback_window_days
-    )
-
-
-def filter_articles_by_time_window(
-    articles: List[Article],
-    resolution_date: datetime,
-    estimated_start_time: Optional[datetime] = None,
-    fallback_window_days: int = 365,
-) -> List[Article]:
-    """Filter articles to valid time window for a question.
-
-    DEPRECATED: Use TemporalFilterService.filter_by_window instead.
-    This function is maintained for backward compatibility.
-
-    Uses two-tier window approach:
-    1. If estimated_start_time provided: [estimated_start_time, resolution_date)
-    2. Fallback: [resolution_date - fallback_window_days, resolution_date)
-
-    Args:
-        articles: List of articles to filter
-        resolution_date: Question resolution date (articles must be before this)
-        estimated_start_time: Optional question/market start time (preferred window start)
-        fallback_window_days: Days to look back if no estimated_start_time (default: 365)
-
-    Returns:
-        List of articles within the valid time window
-    """
-    import warnings
-
-    warnings.warn(
-        "filter_articles_by_time_window is deprecated. Use TemporalFilterService.filter_by_window",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
-    # Delegate to new service
-    from src.services.temporal_filter_service import TemporalFilterService
-
-    window_start, window_end = TemporalFilterService.get_evidence_window(
-        resolution_date, estimated_start_time, fallback_window_days
-    )
-    return TemporalFilterService.filter_by_window(articles, window_start, window_end)
 
 
 def analyze_timeline(

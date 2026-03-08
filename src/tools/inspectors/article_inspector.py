@@ -5,17 +5,17 @@ from typing import Optional, List, Dict
 from src.tools.base.database_mixin import DatabaseAwareTool
 from src.domain.models import Article, Question
 from src.analysis.article_analysis import (
-    filter_articles_by_time_window,
     analyze_timeline,
     analyze_sources,
     identify_gaps,
     calculate_quality,
     get_recommendation,
 )
+from src.services.temporal_filter_service import TemporalFilterService
 from src.utils.date_utils import ensure_timezone_aware
 from src.utils.formatting_utils import (
+    InspectorReportBuilder,
     format_inspector_header,
-    format_section_header,
     format_time_window,
     format_coverage_range,
     render_monthly_bar_chart,
@@ -85,9 +85,12 @@ class ArticleInspectorTool(DatabaseAwareTool):
             Article, filters={"collected_for_question_id": self.question_id}
         )
 
-        # Filter articles by time window using shared utility
-        filtered_articles = filter_articles_by_time_window(
-            question_articles, question.resolution_date, question.estimated_start_time
+        # Filter articles by time window
+        window_start, window_end = TemporalFilterService.get_evidence_window(
+            question.resolution_date, question.estimated_start_time
+        )
+        filtered_articles = TemporalFilterService.filter_by_window(
+            question_articles, window_start, window_end
         )
 
         if not filtered_articles:
@@ -159,8 +162,6 @@ ERROR: {error}
         quality: Dict,
     ) -> str:
         """Format the article analysis as visual text."""
-        from src.utils.formatting_utils import InspectorReportBuilder
-
         builder = InspectorReportBuilder("ARTICLE COVERAGE INSPECTOR")
         
         # Overview

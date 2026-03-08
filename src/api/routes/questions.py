@@ -1233,7 +1233,7 @@ async def get_article_coverage(
             )
 
         # Get articles for this question and filter by time window
-        from src.analysis.article_analysis import filter_articles_by_time_window
+        from src.services.temporal_filter_service import TemporalFilterService
         from src.utils.date_utils import ensure_timezone_aware
 
         all_articles = db.get_many(Article)
@@ -1279,10 +1279,12 @@ async def get_article_coverage(
                 )
 
         # Filter by time window using shared utility
-        question_articles = filter_articles_by_time_window(
-            all_question_articles,
+        window_start, window_end = TemporalFilterService.get_evidence_window(
             question.resolution_date,
             question.estimated_start_time,
+        )
+        question_articles = TemporalFilterService.filter_by_window(
+            all_question_articles, window_start, window_end
         )
 
         logger.info(

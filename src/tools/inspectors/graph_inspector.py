@@ -14,8 +14,8 @@ from src.analysis.event_analysis import (
     get_event_temporal_recommendation,
 )
 from src.utils.formatting_utils import (
+    InspectorReportBuilder,
     format_inspector_header,
-    format_section_header,
     format_time_window,
     format_coverage_range,
     render_monthly_bar_chart,
@@ -297,8 +297,6 @@ RECOMMENDATION:
         target_event_id: Optional[str] = None,
     ) -> str:
         """Format the graph as a visual text representation."""
-        from src.utils.formatting_utils import InspectorReportBuilder
-
         builder = InspectorReportBuilder("RELATIONAL GRAPH INSPECTOR")
         
         # Question info

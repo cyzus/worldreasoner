@@ -183,9 +183,9 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
             Formatted agent prompt string
         """
         # Calculate evidence window with fallback logic
-        from src.analysis.article_analysis import get_evidence_window
+        from src.services.temporal_filter_service import TemporalFilterService
 
-        window_start, window_end = get_evidence_window(
+        window_start, window_end = TemporalFilterService.get_evidence_window(
             question.resolution_date,
             question.estimated_start_time,
             fallback_window_days=evidence_window_days,

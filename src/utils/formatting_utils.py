@@ -165,36 +165,32 @@ class InspectorReportBuilder:
         return "\n".join(self.lines)
 
 
-# Keep legacy functions for backward compatibility if needed, 
-# or redirect them to use the builder if we want to be strict.
-# For now, I will keep the existing functions but implement them 
-# using the builder where appropriate or just leave them as aliases 
-# if they are used elsewhere. 
-# But to ensure a clean refactor, I will redefine them to be compatible wrappers 
-# or just keep the original implementation if it's simpler for now.
-# Since the goal is refactoring, replacing them entirely with the class is better,
-# but to avoid breaking other potential unknown consumers (unlikely given the codebase size associated with me),
-# I'll leave valid function signatures.
-
 def format_inspector_header(title: str, width: int = 64) -> str:
-    return InspectorReportBuilder(title, width).lines[0] # Just the header part, actually lines 1-4
+    return f"## {title}"
 
-# Re-implementing legacy functions to keep the file valid for existing imports
-# but simpler.
 
 def format_section_header(title: str, width: int = 64) -> List[str]:
     return ["", title, "━" * width, ""]
+
 
 def format_time_window(
     resolution_date: datetime,
     estimated_start_time: Optional[datetime] = None,
     indent: str = "  ",
 ) -> List[str]:
-    builder = InspectorReportBuilder("TEMP")
-    # Reset lines
-    builder.lines = []
-    builder.add_time_window(resolution_date, estimated_start_time, indent=len(indent))
-    return builder.lines
+    q_resolution = ensure_timezone_aware(resolution_date)
+    lines = []
+    if estimated_start_time:
+        q_start = ensure_timezone_aware(estimated_start_time)
+        lines.append(
+            f"{indent}- Time Window: {q_start.strftime('%Y-%m-%d')} -> {q_resolution.strftime('%Y-%m-%d')}"
+        )
+        window_days = (q_resolution - q_start).days
+        lines.append(f"{indent}- Window Span: {window_days} days")
+    else:
+        lines.append(f"{indent}- Resolution Date: {q_resolution.strftime('%Y-%m-%d')}")
+    return lines
+
 
 def format_coverage_range(
     earliest: datetime,
@@ -205,10 +201,19 @@ def format_coverage_range(
     item_type: str = "Item",
     indent: str = "  ",
 ) -> List[str]:
-    builder = InspectorReportBuilder("TEMP")
-    builder.lines = []
-    builder.add_coverage_range(earliest, latest, resolution_date, estimated_start_time, item_type, indent=len(indent))
-    return builder.lines
+    earliest = ensure_timezone_aware(earliest)
+    latest = ensure_timezone_aware(latest)
+    span = (latest - earliest).days
+    lines = [
+        f"{indent}- {item_type} Range: {earliest.strftime('%Y-%m-%d')} -> {latest.strftime('%Y-%m-%d')} ({span} days)"
+    ]
+    if estimated_start_time:
+        q_start = ensure_timezone_aware(estimated_start_time)
+        if earliest > q_start:
+            gap_days = (earliest - q_start).days
+            lines.append(f"{indent}  - WARNING: Missing early coverage ({gap_days} days)")
+    return lines
+
 
 def render_monthly_bar_chart(
     monthly_data: Dict[str, int],
@@ -216,13 +221,17 @@ def render_monthly_bar_chart(
     indent: str = "  ",
     bar_width: int = 30,
 ) -> List[str]:
-    builder = InspectorReportBuilder("TEMP")
-    builder.lines = []
-    builder.add_monthly_bar_chart(monthly_data, item_type, bar_width, indent=len(indent))
-    # Remove the last empty line added by builder if legacy expects exact match
-    if builder.lines and builder.lines[-1] == "":
-        builder.lines.pop()
-    return builder.lines
+    if not monthly_data:
+        return [f"{indent}- No monthly data"]
+    max_count = max(monthly_data.values())
+    lines = [f"{indent}- {item_type} by Month:"]
+    for month in sorted(monthly_data.keys()):
+        count = monthly_data[month]
+        bar_len = int((count / max_count) * bar_width) if max_count > 0 else 0
+        bar = "|" * bar_len
+        lines.append(f"{indent}  - {month}: {bar} ({count})")
+    return lines
+
 
 def format_timeline_gaps(
     gaps: List[Dict],
@@ -231,11 +240,16 @@ def format_timeline_gaps(
     indent: str = "  ",
     compact: bool = False,
 ) -> List[str]:
-    builder = InspectorReportBuilder("TEMP")
-    builder.lines = []
-    builder.add_timeline_gaps(gaps, min_gap_label, max_display, compact, indent=len(indent))
-    # Handle builder adding sections/headers differently than legacy list return
-    return builder.lines
+    if not gaps:
+        return []
+    lines = [f"{indent}- Timeline Gaps ({min_gap_label}):"]
+    for gap in gaps[:max_display]:
+        start_str = gap["start"].strftime("%Y-%m-%d")
+        end_str = gap["end"].strftime("%Y-%m-%d")
+        days = gap["days"]
+        lines.append(f"{indent}  - GAP: {start_str} -> {end_str} ({days} days)")
+    return lines
+
 
 def format_metric_line(
     label: str,
