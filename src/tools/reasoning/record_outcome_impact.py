@@ -115,16 +115,24 @@ class RecordOutcomeImpactTool(Tool, ToolResponseMixin):
 
         # Create impact record
         impact_id = f"imp_{uuid.uuid4().hex[:8]}"
+        current_time = datetime.now(timezone.utc)
+        
+        # question_id is required
+        qid = self.question_id or "unknown_question"
+        
         impact = EventOutcomeImpact(
             id=impact_id,
             event_id=event_id,
             outcome_event_id=outcome_event_id,
-            direction=dir_enum,
-            magnitude=magnitude,
+            question_id=qid,
+            impact_direction=dir_enum,
+            impact_magnitude=magnitude,
             confidence=confidence,
             reasoning=reasoning,
-            assessed_at=datetime.now(timezone.utc),
-            question_id=self.question_id
+            discovered_by_question_ids=[qid] if self.question_id else [],
+            identified_by="record_outcome_impact_tool",
+            first_identified_at=current_time,
+            last_confirmed_at=current_time,
         )
 
         self.db.save(EventOutcomeImpact, impact)
