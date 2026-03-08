@@ -13,7 +13,7 @@ from src.analysis.article_analysis import (
 )
 from src.services.temporal_filter_service import TemporalFilterService
 from src.utils.date_utils import ensure_timezone_aware
-from src.utils.formatting_utils import (
+from src.tools.inspectors.formatting import (
     InspectorReportBuilder,
     format_inspector_header,
     format_time_window,

@@ -26,7 +26,7 @@ from src.domain.models.question_helpers import (
     get_forecast_date_for_slot,
 )
 from src.pipelines.prompts.forecast import get_forecast_instructions
-from src.utils.llm_utils import get_knowledge_cutoff_date
+from src.core.llm import get_knowledge_cutoff_date
 from src.utils.logging import logger
 
 

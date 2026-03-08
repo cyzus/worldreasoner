@@ -4,7 +4,7 @@ from src.tools.base.database_mixin import DatabaseAwareTool
 from src.tools.base.base import ToolResponseMixin
 from src.tools.base.output_models import ArticleRetrievalOutput
 from src.domain.models import Article
-from src.utils.schema_helper import pydantic_to_output_schema
+from src.tools.base.schema_helper import pydantic_to_output_schema
 
 
 class ArticleRetrievalTool(DatabaseAwareTool, ToolResponseMixin):

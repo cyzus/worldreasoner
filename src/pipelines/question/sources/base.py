@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from src.domain.models import Question
 from src.config.collection_goal import QualityRequirements
 from src.utils.logging import logger
-from src.utils.question_filters import (
+from src.services.question_filters import (
     filter_questions,
     tag_questions_with_source,
 )
@@ -142,7 +142,7 @@ class QuestionSourceRunner(ABC):
         from src.core.llm import LiteLLMClient
         from src.config import get_config
         from src.pipelines.prompts import QuestionCategorizationPrompts
-        from src.utils.llm_utils import parse_json_response
+        from src.core.llm import parse_json_response
 
         try:
             # Get LLM config and create client

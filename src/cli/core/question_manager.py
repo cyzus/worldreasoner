@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 from src.core.database import GenericDatabase
 from src.domain.models import Article, Event, Question, CausalHypothesis
 from src.services.question_service import QuestionService
-from src.utils.question_filters import (
+from src.services.question_filters import (
     filter_resolved_questions,
     filter_by_quality_score,
 )

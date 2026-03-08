@@ -13,7 +13,7 @@ from src.pipelines.prompts.question_quality import (
     QUESTION_QUALITY_ASSESSMENT_PROMPT,
 )
 from src.utils.logging import logger
-from src.utils.schema_helper import pydantic_to_output_schema
+from src.tools.base.schema_helper import pydantic_to_output_schema
 from src.tools.base.output_models import QuestionQualityOutput
 
 
@@ -139,7 +139,7 @@ class QuestionQualityScorer(Tool):
         )
 
         # Parse the JSON response using utility
-        from src.utils.llm_utils import parse_json_response
+        from src.core.llm import parse_json_response
 
         try:
             response_json = parse_json_response(response_str)

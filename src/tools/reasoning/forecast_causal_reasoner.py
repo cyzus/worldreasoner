@@ -9,9 +9,9 @@ from src.domain.models.forecast_graph import ForecastHypothesis
 from src.domain.models.event import CausalRelationType
 from src.core.database import GenericDatabase
 from src.utils.logging import logger
-from src.utils.id_generator import generate_forecast_hypothesis_id
+from src.domain.models.id_generator import generate_forecast_hypothesis_id
 from src.utils.enums import enum_to_list
-from src.utils.schema_helper import pydantic_to_output_schema
+from src.tools.base.schema_helper import pydantic_to_output_schema
 from src.tools.base.output_models import ForecastHypothesisOutput
 
 

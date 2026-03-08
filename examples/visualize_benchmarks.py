@@ -12,7 +12,7 @@ Usage:
 
 import argparse
 from pathlib import Path
-from src.utils.benchmark_visualization import BenchmarkVisualizer
+from examples.benchmark_visualization import BenchmarkVisualizer
 
 
 def main():

@@ -160,7 +160,7 @@ class PipelineExecutor:
             OrchestratorConfig,
         )
         from src.pipelines.question.sources.markets import PolymarketRunner
-        from src.utils.search_indexing import auto_index_articles
+        from src.core.search_indexing import auto_index_articles
 
         results = PipelineResult([], [], [], 0.0)
 
@@ -330,7 +330,7 @@ class PipelineExecutor:
         **kwargs,
     ) -> PipelineResult:
         """Run ad-hoc news collection pipeline."""
-        from src.utils.search_indexing import auto_index_articles
+        from src.core.search_indexing import auto_index_articles
 
         results = PipelineResult([], [], [], 0.0)
 
@@ -583,7 +583,7 @@ class PipelineExecutor:
 
         # Auto-index articles if not skipped
         if not skip_indexing:
-            from src.utils.search_indexing import auto_index_articles
+            from src.core.search_indexing import auto_index_articles
 
             try:
                 logger.info("Indexing articles for hybrid search...")
@@ -721,7 +721,7 @@ class PipelineExecutor:
 
         # Auto-index articles if not skipped
         if not skip_indexing:
-            from src.utils.search_indexing import auto_index_articles
+            from src.core.search_indexing import auto_index_articles
 
             try:
                 logger.info("Indexing articles for hybrid search...")
@@ -756,7 +756,7 @@ class PipelineExecutor:
     ) -> PipelineResult:
         """Run forecasting on questions."""
         from src.agents.forecast_agent import ForecastAgent
-        from src.utils.llm_utils import get_knowledge_cutoff_date
+        from src.core.llm import get_knowledge_cutoff_date
         from src.domain.models.question_helpers import ForecastSlot, get_forecast_date_for_slot
 
         results = PipelineResult([], [], [], 0.0)

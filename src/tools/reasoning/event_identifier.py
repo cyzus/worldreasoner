@@ -6,11 +6,11 @@ from typing import List, Optional
 
 from src.domain.models import Article, Event, EventType, EventStatus, Domain, OutcomeScenario
 from src.utils.enums import enum_to_list, parse_domain, parse_event_type
-from src.utils.id_generator import generate_event_id
+from src.domain.models.id_generator import generate_event_id
 from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
 from src.utils.logging import logger
 from src.utils.similarity import SimilarityMatcher
-from src.utils.schema_helper import pydantic_to_output_schema
+from src.tools.base.schema_helper import pydantic_to_output_schema
 from src.tools.base.base import CollectorAwareTool, ToolResponseMixin
 from src.tools.base.output_models import EventOutput
 

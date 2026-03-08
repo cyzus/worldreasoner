@@ -5,7 +5,7 @@ from collections import defaultdict
 
 from src.tools.base.database_mixin import DatabaseAwareTool
 from src.domain.models import CausalHypothesis, Event
-from src.utils.graph_visualization import GraphVisualizer
+from src.analysis.graph_visualization import GraphVisualizer
 from src.services.temporal_filter_service import TemporalFilterService
 from src.analysis.event_analysis import (
     analyze_event_timeline,
@@ -13,7 +13,7 @@ from src.analysis.event_analysis import (
     calculate_event_temporal_quality,
     get_event_temporal_recommendation,
 )
-from src.utils.formatting_utils import (
+from src.tools.inspectors.formatting import (
     InspectorReportBuilder,
     format_inspector_header,
     format_time_window,

@@ -71,7 +71,7 @@ from src.core.database import GenericDatabase
 from src.core.hybrid_search import HybridSearch
 from src.domain.models import Forecast
 from src.utils.logging import logger
-from src.utils.serialization import serialize_domain
+from src.utils.enums import serialize_domain
 from src.analysis.graph_analysis import resolve_target_event_id
 
 # Import services

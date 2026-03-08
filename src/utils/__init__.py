@@ -9,8 +9,6 @@ from .similarity import (
     SimilarityMatcher,
 )
 
-# Note: question_filters not imported here to avoid circular import
-# Import directly: from src.utils.question_filters import filter_questions
 
 __all__ = [
     "logger",

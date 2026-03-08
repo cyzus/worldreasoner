@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional
 from collections import defaultdict
 
 from src.domain.models import CausalHypothesis
-from src.utils.graph_visualization import GraphVisualizer
+from src.analysis.graph_visualization import GraphVisualizer
 
 
 def build_graph_from_hypotheses(

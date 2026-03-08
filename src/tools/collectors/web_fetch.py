@@ -4,7 +4,7 @@ import asyncio
 import json
 from typing import Dict, Any, Optional
 from smolagents import Tool
-from src.utils.schema_helper import pydantic_to_output_schema
+from src.tools.base.schema_helper import pydantic_to_output_schema
 from src.tools.base.output_models import WebFetchOutput
 
 

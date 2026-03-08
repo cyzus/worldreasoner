@@ -44,6 +44,7 @@ from typing import (
     TypeVar,
     Generic,
     Type,
+    Union,
     get_args,
     get_origin,
 )
@@ -805,3 +806,24 @@ class GenericDatabase(Generic[T]):
             cursor = conn.cursor()
             cursor.execute(f"DELETE FROM {table_name}")
             self._commit(conn)
+
+
+def ensure_database(db: "Union[str, GenericDatabase]") -> "GenericDatabase":
+    """Convert string path to GenericDatabase instance if needed.
+
+    Eliminates repeated pattern:
+    `db = GenericDatabase(db) if isinstance(db, str) else db`
+
+    Args:
+        db: Either a database path string or GenericDatabase instance
+
+    Returns:
+        GenericDatabase instance
+
+    Examples:
+        >>> db = ensure_database("worldreasoner.db")
+        >>> db = ensure_database(existing_db_instance)  # No-op
+    """
+    if isinstance(db, str):
+        return GenericDatabase(db)
+    return db

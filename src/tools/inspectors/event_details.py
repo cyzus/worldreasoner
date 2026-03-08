@@ -5,7 +5,7 @@ from src.tools.base.database_mixin import DatabaseAwareTool
 from src.tools.base.base import ToolResponseMixin
 from src.tools.base.output_models import EventDetailsOutput
 from src.domain.models import Event, Article
-from src.utils.schema_helper import pydantic_to_output_schema
+from src.tools.base.schema_helper import pydantic_to_output_schema
 
 if TYPE_CHECKING:
     from src.core.database import GenericDatabase

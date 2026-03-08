@@ -21,7 +21,7 @@ from src.cli.ui.tables import (
     display_article_table,
 )
 from src.domain.models import Event, Article
-from src.utils.search_indexing import auto_index_articles
+from src.core.search_indexing import auto_index_articles
 from src.config.settings import get_config
 
 app = typer.Typer(help="Database management commands")

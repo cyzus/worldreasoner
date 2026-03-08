@@ -14,8 +14,8 @@ from src.core.database import GenericDatabase
 from src.utils.logging import logger
 from src.utils.enums import parse_domain, parse_event_type, enum_to_list, Domain
 from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
-from src.utils.id_generator import generate_forecast_event_id
-from src.utils.schema_helper import pydantic_to_output_schema
+from src.domain.models.id_generator import generate_forecast_event_id
+from src.tools.base.schema_helper import pydantic_to_output_schema
 from src.tools.base.output_models import ForecastEventOutput
 
 

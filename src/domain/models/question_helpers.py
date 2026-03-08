@@ -7,7 +7,7 @@ from .question import Question
 from .event import Event
 from .article import Article
 from src.utils.logging import logger
-from src.utils.database_helpers import ensure_database
+from src.core.database import ensure_database
 
 
 class ForecastSlot(str, Enum):

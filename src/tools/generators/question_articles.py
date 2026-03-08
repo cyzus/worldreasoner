@@ -6,7 +6,7 @@ from src.tools.base.database_mixin import DatabaseAwareTool
 from src.tools.base.output_models import QuestionArticlesOutput
 from src.domain.models import Article
 from src.utils.logging import logger
-from src.utils.schema_helper import pydantic_to_output_schema
+from src.tools.base.schema_helper import pydantic_to_output_schema
 
 
 class QuestionArticlesTool(DatabaseAwareTool):

@@ -2,8 +2,8 @@
 
 from typing import Optional
 
-from ..core.database import GenericDatabase
-from ..core.hybrid_search import HybridSearch
+from src.core.database import GenericDatabase
+from src.core.hybrid_search import HybridSearch
 from src.domain.models import Article
 from src.utils.logging import logger
 
