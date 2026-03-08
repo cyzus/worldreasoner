@@ -117,7 +117,7 @@ class MCPServerManager:
                 [
                     python_exe,
                     "-m",
-                    "src.mcp_forecasting_server",
+                    "src.api.mcp_forecasting_server",
                     "--host",
                     self.host,
                     "--port",
