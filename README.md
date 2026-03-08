@@ -38,8 +38,14 @@ cp config/config.example.yaml config/config.yaml
 # View all commands
 uv run wr --help
 
-# Run the evidence pipeline for a question
-uv run wr evidence run --question-id <id>
+# 1. Run the evidence pipeline for a question (generates NL explanation)
+uv run wr evidence run -q <id>
+
+# 2. Build the causal graph from the explanation
+uv run wr graph build -q <id>
+
+# 3. Audit the graph for quality (chronology, orphan checks)
+uv run wr graph audit -q <id>
 ```
 
 **2. MCP Forecasting Server**
@@ -47,7 +53,7 @@ Provides temporal-aware tools to agents (e.g., in Claude Desktop).
 
 ```bash
 # Run server (stdio mode)
-uv run python -m src.mcp_forecasting_server
+uv run worldreasoner-mcp-forecast
 ```
 See [docs/mcp-server.md](docs/mcp-server.md) for full documentation and Claude Desktop setup.
 
@@ -74,8 +80,18 @@ cd frontend && npm run dev
 ### Directory Structure
 -   `src/agents`: AI agent implementations.
 -   `src/pipelines`: Data processing pipelines (Question & Evidence).
--   `src/mcp_forecasting_server.py`: Model Context Protocol server.
+-   `src/api/mcp_forecasting_server.py`: Model Context Protocol server.
 -   `src/cli`: Command-line interface logic.
+
+
+## Documentation
+
+- [System Architecture](AGENTS.md): Detailed breakdown of the multi-agent system.
+- [CLI Reference](docs/cli.md): Complete guide to `wr` command-line tools.
+- [MCP Server Setup](docs/mcp-server.md): How to connect Claude Desktop to WorldReasoner.
+- [Evaluation & Benchmarking](docs/benchmarking.md): How to run tests and score LLM performance.
+- [Market Analysis](docs/market-turning-points.md): How the system detects shifts in Polymarket curves.
+- [Temporal Context](docs/context-window-guide.md): How simulated past dates are calculated.
 
 ## Research
 
