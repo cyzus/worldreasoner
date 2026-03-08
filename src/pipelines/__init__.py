@@ -10,9 +10,6 @@ from .base import (
     PipelineStageStatus,
 )
 
-# Re-export stages for convenience
-from .stages import *
-
 __all__ = [
     # Base classes
     "Pipeline",
