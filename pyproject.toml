@@ -55,8 +55,8 @@ Repository = "https://github.com/cyzus/worldreasoner"
 Issues = "https://github.com/cyzus/worldreasoner/issues"
 
 [project.scripts]
-worldreasoner = "src.server:main"
-worldreasoner-mcp-forecast = "src.mcp_forecasting_server:main"
+worldreasoner = "src.api.server:main"
+worldreasoner-mcp-forecast = "src.api.mcp_forecasting_server:main"
 wr = "src.cli.main:cli"
 
 [tool.hatch.build.targets.wheel]
