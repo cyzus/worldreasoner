@@ -175,10 +175,14 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
         event_date = parse_iso_datetime(occurred_date)
         event_date = ensure_timezone_aware(event_date)
 
-        # Parse article IDs
+        # Parse article IDs (resolve aliases like A1:BBCSanctions to real IDs)
         article_ids = []
         article_date_warnings = []
         if source_article_ids:
+            if getattr(self, "alias_registry", None):
+                source_article_ids = self.alias_registry.resolve_article_ids(
+                    source_article_ids
+                )
             article_ids = [aid.strip() for aid in source_article_ids.split(",")]
             if self.db is not None:
                 # Verify article IDs exist in database

@@ -14,6 +14,7 @@ from src.tools import (
     # NL Explanation
     SaveExplanationTool,
 )
+from src.tools.generators.question_articles import QuestionArticlesTool
 from src.pipelines.prompts.hindsight_causal_analysis import (
     EVIDENCE_AGENT_DESCRIPTION,
 )
@@ -92,6 +93,7 @@ class HindsightAgent(BaseAgent):
 
         # Manager tools: coordination + save explanation
         tools = tools + [
+            QuestionArticlesTool(db_path=db_path, question_id=question_id),
             GraphInspectorTool(db_path=db_path, question_id=question_id),
             ArticleInspectorTool(db_path=db_path, question_id=question_id),
             SaveExplanationTool(db_path=db_path, question_id=question_id),

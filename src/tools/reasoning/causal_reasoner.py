@@ -173,9 +173,13 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
                 error=f"Invalid relation_type '{relation_type}'. Valid: {[r.value for r in CausalRelationType]}",
             )
 
-        # Parse evidence article IDs
+        # Parse evidence article IDs (resolve aliases like A1:BBCSanctions to real IDs)
         evidence_ids = []
         if evidence_article_ids:
+            if getattr(self, "alias_registry", None):
+                evidence_article_ids = self.alias_registry.resolve_article_ids(
+                    evidence_article_ids
+                )
             evidence_ids = [
                 aid.strip() for aid in evidence_article_ids.split(",") if aid.strip()
             ]

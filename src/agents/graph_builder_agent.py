@@ -15,6 +15,7 @@ from src.tools import (
     DeleteEventTool,
     DeleteHypothesisTool,
 )
+from src.tools.generators.question_articles import QuestionArticlesTool
 from src.tools.reasoning.propose_subgraph import ProposeSubgraphTool
 
 from .factory import AgentFactory
@@ -78,6 +79,11 @@ class GraphBuilderAgentFactory(AgentFactory):
         )
 
         tools = [
+            QuestionArticlesTool(
+                db_path=db_path,
+                question_id=question_id,
+                alias_registry=alias_registry,
+            ),
             ArticleRetrievalTool(db_path=db_path),
             ProposeSubgraphTool(
                 event_identifier_tool=evt_tool,

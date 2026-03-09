@@ -101,6 +101,12 @@ class ProposeSubgraphTool(Tool, ToolResponseMixin):
                 else:
                     raw_ids = [a.strip() for a in str(art_ids).split(",") if a.strip()]
 
+                # Resolve article aliases (e.g. A1:BBCSanctions -> real ID)
+                if self.alias_registry and raw_ids:
+                    raw_ids = [
+                        self.alias_registry.resolve(aid) or aid for aid in raw_ids
+                    ]
+
                 # Filter to IDs that actually exist in DB to avoid hard validation failures
                 if self.db and raw_ids:
                     from src.domain.models import Article

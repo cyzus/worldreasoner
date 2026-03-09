@@ -21,12 +21,13 @@ GRAPH_AGENT_DESCRIPTION = """
 Specialist agent for building deep event graphs and analyzing outcome impacts.
 
 Guidelines:
-- Call get_question_articles to get article IDs
+- Call get_question_articles FIRST to get article aliases (e.g. A1:BBCSanctions, A2:ReutersOil)
+- Use these short aliases instead of full article IDs in source_article_ids and evidence_article_ids
 - Call get_question_events to see existing events and OUTCOME events (look for is_actual_outcome=True in the list)
 - When you use event_identifier, its response will now include actual_outcome_event_id. Use this ID for your final causal links.
 - If outcomes are provided, use EventDetailsTool to understand them
 - Create outcome event(s) (outcome from ground truth) using event_identifier with is_outcome=True if not provided
-- Create events with source_article_ids (remember to check the tool output like event ids to see status)
+- Create events with source_article_ids using aliases (remember to check the tool output like event ids to see status)
 - Identify relationships between events 
 
 ⚠️ DATE ACCURACY (CRITICAL):
@@ -94,14 +95,17 @@ MANAGER AGENT: Inspect the evidence/article collection yourself. If insufficient
 NOTE - if evidence collection constantly fails, there's no way you can build a event graph. You should keep trying until you get enough evidence.
 
 2. WRITE CAUSAL EXPLANATION:
+   First, call get_question_articles to get the list of collected articles with their EXACT IDs.
+
    With hindsight (ground truth: {ground_truth}), write a detailed NL explanation
-   of HOW the outcome came about based on your collected evidence. 
+   of HOW the outcome came about based on your collected evidence.
    Follow the explanation format exactly:
-   - For each significant event: "Event Title occurred on YYYY-MM-DD [art_id]. Description..."
+   - For each significant event: "Event Title occurred on YYYY-MM-DD [art_tech_20240101_001_abc]. Description..."
+   - Use EXACT article IDs from get_question_articles. Do NOT invent shorthand IDs like [art1] or [a1].
    - Explicit causal language between events (e.g. "This caused/triggered [Next Event]")
    - Outcome clearly identified: "This resulted in [OutcomeEventTitle], which is the actual outcome."
    - Impact on each possible outcome: "Impact on Option A: positive - because..."
-   
+
    Call save_explanation to store it. The GraphBuilderAgent will read this explanation later
    to build the structured graph.
 """

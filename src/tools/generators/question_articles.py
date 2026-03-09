@@ -1,6 +1,7 @@
 from typing import Optional
 from datetime import datetime, timezone
 
+from src.core.alias_registry import AliasRegistry
 from src.tools.base.database_mixin import DatabaseAwareTool
 from src.tools.base.output_models import QuestionArticlesOutput
 from src.domain.models import Article
@@ -49,15 +50,22 @@ class QuestionArticlesTool(DatabaseAwareTool):
     output_type = "object"
     output_schema = pydantic_to_output_schema(QuestionArticlesOutput)
 
-    def __init__(self, db_path: str = None, question_id: Optional[str] = None):
+    def __init__(
+        self,
+        db_path: str = None,
+        question_id: Optional[str] = None,
+        alias_registry: Optional[AliasRegistry] = None,
+    ):
         """Initialize the tool.
 
         Args:
             db_path: Path to the database
             question_id: Question ID to get articles for (injected at init)
+            alias_registry: Optional alias registry for generating article aliases
         """
         super().__init__(db_path=db_path, ensure_tables=[Article])
         self.question_id = question_id
+        self.alias_registry = alias_registry
 
     def forward(
         self, limit: int = 20, offset: int = 0, sort: str = "date_desc"
@@ -119,9 +127,17 @@ class QuestionArticlesTool(DatabaseAwareTool):
         # Format response with essential info
         articles_data = []
         for article in paginated_articles:
+            # Generate article alias if registry is provided
+            alias = None
+            if self.alias_registry:
+                alias = self.alias_registry.generate_article_alias(
+                    article.title, article.id
+                )
+
             articles_data.append(
                 {
                     "id": article.id,
+                    "alias": alias,
                     "title": article.title,
                     "source": article.source,
                     "published_date": article.published_date.isoformat()
