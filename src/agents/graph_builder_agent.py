@@ -1,7 +1,5 @@
 """Graph builder agent for translating NL causal explanations into structured graphs."""
 
-import os
-
 from smolagents import CodeAgent, Tool
 
 from src.core.database import GenericDatabase
@@ -101,8 +99,8 @@ class GraphBuilderAgentFactory(AgentFactory):
         agent = CodeAgent(
             model=llm_model,
             tools=tools,
+            max_steps=kwargs.get("max_steps", 30),
             additional_authorized_imports=["json", "datetime", "typing"],
-            verbosity_level=1 if os.environ.get("WR_DEBUG") else 0,
         )
 
         return agent

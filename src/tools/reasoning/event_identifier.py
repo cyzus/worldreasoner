@@ -224,10 +224,7 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
                             f"This is impossible. Please verify the event date."
                         )
 
-        else:
-            return self.error_response(
-                "source_article_ids cannot be empty", error="empty_source_article_ids"
-            )
+        # No article IDs provided — allowed (graph builder creates events without articles)
         # Validate and convert domain
         domain_enum = parse_domain(domain)
 

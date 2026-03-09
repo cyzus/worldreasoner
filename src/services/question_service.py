@@ -219,6 +219,48 @@ class QuestionService:
             "impacts": len(deleted["impacts"]),
         }
 
+    def clear_graph(self, question_id: str) -> Dict[str, int]:
+        """Clear only graph data for a question (events, hypotheses, graph flags).
+
+        Keeps articles and causal_explanation intact so the graph can be rebuilt
+        without re-running the evidence pipeline.
+        """
+        question = self.db.get(Question, question_id)
+        if not question:
+            return {"events": 0, "hypotheses": 0, "impacts": 0}
+
+        analysis = self.analyze_cascade(question_id)
+        deleted = {"events": [], "hypotheses": [], "impacts": []}
+
+        for hid in analysis.get("orphaned", {}).get("causal_hypotheses_delete", []):
+            if self.db.delete(CausalHypothesis, hid):
+                deleted["hypotheses"].append(hid)
+
+        for hid in analysis.get("shared", {}).get("causal_hypotheses_update", []):
+            h = self.db.get(CausalHypothesis, hid)
+            if h and question_id in h.discovered_by_question_ids:
+                h.discovered_by_question_ids.remove(question_id)
+                self.db.save(CausalHypothesis, h)
+
+        for eid in analysis.get("orphaned", {}).get("events", []):
+            if self.db.delete(Event, eid):
+                deleted["events"].append(eid)
+
+        impacts = self.db.get_many(EventOutcomeImpact, filters={"question_id": question_id})
+        for impact in impacts:
+            if self.db.delete(EventOutcomeImpact, impact.id):
+                deleted["impacts"].append(impact.id)
+
+        question.graph_built = False
+        question.graph_build_error = None
+        self.db.save(Question, question)
+
+        return {
+            "events": len(deleted["events"]),
+            "hypotheses": len(deleted["hypotheses"]),
+            "impacts": len(deleted["impacts"]),
+        }
+
     def delete_question(
         self, question_id: str, cascade: bool = True, dry_run: bool = False
     ) -> Dict:

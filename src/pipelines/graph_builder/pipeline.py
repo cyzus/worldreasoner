@@ -6,6 +6,7 @@ from src.core.database import GenericDatabase
 from src.domain.models import Question, Event
 from src.agents.graph_builder_agent import GraphBuilderAgentFactory
 from src.pipelines.prompts.graph_builder import GraphBuilderPrompts
+from src.config.pipeline import SATISFACTION_DEFAULTS
 from src.utils.logging import logger
 
 
@@ -17,12 +18,16 @@ class GraphBuilderPipeline:
         db_path: str,
         model_id: str = "claude-3-5-sonnet-20241022",
         temperature: float = 0.2,
+        min_graph_depth: int = SATISFACTION_DEFAULTS.min_graph_depth,
+        min_events: int = SATISFACTION_DEFAULTS.min_graph_events,
     ):
         """Initialize the pipeline."""
         self.db_path = db_path
         self.db = GenericDatabase(db_path)
         self.model_id = model_id
         self.temperature = temperature
+        self.min_graph_depth = min_graph_depth
+        self.min_events = min_events
         self.prompts = GraphBuilderPrompts()
 
     def _load_pending_questions(self) -> List[Question]:
@@ -86,7 +91,10 @@ class GraphBuilderPipeline:
 
             # 2. Build Prompt
             prompt = self.prompts.get_agent_prompt(
-                question=question, actual_outcome_event_id=actual_outcome_id
+                question=question,
+                actual_outcome_event_id=actual_outcome_id,
+                min_graph_depth=self.min_graph_depth,
+                min_events=self.min_events,
             )
 
             # 3. Create Agent

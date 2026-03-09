@@ -275,6 +275,26 @@ async def clear_questions_evidence(request: ClearEvidenceRequest):
     return results
 
 
+@router.post("/questions/clear-graph")
+async def clear_questions_graph(request: ClearEvidenceRequest):
+    """Clear only graph data (events, hypotheses) for questions, keeping articles and explanation."""
+    db_path = get_current_db_path()
+    db = GenericDatabase(db_path)
+    from src.services.question_service import QuestionService
+
+    service = QuestionService(db)
+    results = {"cleared": [], "failed": []}
+
+    for qid in request.question_ids:
+        try:
+            service.clear_graph(qid)
+            results["cleared"].append(qid)
+        except Exception as e:
+            results["failed"].append({"id": qid, "error": str(e)})
+
+    return results
+
+
 # ============================================================================
 # Background Task Runner
 # ============================================================================
@@ -327,14 +347,14 @@ async def run_pipeline_job(
             job.updated_at = datetime.utcnow().isoformat()
             try:
                 from src.pipelines.graph_builder.pipeline import GraphBuilderPipeline
-                from src.config.settings import get_settings
+                from src.config import get_config
                 from src.core.database import GenericDatabase
                 from src.domain.models import Question
-                
+
                 db_path = get_current_db_path()
                 graph_pipeline = GraphBuilderPipeline(
                     db_path=db_path,
-                    model_id=get_settings().default_model,
+                    model_id=get_config().llm.model,
                 )
                 db = GenericDatabase(db_path)
                 

@@ -9,8 +9,22 @@ These models serve as:
 3. Optional runtime validation (if needed)
 """
 
+import json
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
+
+# Make all Pydantic output models JSON-serializable with the standard json module.
+# This allows CodeAgent-generated code to call json.dumps(tool_result) without errors.
+_original_default = json.JSONEncoder.default
+
+
+def _pydantic_aware_default(self, obj):
+    if isinstance(obj, BaseModel):
+        return obj.model_dump()
+    return _original_default(self, obj)
+
+
+json.JSONEncoder.default = _pydantic_aware_default
 
 
 # =============================================================================

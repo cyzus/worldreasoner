@@ -97,9 +97,17 @@ class ProposeSubgraphTool(Tool, ToolResponseMixin):
 
                 art_ids = ev.get("article_ids", [])
                 if isinstance(art_ids, list):
-                    art_ids_str = ",".join(art_ids)
+                    raw_ids = art_ids
                 else:
-                    art_ids_str = str(art_ids)
+                    raw_ids = [a.strip() for a in str(art_ids).split(",") if a.strip()]
+
+                # Filter to IDs that actually exist in DB to avoid hard validation failures
+                if self.db and raw_ids:
+                    from src.domain.models import Article
+                    valid_ids = [aid for aid in raw_ids if self.db.get(Article, aid) is not None]
+                else:
+                    valid_ids = raw_ids
+                art_ids_str = ",".join(valid_ids)
 
                 occurred_date = ev.get("occurred_date", "")
 
@@ -114,8 +122,17 @@ class ProposeSubgraphTool(Tool, ToolResponseMixin):
                     occurred_date=occurred_date,
                 )
 
-                # Check for errors in the Pydantic response
-                # EventIdentifier returns EventOutput
+                # EventIdentifier returns EventOutput on success or a JSON error string on failure
+                if isinstance(resp, str):
+                    import json as _json
+                    try:
+                        err = _json.loads(resp)
+                        reason = err.get("message") or err.get("error") or resp
+                    except Exception:
+                        reason = resp
+                    failed_items.append({"type": "event", "alias": alias, "reason": reason})
+                    continue
+
                 event_id = getattr(resp, "id", None)
                 if not event_id:
                     failed_items.append(
@@ -162,8 +179,16 @@ class ProposeSubgraphTool(Tool, ToolResponseMixin):
                     reasoning=ed.get("reasoning", ""),
                 )
 
-                status = getattr(resp, "status", "error")
-                if status == "error":
+                # CausalReasonerTool returns HypothesisOutput on success or a JSON error string
+                if isinstance(resp, str):
+                    import json as _json
+                    try:
+                        err = _json.loads(resp)
+                        reason = err.get("message") or err.get("error") or resp
+                    except Exception:
+                        reason = resp
+                    failed_items.append({"type": "edge", "source": source_alias, "target": target_alias, "reason": reason})
+                elif getattr(resp, "status", "error") == "error":
                     error_msg = getattr(resp, "error", "Unknown validation error")
                     failed_items.append(
                         {

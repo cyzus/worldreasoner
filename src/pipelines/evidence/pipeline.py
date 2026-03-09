@@ -15,6 +15,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
 
 from src.pipelines.base import Pipeline, PipelineStageResult, PipelineStageStatus
+from src.config.pipeline import SATISFACTION_DEFAULTS
 from src.pipelines.prompts import HindsightCausalAnalysisPrompts
 from src.config.pipeline import EvidencePipelineConfig
 from src.config import DatabaseConfig
@@ -45,7 +46,7 @@ class EvidencePipeline(Pipeline):
         max_concurrent_questions: int = 1,
         min_quality_score: Optional[float] = None,
         agent_max_steps: int = 30,
-        min_graph_depth: int = 3,
+        min_graph_depth: int = SATISFACTION_DEFAULTS.min_graph_depth,
     ):
         """Initialize evidence pipeline with agent-based processing.
 

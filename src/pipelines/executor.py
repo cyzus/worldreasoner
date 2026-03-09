@@ -4,6 +4,7 @@ Extracted from src/cli/core/pipeline_runner.py to enable reuse
 across CLI and backend API without CLI dependencies.
 """
 
+import asyncio
 import time
 from copy import deepcopy
 from typing import List, Optional, Callable, Dict, Any
@@ -15,7 +16,8 @@ from src.config import DatabaseConfig
 from src.core.database import GenericDatabase
 from src.domain.models import Question, Forecast, Article, CausalHypothesis, Event
 from src.pipelines.base import PipelineStageStatus
-from src.pipelines.types import PipelineType, PipelineProgress, PipelineResult
+from src.config.pipeline import SATISFACTION_DEFAULTS
+from src.pipelines.types import PipelineProgress, PipelineResult, PipelineType
 from src.utils.logging import logger
 
 
@@ -70,6 +72,8 @@ class PipelineExecutor:
             result = await self._run_benchmark(question_ids, on_progress, **kwargs)
         elif pipeline_type == PipelineType.AUTO_BENCHMARK:
             result = await self._run_auto_benchmark(question_ids, on_progress, **kwargs)
+        elif pipeline_type == PipelineType.GRAPH_BUILDER:
+            result = await self._run_graph_builder(question_ids, on_progress, **kwargs)
         else:
             raise ValueError(f"Unknown pipeline type: {pipeline_type}")
 
@@ -507,6 +511,7 @@ class PipelineExecutor:
         evidence_window_days: Optional[int] = None,
         force_reprocess: bool = False,
         skip_indexing: bool = False,
+        min_graph_depth: int = SATISFACTION_DEFAULTS.min_graph_depth,
         **kwargs,
     ) -> PipelineResult:
         """Run basic evidence pipeline."""
@@ -559,7 +564,7 @@ class PipelineExecutor:
                     continue
 
                 if not force_reprocess:
-                    skip_reason = self._check_sufficient_evidence(question, min_depth=3)
+                    skip_reason = self._check_sufficient_evidence(question, min_depth=min_graph_depth)
                     if skip_reason:
                         results.skipped.append({"id": qid, "reason": skip_reason})
                         continue
@@ -612,7 +617,7 @@ class PipelineExecutor:
         question_ids: List[str],
         on_progress: Optional[Callable],
         agent_max_steps: int = 30,
-        min_graph_depth: int = 3,
+        min_graph_depth: int = SATISFACTION_DEFAULTS.min_graph_depth,
         skip_indexing: bool = False,
         **kwargs,
     ) -> PipelineResult:
@@ -950,6 +955,65 @@ class PipelineExecutor:
         except Exception as e:
             logger.error(f"Auto-benchmark failed: {e}")
             results.failed.append({"error": str(e)})
+
+        return results
+
+    async def _run_graph_builder(
+        self,
+        question_ids: List[str],
+        on_progress: Optional[Callable],
+        force: bool = False,
+        min_graph_depth: int = SATISFACTION_DEFAULTS.min_graph_depth,
+        min_events: int = SATISFACTION_DEFAULTS.min_graph_events,
+        **kwargs,
+    ) -> PipelineResult:
+        """Build causal graphs for questions that already have a causal explanation."""
+        from src.pipelines.graph_builder.pipeline import GraphBuilderPipeline
+
+        config = self.config
+        pipeline = GraphBuilderPipeline(
+            db_path=self.db_path,
+            model_id=config.llm.model,
+            min_graph_depth=min_graph_depth,
+            min_events=min_events,
+        )
+
+        results = PipelineResult([], [], [], 0.0)
+
+        for i, qid in enumerate(question_ids):
+            if on_progress:
+                on_progress(
+                    PipelineProgress(
+                        current=i + 1,
+                        total=len(question_ids),
+                        question_id=qid,
+                        stage="graph_builder",
+                        message=f"Building graph for {qid}",
+                    )
+                )
+
+            question = self.db.get(Question, qid)
+            if not question:
+                results.failed.append({"id": qid, "error": "Question not found"})
+                continue
+
+            if not question.causal_explanation:
+                results.skipped.append({"id": qid, "reason": "No causal explanation — run evidence pipeline first"})
+                continue
+
+            if not force and question.graph_built:
+                results.skipped.append({"id": qid, "reason": "Graph already built (use force to rebuild)"})
+                continue
+
+            try:
+                success = await asyncio.to_thread(pipeline._process_single_question, question)
+                if success:
+                    results.processed.append({"id": qid})
+                else:
+                    results.failed.append({"id": qid, "error": "Graph building failed"})
+            except Exception as e:
+                logger.error(f"Graph builder error for {qid}: {e}")
+                results.failed.append({"id": qid, "error": str(e)})
 
         return results
 

@@ -111,7 +111,7 @@
 
 .action-buttons {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
 }
 
@@ -168,6 +168,26 @@
 
 .action-btn.forecast:hover:not(:disabled) {
   background: #4caf50;
+  color: white;
+}
+
+.action-btn.graph {
+  border-color: #00897b;
+  color: #00897b;
+}
+
+.action-btn.graph:hover:not(:disabled) {
+  background: #00897b;
+  color: white;
+}
+
+.action-btn.clear-graph {
+  border-color: #ef5350;
+  color: #ef5350;
+}
+
+.action-btn.clear-graph:hover:not(:disabled) {
+  background: #ef5350;
   color: white;
 }
 

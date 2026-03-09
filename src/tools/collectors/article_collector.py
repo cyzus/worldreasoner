@@ -155,6 +155,15 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             if existing_articles:
                 existing = existing_articles[0]
 
+                # Update collected_for_question_id if this article is being claimed
+                # for a question but wasn't previously tagged (e.g. pre-existing news articles)
+                if self.question_id and existing.collected_for_question_id != self.question_id:
+                    existing.collected_for_question_id = self.question_id
+                    self.db.save(Article, existing)
+                    logger.debug(
+                        f"Updated collected_for_question_id on existing article {existing.id}"
+                    )
+
                 # Add to collector even if duplicate (for current pipeline run)
                 # Note: Check 'is not None' because ResultCollector.__bool__ returns False when empty
                 if self.collector is not None:

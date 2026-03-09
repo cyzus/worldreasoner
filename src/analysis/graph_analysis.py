@@ -9,6 +9,7 @@ from collections import defaultdict
 
 from src.domain.models import CausalHypothesis
 from src.analysis.graph_visualization import GraphVisualizer
+from src.config.pipeline import SATISFACTION_DEFAULTS
 
 
 def build_graph_from_hypotheses(
@@ -38,7 +39,7 @@ def build_graph_from_hypotheses(
 def calculate_graph_quality(
     hypotheses: List[CausalHypothesis],
     target_event_id: str = None,
-    min_depth_for_full_score: int = 3,
+    min_depth_for_full_score: int = SATISFACTION_DEFAULTS.min_graph_depth,
 ) -> Dict[str, Any]:
     """Calculate comprehensive quality metrics for a causal graph.
 

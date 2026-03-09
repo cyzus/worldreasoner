@@ -4,7 +4,6 @@ from datetime import date, timedelta
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
-
 class QuestionPipelineConfig(BaseModel):
     """Configuration for question generation pipeline."""
 
@@ -114,6 +113,7 @@ class EvidenceSatisfactionConfig(BaseModel):
     """
 
     min_graph_depth: int = Field(default=3, description="Minimum causal graph depth")
+    min_graph_events: int = Field(default=10, description="Minimum events in the causal graph")
     min_articles: int = Field(default=20, description="Minimum evidence articles")
     min_hypotheses: int = Field(default=1, description="Minimum causal hypotheses")
     min_confidence: float = Field(
@@ -122,6 +122,10 @@ class EvidenceSatisfactionConfig(BaseModel):
     min_strength: float = Field(
         default=0.3, ge=0.0, le=1.0, description="Hypothesis strength threshold"
     )
+
+
+# Default instance — use this to access canonical threshold values in function signatures
+SATISFACTION_DEFAULTS = EvidenceSatisfactionConfig()
 
 
 class EvidencePipelineConfig(BaseModel):
@@ -164,10 +168,6 @@ class EvidencePipelineConfig(BaseModel):
     require_evidence: bool = Field(
         default=True, description="Causal hypotheses must cite evidence articles"
     )
-    max_causal_depth: int = Field(
-        default=3, description="Maximum depth of causal graph paths to trace"
-    )
-
     validate_temporal_ordering: bool = Field(
         default=True, description="Ensure causes temporally precede effects"
     )

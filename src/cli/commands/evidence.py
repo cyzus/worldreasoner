@@ -34,6 +34,7 @@ from src.cli.core.options import (
 )
 from src.cli.core.question_selector import QuestionSelector
 from src.cli.core.pipeline_runner import PipelineRunner, PipelineType, PipelineProgress
+from src.config.pipeline import SATISFACTION_DEFAULTS
 from src.domain.models import Question, Event, Article, ReviewStatus
 from src.services.event_review_service import EventReviewService, EventReviewReport
 from src.config.settings import get_config
@@ -246,7 +247,7 @@ async def _run_evidence_pipeline_async(
     force_reprocess: bool = False,
     adaptive: bool = False,
     agent_max_steps: int = 30,
-    min_graph_depth: int = 3,
+    min_graph_depth: int = SATISFACTION_DEFAULTS.min_graph_depth,
 ):
     """Execute the evidence pipeline on selected questions using PipelineRunner."""
     runner = PipelineRunner(db_path=db_path)

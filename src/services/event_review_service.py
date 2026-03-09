@@ -14,6 +14,7 @@ from src.core.llm import LiteLLMClient
 from src.config.app import LLMConfig
 from src.utils.logging import logger
 from src.config.settings import get_config
+from src.config.pipeline import SATISFACTION_DEFAULTS
 
 console = Console()
 
@@ -21,7 +22,7 @@ console = Console()
 class EventReviewCriteria(BaseModel):
     """Criteria for LLM event review."""
 
-    min_events: int = 10
+    min_events: int = SATISFACTION_DEFAULTS.min_graph_events
     min_depth: int = 1  # Lowered default - causal links may not exist yet
     require_time_coverage: bool = True
     check_factual_accuracy: bool = (
