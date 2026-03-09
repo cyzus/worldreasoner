@@ -248,7 +248,7 @@ class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):
             is_actual_outcome = ""
             if event.is_actual_outcome:
                 is_actual_outcome = " [TARGET GROUND TRUTH]"
-            lines.append(f"- {event.id}: {event.title}{scenario}{is_actual_outcome}")
+            lines.append(f"- {event.title}{scenario}{is_actual_outcome}")
 
         return "\n".join(lines)
 
