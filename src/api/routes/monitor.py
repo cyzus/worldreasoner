@@ -10,6 +10,7 @@ from fastapi import APIRouter, Query, HTTPException, Depends
 from src.core.database import GenericDatabase
 from src.config import get_config
 from src.services.question_monitor_service import QuestionMonitorService
+from .database import get_current_db_path
 
 router = APIRouter()
 
