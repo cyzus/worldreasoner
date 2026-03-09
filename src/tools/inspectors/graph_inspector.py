@@ -223,18 +223,36 @@ RECOMMENDATION:
         """Get summary of event-outcome impacts for this question.
 
         Returns:
-            Dict with impact analysis or None if no impacts found
+            Dict with impact analysis and coverage info, or None if no
+            non-outcome events exist yet.
         """
         from src.domain.models.event_outcome_impact import (
             EventOutcomeImpact,
             ImpactDirection,
         )
 
+        # Find all non-outcome events for this question to compute coverage
+        all_events = self.db.get_many(Event)
+        question_events = [
+            e
+            for e in all_events
+            if getattr(e, "extracted_for_question_id", None) == self.question_id
+            and not getattr(e, "is_outcome", False)
+        ]
+
         impacts = self.db.get_many(
             EventOutcomeImpact, filters={"question_id": self.question_id}
         )
 
-        if not impacts:
+        # Events that have at least one impact recorded
+        events_with_impacts = {imp.event_id for imp in impacts}
+
+        # Events missing impacts
+        events_missing_impacts = [
+            e for e in question_events if e.id not in events_with_impacts
+        ]
+
+        if not impacts and not question_events:
             return None
 
         # Group by outcome event
@@ -272,10 +290,21 @@ RECOMMENDATION:
             else:
                 by_outcome[outcome_id]["neutral_impacts"].append(impact_info)
 
+        total_non_outcome = len(question_events)
+        covered = len(events_with_impacts & {e.id for e in question_events})
+
         return {
             "impact_count": len(impacts),
             "outcomes_analyzed": len(by_outcome),
             "by_outcome": by_outcome,
+            "coverage": {
+                "total_non_outcome_events": total_non_outcome,
+                "events_with_impacts": covered,
+                "events_missing_impacts": [
+                    {"id": e.id, "title": e.title}
+                    for e in events_missing_impacts
+                ],
+            },
         }
 
     def _format_graph_visualization(
@@ -395,7 +424,37 @@ RECOMMENDATION:
             builder.add_kv(
                 "Outcomes Analyzed", outcome_impacts["outcomes_analyzed"], indent=2
             )
+
+            # Impact coverage
+            coverage = outcome_impacts.get("coverage", {})
+            total_events = coverage.get("total_non_outcome_events", 0)
+            covered_events = coverage.get("events_with_impacts", 0)
+            missing = coverage.get("events_missing_impacts", [])
+
+            if total_events > 0:
+                pct = (covered_events / total_events) * 100
+                builder.add_kv(
+                    "Impact Coverage",
+                    f"{covered_events}/{total_events} events ({pct:.0f}%)",
+                    indent=2,
+                )
             builder.add_line()
+
+            if missing:
+                builder.add_line(
+                    f"!! MISSING IMPACTS: {len(missing)} event(s) have no outcome impact recorded:",
+                    indent=2,
+                )
+                for item in missing[:10]:
+                    title_short = self._truncate(item["title"], 50)
+                    builder.add_line(f"- {title_short} ({item['id']})", indent=4)
+                if len(missing) > 10:
+                    builder.add_line(f"  ... and {len(missing) - 10} more", indent=4)
+                builder.add_line(
+                    "-> Call record_outcome_impact for each missing event.",
+                    indent=4,
+                )
+                builder.add_line()
 
             for outcome_id, outcome_data in outcome_impacts["by_outcome"].items():
                 outcome_title = outcome_data["outcome_title"]
