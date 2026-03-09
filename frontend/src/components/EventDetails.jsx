@@ -1,216 +1,27 @@
-import React, { useState, useEffect, memo, useRef } from 'react'
-import { fetchEventArticles, fetchEventQuestions, fetchEventImpacts, fetchOutcomeImpacts } from '../api/graphApi'
+import React, { useState, memo, useEffect } from 'react'
+import { useDraggablePopup } from '../hooks/useDraggablePopup'
+import { EventMetrics } from './EventDetails/EventMetrics'
+import { RelatedArticles, RelatedQuestions } from './EventDetails/RelatedItems'
+import { EventImpacts } from './EventDetails/EventImpacts'
 import './EventDetails.css'
 
 const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborhood }) {
-  const [articles, setArticles] = useState([])
-  const [questions, setQuestions] = useState([])
-  const [impacts, setImpacts] = useState([])
-  const [loadingArticles, setLoadingArticles] = useState(false)
-  const [loadingQuestions, setLoadingQuestions] = useState(false)
-  const [loadingImpacts, setLoadingImpacts] = useState(false)
   const [showArticles, setShowArticles] = useState(false)
   const [showQuestions, setShowQuestions] = useState(false)
   const [showImpacts, setShowImpacts] = useState(false)
-  const [articlesLoaded, setArticlesLoaded] = useState(false)
-  const [questionsLoaded, setQuestionsLoaded] = useState(false)
-  const [impactsLoaded, setImpactsLoaded] = useState(false)
 
-  // Filter state for outcome impacts
-  const [minConfidence, setMinConfidence] = useState(0)
-  const [filterDirection, setFilterDirection] = useState(null)
+  const { position, isDragging, handleMouseDown } = useDraggablePopup(node)
 
-  // Dragging state
-  const [position, setPosition] = useState({ x: 0, y: 0 })
-  const [isDragging, setIsDragging] = useState(false)
-  const dragOffset = useRef({ x: 0, y: 0 })
+  // Reset toggles when node changes
+  useEffect(() => {
+    if (node) {
+      setShowArticles(false)
+      setShowQuestions(false)
+      setShowImpacts(false)
+    }
+  }, [node?.id])
 
   if (!node) return null
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'Unknown'
-    return new Date(dateString).toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
-  }
-
-  const truncateText = (text, maxLength = 150) => {
-    if (!text) return ''
-    if (text.length <= maxLength) return text
-    return text.substring(0, maxLength) + '...'
-  }
-
-  // Initialize position when node changes (Smart Positioning)
-  useEffect(() => {
-    const screenX = node._screenX || 0
-    const screenY = node._screenY || 0
-
-    // Constants
-    const POPUP_WIDTH = 320
-    const POPUP_EST_HEIGHT = 400
-    const PADDING = 20
-    const WINDOW_W = window.innerWidth
-    const WINDOW_H = window.innerHeight
-
-    // POSITIONING STRATEGY:
-    // User requested "Right of the event node".
-    // 1. Default X: To the right of the node (node center + offset)
-    // 2. Default Y: Align top of popup with top of node (node center - offset)
-
-    let x = screenX + 60
-    let y = screenY - 100
-
-    // Clamp X (Right Edge)
-    // If it goes off-screen right, shift it left just enough to fit
-    if (x + POPUP_WIDTH > WINDOW_W - PADDING) {
-      x = WINDOW_W - POPUP_WIDTH - PADDING
-    }
-    // Clamp X (Left Edge)
-    x = Math.max(PADDING, x)
-
-    // Clamp Y (Bottom Edge)
-    if (y + POPUP_EST_HEIGHT > WINDOW_H - PADDING) {
-      y = WINDOW_H - POPUP_EST_HEIGHT - PADDING
-    }
-    // Clamp Y (Top Edge)
-    y = Math.max(PADDING + 60, y) // +60 for header clear
-
-    setPosition({ x, y })
-  }, [node.id, node._screenX, node._screenY])
-
-  // Handle dragging
-  useEffect(() => {
-    if (!isDragging) return
-
-    const handleMouseMove = (e) => {
-      setPosition({
-        x: e.clientX - dragOffset.current.x,
-        y: e.clientY - dragOffset.current.y
-      })
-    }
-
-    const handleMouseUp = () => {
-      setIsDragging(false)
-    }
-
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', handleMouseUp)
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', handleMouseUp)
-    }
-  }, [isDragging])
-
-  const handleMouseDown = (e) => {
-    // Only allow dragging from header (excluding close button)
-    if (e.target.closest('.close-btn')) return
-
-    setIsDragging(true)
-    dragOffset.current = {
-      x: e.clientX - position.x,
-      y: e.clientY - position.y
-    }
-  }
-
-  // Reset state when node changes
-  useEffect(() => {
-    setArticles([])
-    setQuestions([])
-    setImpacts([])
-    setShowArticles(false)
-    setShowQuestions(false)
-    setShowImpacts(false)
-    setArticlesLoaded(false)
-    setQuestionsLoaded(false)
-    setImpactsLoaded(false)
-    // Reset filters
-    setMinConfidence(0)
-    setFilterDirection(null)
-  }, [node.id])
-
-  // Load articles when expanded
-  useEffect(() => {
-    if (showArticles && !articlesLoaded && !loadingArticles) {
-      setLoadingArticles(true)
-      fetchEventArticles(node.id)
-        .then(data => {
-          console.log('Fetched articles for event:', node.id, data)
-          setArticles(data.articles || [])
-          setArticlesLoaded(true)
-        })
-        .catch(error => {
-          console.error('Failed to load articles:', error)
-          setArticlesLoaded(true)
-        })
-        .finally(() => {
-          setLoadingArticles(false)
-        })
-    }
-  }, [showArticles, articlesLoaded, loadingArticles, node.id])
-
-  // Load questions when expanded
-  useEffect(() => {
-    if (showQuestions && !questionsLoaded && !loadingQuestions) {
-      setLoadingQuestions(true)
-      fetchEventQuestions(node.id)
-        .then(data => {
-          console.log('Fetched questions for event:', node.id, data)
-          setQuestions(data.questions || [])
-          setQuestionsLoaded(true)
-        })
-        .catch(error => {
-          console.error('Failed to load questions:', error)
-          setQuestionsLoaded(true)
-        })
-        .finally(() => {
-          setLoadingQuestions(false)
-        })
-    }
-  }, [showQuestions, questionsLoaded, loadingQuestions, node.id])
-
-  // Load impacts when expanded (for all nodes)
-  useEffect(() => {
-    if (showImpacts && !impactsLoaded && !loadingImpacts) {
-      setLoadingImpacts(true)
-
-      const fetchPromise = node.isOutcome
-        ? fetchOutcomeImpacts(
-            node.id,
-            minConfidence > 0 ? minConfidence : null,
-            filterDirection
-          ) // Get incoming impacts for outcomes with filters
-        : fetchEventImpacts(node.id)   // Get outgoing impacts for regular events
-
-      fetchPromise
-        .then(data => {
-          console.log('Fetched impacts for event:', node.id, 'Type:', node.isOutcome ? 'outcome' : 'regular', 'Data:', data)
-          console.log('Impact count:', data?.length || 0)
-          if (data && data.length > 0) {
-            console.log('First impact:', data[0])
-          }
-          setImpacts(data || [])
-          setImpactsLoaded(true)
-        })
-        .catch(error => {
-          console.error('Failed to load impacts for', node.id, 'Error:', error)
-          console.error('Error details:', error.response?.data || error.message)
-          setImpactsLoaded(true)
-        })
-        .finally(() => {
-          setLoadingImpacts(false)
-        })
-    }
-  }, [showImpacts, impactsLoaded, loadingImpacts, node.id, node.isOutcome])
-
-  // Reload impacts when filters change (for outcome events only)
-  useEffect(() => {
-    if (showImpacts && impactsLoaded && node.isOutcome) {
-      setImpactsLoaded(false)
-    }
-  }, [minConfidence, filterDirection])
 
   return (
     <div className="event-details" style={{
@@ -218,14 +29,14 @@ const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborh
       maxHeight: '80vh',
       display: 'flex',
       flexDirection: 'column',
-      // Fixed positioning relative to viewport
       position: 'fixed',
       left: position.x,
       top: position.y,
       zIndex: 1000,
       transform: 'translate(0, 0)',
       boxShadow: '0 8px 30px rgba(0,0,0,0.2)',
-      borderRadius: '8px'
+      borderRadius: '8px',
+      backgroundColor: '#fff'
     }}>
       <div
         className="details-header"
@@ -237,7 +48,7 @@ const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborh
           userSelect: 'none'
         }}
       >
-        <div className="header-top" style={{ marginBottom: '8px' }}>
+        <div className="header-top" style={{ marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <span
             className="node-type-badge"
             style={{
@@ -254,7 +65,7 @@ const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborh
           >
             {node.domain || 'General'}
           </span>
-          <button className="close-btn" onClick={onClose} aria-label="Close details" style={{ fontSize: '1.2rem', padding: '4px' }}>
+          <button className="close-btn" onClick={onClose} aria-label="Close details" style={{ fontSize: '1.2rem', padding: '4px', background: 'none', border: 'none', cursor: 'pointer' }}>
             ×
           </button>
         </div>
@@ -268,7 +79,7 @@ const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborh
           {node.name}
         </h3>
 
-        {/* Outcome badges - shown when node is an outcome event */}
+        {/* Outcome badges */}
         {node.isOutcome && (
           <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
             <span style={{
@@ -313,325 +124,25 @@ const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborh
       </div>
 
       <div className="details-content" style={{ padding: '16px 20px', overflowY: 'auto' }}>
-        {/* Compact Metrics Row */}
-        <div className="metrics-row" style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '16px',
-          fontSize: '0.8rem',
-          color: '#4b5563',
-          marginBottom: '16px',
-          paddingBottom: '12px',
-          borderBottom: '1px solid #f3f4f6'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span>📅</span>
-            <span style={{ fontWeight: '500' }}>
-              {formatDate(node.properties?.occurred_date || node.properties?.predicted_date)}
-            </span>
-          </div>
+        <EventMetrics node={node} />
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span>🏷️</span>
-            <span style={{ textTransform: 'capitalize' }}>
-              {node.properties?.event_type || node.event_type || 'Event'}
-            </span>
-          </div>
+        <RelatedArticles
+          eventId={node.id}
+          show={showArticles}
+          onToggle={() => setShowArticles(!showArticles)}
+        />
 
-          {node.properties?.status && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span>
-                {node.properties.status === 'occurred' ? '✅' :
-                  node.properties.status === 'predicted' ? '🔮' : 'ℹ️'}
-              </span>
-              <span style={{ textTransform: 'capitalize' }}>
-                {node.properties.status}
-              </span>
-            </div>
-          )}
-        </div>
+        <RelatedQuestions
+          eventId={node.id}
+          show={showQuestions}
+          onToggle={() => setShowQuestions(!showQuestions)}
+        />
 
-        {node.properties?.description && (
-          <div className="description-block" style={{ marginBottom: '16px' }}>
-            <p style={{
-              fontSize: '0.9rem',
-              lineHeight: '1.5',
-              color: '#374151',
-              margin: 0
-            }}>
-              {node.properties.description}
-            </p>
-          </div>
-        )}
-
-        <div className="expandable-section">
-          <button
-            className={`section-toggle ${showArticles ? 'active' : ''}`}
-            onClick={() => setShowArticles(!showArticles)}
-            style={{ padding: '8px 12px', fontSize: '0.9rem' }}
-          >
-            <span className="toggle-text">Related Articles</span>
-            <span className="toggle-meta" style={{ fontSize: '0.8rem' }}>
-              {articlesLoaded ? articles.length : ''}
-              <span className="toggle-icon">{showArticles ? '−' : '+'}</span>
-            </span>
-          </button>
-
-          {showArticles && (
-            <div className="section-content">
-              {loadingArticles ? (
-                <div className="loading-message">Loading...</div>
-              ) : articles.length === 0 ? (
-                <div className="empty-message">No articles</div>
-              ) : (
-                <div className="articles-list">
-                  {articles.map(article => (
-                    <div key={article.id} className="article-card" style={{ padding: '10px' }}>
-                      <div className="article-header">
-                        <h4 className="article-title" style={{ fontSize: '0.9rem' }}>{article.title}</h4>
-                        <span className="article-date" style={{ fontSize: '0.75rem' }}>{formatDate(article.published_date)}</span>
-                      </div>
-                      <div className="article-source-badge" style={{ fontSize: '0.7rem' }}>{article.source}</div>
-                      <p className="article-excerpt" style={{ fontSize: '0.8rem', marginTop: '4px' }}>{truncateText(article.content)}</p>
-                      {article.url && (
-                        <a
-                          href={article.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="article-link"
-                          style={{ fontSize: '0.8rem' }}
-                        >
-                          Source ↗
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="expandable-section">
-          <button
-            className={`section-toggle ${showQuestions ? 'active' : ''}`}
-            onClick={() => setShowQuestions(!showQuestions)}
-            style={{ padding: '8px 12px', fontSize: '0.9rem' }}
-          >
-            <span className="toggle-text">Related Questions</span>
-            <span className="toggle-meta" style={{ fontSize: '0.8rem' }}>
-              {questionsLoaded ? questions.length : ''}
-              <span className="toggle-icon">{showQuestions ? '−' : '+'}</span>
-            </span>
-          </button>
-
-          {showQuestions && (
-            <div className="section-content">
-              {loadingQuestions ? (
-                <div className="loading-message">Loading...</div>
-              ) : questions.length === 0 ? (
-                <div className="empty-message">No questions</div>
-              ) : (
-                <div className="questions-list">
-                  {questions.map(question => (
-                    <div key={question.id} className="question-card" style={{ padding: '10px' }}>
-                      <div className="question-text" style={{ fontSize: '0.9rem' }}>{question.question_text}</div>
-                      <div className="question-tags">
-                        <span className="tag domain" style={{ fontSize: '0.7rem' }}>{question.domain}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Outcome Impacts - shown for all nodes that have impacts */}
-        <div className="expandable-section">
-          <button
-            className={`section-toggle ${showImpacts ? 'active' : ''}`}
-            onClick={() => setShowImpacts(!showImpacts)}
-            style={{ padding: '8px 12px', fontSize: '0.9rem' }}
-          >
-            <span className="toggle-text">
-              {node.isOutcome ? '⭐ Impacted By' : '🎯 Impact on Outcome'}
-            </span>
-            <span className="toggle-meta" style={{ fontSize: '0.8rem' }}>
-              {impactsLoaded ? impacts.length : ''}
-              <span className="toggle-icon">{showImpacts ? '−' : '+'}</span>
-            </span>
-          </button>
-
-          {/* Filters for outcome events */}
-          {showImpacts && node.isOutcome && (
-            <div style={{
-              padding: '8px 12px',
-              backgroundColor: '#f8f9fa',
-              borderTop: '1px solid #e9ecef',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px'
-            }}>
-              <div>
-                <label style={{ fontSize: '0.75rem', color: '#666', display: 'block', marginBottom: '4px' }}>
-                  Min Confidence: {(minConfidence * 100).toFixed(0)}%
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.1"
-                  value={minConfidence}
-                  onChange={(e) => setMinConfidence(parseFloat(e.target.value))}
-                  style={{ width: '100%' }}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: '0.75rem', color: '#666', display: 'block', marginBottom: '4px' }}>
-                  Direction
-                </label>
-                <select
-                  value={filterDirection || ''}
-                  onChange={(e) => setFilterDirection(e.target.value || null)}
-                  style={{
-                    width: '100%',
-                    padding: '4px 8px',
-                    fontSize: '0.8rem',
-                    borderRadius: '4px',
-                    border: '1px solid #ced4da'
-                  }}
-                >
-                  <option value="">All</option>
-                  <option value="positive">Positive</option>
-                  <option value="negative">Negative</option>
-                  <option value="mixed">Mixed</option>
-                  <option value="neutral">Neutral</option>
-                </select>
-              </div>
-            </div>
-          )}
-
-          {showImpacts && (
-            <div className="section-content">
-              {loadingImpacts ? (
-                <div className="loading-message">Loading...</div>
-              ) : impacts.length === 0 ? (
-                <div className="empty-message">No impacts</div>
-              ) : (
-                <div className="impacts-list">
-                  {impacts.map((impact, index) => {
-                    const getDirectionInfo = (direction) => {
-                      switch (direction) {
-                        case 'positive':
-                          return { icon: '↗', color: '#22c55e', label: 'Positive' }
-                        case 'negative':
-                          return { icon: '↘', color: '#ef4444', label: 'Negative' }
-                        case 'mixed':
-                          return { icon: '↔', color: '#a855f7', label: 'Mixed' }
-                        case 'neutral':
-                          return { icon: '→', color: '#94a3b8', label: 'Neutral' }
-                        default:
-                          return { icon: '?', color: '#6c757d', label: 'Unknown' }
-                      }
-                    }
-
-                    const dirInfo = getDirectionInfo(impact.properties?.impact_direction)
-                    const magnitude = impact.properties?.impact_magnitude || 0
-                    const confidence = impact.properties?.confidence || 0
-                    const reasoning = impact.properties?.reasoning || 'No reasoning'
-                    const evidenceCount = impact.properties?.evidence_count || 0
-                    const chainCount = impact.properties?.causal_chain_hypothesis_ids?.length || 0
-                    // For outcome events, source_id is the impacting event
-                    // For regular events, target_id is the outcome being impacted
-                    const eventId = node.isOutcome ? impact.source_id : impact.target_id
-                    const eventLabel = impact.label || `Event ${eventId?.substring(0, 8)}`
-
-                    return (
-                      <div key={index} className="impact-item" style={{
-                        padding: '10px',
-                        marginBottom: '8px',
-                        border: '1px solid #e0e0e0',
-                        borderRadius: '6px',
-                        backgroundColor: '#fff'
-                      }}>
-                        {/* Event name */}
-                        {eventId && (
-                          <div style={{
-                            fontSize: '0.8rem',
-                            fontWeight: '600',
-                            color: '#495057',
-                            marginBottom: '6px',
-                            paddingBottom: '6px',
-                            borderBottom: '1px solid #f0f0f0'
-                          }}>
-                            {node.isOutcome ? '← From: ' : '→ To: '}{eventLabel}
-                          </div>
-                        )}
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          marginBottom: '6px'
-                        }}>
-                          <div style={{
-                            width: '24px',
-                            height: '24px',
-                            borderRadius: '50%',
-                            backgroundColor: dirInfo.color,
-                            color: '#fff',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '12px',
-                            fontWeight: '600'
-                          }}>
-                            {dirInfo.icon}
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#333' }}>
-                              {dirInfo.label} Impact
-                            </div>
-                            <div style={{ fontSize: '0.75rem', color: '#6c757d' }}>
-                              Mag: {(magnitude * 100).toFixed(0)}% • Conf: {(confidence * 100).toFixed(0)}%
-                            </div>
-                          </div>
-                        </div>
-                        <div style={{
-                          fontSize: '0.8rem',
-                          color: '#495057',
-                          lineHeight: '1.4',
-                          padding: '6px',
-                          backgroundColor: '#f8f9fa',
-                          borderRadius: '4px',
-                          marginBottom: '6px'
-                        }}>
-                          {reasoning}
-                        </div>
-                        {/* Metadata */}
-                        {(evidenceCount > 0 || chainCount > 0) && (
-                          <div style={{
-                            display: 'flex',
-                            gap: '10px',
-                            fontSize: '0.7rem',
-                            color: '#6c757d'
-                          }}>
-                            {evidenceCount > 0 && (
-                              <span>📄 {evidenceCount} evidence article{evidenceCount !== 1 ? 's' : ''}</span>
-                            )}
-                            {chainCount > 0 && (
-                              <span>🔗 {chainCount} causal link{chainCount !== 1 ? 's' : ''}</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <EventImpacts
+          node={node}
+          show={showImpacts}
+          onToggle={() => setShowImpacts(!showImpacts)}
+        />
 
         <div className="actions-footer" style={{ marginTop: '16px' }}>
           <h4 style={{ fontSize: '0.8rem', marginBottom: '8px', color: '#6b7280' }}>Explore Neighborhood</h4>
