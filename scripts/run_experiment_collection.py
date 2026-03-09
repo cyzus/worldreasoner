@@ -41,12 +41,12 @@ from src.config.collection_goal import CollectionGoal, TimeHorizon
 from src.config.pipeline import QuestionPipelineConfig
 from src.core.database import GenericDatabase
 from src.domain.models import Question, Article, Event, CausalHypothesis
-from src.pipelines.question.orchestrator import (
+from src.pipelines.collection.orchestrator import (
     QuestionCollectionOrchestrator,
     OrchestratorConfig,
 )
-from src.pipelines.question.sources.markets import PolymarketRunner
-from src.pipelines.question.progress import classify_question_time_horizon
+from src.pipelines.collection.runner_polymarket import PolymarketRunner
+from src.pipelines.collection.progress import classify_question_time_horizon
 from src.utils.logging import logger
 
 
@@ -246,7 +246,7 @@ def export_dataset_summary(questions: list, output_path: str) -> None:
 def _load_article_sources(sources_config: str, domains: list) -> list:
     """Load and filter article sources from YAML config."""
     import yaml
-    from src.pipelines.stages import ArticleSource
+    from src.pipelines.collection import ArticleSource
 
     with open(sources_config, "r", encoding="utf-8") as f:
         config_data = yaml.safe_load(f)
@@ -273,8 +273,7 @@ def _load_article_sources(sources_config: str, domains: list) -> list:
 def _create_news_runner(article_sources, domains, question_types, goal):
     """Create a NewsBasedRunner with experiment-appropriate configuration."""
     from datetime import timedelta
-    from src.pipelines.stages import ArticleCollectionConfig
-    from src.pipelines.question.sources.news import NewsBasedRunner
+    from src.pipelines.collection import ArticleCollectionConfig, NewsBasedRunner
 
     domain_strs = [d.value if hasattr(d, 'value') else str(d) for d in domains]
     qtype_strs = [t.value if hasattr(t, 'value') else str(t) for t in question_types]

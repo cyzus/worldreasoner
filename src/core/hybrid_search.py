@@ -22,9 +22,9 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 from contextlib import contextmanager
 
-from ..llm import LiteLLMClient
-from ..domain.models import Article
-from ..utils.logging import logger
+from .llm import LiteLLMClient
+from src.domain.models import Article
+from src.utils.logging import logger
 from ..config.settings import get_config
 
 
@@ -586,7 +586,7 @@ class HybridSearch:
             Number of orphaned embeddings removed
         """
         from .database import GenericDatabase
-        from ..domain.models import Article
+        from src.domain.models import Article
 
         logger.info("Checking for orphaned embeddings...")
 

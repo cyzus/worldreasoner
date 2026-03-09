@@ -255,7 +255,7 @@ async def clear_questions_evidence(request: ClearEvidenceRequest):
 
     This removes causal hypotheses and optionally cascades to orphaned events.
     """
-    from src.domain.question_service import QuestionService
+    from src.services.question_service import QuestionService
 
     db = GenericDatabase(get_current_db_path())
     service = QuestionService(db)
@@ -268,6 +268,26 @@ async def clear_questions_evidence(request: ClearEvidenceRequest):
     for qid in request.question_ids:
         try:
             service.clear_evidence(qid, cascade=request.cascade)
+            results["cleared"].append(qid)
+        except Exception as e:
+            results["failed"].append({"id": qid, "error": str(e)})
+
+    return results
+
+
+@router.post("/questions/clear-graph")
+async def clear_questions_graph(request: ClearEvidenceRequest):
+    """Clear only graph data (events, hypotheses) for questions, keeping articles and explanation."""
+    db_path = get_current_db_path()
+    db = GenericDatabase(db_path)
+    from src.services.question_service import QuestionService
+
+    service = QuestionService(db)
+    results = {"cleared": [], "failed": []}
+
+    for qid in request.question_ids:
+        try:
+            service.clear_graph(qid)
             results["cleared"].append(qid)
         except Exception as e:
             results["failed"].append({"id": qid, "error": str(e)})
@@ -318,6 +338,40 @@ async def run_pipeline_job(
             on_progress=on_progress,
             **config,
         )
+        
+        # In decoupled V2 architecture, Evidence pipeline only extracts NL explanations.
+        # If we successfully ran the evidence pipeline, we should automatically trigger 
+        # the graph builder pipeline to build the structured graph.
+        if pipeline_type == PipelineType.EVIDENCE and len(result.processed) > 0:
+            job.message = f"Building graphs for {len(result.processed)} questions..."
+            job.updated_at = datetime.utcnow().isoformat()
+            try:
+                from src.pipelines.graph_builder.pipeline import GraphBuilderPipeline
+                from src.config import get_config
+                from src.core.database import GenericDatabase
+                from src.domain.models import Question
+
+                db_path = get_current_db_path()
+                graph_pipeline = GraphBuilderPipeline(
+                    db_path=db_path,
+                    model_id=get_config().llm.model,
+                )
+                db = GenericDatabase(db_path)
+                
+                graph_success = 0
+                for item in result.processed:
+                    q = db.get(Question, item["id"])
+                    if q and q.causal_explanation:
+                        success = graph_pipeline._process_single_question(q)
+                        if success:
+                            graph_success += 1
+                            
+                job.results["graphs_built"] = graph_success
+                
+            except Exception as e:
+                logger.error(f"Auto graph builder failed: {e}")
+                # Don't fail the job if just the graph building failed, 
+                # they still got the evidence explanation.
 
         # Determine job status based on results
         # Determine job status based on results

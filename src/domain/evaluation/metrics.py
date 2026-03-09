@@ -9,16 +9,16 @@ This module implements standard forecasting metrics:
 import math
 from typing import Any, Dict, Optional
 from src.domain.models.question import QuestionType
-from src.llm import LiteLLMClient
+from src.core.llm import LiteLLMClient
 from src.config import get_config
 
 
 def calculate_accuracy(
-    prediction: Any, 
-    ground_truth: Any, 
+    prediction: Any,
+    ground_truth: Any,
     question_type: QuestionType,
     question_text: str = "",
-    options: Optional[list] = None
+    options: Optional[list] = None,
 ) -> float:
     """Calculate simple accuracy (1.0 for correct, 0.0 for incorrect).
 
@@ -33,10 +33,12 @@ def calculate_accuracy(
     if question_type == QuestionType.BINARY:
         # Support list of truth for binary? Unlikely but possible if ambiguously resolved
         if isinstance(ground_truth, list):
-            if prediction in ground_truth: return 1.0
+            if prediction in ground_truth:
+                return 1.0
         else:
-            if prediction == ground_truth: return 1.0
-            
+            if prediction == ground_truth:
+                return 1.0
+
         # Try LLM judge fallback
         if question_text and isinstance(prediction, str):
             return llm_judge_accuracy(prediction, ground_truth, question_text, options)
@@ -45,10 +47,12 @@ def calculate_accuracy(
     elif question_type == QuestionType.MCQ:
         # Check if ground_truth is a list of acceptable answers
         if isinstance(ground_truth, list):
-            if prediction in ground_truth: return 1.0
+            if prediction in ground_truth:
+                return 1.0
         else:
-            if prediction == ground_truth: return 1.0
-            
+            if prediction == ground_truth:
+                return 1.0
+
         # Try LLM judge fallback
         if question_text and isinstance(prediction, str):
             return llm_judge_accuracy(prediction, ground_truth, question_text, options)
@@ -82,27 +86,34 @@ def calculate_accuracy(
 
     return 0.0
 
+
 import asyncio
 
-def llm_judge_accuracy(prediction: Any, ground_truth: Any, question_text: str, options: Optional[list] = None) -> float:
+
+def llm_judge_accuracy(
+    prediction: Any,
+    ground_truth: Any,
+    question_text: str,
+    options: Optional[list] = None,
+) -> float:
     """Use an LLM to judge if a prediction is semantically equivalent to the ground truth outcome.
-    
+
     Args:
         prediction: The agent's predicted string
         ground_truth: The strict ground truth option
         question_text: The context of the question
         options: The acceptable options
-        
+
     Returns:
         1.0 if the LLM judges it semantically matches, 0.0 otherwise.
     """
     config = get_config()
     client = LiteLLMClient(config.llm.model_dump(exclude_none=True))
-    
+
     prompt = f"""You are an impartial judge evaluating a forecasting agent's prediction for a multiple-choice or binary question.
     
 Question: {question_text}
-Valid Options: {options if options else 'N/A'}
+Valid Options: {options if options else "N/A"}
 
 The strict ground truth correct answer is: '{ground_truth}'
 
@@ -114,21 +125,22 @@ Sometimes the agent predicts the underlying subject matter (e.g. predicting the 
 Output ONLY "YES" if the prediction is semantically correct and matches the ground truth outcome. Output ONLY "NO" if it is incorrect.
 """
     messages = [{"role": "user", "content": prompt}]
-    
+
     try:
         # Using a new event loop just for the synchronous call
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         response = loop.run_until_complete(client.acomplete(messages=messages))
         loop.close()
-        
+
         judgement = response.strip().upper()
         if judgement.startswith("YES"):
             return 1.0
     except Exception as e:
         import logging
+
         logging.getLogger(__name__).warning("LLM Judge evaluation failed", exc_info=e)
-        
+
     return 0.0
 
 

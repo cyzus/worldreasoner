@@ -5,10 +5,10 @@ import asyncio
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 
-from src.pipelines.stages.question_quality import QuestionQualityRankingStage
+from src.pipelines.collection.stage_quality import QuestionQualityRankingStage
 from src.config.pipeline import QuestionQualityConfig
 from src.domain.models import Question, QuestionType, Domain
-from src.tools.question_quality_scorer import QualityAssessment
+from src.tools.generators.question_quality_scorer import QualityAssessment
 
 
 @pytest.fixture

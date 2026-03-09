@@ -44,6 +44,7 @@ from typing import (
     TypeVar,
     Generic,
     Type,
+    Union,
     get_args,
     get_origin,
 )
@@ -136,8 +137,10 @@ class GenericDatabase(Generic[T]):
     """
 
     def __init__(
-        self, db_path: str = "worldreasoner.db", cutoff_date: Optional[datetime] = None,
-        timeout: float = 30.0
+        self,
+        db_path: str = "worldreasoner.db",
+        cutoff_date: Optional[datetime] = None,
+        timeout: float = 30.0,
     ):
         """Initialize database connection.
 
@@ -185,14 +188,14 @@ class GenericDatabase(Generic[T]):
         # Skip for in-memory databases
         if str(self.db_path) == ":memory:" or self.db_path.name == ":memory:":
             return
-            
+
         if not self.db_path.exists():
             self.db_path.touch()
 
     @contextmanager
     def _get_connection(self):
         """Get database connection context manager.
-        
+
         If inside a batch() context, reuses the shared connection.
         Otherwise creates a new connection per operation.
         """
@@ -221,11 +224,11 @@ class GenericDatabase(Generic[T]):
     @contextmanager
     def batch(self):
         """Context manager for batching multiple operations in a single transaction.
-        
+
         Reuses a single connection and wraps all operations in a transaction.
         Commits on success, rolls back on error. Individual operation commits
         are deferred until the batch exits.
-        
+
         Usage:
             with db.batch():
                 db.save(Article, article1)
@@ -573,7 +576,7 @@ class GenericDatabase(Generic[T]):
 
             # Apply temporal filtering if gateway exists
             if self.gateway is not None:
-                from ..domain.models import Article, Event
+                from src.domain.models import Article, Event
 
                 if model == Article:
                     if not self.gateway.is_article_accessible(instance):
@@ -600,7 +603,7 @@ class GenericDatabase(Generic[T]):
         Returns:
             List of model instances (temporally filtered if gateway active)
         """
-        from ..domain.models import Article, Event
+        from src.domain.models import Article, Event
 
         table_name = _registry.get_table_name(model)
         filters = filters or {}
@@ -805,3 +808,24 @@ class GenericDatabase(Generic[T]):
             cursor = conn.cursor()
             cursor.execute(f"DELETE FROM {table_name}")
             self._commit(conn)
+
+
+def ensure_database(db: "Union[str, GenericDatabase]") -> "GenericDatabase":
+    """Convert string path to GenericDatabase instance if needed.
+
+    Eliminates repeated pattern:
+    `db = GenericDatabase(db) if isinstance(db, str) else db`
+
+    Args:
+        db: Either a database path string or GenericDatabase instance
+
+    Returns:
+        GenericDatabase instance
+
+    Examples:
+        >>> db = ensure_database("worldreasoner.db")
+        >>> db = ensure_database(existing_db_instance)  # No-op
+    """
+    if isinstance(db, str):
+        return GenericDatabase(db)
+    return db

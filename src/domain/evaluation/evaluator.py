@@ -138,11 +138,11 @@ class ForecastEvaluator:
 
         # Calculate metrics
         accuracy = calculate_accuracy(
-            forecast.prediction, 
-            question.ground_truth, 
+            forecast.prediction,
+            question.ground_truth,
             question.question_type,
             question_text=question.question_text,
-            options=question.options
+            options=question.options,
         )
 
         is_correct = accuracy == 1.0

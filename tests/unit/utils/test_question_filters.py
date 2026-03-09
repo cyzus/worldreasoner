@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 
 from src.domain.models import Question, QuestionType, Domain
 from src.config.collection_goal import QualityRequirements
-from src.utils.question_filters import (
+from src.services.question_filters import (
     filter_questions_by_type,
     filter_questions_by_category,
     apply_quality_requirements,

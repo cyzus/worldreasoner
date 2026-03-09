@@ -2,11 +2,11 @@
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from src.pipelines.question.gap_filler import GapFiller
-from src.pipelines.question.gap_analyzer import GapAnalysis
-from src.pipelines.question.source_coordinator import SourceCoordinator
-from src.pipelines.question.progress import CollectionProgress
-from src.pipelines.question.sources.base import QuestionSourceRunner, CollectionResult
+from src.pipelines.collection.gap_filler import GapFiller
+from src.pipelines.collection.gap_analyzer import GapAnalysis
+from src.pipelines.collection.coordinator import SourceCoordinator
+from src.pipelines.collection.progress import CollectionProgress
+from src.pipelines.collection.runner_base import QuestionSourceRunner, CollectionResult
 from src.config.collection_goal import CollectionGoal
 from tests.conftest import create_test_question
 
@@ -58,9 +58,9 @@ def test_gap_filler_initialization(sample_goal, coordinator):
 async def test_fill_gaps_no_gaps(gap_filler):
     """Test gap filling when no gaps exist."""
     analysis = GapAnalysis(type_gaps={}, category_gaps={}, total_needed=0)
-    progress = CollectionProgress()
+    
 
-    questions = await gap_filler.fill_gaps(analysis, progress, set())
+    questions = await gap_filler.fill_gaps(analysis, set())
 
     assert questions == []
 
@@ -85,10 +85,10 @@ async def test_fill_type_gap(sample_goal, coordinator, mock_runner):
 
     # Create analysis with type gap
     analysis = GapAnalysis(type_gaps={"binary": 5}, category_gaps={}, total_needed=5)
-    progress = CollectionProgress()
+    
 
     # Fill gaps
-    questions = await filler.fill_gaps(analysis, progress, set())
+    questions = await filler.fill_gaps(analysis, set())
 
     assert len(questions) == 1
     assert questions[0].id == "q_1"
@@ -115,10 +115,10 @@ async def test_fill_category_gap(sample_goal, coordinator, mock_runner):
 
     # Create analysis with category gap
     analysis = GapAnalysis(type_gaps={}, category_gaps={"tech": 5}, total_needed=5)
-    progress = CollectionProgress()
+    
 
     # Fill gaps
-    questions = await filler.fill_gaps(analysis, progress, set())
+    questions = await filler.fill_gaps(analysis, set())
 
     assert len(questions) == 1
     assert questions[0].category == "tech"
@@ -136,10 +136,10 @@ async def test_fill_gaps_source_exhausted(sample_goal, coordinator, mock_runner)
 
     # Create analysis
     analysis = GapAnalysis(type_gaps={"binary": 5}, category_gaps={}, total_needed=5)
-    progress = CollectionProgress()
+    
 
     # Fill gaps - should skip exhausted source
-    questions = await filler.fill_gaps(analysis, progress, set())
+    questions = await filler.fill_gaps(analysis, set())
 
     assert questions == []
     # Runner should not be called
@@ -157,10 +157,10 @@ async def test_fill_gaps_source_cannot_provide(sample_goal, coordinator, mock_ru
 
     # Create analysis
     analysis = GapAnalysis(type_gaps={"binary": 5}, category_gaps={}, total_needed=5)
-    progress = CollectionProgress()
+    
 
     # Fill gaps
-    questions = await filler.fill_gaps(analysis, progress, set())
+    questions = await filler.fill_gaps(analysis, set())
 
     assert questions == []
     mock_runner.collect.assert_not_called()
@@ -183,19 +183,11 @@ async def test_fill_gaps_quota_exceeded(sample_goal, coordinator, mock_runner):
         )
     )
 
-    # Setup progress with source1 already having 60 questions
-    progress = CollectionProgress()
-    for i in range(60):
-        q = create_test_question(
-            id=f"q_{i}", question_type="binary", source_name="source1"
-        )
-        progress.add_question(q)
-
     # Create analysis
     analysis = GapAnalysis(type_gaps={"binary": 5}, category_gaps={}, total_needed=5)
 
     # Fill gaps - source still gets called (quota is not enforced at GapFiller level)
-    questions = await filler.fill_gaps(analysis, progress, set())
+    questions = await filler.fill_gaps(analysis, set())
 
     assert questions == []
 
@@ -222,10 +214,10 @@ async def test_fill_gaps_marks_source_exhausted_on_failure(
 
     # Create analysis
     analysis = GapAnalysis(type_gaps={"binary": 5}, category_gaps={}, total_needed=5)
-    progress = CollectionProgress()
+    
 
     # Fill gaps
-    questions = await filler.fill_gaps(analysis, progress, set())
+    questions = await filler.fill_gaps(analysis, set())
 
     assert questions == []
     assert "source1" in filler.exhausted_sources
@@ -286,10 +278,10 @@ async def test_fill_multiple_gaps_incrementally(sample_goal, coordinator):
 
     # Need 5 boolean questions
     analysis = GapAnalysis(type_gaps={"binary": 5}, category_gaps={}, total_needed=5)
-    progress = CollectionProgress()
+    
 
     # Fill gaps
-    questions = await filler.fill_gaps(analysis, progress, set())
+    questions = await filler.fill_gaps(analysis, set())
 
     # Should get all 5 questions (3 from source1, 2 from source2)
     assert len(questions) == 5

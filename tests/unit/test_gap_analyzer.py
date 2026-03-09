@@ -1,8 +1,8 @@
 """Unit tests for GapAnalyzer."""
 
 import pytest
-from src.pipelines.question.gap_analyzer import GapAnalyzer, GapAnalysis
-from src.pipelines.question.progress import CollectionProgress
+from src.pipelines.collection.gap_analyzer import GapAnalyzer, GapAnalysis
+from src.pipelines.collection.progress import CollectionProgress
 from src.config.collection_goal import CollectionGoal
 from tests.conftest import create_test_question
 

@@ -6,7 +6,7 @@ Demonstrates the collection orchestrator.
 import asyncio
 import argparse
 from src.config.collection_goal import CollectionGoal
-from src.pipelines.question.orchestrator import QuestionCollectionOrchestrator, OrchestratorConfig
+from src.pipelines.collection.orchestrator import QuestionCollectionOrchestrator, OrchestratorConfig
 
 async def run_collection(args):
     # Load goal

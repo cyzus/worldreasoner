@@ -4,7 +4,9 @@ Extracted from src/cli/core/pipeline_runner.py to enable reuse
 across CLI and backend API without CLI dependencies.
 """
 
+import asyncio
 import time
+from copy import deepcopy
 from typing import List, Optional, Callable, Dict, Any
 from datetime import datetime, timezone
 
@@ -14,7 +16,8 @@ from src.config import DatabaseConfig
 from src.core.database import GenericDatabase
 from src.domain.models import Question, Forecast, Article, CausalHypothesis, Event
 from src.pipelines.base import PipelineStageStatus
-from src.pipelines.types import PipelineType, PipelineProgress, PipelineResult
+from src.config.pipeline import SATISFACTION_DEFAULTS
+from src.pipelines.types import PipelineProgress, PipelineResult, PipelineType
 from src.utils.logging import logger
 
 
@@ -47,39 +50,32 @@ class PipelineExecutor:
             PipelineResult with processed/failed/skipped items
         """
         start_time = time.time()
+        logger.info(f"Starting {pipeline_type.value} pipeline")
 
         if pipeline_type == PipelineType.COLLECTION:
-            logger.info(f"Starting {pipeline_type.value} pipeline")
             result = await self._run_collection(on_progress, **kwargs)
         elif pipeline_type == PipelineType.NEWS_COLLECTION:
-            logger.info(f"Starting {pipeline_type.value} pipeline")
-            # Pass the entire kwargs dict as the configuration
             result = await self._run_news_collection(
                 on_progress, collection_config=kwargs
             )
-        else:
-            logger.info(
-                f"Starting {pipeline_type.value} pipeline for {len(question_ids)} questions"
+        elif pipeline_type == PipelineType.EVIDENCE:
+            result = await self._run_evidence(question_ids, on_progress, **kwargs)
+        elif pipeline_type == PipelineType.ADAPTIVE_EVIDENCE:
+            result = await self._run_adaptive_evidence(
+                question_ids, on_progress, **kwargs
             )
-
-            if pipeline_type == PipelineType.EVIDENCE:
-                result = await self._run_evidence(question_ids, on_progress, **kwargs)
-            elif pipeline_type == PipelineType.ADAPTIVE_EVIDENCE:
-                result = await self._run_adaptive_evidence(
-                    question_ids, on_progress, **kwargs
-                )
-            elif pipeline_type == PipelineType.FORECAST:
-                result = await self._run_forecast(question_ids, on_progress, **kwargs)
-            elif pipeline_type == PipelineType.EVALUATION:
-                result = await self._run_evaluation(question_ids, on_progress, **kwargs)
-            elif pipeline_type == PipelineType.BENCHMARK:
-                result = await self._run_benchmark(question_ids, on_progress, **kwargs)
-            elif pipeline_type == PipelineType.AUTO_BENCHMARK:
-                result = await self._run_auto_benchmark(
-                    question_ids, on_progress, **kwargs
-                )
-            else:
-                raise ValueError(f"Unknown pipeline type: {pipeline_type}")
+        elif pipeline_type == PipelineType.FORECAST:
+            result = await self._run_forecast(question_ids, on_progress, **kwargs)
+        elif pipeline_type == PipelineType.EVALUATION:
+            result = await self._run_evaluation(question_ids, on_progress, **kwargs)
+        elif pipeline_type == PipelineType.BENCHMARK:
+            result = await self._run_benchmark(question_ids, on_progress, **kwargs)
+        elif pipeline_type == PipelineType.AUTO_BENCHMARK:
+            result = await self._run_auto_benchmark(question_ids, on_progress, **kwargs)
+        elif pipeline_type == PipelineType.GRAPH_BUILDER:
+            result = await self._run_graph_builder(question_ids, on_progress, **kwargs)
+        else:
+            raise ValueError(f"Unknown pipeline type: {pipeline_type}")
 
         result.duration_seconds = time.time() - start_time
 
@@ -97,7 +93,7 @@ class PipelineExecutor:
         domains: Optional[List[str]] = None,
     ):
         """Helper to load and filter article sources."""
-        from src.pipelines.stages import ArticleSource
+        from src.pipelines.collection import ArticleSource
         import yaml
 
         with open(sources_config, "r") as f:
@@ -120,8 +116,7 @@ class PipelineExecutor:
     ):
         """Helper to create configured NewsBasedRunner."""
         from datetime import timedelta
-        from src.pipelines.question.sources.news import NewsBasedRunner
-        from src.pipelines.stages import ArticleCollectionConfig
+        from src.pipelines.collection import NewsBasedRunner, ArticleCollectionConfig
         from src.config.pipeline import QuestionPipelineConfig
 
         article_config = ArticleCollectionConfig(
@@ -142,6 +137,73 @@ class PipelineExecutor:
             db_path=self.db_path,
         )
 
+    def _check_sufficient_evidence(
+        self,
+        question: Question,
+        min_depth: int,
+    ) -> Optional[str]:
+        """Check if a question already has evidence meeting the minimum graph depth.
+
+        Returns a skip-reason string if sufficient, None if processing is needed.
+        """
+        from src.analysis.graph_analysis import (
+            resolve_target_event_id,
+            calculate_graph_quality,
+        )
+
+        all_hypotheses = self.db.get_many(CausalHypothesis)
+        hypotheses = [
+            h for h in all_hypotheses if question.id in h.discovered_by_question_ids
+        ]
+
+        if not hypotheses:
+            return None
+
+        target = resolve_target_event_id(question, self.db, hypotheses)
+        metrics = calculate_graph_quality(hypotheses, target)
+        graph_depth = metrics["max_depth"]
+
+        if graph_depth >= min_depth:
+            logger.info(
+                f"Question {question.id} already has {len(hypotheses)} hypotheses "
+                f"(depth {graph_depth}), skipping"
+            )
+            return f"Already has {len(hypotheses)} hypotheses (depth {graph_depth})"
+
+        logger.info(
+            f"Question {question.id} has {len(hypotheses)} hypotheses but "
+            f"insufficient depth ({graph_depth} < {min_depth}), reprocessing"
+        )
+        return None
+
+    async def _auto_index_articles(self) -> None:
+        """Auto-index articles for hybrid search, logging status."""
+        from src.core.search_indexing import auto_index_articles
+
+        try:
+            logger.info("Indexing articles for hybrid search...")
+            index_stats = await auto_index_articles(db_path=self.db_path)
+            if index_stats["status"] == "success":
+                logger.info(
+                    f"Indexed {index_stats['newly_indexed']} new articles "
+                    f"(total: {index_stats['final_indexed']})"
+                )
+            elif index_stats["status"] == "up_to_date":
+                logger.info("Search index is up to date")
+            elif index_stats["status"] == "no_articles":
+                logger.warning("No articles to index")
+            else:
+                logger.error(
+                    f"Indexing failed: {index_stats.get('error', 'Unknown error')}"
+                )
+        except Exception as e:
+            logger.error(f"Failed to auto-index articles: {e}")
+
+    def _pipeline_error_message(self, pipeline_results: List) -> str:
+        """Extract a combined error message from failed pipeline stage results."""
+        msgs = [r.error_message for r in pipeline_results if r.error_message]
+        return "; ".join(msgs) if msgs else "Pipeline failed with no error message"
+
     async def _run_collection(
         self,
         on_progress: Optional[Callable],
@@ -155,12 +217,11 @@ class PipelineExecutor:
     ) -> PipelineResult:
         """Run goal-oriented question collection pipeline."""
         from src.config.collection_goal import CollectionGoal
-        from src.pipelines.question.orchestrator import (
+        from src.pipelines.collection import (
             QuestionCollectionOrchestrator,
             OrchestratorConfig,
+            PolymarketRunner,
         )
-        from src.pipelines.question.sources.markets import PolymarketRunner
-        from src.utils.search_indexing import auto_index_articles
 
         results = PipelineResult([], [], [], 0.0)
 
@@ -244,7 +305,7 @@ class PipelineExecutor:
                 )
 
             orchestrator_config = OrchestratorConfig(
-                max_iterations=1,  # Allow multiple iterations to meet goal
+                max_iterations=1,  # Single broad pass; orchestrator loop handles retries internally
                 parallel_sources=parallel_sources,
                 save_intermediate_results=True,
             )
@@ -282,7 +343,7 @@ class PipelineExecutor:
                             message="Indexing articles",
                         )
                     )
-                await auto_index_articles(db_path=self.db_path)
+                await self._auto_index_articles()
 
             # Convert to standard result format
             for q in collection_result.questions:
@@ -330,8 +391,6 @@ class PipelineExecutor:
         **kwargs,
     ) -> PipelineResult:
         """Run ad-hoc news collection pipeline."""
-        from src.utils.search_indexing import auto_index_articles
-
         results = PipelineResult([], [], [], 0.0)
 
         try:
@@ -365,7 +424,7 @@ class PipelineExecutor:
                 days_back=7,
             )
 
-            # 3. Run Collection
+            # 2. Run Collection
             if on_progress:
                 on_progress(
                     PipelineProgress(
@@ -376,9 +435,6 @@ class PipelineExecutor:
                         message="Collecting articles and generating questions",
                     )
                 )
-
-            # Helper to bridge runner progress if we wanted to map internal steps,
-            # but for now we just wait for the monolithic collect()
 
             collection_result = await runner.collect(
                 count=collection_config.get("count", 5),
@@ -397,7 +453,7 @@ class PipelineExecutor:
                     )
                 )
 
-            # 4. Processing Results
+            # 3. Processing Results
             for q in collection_result.questions:
                 results.processed.append(
                     {
@@ -428,7 +484,7 @@ class PipelineExecutor:
             if collection_result.error_message:
                 results.failed.append({"error": collection_result.error_message})
 
-            # 5. Indexing
+            # 4. Indexing
             if on_progress:
                 on_progress(
                     PipelineProgress(
@@ -439,7 +495,7 @@ class PipelineExecutor:
                         message="Indexing collected articles",
                     )
                 )
-            await auto_index_articles(db_path=self.db_path)
+            await self._auto_index_articles()
 
         except Exception as e:
             logger.error(f"News collection failed: {e}")
@@ -455,6 +511,7 @@ class PipelineExecutor:
         evidence_window_days: Optional[int] = None,
         force_reprocess: bool = False,
         skip_indexing: bool = False,
+        min_graph_depth: int = SATISFACTION_DEFAULTS.min_graph_depth,
         **kwargs,
     ) -> PipelineResult:
         """Run basic evidence pipeline."""
@@ -507,33 +564,10 @@ class PipelineExecutor:
                     continue
 
                 if not force_reprocess:
-                    # Check if evidence already exists AND meets graph depth requirement
-                    all_hypotheses = self.db.get_many(CausalHypothesis)
-                    hypotheses = [
-                        h for h in all_hypotheses if qid in h.discovered_by_question_ids
-                    ]
-                    if hypotheses:
-                        from src.utils.graph_analysis import resolve_target_event_id, calculate_graph_quality
-                        target = resolve_target_event_id(question, self.db, hypotheses)
-                        metrics = calculate_graph_quality(hypotheses, target)
-                        graph_depth = metrics["max_depth"]
-                        if graph_depth >= 3:
-                            logger.info(
-                                f"Question {qid} already has {len(hypotheses)} hypotheses "
-                                f"(depth {graph_depth}), skipping"
-                            )
-                            results.skipped.append(
-                                {
-                                    "id": qid,
-                                    "reason": f"Already has {len(hypotheses)} hypotheses (depth {graph_depth})",
-                                }
-                            )
-                            continue
-                        else:
-                            logger.info(
-                                f"Question {qid} has {len(hypotheses)} hypotheses but "
-                                f"insufficient depth ({graph_depth} < 3), reprocessing"
-                            )
+                    skip_reason = self._check_sufficient_evidence(question, min_depth=min_graph_depth)
+                    if skip_reason:
+                        results.skipped.append({"id": qid, "reason": skip_reason})
+                        continue
 
                 # Run pipeline on single question
                 logger.info(f"Running evidence pipeline on question: {qid}")
@@ -565,15 +599,7 @@ class PipelineExecutor:
                         f"Successfully processed {qid}: {len(articles)} articles, {len(hypotheses)} hypotheses"
                     )
                 else:
-                    # Find error message from failed stages
-                    error_msgs = [
-                        r.error_message for r in pipeline_results if r.error_message
-                    ]
-                    error_msg = (
-                        "; ".join(error_msgs)
-                        if error_msgs
-                        else "Pipeline failed with no error message"
-                    )
+                    error_msg = self._pipeline_error_message(pipeline_results)
                     results.failed.append({"id": qid, "error": error_msg})
                     logger.error(f"Failed to process {qid}: {error_msg}")
 
@@ -581,27 +607,8 @@ class PipelineExecutor:
                 logger.error(f"Error processing question {qid}: {e}")
                 results.failed.append({"id": qid, "error": str(e)})
 
-        # Auto-index articles if not skipped
         if not skip_indexing:
-            from src.utils.search_indexing import auto_index_articles
-
-            try:
-                logger.info("Indexing articles for hybrid search...")
-                index_stats = await auto_index_articles(db_path=self.db_path)
-                if index_stats["status"] == "success":
-                    logger.info(
-                        f"Indexed {index_stats['newly_indexed']} new articles (total: {index_stats['final_indexed']})"
-                    )
-                elif index_stats["status"] == "up_to_date":
-                    logger.info("Search index is up to date")
-                elif index_stats["status"] == "no_articles":
-                    logger.warning("No articles to index")
-                else:
-                    logger.error(
-                        f"Indexing failed: {index_stats.get('error', 'Unknown error')}"
-                    )
-            except Exception as e:
-                logger.error(f"Failed to auto-index articles: {e}")
+            await self._auto_index_articles()
 
         return results
 
@@ -610,7 +617,7 @@ class PipelineExecutor:
         question_ids: List[str],
         on_progress: Optional[Callable],
         agent_max_steps: int = 30,
-        min_graph_depth: int = 3,
+        min_graph_depth: int = SATISFACTION_DEFAULTS.min_graph_depth,
         skip_indexing: bool = False,
         **kwargs,
     ) -> PipelineResult:
@@ -649,43 +656,15 @@ class PipelineExecutor:
                     results.failed.append({"id": qid, "error": "Question not found"})
                     continue
 
-                # Check if evidence already exists AND meets graph depth requirement
-                all_hypotheses = self.db.get_many(CausalHypothesis)
-                hypotheses = [
-                    h for h in all_hypotheses if qid in h.discovered_by_question_ids
-                ]
-                if hypotheses:
-                    from src.utils.graph_analysis import resolve_target_event_id, calculate_graph_quality
-                    target = resolve_target_event_id(question, self.db, hypotheses)
-                    metrics = calculate_graph_quality(hypotheses, target)
-                    graph_depth = metrics["max_depth"]
-                    min_depth = kwargs.get("min_graph_depth", min_graph_depth)
-                    if graph_depth >= min_depth:
-                        logger.info(
-                            f"Question {qid} already has {len(hypotheses)} hypotheses "
-                            f"(depth {graph_depth}), skipping"
-                        )
-                        results.skipped.append(
-                            {
-                                "id": qid,
-                                "reason": f"Already has {len(hypotheses)} hypotheses (depth {graph_depth})",
-                            }
-                        )
-                        continue
-                    else:
-                        logger.info(
-                            f"Question {qid} has {len(hypotheses)} hypotheses but "
-                            f"insufficient depth ({graph_depth} < {min_depth}), reprocessing"
-                        )
+                skip_reason = self._check_sufficient_evidence(
+                    question, min_depth=min_graph_depth
+                )
+                if skip_reason:
+                    results.skipped.append({"id": qid, "reason": skip_reason})
+                    continue
 
                 logger.info(f"Running adaptive evidence pipeline on question: {qid}")
                 pipeline_results = await pipeline.run([question])
-
-                logger.info(f"Pipeline returned {len(pipeline_results)} results")
-                for r in pipeline_results:
-                    logger.info(
-                        f"  Stage: {r.stage_name}, Status: {r.status}, Error: {r.error_message}"
-                    )
 
                 # Check if pipeline succeeded (no FAILED stages and at least one result)
                 has_failure = any(
@@ -704,42 +683,15 @@ class PipelineExecutor:
                         }
                     )
                 else:
-                    # Find error message from failed stages
-                    error_msgs = [
-                        r.error_message for r in pipeline_results if r.error_message
-                    ]
-                    error_msg = (
-                        "; ".join(error_msgs)
-                        if error_msgs
-                        else "Pipeline failed with no error message"
-                    )
+                    error_msg = self._pipeline_error_message(pipeline_results)
                     results.failed.append({"id": qid, "error": error_msg})
 
             except Exception as e:
                 logger.error(f"Error processing question {qid}: {e}")
                 results.failed.append({"id": qid, "error": str(e)})
 
-        # Auto-index articles if not skipped
         if not skip_indexing:
-            from src.utils.search_indexing import auto_index_articles
-
-            try:
-                logger.info("Indexing articles for hybrid search...")
-                index_stats = await auto_index_articles(db_path=self.db_path)
-                if index_stats["status"] == "success":
-                    logger.info(
-                        f"Indexed {index_stats['newly_indexed']} new articles (total: {index_stats['final_indexed']})"
-                    )
-                elif index_stats["status"] == "up_to_date":
-                    logger.info("Search index is up to date")
-                elif index_stats["status"] == "no_articles":
-                    logger.warning("No articles to index")
-                else:
-                    logger.error(
-                        f"Indexing failed: {index_stats.get('error', 'Unknown error')}"
-                    )
-            except Exception as e:
-                logger.error(f"Failed to auto-index articles: {e}")
+            await self._auto_index_articles()
 
         return results
 
@@ -756,17 +708,18 @@ class PipelineExecutor:
     ) -> PipelineResult:
         """Run forecasting on questions."""
         from src.agents.forecast_agent import ForecastAgent
-        from src.utils.llm_utils import get_knowledge_cutoff_date
-        from src.domain.models.question_helpers import ForecastSlot, get_forecast_date_for_slot
+        from src.core.llm import get_knowledge_cutoff_date
+        from src.domain.models.question_helpers import (
+            ForecastSlot,
+            get_forecast_date_for_slot,
+        )
+        from src.pipelines.prompts.forecast import get_forecast_instructions
 
         results = PipelineResult([], [], [], 0.0)
 
         # Override config model if specified
         config = self.config
         if model:
-            # Create a copy of config with the specified model
-            from copy import deepcopy
-
             config = deepcopy(self.config)
             config.llm.model = model
 
@@ -813,8 +766,6 @@ class PipelineExecutor:
                     mode=mode,
                     enable_causal_tools=enable_causal_tools,
                 )
-                from src.pipelines.prompts.forecast import get_forecast_instructions
-
                 prompt_instructions = get_forecast_instructions(
                     mode=mode,
                     enable_causal_tools=enable_causal_tools,
@@ -1007,6 +958,65 @@ class PipelineExecutor:
 
         return results
 
+    async def _run_graph_builder(
+        self,
+        question_ids: List[str],
+        on_progress: Optional[Callable],
+        force: bool = False,
+        min_graph_depth: int = SATISFACTION_DEFAULTS.min_graph_depth,
+        min_events: int = SATISFACTION_DEFAULTS.min_graph_events,
+        **kwargs,
+    ) -> PipelineResult:
+        """Build causal graphs for questions that already have a causal explanation."""
+        from src.pipelines.graph_builder.pipeline import GraphBuilderPipeline
+
+        config = self.config
+        pipeline = GraphBuilderPipeline(
+            db_path=self.db_path,
+            model_id=config.llm.model,
+            min_graph_depth=min_graph_depth,
+            min_events=min_events,
+        )
+
+        results = PipelineResult([], [], [], 0.0)
+
+        for i, qid in enumerate(question_ids):
+            if on_progress:
+                on_progress(
+                    PipelineProgress(
+                        current=i + 1,
+                        total=len(question_ids),
+                        question_id=qid,
+                        stage="graph_builder",
+                        message=f"Building graph for {qid}",
+                    )
+                )
+
+            question = self.db.get(Question, qid)
+            if not question:
+                results.failed.append({"id": qid, "error": "Question not found"})
+                continue
+
+            if not question.causal_explanation:
+                results.skipped.append({"id": qid, "reason": "No causal explanation — run evidence pipeline first"})
+                continue
+
+            if not force and question.graph_built:
+                results.skipped.append({"id": qid, "reason": "Graph already built (use force to rebuild)"})
+                continue
+
+            try:
+                success = await asyncio.to_thread(pipeline._process_single_question, question)
+                if success:
+                    results.processed.append({"id": qid})
+                else:
+                    results.failed.append({"id": qid, "error": "Graph building failed"})
+            except Exception as e:
+                logger.error(f"Graph builder error for {qid}: {e}")
+                results.failed.append({"id": qid, "error": str(e)})
+
+        return results
+
     async def clear_evidence(
         self,
         question_ids: List[str],
@@ -1021,7 +1031,7 @@ class PipelineExecutor:
         Returns:
             Dict with cleared/failed lists
         """
-        from src.domain.question_service import QuestionService
+        from src.services.question_service import QuestionService
 
         service = QuestionService(self.db)
         results = {"cleared": [], "failed": []}

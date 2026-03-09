@@ -4,7 +4,6 @@ Centralizes pipeline creation to avoid duplicate configuration logic
 across CLI and backend API.
 """
 
-
 from src.config import Config
 from src.config.database import DatabaseConfig
 from src.config.pipeline import EvidencePipelineConfig, EvidenceSatisfactionConfig

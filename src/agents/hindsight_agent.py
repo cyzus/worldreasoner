@@ -4,21 +4,18 @@ from src.agents.base import BaseAgent
 from src.config import Config, get_config
 from smolagents import CodeAgent, LiteLLMModel
 from src.tools import (
-    ArticleRetrievalTool,
+    # Evidence
     ArticleCollectorTool,
     WebFetchTool,
     WebSearchTool,
-    EventDetailsTool,
-    EventIdentifierTool,
-    CausalReasonerTool,
-    GraphInspectorTool,
+    # Inspector
     ArticleInspectorTool,
-    QuestionArticlesTool,
-    QuestionEventsTool,
+    GraphInspectorTool,
+    # NL Explanation
+    SaveExplanationTool,
 )
 from src.pipelines.prompts.hindsight_causal_analysis import (
     EVIDENCE_AGENT_DESCRIPTION,
-    GRAPH_AGENT_DESCRIPTION,
 )
 
 
@@ -27,8 +24,10 @@ class HindsightAgent(BaseAgent):
 
     This agent orchestrates:
     1. Evidence collection (delegated to Evidence Agent)
-    2. Deep causal graph building (delegated to Causal Analysis Agent)
-    3. Quality evaluation and iteration
+    2. Writing a natural-language causal explanation (save_explanation)
+
+    The GraphBuilderAgent converts the saved explanation into a structured
+    graph asynchronously.
     """
 
     def __init__(
@@ -89,45 +88,13 @@ class HindsightAgent(BaseAgent):
             description=EVIDENCE_AGENT_DESCRIPTION,
         )
 
-        # Causal analysis specialist (event creation, graph building, depth evaluation)
-        # Tools get question_id for provenance tracking
-        causal_agent = CodeAgent(
-            model=llm_model,
-            tools=[
-                QuestionArticlesTool(
-                    db_path=db_path, question_id=question_id
-                ),  # Get articles for this question
-                EventIdentifierTool(
-                    db_path=db_path, question_id=question_id
-                ),  # Provenance-aware
-                EventDetailsTool(db_path=db_path),
-                CausalReasonerTool(
-                    db_path=db_path, question_id=question_id
-                ),  # Provenance-aware
-                GraphInspectorTool(
-                    db_path=db_path, question_id=question_id
-                ),  # Provenance-aware
-                ArticleRetrievalTool(db_path=db_path),
-                ArticleInspectorTool(
-                    db_path=db_path, question_id=question_id
-                ),  # Check coverage
-                QuestionEventsTool(
-                    db_path=db_path, question_id=question_id
-                ),  # Get events and outcomes for this question
-            ],
-            max_steps=30,  # More steps for iterative graph building
-            stream_outputs=False,
-            additional_authorized_imports=["json"],  # Allow json imports in code agent
-            name="causal_analyzer",
-            description=GRAPH_AGENT_DESCRIPTION,
-        )
+        managed_agents = [evidence_agent]
 
-        managed_agents = [evidence_agent, causal_agent]
-
-        # Manager tools (high-level coordination)
+        # Manager tools: coordination + save explanation
         tools = tools + [
             GraphInspectorTool(db_path=db_path, question_id=question_id),
             ArticleInspectorTool(db_path=db_path, question_id=question_id),
+            SaveExplanationTool(db_path=db_path, question_id=question_id),
         ]
 
         super().__init__(

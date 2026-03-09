@@ -2,8 +2,8 @@
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from src.pipelines.question.source_coordinator import SourceCoordinator, SourceRequest
-from src.pipelines.question.sources.base import QuestionSourceRunner, CollectionResult
+from src.pipelines.collection.coordinator import SourceCoordinator, SourceRequest
+from src.pipelines.collection.runner_base import QuestionSourceRunner, CollectionResult
 from tests.conftest import create_test_question
 
 

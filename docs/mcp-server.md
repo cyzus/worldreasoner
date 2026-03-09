@@ -19,7 +19,7 @@ Add to your `claude_desktop_config.json`:
   "mcpServers": {
     "worldreasoner": {
       "command": "uv",
-      "args": ["run", "python", "-m", "src.mcp_forecasting_server"],
+      "args": ["run", "worldreasoner-mcp-forecast"],
       "cwd": "/absolute/path/to/worldreasoner"
     }
   }

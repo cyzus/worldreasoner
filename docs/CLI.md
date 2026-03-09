@@ -156,7 +156,22 @@ wr evidence reset --status rejected
 wr evidence reset -q q_abc123
 ```
 
-### 4. Forecasting (`wr forecast`)
+
+### 4. Graph Builder (`wr graph`)
+
+```bash
+# Build graphs for pending questions (batch process)
+wr graph build
+wr graph build --limit 5
+
+# Build a graph for a specific question
+wr graph build -q <question_id>
+
+# Run audit pipeline on a completed graph
+wr graph audit -q <question_id>
+```
+
+### 5. Forecasting (`wr forecast`)
 
 ```bash
 # Run single forecast
@@ -220,20 +235,20 @@ Common databases:
 
 ## Examples
 
-### Full Evidence Workflow
+### Full Evidence & Graph Workflow
 
 ```bash
-# 1. Collect evidence for questions
+# 1. Collect evidence for questions (creates NL explanation)
 wr evidence run --db experiment.db --sample 20
 
-# 2. Auto-review collected events
+# 2. Build the structured graphs
+wr graph build --db experiment.db --limit 20
+
+# 3. Auto-review collected events
 wr evidence auto-review --db experiment.db -y
 
-# 3. Check rejected events
+# 4. Check rejected events
 wr evidence list-rejected --db experiment.db -v
-
-# 4. Manual review of specific events (if needed)
-wr evidence review -q q_abc123
 ```
 
 ### Running Benchmarks

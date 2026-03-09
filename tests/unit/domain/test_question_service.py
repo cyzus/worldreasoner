@@ -4,7 +4,7 @@ import pytest
 from datetime import datetime, timezone
 
 from src.core.database import GenericDatabase
-from src.domain.question_service import QuestionService
+from src.services.question_service import QuestionService
 from src.domain.models import Question, Article, Event, CausalHypothesis
 from src.domain.models import (
     QuestionType,
@@ -20,10 +20,12 @@ def test_db(tmp_path):
     """Create temporary test database."""
     db_path = tmp_path / "test.db"
     db = GenericDatabase(str(db_path))
+    from src.domain.models.event_outcome_impact import EventOutcomeImpact
     db.create_table(Question)
     db.create_table(Article)
     db.create_table(Event)
     db.create_table(CausalHypothesis)
+    db.create_table(EventOutcomeImpact)
     return db
 
 
@@ -205,7 +207,7 @@ class TestClearEvidence:
         test_db.save(Question, sample_question)
 
         # Clear evidence
-        result = service.clear_evidence(sample_question.id, cascade=True)
+        service.clear_evidence(sample_question.id, cascade=True)
 
         # Pre-existing event should not be deleted
         assert test_db.get(Event, pre_event.id) is not None

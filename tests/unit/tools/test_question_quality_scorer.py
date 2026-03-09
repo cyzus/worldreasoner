@@ -5,8 +5,8 @@ import pytest
 from unittest.mock import patch, AsyncMock
 from datetime import datetime, timezone
 
-from src.tools.question_quality_scorer import QuestionQualityScorer, QualityAssessment
-from src.tools.output_models import QuestionQualityOutput
+from src.tools.generators.question_quality_scorer import QuestionQualityScorer, QualityAssessment
+from src.tools.base.output_models import QuestionQualityOutput
 from src.domain.models import Question, QuestionType, Domain
 from src.core.collectors import ResultCollector
 
@@ -85,7 +85,7 @@ def _expected_weighted_score(dimensions: dict, weights: dict) -> float:
 
 
 @pytest.mark.asyncio
-@patch("src.tools.question_quality_scorer.LiteLLMClient")
+@patch("src.tools.generators.question_quality_scorer.LiteLLMClient")
 async def test_question_quality_scorer_forward(
     mock_llm_client, sample_questions, mock_llm_response
 ):
@@ -126,7 +126,7 @@ def test_quality_assessment_model():
 
 
 @pytest.mark.asyncio
-@patch("src.tools.question_quality_scorer.LiteLLMClient")
+@patch("src.tools.generators.question_quality_scorer.LiteLLMClient")
 async def test_scorer_with_collector(
     mock_llm_client, sample_questions, mock_llm_response
 ):

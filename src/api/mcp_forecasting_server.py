@@ -1,0 +1,775 @@
+"""Temporal-aware MCP server for LLM forecasting.
+
+This MCP server provides tools for LLMs to make forecasts while respecting
+temporal constraints. All search and fetch operations are filtered based on
+a simulated date to create realistic forecasting scenarios.
+
+FORECASTING SIMULATION CONCEPT:
+    The server uses TWO important dates to simulate realistic forecasting:
+
+    1. X-Knowledge-Cutoff: The LLM's training data cutoff date
+       - Represents when the LLM's training data ends
+       - Example: 2024-01-01 for models trained in early 2024
+
+    2. X-Simulated-Date: The simulated "today" date for the forecast
+       - This is the date we're pretending "today" is
+       - Must be AFTER the knowledge cutoff (LLM has been "deployed")
+       - Must be BEFORE the question's resolution date
+       - The LLM can access articles from before this date
+
+    Timeline:
+        Knowledge Cutoff → Simulated Date → Resolution Date
+        (training ends)    (forecast "today") (answer known)
+
+Example Scenario:
+    - LLM's knowledge cutoff: 2024-01-01 (training data ends)
+    - Simulated date: 2024-04-01 (we're pretending today is April 1st)
+    - Question resolves on: 2024-06-01
+    - LLM can access articles from: before 2024-04-01
+    - LLM must forecast: 61 days into the future
+
+The forecasting context is provided via MCP connection metadata/headers
+when the client connects. This allows one server instance to handle
+multiple forecasting sessions.
+
+Exposed Tools (4 essential tools):
+    1. get_question - Get the current forecast question details
+    2. temporal_search_articles - Search articles before simulated date
+    3. fetch_article - Fetch full article content (temporally filtered)
+    4. submit_forecast - Submit prediction for the question
+
+Server Mode:
+    - stream: Streamable HTTP with Server-Sent Events (SSE)
+
+Usage:
+    # Start server
+    python -m src.mcp_forecasting_server
+    python -m src.mcp_forecasting_server --port 8110
+    python -m src.mcp_forecasting_server --host 0.0.0.0 --port 8110
+
+    # Client provides context via connection metadata:
+    # X-Question-ID: q_123
+    # X-Knowledge-Cutoff: 2024-01-01T00:00:00Z  (LLM's training cutoff)
+    # X-Simulated-Date: 2024-04-01T00:00:00Z   (simulated "today")
+
+Configuration:
+    WORLDREASONER_DB: Path to database (default: worldreasoner.db)
+"""
+
+import os
+import json
+import argparse
+from typing import Optional, Union
+from contextvars import ContextVar
+
+from fastmcp import FastMCP
+from fastmcp.server import Context
+from fastmcp.server.middleware import Middleware, MiddlewareContext
+
+# Import WorldReasoner components
+from src.core.database import GenericDatabase
+from src.core.hybrid_search import HybridSearch
+from src.domain.models import Forecast
+from src.utils.logging import logger
+from src.utils.enums import serialize_domain
+from src.analysis.graph_analysis import resolve_target_event_id
+
+# Import services
+from src.services.forecast_context_service import (
+    ForecastContextService,
+    ForecastContext,
+)
+from src.services.article_operations_service import ArticleOperationsService
+from src.services.forecast_submission_service import ForecastSubmissionService
+
+# Initialize MCP server
+mcp = FastMCP("worldreasoner-forecasting")
+
+# Global database connection and search engine
+DB_PATH = os.getenv("WORLDREASONER_DB", "worldreasoner.db")
+db: GenericDatabase = None  # Will be initialized in main()
+hybrid_search: HybridSearch = None  # Will be initialized in main()
+
+# Global services (initialized in main())
+context_service: ForecastContextService = None
+article_service: ArticleOperationsService = None
+forecast_service: ForecastSubmissionService = None
+
+# Context variable for storing forecast context (replaces global dict)
+_current_context: ContextVar[Optional[ForecastContext]] = ContextVar(
+    "forecast_context", default=None
+)
+
+
+# ============================================================================
+# Middleware to capture connection headers
+# ============================================================================
+
+
+class ForecastContextMiddleware(Middleware):
+    """Middleware to capture and store forecasting context from request headers.
+
+    This captures forecasting context headers from any request and uses
+    ForecastContextService to parse and validate them.
+    """
+
+    async def on_message(self, context: MiddlewareContext, call_next):
+        """Called for all MCP messages to capture headers."""
+        logger.debug(f"Middleware processing: {context.method}")
+
+        # Try to extract headers from FastMCP context if available
+        if context.fastmcp_context:
+            try:
+                request = context.fastmcp_context.get_http_request()
+
+                if request and hasattr(request, "headers"):
+                    headers = {
+                        k: v
+                        for k, v in request.headers.items()
+                        if k.lower().startswith("x-")
+                    }
+                    logger.debug(
+                        f"Request headers available: {list(headers.keys())[:5]}..."
+                    )
+
+                    # Try to parse and validate context
+                    try:
+                        forecast_context = context_service.parse_context_from_headers(
+                            headers
+                        )
+                        context_service.validate_context(forecast_context)
+                        _current_context.set(forecast_context)
+
+                        logger.info(
+                            f"Context captured: q={forecast_context.question_id}, "
+                            f"mode={forecast_context.forecast_mode}, "
+                            f"session={forecast_context.session_id[:8]}..., "
+                            f"simulated_date={forecast_context.simulated_date.date()}"
+                        )
+                    except ValueError as e:
+                        logger.warning(f"Context parsing/validation failed: {e}")
+                        # Don't fail the request - context will be extracted again in tool calls
+            except Exception as e:
+                logger.debug(f"Could not get HTTP request: {e}")
+
+        return await call_next(context)
+
+
+# Add middleware to capture headers
+mcp.add_middleware(ForecastContextMiddleware())
+
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+
+def _get_context_from_mcp(ctx: Context) -> ForecastContext:
+    """Extract forecasting context from MCP request metadata/headers.
+
+    First checks ContextVar for cached context, then tries to extract
+    directly from request headers if not found.
+
+    Args:
+        ctx: MCP context object
+
+    Returns:
+        ForecastContext object
+
+    Raises:
+        ValueError: If required context not found or invalid
+    """
+    # Try to get cached context from ContextVar
+    forecast_context = _current_context.get()
+
+    if forecast_context:
+        return forecast_context
+
+    # If not cached, try to extract directly from request headers
+    try:
+        if hasattr(ctx, "fastmcp_context") and ctx.fastmcp_context:
+            request = ctx.fastmcp_context.get_http_request()
+            if request and hasattr(request, "headers"):
+                headers = {
+                    k: v
+                    for k, v in request.headers.items()
+                    if k.lower().startswith("x-")
+                }
+                forecast_context = context_service.parse_context_from_headers(headers)
+                context_service.validate_context(forecast_context)
+                _current_context.set(forecast_context)
+                return forecast_context
+    except Exception as e:
+        logger.debug(f"Could not extract headers from context: {e}")
+
+    raise ValueError(
+        "Forecasting context not initialized. "
+        "Client must provide X-Question-ID and X-Simulated-Date headers when connecting."
+    )
+
+
+def _get_db(db_path: Optional[str] = None) -> GenericDatabase:
+    """Get a GenericDatabase instance for the given database."""
+    if db_path and db_path != db.db_path:
+        logger.debug(f"Creating GenericDatabase for custom database: {db_path}")
+        return GenericDatabase(db_path)
+    return db
+
+
+def _get_hybrid_search(db_path: Optional[str] = None) -> HybridSearch:
+    """Get a HybridSearch instance for the given database."""
+    if db_path and db_path != db.db_path:
+        logger.debug(f"Creating HybridSearch for custom database: {db_path}")
+        return HybridSearch(db_path)
+    return hybrid_search
+
+
+def _get_article_service(
+    db_instance: GenericDatabase, forecast_context: ForecastContext
+) -> ArticleOperationsService:
+    """Get an ArticleOperationsService instance for the given database and context.
+
+    Args:
+        db_instance: Database instance
+        forecast_context: Forecast context
+
+    Returns:
+        ArticleOperationsService instance
+    """
+    search_engine = _get_hybrid_search(forecast_context.db_path)
+    return ArticleOperationsService(db_instance, search_engine)
+
+
+# ============================================================================
+# MCP Tools
+# ============================================================================
+
+
+@mcp.tool()
+def get_question(ctx: Context) -> str:
+    """Get details about the current forecasting question.
+
+    This returns the question you need to forecast, along with temporal context
+    showing your knowledge cutoff date, the simulated "today" date, and how far
+    into the future you're forecasting.
+
+    Returns:
+        JSON string with question details and temporal context
+    """
+    try:
+        # Get context
+        forecast_context = _get_context_from_mcp(ctx)
+
+        # Get appropriate database
+        db_instance = _get_db(forecast_context.db_path)
+
+        # Load question using service (optionally passing db)
+        question = context_service.get_question_for_context(forecast_context)
+
+        result = {
+            "question": {
+                "id": question.id,
+                "question_text": question.question_text,
+                "question_type": question.question_type.value,
+                "domain": serialize_domain(question.domain),
+                "difficulty": question.difficulty,
+                "options": question.options,
+                "quantity_unit": question.quantity_unit,
+            },
+            "temporal_context": {
+                "knowledge_cutoff_date": forecast_context.knowledge_cutoff.isoformat()
+                if forecast_context.knowledge_cutoff
+                else None,
+                "today's date": forecast_context.simulated_date.isoformat(),
+                "explanation": (
+                    f"'today' is {forecast_context.simulated_date.date()}. "
+                    + (
+                        f"Your training data cutoff is {forecast_context.knowledge_cutoff.date()}. "
+                        if forecast_context.knowledge_cutoff
+                        else ""
+                    )
+                ),
+            },
+            "instructions": (
+                "FORECASTING SCENARIO:\n"
+                + (
+                    f"- Your training data includes information up to: {forecast_context.knowledge_cutoff.date()}\n"
+                    if forecast_context.knowledge_cutoff
+                    else ""
+                )
+                + f"- 'today' date: {forecast_context.simulated_date.date()}\n"
+                f"- Approximate event resolution date: {question.resolution_date.date()}\n"
+                f"- You must forecast: around {(question.resolution_date - forecast_context.simulated_date).days} days into the future\n"
+                f"- All article searches will only return information from BEFORE today\n"
+                f"- This tests your ability to make genuine predictions about future events"
+            ),
+        }
+
+        return json.dumps(result, indent=2)
+
+    except ValueError as e:
+        logger.error(f"Context error: {e}")
+        return json.dumps({"error": str(e)})
+    except Exception as e:
+        logger.error(f"Error getting question: {e}")
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+async def temporal_search_articles(
+    ctx: Context, query: str, domain: str = None, max_results: int = 10
+) -> str:
+    """Search for articles with temporal filtering using hybrid search.
+
+    Find the most relevant articles published BEFORE the simulated date.
+
+    Returns:
+        JSON string with article summaries (only from before simulated date)
+    """
+    try:
+        # Get context
+        forecast_context = _get_context_from_mcp(ctx)
+
+        # Get appropriate database
+        db_instance = _get_db(forecast_context.db_path)
+
+        # Create article service with appropriate database and search engine
+        article_ops = _get_article_service(db_instance, forecast_context)
+
+        # Perform search
+        articles = await article_ops.search_articles(
+            query=query,
+            simulated_date=forecast_context.simulated_date,
+            domain=domain,
+            max_results=max_results,
+            search_method="fts",
+        )
+
+        # Format response
+        result = {
+            "query": query,
+            "simulated_date": forecast_context.simulated_date.isoformat(),
+            "note": f"Only showing articles from BEFORE the simulated date ({forecast_context.simulated_date.date()})",
+            "count": len(articles),
+            "articles": [
+                {
+                    "id": article.id,
+                    "title": article.title,
+                    "url": article.url,
+                    "source": article.source,
+                    "domain": serialize_domain(article.domain),
+                    "published_date": article.published_date.isoformat(),
+                    "word_count": article.word_count,
+                    "excerpt": article.content[:300] + "..."
+                    if len(article.content) > 300
+                    else article.content,
+                }
+                for article in articles
+            ],
+        }
+
+        return json.dumps(result, indent=2)
+
+    except ValueError as e:
+        logger.error(f"Context error: {e}")
+        return json.dumps({"error": str(e)})
+    except Exception as e:
+        logger.error(f"Error searching articles: {e}")
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def fetch_article(ctx: Context, article_id: str) -> str:
+    """Fetch full article content with temporal validation.
+
+    Only returns the article if it was published before the simulated date.
+
+    Returns:
+        JSON string with full article content (only if before simulated date)
+    """
+    try:
+        # Get context
+        forecast_context = _get_context_from_mcp(ctx)
+
+        # Get appropriate database
+        db_instance = _get_db(forecast_context.db_path)
+
+        # Create article service with appropriate database
+        article_ops = _get_article_service(db_instance, forecast_context)
+
+        # Fetch article using service
+        try:
+            article = article_ops.fetch_article(
+                article_id, forecast_context.simulated_date
+            )
+        except ValueError as e:
+            return json.dumps({"error": str(e)})
+
+        if not article:
+            return json.dumps(
+                {
+                    "error": f"Article {article_id} not found or published after simulated date"
+                }
+            )
+
+        # Return full article
+        result = {
+            "id": article.id,
+            "title": article.title,
+            "url": article.url,
+            "source": article.source,
+            "domain": serialize_domain(article.domain),
+            "published_date": article.published_date.isoformat(),
+            "author": article.author,
+            "word_count": article.word_count,
+            "tags": article.tags,
+            "content": article.content[:2000] + "..."
+            if len(article.content) > 2000
+            else article.content,
+            "event_ids": article.event_ids,
+        }
+
+        return json.dumps(result, indent=2)
+
+    except ValueError as e:
+        logger.error(f"Context error: {e}")
+        return json.dumps({"error": str(e)})
+    except Exception as e:
+        logger.error(f"Error fetching article: {e}")
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def identify_forecast_event(
+    ctx: Context,
+    title: str,
+    description: str,
+    occurred_date: str,
+    domain: str = None,
+    event_type: str = None,
+    source_article_ids: str = None,
+) -> dict:
+    """Identify event for forecast reasoning.
+
+    Use this tool to identify and record events that are relevant to your forecast.
+
+    Args:
+        title: Short event title
+        description: Detailed event description
+        occurred_date: When event occurred (ISO format with timezone)
+        domain: Event domain (optional, defaults to 'general')
+        event_type: Optional event type
+        source_article_ids: Optional comma-separated article IDs
+
+    Returns:
+        Event details with status (created or reused)
+    """
+    try:
+        forecast_context = _get_context_from_mcp(ctx)
+
+        from src.tools.reasoning.forecast_event_identifier import (
+            ForecastEventIdentifierTool,
+        )
+
+        # Get appropriate database
+        db_instance = _get_db(forecast_context.db_path)
+
+        tool = ForecastEventIdentifierTool(
+            question_db_path=db_instance.db_path,
+            forecast_db_path=forecast_context.db_path or db_instance.db_path,
+            session_id=forecast_context.session_id,
+        )
+
+        return tool.forward(
+            title, description, domain, occurred_date, event_type, source_article_ids
+        ).model_dump()
+    except Exception as e:
+        logger.error(f"Error identifying forecast event: {e}")
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def create_forecast_causal_link(
+    ctx: Context,
+    source_event_id: str,
+    target_event_id: str,
+    relation_type: str,
+    strength: float,
+    confidence: float,
+    reasoning: str,
+    evidence_article_ids: str = "",
+) -> dict:
+    """Create causal link for forecast reasoning.
+
+    Use this tool to record causal relationships between events during forecasting.
+
+    Args:
+        source_event_id: Event ID of the cause
+        target_event_id: Event ID of the effect
+        relation_type: Type of causation
+        strength: Causal strength (0-1)
+        confidence: Confidence in link (0-1)
+        reasoning: Explanation of mechanism
+        evidence_article_ids: Optional comma-separated article IDs
+
+    Returns:
+        Hypothesis details with ID and relation
+    """
+    try:
+        forecast_context = _get_context_from_mcp(ctx)
+
+        from src.tools.reasoning.forecast_causal_reasoner import (
+            ForecastCausalReasonerTool,
+        )
+
+        tool = ForecastCausalReasonerTool(
+            forecast_db_path=forecast_context.db_path or db.db_path,
+            session_id=forecast_context.session_id,
+        )
+
+        return tool.forward(
+            source_event_id,
+            target_event_id,
+            relation_type,
+            strength,
+            confidence,
+            reasoning,
+            evidence_article_ids,
+        ).model_dump()
+    except Exception as e:
+        logger.error(f"Error creating forecast causal link: {e}")
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def inspect_forecast_graph(ctx: Context) -> str:
+    """Inspect forecast's causal reasoning graph.
+
+    Use this tool to check the quality and structure of your causal reasoning graph.
+
+    Returns:
+        JSON with graph statistics and quality feedback
+    """
+    try:
+        forecast_context = _get_context_from_mcp(ctx)
+
+        from src.tools.inspectors.forecast_graph_inspector import (
+            ForecastGraphInspectorTool,
+        )
+
+        tool = ForecastGraphInspectorTool(
+            forecast_db_path=forecast_context.db_path or db.db_path,
+            session_id=forecast_context.session_id,
+        )
+
+        return tool.forward()
+    except Exception as e:
+        logger.error(f"Error inspecting forecast graph: {e}")
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def submit_forecast(
+    ctx: Context,
+    prediction: Union[str, float, int],
+    confidence: float,
+    reasoning: str,
+    articles_accessed: list[str],
+) -> str:
+    """Submit a forecast for the current question.
+
+    This records your prediction about a future event, based only on information
+    available before the simulated date.
+
+    Returns:
+        JSON string with forecast ID and confirmation
+    """
+    try:
+        # Get context
+        forecast_context = _get_context_from_mcp(ctx)
+        question = context_service.get_question_for_context(forecast_context)
+
+        logger.info(f"Submitting forecast for question {forecast_context.question_id}")
+
+        # Ensure prediction is a string
+        prediction_str = str(prediction)
+
+        # Validate prediction
+        valid, parsed_prediction, error = forecast_service.validate_prediction(
+            question, prediction_str
+        )
+        if not valid:
+            return json.dumps({"error": error})
+
+        # Create forecast
+        forecast = forecast_service.create_forecast(
+            question_id=forecast_context.question_id,
+            session_id=forecast_context.session_id,
+            prediction=parsed_prediction,
+            confidence=confidence,
+            reasoning=reasoning,
+            articles_accessed=articles_accessed or [],
+            simulated_date=forecast_context.simulated_date,
+            target_event_id=resolve_target_event_id(question, db),
+            model_name=forecast_context.model_name,
+            mode=forecast_context.forecast_mode,
+            db_path=forecast_context.db_path,
+        )
+
+        # Link graph elements
+        graph_counts = forecast_service.link_forecast_graph(
+            forecast.id, forecast_context.session_id, forecast_context.db_path
+        )
+
+        result = {
+            "forecast_id": forecast.id,
+            "question_id": forecast_context.question_id,
+            "prediction": parsed_prediction,
+            "confidence": confidence,
+            "simulated_date": forecast_context.simulated_date.isoformat(),
+            "submitted_at": forecast.timestamp.isoformat(),
+            "status": "submitted",
+            "graph_links": graph_counts,
+            "note": (
+                f"Forecast submitted! You predicted based on information from before the simulated date ({forecast_context.simulated_date.date()}). "
+                f"The actual outcome will be known on {question.resolution_date.date()}."
+            ),
+        }
+
+        return json.dumps(result, indent=2)
+
+    except ValueError as e:
+        logger.error(f"Context error: {e}")
+        return json.dumps({"error": str(e)})
+    except Exception as e:
+        logger.error(f"Error submitting forecast: {e}")
+        return json.dumps({"error": str(e)})
+
+
+# ============================================================================
+# CLI Entry Point
+# ============================================================================
+
+
+def main():
+    """CLI entry point for streamable HTTP MCP server.
+
+    The server accepts forecasting context from the MCP client via connection
+    metadata/headers, not from CLI args:
+        - question_id: The question to forecast
+        - knowledge_cutoff: The LLM's training data cutoff (optional)
+        - simulated_date: The simulated "today" date (required)
+
+    Mode:
+        stream  - Streamable HTTP (Server-Sent Events) for incremental tool output
+
+    Example:
+        # Start server (context comes from client)
+        python -m src.mcp_forecasting_server
+        python -m src.mcp_forecasting_server --port 8110
+        python -m src.mcp_forecasting_server --host 0.0.0.0 --port 8110 --log-level info
+    """
+    parser = argparse.ArgumentParser(
+        description="WorldReasoner Forecasting MCP Server (Streamable HTTP)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Start server with default settings
+  python -m src.mcp_forecasting_server
+
+  # Custom port
+  python -m src.mcp_forecasting_server --port 8110
+
+  # Custom host and log level
+  python -m src.mcp_forecasting_server --host 0.0.0.0 --port 8110 --log-level info
+
+Connection Metadata (provided by MCP client):
+  X-Question-ID: Question identifier to forecast
+  X-Knowledge-Cutoff: LLM's training data cutoff date (ISO format, optional)
+  X-Simulated-Date: Simulated "today" date (ISO format, required)
+                    Must be AFTER knowledge cutoff and BEFORE resolution date
+        """,
+    )
+    parser.add_argument(
+        "--db",
+        default=DB_PATH,
+        help="Path to WorldReasoner database (default: worldreasoner.db)",
+    )
+    parser.add_argument(
+        "--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)"
+    )
+    parser.add_argument("--port", type=int, default=8110, help="Port (default: 8110)")
+    parser.add_argument(
+        "--log-level",
+        default="debug",
+        help="Logging level: debug|info|warning|error (default: debug)",
+    )
+    global db, hybrid_search, context_service, article_service, forecast_service
+
+    args = parser.parse_args()
+    db = GenericDatabase(args.db)
+    # Ensure forecasts table exists (idempotent)
+    db.create_table(Forecast)
+
+    # HybridSearch loads embedding_model from config.yaml by default
+    hybrid_search = HybridSearch(args.db)
+
+    # Initialize services
+    context_service = ForecastContextService(db)
+    article_service = ArticleOperationsService(db, hybrid_search)
+    forecast_service = ForecastSubmissionService(db)
+    logger.info("Initialized forecasting services")
+
+    logger.info(f"Launching MCP server (stream mode) db={args.db}")
+    logger.info("Forecasting context will be provided by MCP client via headers:")
+    logger.info("  - X-Question-ID (required)")
+    logger.info("  - X-Knowledge-Cutoff (optional)")
+    logger.info("  - X-Simulated-Date (required)")
+
+    logger.info(
+        f"Starting MCP STREAMABLE HTTP server on http://{args.host}:{args.port}"
+    )
+    logger.info("Endpoints: /mcp/tools, /mcp/prompts, SSE streaming available")
+    logger.info(
+        "Context headers: X-Question-ID, X-Knowledge-Cutoff (optional), X-Simulated-Date (required)"
+    )
+
+    # Add health check endpoint
+    from fastapi.responses import JSONResponse
+    from starlette.routing import Route
+
+    # Define health check function
+    async def health_check(request):
+        """Health check endpoint for monitoring server availability."""
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "healthy",
+                "database": args.db,
+                "server_type": "mcp_forecasting",
+                "mode": "streamable_http",
+            },
+        )
+
+    # Get the app instance using http_app() with streamable-http transport
+    logger.info("Creating FastMCP HTTP app...")
+    try:
+        app = mcp.http_app(transport="streamable-http")
+        logger.info("FastMCP app created successfully")
+    except Exception as e:
+        logger.error(f"Failed to create FastMCP app: {e}", exc_info=True)
+        raise
+
+    # Add health check route to the Starlette app
+    logger.info("Adding health check route...")
+    app.routes.append(Route("/health", health_check, methods=["GET"]))
+    logger.info(f"MCP server app created with {len(app.routes)} routes")
+
+    logger.info(f"Starting uvicorn server on {args.host}:{args.port}")
+    import uvicorn
+
+    uvicorn.run(app, host=args.host, port=args.port)
+
+
+if __name__ == "__main__":
+    main()

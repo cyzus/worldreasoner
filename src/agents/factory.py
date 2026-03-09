@@ -27,6 +27,17 @@ class AgentFactory:
         agent = AgentFactory.create_base_agent(tools=[analysis_tool])
     """
 
+    @classmethod
+    def _create_model(cls, model_id: str, temperature: float = 0.2):
+        """Create a LiteLLMModel using global config settings."""
+        from smolagents import LiteLLMModel
+
+        config = get_config()
+        extra = config.llm.model_dump(
+            exclude={"model", "embedding_model", "temperature"}, exclude_none=True
+        )
+        return LiteLLMModel(model_id=model_id, temperature=temperature, **extra)
+
     @staticmethod
     def create_web_agent(
         tools: Optional[List[Tool]] = None,

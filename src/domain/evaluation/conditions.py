@@ -95,7 +95,7 @@ EXPERIMENT_CONDITIONS: Dict[ConditionName, ExperimentCondition] = {
         display_name="Real-Time Search Agent",
         mode="real_time",
         enable_causal_tools=True,
-        is_oracle=False, # We use the live internet instead of MCP temporally restricted internet
+        is_oracle=False,  # We use the live internet instead of MCP temporally restricted internet
         max_steps=25,
         description="Full system using real-time live internet search tools",
     ),
@@ -126,9 +126,7 @@ def get_conditions(
             condition_name = ConditionName(name)
         except ValueError:
             valid = [c.value for c in ConditionName]
-            raise ValueError(
-                f"Unknown condition: '{name}'. Valid conditions: {valid}"
-            )
+            raise ValueError(f"Unknown condition: '{name}'. Valid conditions: {valid}")
         conditions.append(EXPERIMENT_CONDITIONS[condition_name])
 
     return conditions

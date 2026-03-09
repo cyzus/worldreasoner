@@ -10,8 +10,8 @@ from typing import Dict, List, Optional
 
 from src.core.database import GenericDatabase
 from src.domain.models import Article, Event, Question, CausalHypothesis
-from src.domain.question_service import QuestionService
-from src.utils.question_filters import (
+from src.services.question_service import QuestionService
+from src.services.question_filters import (
     filter_resolved_questions,
     filter_by_quality_score,
 )
@@ -132,7 +132,8 @@ class QuestionManager:
                 else None,
             }
             if show_related:
-                from src.utils.graph_analysis import resolve_target_event_id
+                from src.analysis.graph_analysis import resolve_target_event_id
+
                 item["target_event_id"] = resolve_target_event_id(q, self.db)
                 item["related_event_count"] = len(q.related_event_ids)
             results.append(item)

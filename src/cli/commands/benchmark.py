@@ -4,7 +4,6 @@ Provides commands to run auto-benchmark experiments across
 multiple conditions, models, and questions.
 """
 
-import asyncio
 from typing import List, Optional
 
 import typer
@@ -19,7 +18,6 @@ from rich.progress import (
 )
 
 from src.cli.core.options import db_option, source_option, domain_option, yes_option
-from src.core.database import GenericDatabase
 from src.domain.evaluation.auto_benchmark import (
     AutoBenchmarkProgress,
     AutoBenchmarkService,
@@ -27,7 +25,7 @@ from src.domain.evaluation.auto_benchmark import (
 from src.domain.evaluation.auto_benchmark_reporting import (
     print_auto_benchmark_report,
 )
-from src.domain.evaluation.conditions import ConditionName, get_conditions
+from src.domain.evaluation.conditions import get_conditions
 from src.config import get_config
 from src.utils.logging import logger
 

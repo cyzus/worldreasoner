@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from src.core.database import GenericDatabase
 from src.core.hybrid_search import HybridSearch
 from src.domain.models import Article
-from src.utils.search_indexing import auto_index_articles
+from src.core.search_indexing import auto_index_articles
 from src.config.settings import get_config
 from src.utils.logging import logger
 from .database import get_current_db_path

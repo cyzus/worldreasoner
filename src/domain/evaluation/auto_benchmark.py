@@ -15,18 +15,17 @@ from typing import Any, Callable, Dict, List, Optional
 from src.config import Config, get_config
 from src.core.database import GenericDatabase
 from src.domain.evaluation.conditions import (
-    ConditionName,
     ExperimentCondition,
     get_conditions,
 )
-from src.domain.evaluation.evaluator import ForecastEvaluator, EvaluationResult
+from src.domain.evaluation.evaluator import ForecastEvaluator
 from src.domain.models import Article, Event, Forecast, Question
 from src.domain.models.question_helpers import (
     ForecastSlot,
     get_forecast_date_for_slot,
 )
 from src.pipelines.prompts.forecast import get_forecast_instructions
-from src.utils.llm_utils import get_knowledge_cutoff_date
+from src.core.llm import get_knowledge_cutoff_date
 from src.utils.logging import logger
 
 
@@ -116,7 +115,9 @@ class AutoBenchmarkService:
                 if q and q.ground_truth is not None:
                     questions.append(q)
                 else:
-                    logger.warning(f"Question {qid} not found or not resolved, skipping")
+                    logger.warning(
+                        f"Question {qid} not found or not resolved, skipping"
+                    )
         else:
             all_questions = self.db.get_many(Question)
             now = datetime.now(timezone.utc)
@@ -231,9 +232,7 @@ class AutoBenchmarkService:
         """
         from src.agents.forecast_agent import ForecastAgent
 
-        simulated_date = self._compute_simulated_date(
-            question, condition, slot
-        )
+        simulated_date = self._compute_simulated_date(question, condition, slot)
 
         # Create config copy with overridden model
         config = deepcopy(self.config)
@@ -283,9 +282,7 @@ class AutoBenchmarkService:
                 "model": model_name,
             }
 
-        latest_forecast = sorted(
-            forecasts, key=lambda f: f.timestamp, reverse=True
-        )[0]
+        latest_forecast = sorted(forecasts, key=lambda f: f.timestamp, reverse=True)[0]
 
         # Tag the forecast with benchmark metadata
         metadata = latest_forecast.evaluation_metadata or {}
@@ -469,14 +466,16 @@ class AutoBenchmarkService:
                             f"Skipping completed: {cond_name}/{model_name}/{question.id}"
                         )
                         # Still need to include in results for accurate counts
-                        raw_results[cond_name][model_name].append({
-                            "status": "success",
-                            "question_id": question.id,
-                            "condition": cond_name,
-                            "model": model_name,
-                            "is_correct": None,  # Will be filled from DB
-                            "skipped_resume": True,
-                        })
+                        raw_results[cond_name][model_name].append(
+                            {
+                                "status": "success",
+                                "question_id": question.id,
+                                "condition": cond_name,
+                                "model": model_name,
+                                "is_correct": None,  # Will be filled from DB
+                                "skipped_resume": True,
+                            }
+                        )
                         continue
 
                     # Report progress
@@ -511,9 +510,7 @@ class AutoBenchmarkService:
         condition_results: Dict[str, Dict[str, ConditionResult]] = {}
         for cond_name, model_results in raw_results.items():
             condition_results[cond_name] = {}
-            condition = next(
-                c for c in conditions if c.name.value == cond_name
-            )
+            condition = next(c for c in conditions if c.name.value == cond_name)
             for model_name, results_list in model_results.items():
                 metrics = self._aggregate_condition_metrics(results_list)
                 condition_results[cond_name][model_name] = ConditionResult(

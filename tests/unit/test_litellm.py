@@ -1,7 +1,7 @@
 """Unit tests for LiteLLM client."""
 
 import pytest
-from src.llm import LiteLLMClient
+from src.core.llm import LiteLLMClient
 from src.config import get_config
 
 

@@ -102,6 +102,24 @@ class Question(BaseModel):
         None, description="Valid range for quantity questions {'min': x, 'max': y}"
     )
 
+    # Graph Building & NL Explanation
+    causal_explanation: Optional[str] = Field(
+        None,
+        description=(
+            "NL causal explanation produced by HindsightAgent. "
+            "Includes dated events, causal relationships, and article citations [art_id]. "
+            "Input to GraphBuilderAgent."
+        ),
+    )
+    graph_built: bool = Field(
+        default=False,
+        description="Set to True by GraphBuilderAgent after successfully building the causal graph.",
+    )
+    graph_build_error: Optional[str] = Field(
+        None,
+        description="Error message if graph building failed.",
+    )
+
     # Metadata
     is_synthetic: bool = Field(
         default=False, description="Whether question uses synthetic data"

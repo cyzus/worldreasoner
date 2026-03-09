@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException
 
@@ -29,14 +29,16 @@ async def list_benchmark_results() -> List[Dict[str, Any]]:
             info = data.get("auto_benchmark_info", {})
             config = data.get("configuration", {})
 
-            results.append({
-                "run_id": info.get("run_id", path.stem),
-                "timestamp": info.get("timestamp", ""),
-                "duration_seconds": info.get("duration_seconds", 0),
-                "conditions": config.get("conditions", []),
-                "models": config.get("models", []),
-                "question_count": config.get("question_count", 0),
-            })
+            results.append(
+                {
+                    "run_id": info.get("run_id", path.stem),
+                    "timestamp": info.get("timestamp", ""),
+                    "duration_seconds": info.get("duration_seconds", 0),
+                    "conditions": config.get("conditions", []),
+                    "models": config.get("models", []),
+                    "question_count": config.get("question_count", 0),
+                }
+            )
         except Exception as e:
             logger.warning(f"Failed to read benchmark file {path}: {e}")
             continue
@@ -49,13 +51,17 @@ async def get_benchmark_result(run_id: str) -> Dict[str, Any]:
     """Get full result JSON for a specific benchmark run."""
     path = BENCHMARKS_DIR / f"{run_id}.json"
     if not path.exists():
-        raise HTTPException(status_code=404, detail=f"Benchmark run '{run_id}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"Benchmark run '{run_id}' not found"
+        )
 
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read benchmark result: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to read benchmark result: {e}"
+        )
 
 
 @router.get("/conditions")

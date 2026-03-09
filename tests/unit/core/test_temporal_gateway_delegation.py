@@ -4,7 +4,7 @@ import pytest
 from datetime import datetime, timedelta, timezone
 
 from src.core.temporal_gateway import TemporalGateway
-from src.core.temporal_filter_service import TemporalFilterService
+from src.services.temporal_filter_service import TemporalFilterService
 from src.domain.models import Article, Event
 from src.domain.models.domain import Domain
 from src.domain.models.event import EventType

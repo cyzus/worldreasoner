@@ -20,6 +20,7 @@ class PipelineType(str, Enum):
     EVALUATION = "evaluation"
     BENCHMARK = "benchmark"
     AUTO_BENCHMARK = "auto_benchmark"
+    GRAPH_BUILDER = "graph_builder"
 
 
 @dataclass

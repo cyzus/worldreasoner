@@ -15,6 +15,7 @@ class TestWebFetchTool:
         assert "url" in tool.inputs
         assert tool.output_type == "object"
 
+    @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_web_fetch_async(self):
         """Test async web fetching."""
@@ -29,6 +30,7 @@ class TestWebFetchTool:
         # On success, error key may not be present
         assert result.error is None
 
+    @pytest.mark.integration
     def test_web_fetch_sync(self):
         """Test synchronous web fetching (from sync context)."""
         tool = WebFetchTool()
@@ -42,6 +44,7 @@ class TestWebFetchTool:
         # On success, error key may not be present
         assert result.error is None
 
+    @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_web_fetch_from_async_context(self):
         """Test web fetching when called from within an async context.
@@ -58,6 +61,7 @@ class TestWebFetchTool:
         assert result.url == "https://www.example.com"
         assert "Example Domain" in result.title
 
+    @pytest.mark.integration
     def test_web_fetch_invalid_url(self):
         """Test handling of invalid URL."""
         tool = WebFetchTool()
@@ -68,6 +72,7 @@ class TestWebFetchTool:
         assert result.success is False
         assert result.error is not None
 
+    @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_web_fetch_timeout(self):
         """Test that timeout is respected."""
@@ -80,6 +85,7 @@ class TestWebFetchTool:
         # Should either succeed quickly or fail with timeout
         assert isinstance(result.success, bool)
 
+    @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_web_fetch_multiple_urls(self):
         """Test fetching from multiple different URLs to verify robustness."""

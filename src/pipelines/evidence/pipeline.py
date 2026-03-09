@@ -14,11 +14,12 @@ import asyncio
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
 
-from ..base import Pipeline, PipelineStageResult, PipelineStageStatus
+from src.pipelines.base import Pipeline, PipelineStageResult, PipelineStageStatus
+from src.config.pipeline import SATISFACTION_DEFAULTS
 from src.pipelines.prompts import HindsightCausalAnalysisPrompts
 from src.config.pipeline import EvidencePipelineConfig
 from src.config import DatabaseConfig
-from src.domain.models import Question, Article, CausalHypothesis, Event
+from src.domain.models import Question, Article, CausalHypothesis
 from src.core.database import GenericDatabase
 from src.agents.hindsight_agent import HindsightAgent
 from src.utils.logging import logger
@@ -45,7 +46,7 @@ class EvidencePipeline(Pipeline):
         max_concurrent_questions: int = 1,
         min_quality_score: Optional[float] = None,
         agent_max_steps: int = 30,
-        min_graph_depth: int = 3,
+        min_graph_depth: int = SATISFACTION_DEFAULTS.min_graph_depth,
     ):
         """Initialize evidence pipeline with agent-based processing.
 
@@ -204,19 +205,18 @@ class EvidencePipeline(Pipeline):
                     failed_count += 1
                 else:
                     self.evidence_articles.extend(result.get("evidence_articles", []))
-                    self.causal_hypotheses.extend(result.get("causal_hypotheses", []))
                     successful_count += 1
 
             logger.info(
                 f"Per-question processing complete: {successful_count} successful, {failed_count} failed"
             )
 
-            if not self.causal_hypotheses:
-                logger.error("No causal hypotheses generated - pipeline failed")
+            if not self.evidence_articles and len(failure_reasons) == len(self.resolved_questions):
+                logger.error("No evidence collected - pipeline failed")
                 error_message = (
                     "; ".join(failure_reasons)
                     if failure_reasons
-                    else "No causal hypotheses generated"
+                    else "No evidence generated"
                 )
                 failed_result = self._create_stage_result(
                     status=PipelineStageStatus.FAILED,
@@ -229,16 +229,15 @@ class EvidencePipeline(Pipeline):
                 return self._results
 
             logger.info(
-                f"Total: {len(self.evidence_articles)} evidence articles, "
-                f"{len(self.causal_hypotheses)} causal hypotheses"
+                f"Total: {len(self.evidence_articles)} evidence articles"
             )
 
             # Add a success result for the pipeline runner to detect
             success_result = self._create_stage_result(
                 status=PipelineStageStatus.COMPLETED,
                 items_processed=len(self.resolved_questions),
-                items_output=len(self.causal_hypotheses),
-                outputs=self.causal_hypotheses,
+                items_output=len(self.evidence_articles),
+                outputs=self.evidence_articles,
             )
             self._results.append(success_result)
 
@@ -272,7 +271,8 @@ class EvidencePipeline(Pipeline):
             outcome_events = self._get_or_create_outcomes(question, db)
 
             # 1b. Resolve target event (actual outcome) for the agent
-            from src.utils.graph_analysis import resolve_target_event_id
+            from src.analysis.graph_analysis import resolve_target_event_id
+
             resolved_target = resolve_target_event_id(question, db)
 
             # 2. Fetch market analysis (turning points + lead changes) for Polymarket questions
@@ -310,14 +310,13 @@ class EvidencePipeline(Pipeline):
                 logger.info(f"[{question.id}] Agent completed successfully")
 
                 # 6. Collect Results
-                evidence_articles, question_hypotheses = self._collect_agent_results(
+                evidence_articles = self._collect_agent_results(
                     question.id, db
                 )
 
                 logger.info(
                     f"[{question.id}] Agent results: "
-                    f"{len(evidence_articles)} articles, "
-                    f"{len(question_hypotheses)} hypotheses"
+                    f"{len(evidence_articles)} articles"
                 )
 
                 # 7. Calculate Metrics
@@ -325,63 +324,51 @@ class EvidencePipeline(Pipeline):
                     evidence_articles, question
                 )
 
-                graph_metrics = self._calculate_graph_metrics(
-                    question_hypotheses, question, db
-                )
-
                 # 8. Check Failure Conditions
                 status = "success"
                 failure_reason = None
-                
+
                 if article_metrics["score"] == 0.0:
                     status = "failed"
-                    failure_reason = "Article quality is zero (no/insufficient articles)"
-                elif graph_metrics["score"] == 0.0:
-                    status = "failed"
-                    failure_reason = "Graph quality is zero (no/insufficient causal hypotheses)"
-                elif graph_metrics["max_depth"] < self.min_graph_depth:
-                    status = "failed"
-                    failure_reason = f"Graph depth ({graph_metrics['max_depth']}) below minimum ({self.min_graph_depth})"
+                    failure_reason = (
+                        "Article quality is zero (no/insufficient articles)"
+                    )
 
                 if status == "failed":
                     logger.error(f"[{question.id}] Failed: {failure_reason}")
                     return {
                         "evidence_articles": [],
-                        "causal_hypotheses": [],
                         "stage_results": [],
                         "agent_output": result,
                         "status": "failed",
                         "failure_reason": failure_reason,
                         "article_quality": article_metrics["score"],
-                        "graph_quality": graph_metrics["score"],
-                        "graph_depth": graph_metrics["max_depth"],
                     }
 
                 # Success
                 return {
                     "evidence_articles": evidence_articles,
-                    "causal_hypotheses": question_hypotheses,
                     "stage_results": [],
                     "agent_output": result,
                     "status": "success",
                     "article_quality": article_metrics["score"],
-                    "graph_quality": graph_metrics["score"],
-                    "graph_depth": graph_metrics["max_depth"],
                 }
 
             except Exception as e:
                 logger.error(f"[{question.id}] Agent processing failed: {e}")
                 return {
                     "evidence_articles": [],
-                    "causal_hypotheses": [],
                     "stage_results": [],
                     "status": "failed",
                     "failure_reason": str(e),
                 }
 
-    def _get_or_create_outcomes(self, question: Question, db: GenericDatabase) -> List[Any]:
+    def _get_or_create_outcomes(
+        self, question: Question, db: GenericDatabase
+    ) -> List[Any]:
         """Get existing outcome events or create default ones."""
-        from src.domain.outcome_event_service import OutcomeEventService
+        from src.services.outcome_event_service import OutcomeEventService
+
         outcome_service = OutcomeEventService(db)
         outcome_events = outcome_service.get_outcome_events_for_question(question.id)
 
@@ -389,11 +376,15 @@ class EvidencePipeline(Pipeline):
             outcome_events = outcome_service.auto_create_outcome_events(question)
             # Ensure actual outcome flags are correctly set for non-boolean ground truths.
             outcome_events = outcome_service.ensure_actual_outcome_alignment(question)
-            logger.info(f"[{question.id}] Auto-created {len(outcome_events)} outcome events")
+            logger.info(
+                f"[{question.id}] Auto-created {len(outcome_events)} outcome events"
+            )
         else:
             # Backfill legacy data where is_actual_outcome may be missing/incorrect.
             outcome_events = outcome_service.ensure_actual_outcome_alignment(question)
-            logger.debug(f"[{question.id}] Found {len(outcome_events)} existing outcome events")
+            logger.debug(
+                f"[{question.id}] Found {len(outcome_events)} existing outcome events"
+            )
         return outcome_events
 
     async def _fetch_market_analysis(self, question: Question) -> Dict[str, Any]:
@@ -422,7 +413,10 @@ class EvidencePipeline(Pipeline):
             return empty_result
 
         try:
-            from src.utils.polymarket import get_price_history_for_market, analyze_price_curve
+            from src.integrations.polymarket import (
+                get_price_history_for_market,
+                analyze_price_curve,
+            )
 
             # Fetch price history
             price_history = await get_price_history_for_market(
@@ -469,32 +463,26 @@ class EvidencePipeline(Pipeline):
             logger.warning(f"[{question.id}] Failed to fetch market analysis: {e}")
             return empty_result
 
-    def _collect_agent_results(self, question_id: str, db: GenericDatabase):
-        """Collect articles and hypotheses generated by the agent for a question."""
+    def _collect_agent_results(self, question_id: str, db: GenericDatabase) -> List[Article]:
+        """Collect articles generated by the agent for a question."""
         all_articles = db.get_many(Article)
-        all_hypotheses = db.get_many(CausalHypothesis)
 
-        question_hypotheses = [
-            h for h in all_hypotheses
-            if question_id in h.discovered_by_question_ids
-        ]
+        # In Phase 1 architecture, the HindsightAgent only collects articles and writes a causal_explanation.
+        # It no longer builds causal_hypotheses inline. We just return the collected articles for this question.
+        # We can find articles that were extracted for this question_id.
+        
+        evidence_articles = [a for a in all_articles if getattr(a, "collected_for_question_id", None) == question_id]
+        return evidence_articles
 
-        evidence_article_ids = set()
-        for hyp in question_hypotheses:
-            evidence_article_ids.update(hyp.evidence_article_ids)
-
-        evidence_articles = [
-            a for a in all_articles if a.id in evidence_article_ids
-        ]
-        return evidence_articles, question_hypotheses
-
-    def _calculate_article_metrics(self, articles: List[Article], question: Question) -> Dict[str, Any]:
+    def _calculate_article_metrics(
+        self, articles: List[Article], question: Question
+    ) -> Dict[str, Any]:
         """Calculate quality metrics for the collected articles."""
         if not articles:
             logger.warning(f"[{question.id}] No evidence articles - quality: 0.0")
             return {"score": 0.0, "metrics": {}}
 
-        from src.utils.article_analysis import (
+        from src.analysis.article_analysis import (
             analyze_timeline,
             analyze_sources,
             identify_gaps,
@@ -504,9 +492,10 @@ class EvidencePipeline(Pipeline):
 
         coverage_start = (
             ensure_timezone_aware(question.estimated_start_time)
-            if question.estimated_start_time else None
+            if question.estimated_start_time
+            else None
         )
-        
+
         timeline_data = analyze_timeline(
             articles,
             question.resolution_date,
@@ -531,10 +520,10 @@ class EvidencePipeline(Pipeline):
         return {"score": quality_metrics["score"], "metrics": quality_metrics}
 
     def _calculate_graph_metrics(
-        self, 
-        hypotheses: List[CausalHypothesis], 
-        question: Question, 
-        db: GenericDatabase
+        self,
+        hypotheses: List[CausalHypothesis],
+        question: Question,
+        db: GenericDatabase,
     ) -> Dict[str, Any]:
         """Calculate quality metrics for the causal graph."""
         if not hypotheses:
@@ -542,19 +531,21 @@ class EvidencePipeline(Pipeline):
             return {"score": 0.0, "max_depth": 0}
 
         # Resolve target event using shared utility
-        from src.utils.graph_analysis import resolve_target_event_id
+        from src.analysis.graph_analysis import resolve_target_event_id
+
         target_event_id = resolve_target_event_id(question, db, hypotheses)
-        
+
         # NOTE: No longer persisting target_event_id on question (deprecated).
         # Outcome events are managed via outcome_event_ids + is_actual_outcome.
-        
+
         # Fallback only if resolve_target_event_id returned None
         if not target_event_id:
             all_targets = set(h.target_event_id for h in hypotheses)
             if all_targets:
                 target_event_id = list(all_targets)[0]
 
-        from src.utils.graph_analysis import calculate_graph_quality
+        from src.analysis.graph_analysis import calculate_graph_quality
+
         metrics = calculate_graph_quality(
             hypotheses=hypotheses,
             target_event_id=target_event_id,
@@ -566,9 +557,9 @@ class EvidencePipeline(Pipeline):
             f"(depth: {metrics['max_depth']})"
         )
         return {
-            "score": metrics['quality_score'],
-            "max_depth": metrics['max_depth'],
-            "metrics": metrics
+            "score": metrics["quality_score"],
+            "max_depth": metrics["max_depth"],
+            "metrics": metrics,
         }
 
     def _load_resolved_questions(self) -> List[Question]:
@@ -743,7 +734,7 @@ class EvidencePipeline(Pipeline):
         Returns:
             Summary of deleted items with counts
         """
-        from src.domain.question_service import QuestionService
+        from src.services.question_service import QuestionService
 
         service = QuestionService(db)
         deleted = service.clear_evidence(question_id, cascade=True)

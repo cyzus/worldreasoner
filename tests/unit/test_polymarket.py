@@ -14,14 +14,14 @@ import json
 import aiohttp
 from datetime import datetime
 from src.utils.logging import logger
-from src.utils.polymarket import (
+from src.integrations.polymarket import (
     get_price_history,
     get_price_history_for_market,
     detect_turning_points,
     detect_sharp_movements,
     analyze_price_curve,
 )
-from src.pipelines.question.sources.markets import PolymarketRunner
+from src.pipelines.collection.runner_polymarket import PolymarketRunner
 from src.core.database import GenericDatabase
 
 
@@ -375,7 +375,7 @@ async def test_real_market_turning_points():
         min_sharp_movement_change=10.0,
     )
 
-    logger.info(f"\nCurve Summary:")
+    logger.info("\nCurve Summary:")
     if analysis["summary"]:
         summary = analysis["summary"]
         logger.info(f"  Time range: {summary['time_range_days']:.1f} days")

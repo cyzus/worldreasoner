@@ -1,8 +1,8 @@
 
 import pytest
-from datetime import datetime, timezone, timedelta
-from src.tools.causal_reasoner import CausalReasonerTool
-from src.domain.models import Event, EventStatus, EventType, Domain, OutcomeScenario
+from datetime import datetime, timezone
+from src.tools.reasoning.causal_reasoner import CausalReasonerTool
+from src.domain.models import Event, EventStatus, EventType, Domain
 
 @pytest.fixture
 def causal_reasoner(test_db):

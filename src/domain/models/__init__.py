@@ -1,7 +1,14 @@
 """Data models for WorldReasoner."""
 
 from .article import Article
-from .event import Event, EventType, EventStatus, CausalRelationType, OutcomeScenario, ReviewStatus
+from .event import (
+    Event,
+    EventType,
+    EventStatus,
+    CausalRelationType,
+    OutcomeScenario,
+    ReviewStatus,
+)
 from .question import Question, QuestionType
 from .forecast import Forecast
 from .causal_hypothesis import CausalHypothesis

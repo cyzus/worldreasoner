@@ -14,14 +14,20 @@ import json
 
 from src.core.database import GenericDatabase
 from src.core.hybrid_search import HybridSearch
-from src.cli.core.options import db_option, json_option, limit_option, domain_option, get_db_and_manager
+from src.cli.core.options import (
+    db_option,
+    json_option,
+    limit_option,
+    domain_option,
+    get_db_and_manager,
+)
 from src.cli.ui.displays import display_question_list, display_question_detail
 from src.cli.ui.tables import (
     display_event_table,
     display_article_table,
 )
 from src.domain.models import Event, Article
-from src.utils.search_indexing import auto_index_articles
+from src.core.search_indexing import auto_index_articles
 from src.config.settings import get_config
 
 app = typer.Typer(help="Database management commands")

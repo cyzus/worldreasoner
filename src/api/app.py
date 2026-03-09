@@ -48,6 +48,7 @@ async def lifespan(app: FastAPI):
 
             # Migrate: ensure new columns exist on older databases
             from src.domain.models import Forecast
+
             db.ensure_column(Forecast, "enabled_tools", "TEXT")
         except Exception as e:
             logger.warning(f"Failed to initialize database tables on startup: {e}")

@@ -132,6 +132,28 @@ const PipelineControl = ({ selectedQuestions, onJobComplete }) => {
     }
   }
 
+  const clearGraph = async () => {
+    if (!selectedQuestions.length) return
+
+    if (!window.confirm(`Clear graph (events + hypotheses) for ${selectedQuestions.length} questions? Articles and explanation are kept.`)) {
+      return
+    }
+
+    try {
+      setError(null)
+      const response = await fetch('http://localhost:8018/api/pipelines/questions/clear-graph', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question_ids: selectedQuestions }),
+      })
+
+      const result = await response.json()
+      alert(`Cleared graph for ${result.cleared.length} questions`)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   const isRunning = activeJob && jobStatus?.status === 'running'
   const progress = jobStatus?.progress || 0
 
@@ -178,9 +200,8 @@ const PipelineControl = ({ selectedQuestions, onJobComplete }) => {
             disabled={!selectedQuestions.length}
             title="Run evidence pipeline with agent-based causal analysis (deep graphs, 3+ levels)"
           >
-            🔬 Run Evidence Pipeline
+            🔬 Collect Evidence
           </button>
-
           <button
             className="action-btn clear"
             onClick={clearEvidence}
@@ -189,6 +210,25 @@ const PipelineControl = ({ selectedQuestions, onJobComplete }) => {
           >
             🗑️ Clear Evidence
           </button>
+
+          <button
+            className="action-btn graph"
+            onClick={() => startPipeline('graph_builder')}
+            disabled={!selectedQuestions.length}
+            title="Build causal graph from existing evidence — skips already-built questions"
+          >
+            🕸️ Build Graph
+          </button>
+
+          <button
+            className="action-btn clear-graph"
+            onClick={clearGraph}
+            disabled={!selectedQuestions.length}
+            title="Clear graph only (events + hypotheses) — keeps articles and causal explanation"
+          >
+            🗑️ Clear Graph
+          </button>
+
         </div>
       )}
     </div>
