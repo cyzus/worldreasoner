@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import QuestionList from './QuestionList'
 import PipelineControl from './PipelineControl'
-import QuestionMonitor from './QuestionMonitor'
+import PipelineControl from './PipelineControl'
 import { JobSidebar, JobDetails } from './JobManager'
 import { usePipelineJobs } from '../hooks/usePipelineJobs'
 import './PipelinePage.css'
 
 const PipelinePage = ({ questions, onJobComplete }) => {
   const [selectedQuestions, setSelectedQuestions] = useState([])
-  const [activeTab, setActiveTab] = useState('monitor') // 'monitor' | 'manual'
 
   // Use shared hook for job management
   const {
@@ -31,44 +30,10 @@ const PipelinePage = ({ questions, onJobComplete }) => {
     <div className="pipeline-page page-container">
       <div className="pipeline-page-header page-header">
         <h2>Evidence Automation</h2>
-        <div style={{ display: 'flex', gap: '1rem', marginLeft: '2rem' }}>
-          <button
-            onClick={() => setActiveTab('monitor')}
-            style={{
-              fontWeight: activeTab === 'monitor' ? 'bold' : 'normal',
-              color: activeTab === 'monitor' ? '#2563eb' : '#6b7280',
-              border: activeTab === 'monitor' ? '1px solid #2563eb' : '1px solid transparent',
-              background: activeTab === 'monitor' ? '#eff6ff' : 'transparent',
-              padding: '0.25rem 0.75rem',
-              borderRadius: '0.25rem',
-              cursor: 'pointer'
-            }}
-          >
-            Monitor & Auto-Collect
-          </button>
-          <button
-            onClick={() => setActiveTab('manual')}
-            style={{
-              fontWeight: activeTab === 'manual' ? 'bold' : 'normal',
-              color: activeTab === 'manual' ? '#2563eb' : '#6b7280',
-              border: activeTab === 'manual' ? '1px solid #2563eb' : '1px solid transparent',
-              background: activeTab === 'manual' ? '#eff6ff' : 'transparent',
-              padding: '0.25rem 0.75rem',
-              borderRadius: '0.25rem',
-              cursor: 'pointer'
-            }}
-          >
-            Manual Control & History
-          </button>
-        </div>
       </div>
 
       <div className="page-content" style={{ display: 'flex', flexDirection: 'column' }}>
-        <div style={{ flex: 1, overflow: 'hidden', display: activeTab === 'monitor' ? 'block' : 'none' }}>
-          <QuestionMonitor activeJobs={jobs} />
-        </div>
-
-        <div style={{ display: activeTab === 'manual' ? 'flex' : 'none', flex: 1, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           {/* Left Sidebar: Pipeline Controls + Jobs */}
           <div className="page-sidebar">
             <div className="scroll-container">
