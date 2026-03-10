@@ -5,7 +5,7 @@ from typing import Dict, Any, List
 from src.core.database import GenericDatabase
 from src.domain.models import Question, Event
 from src.agents.graph_builder_agent import GraphBuilderAgentFactory
-from src.pipelines.prompts.graph_builder import GraphBuilderPrompts
+from src.pipelines.prompts import graph_builder as graph_builder_prompts
 from src.config.pipeline import SATISFACTION_DEFAULTS
 from src.utils.logging import logger
 
@@ -28,7 +28,6 @@ class GraphBuilderPipeline:
         self.temperature = temperature
         self.min_graph_depth = min_graph_depth
         self.min_events = min_events
-        self.prompts = GraphBuilderPrompts()
 
     def _load_pending_questions(self) -> List[Question]:
         """Find questions that have explanations but no graph."""
@@ -90,7 +89,7 @@ class GraphBuilderPipeline:
                 )
 
             # 2. Build Prompt
-            prompt = self.prompts.get_agent_prompt(
+            prompt = graph_builder_prompts.get_prompt(
                 question=question,
                 actual_outcome_event_id=actual_outcome_id,
                 min_graph_depth=self.min_graph_depth,

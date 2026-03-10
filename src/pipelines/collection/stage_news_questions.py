@@ -9,7 +9,7 @@ from src.config.pipeline import QuestionPipelineConfig
 from src.agents.factory import AgentFactory
 from src.tools import QuestionGeneratorTool, ArticleRetrievalTool
 from src.core.collectors import ResultCollector
-from src.pipelines.prompts import QuestionGenerationPrompts
+from src.pipelines.prompts import question_generation as question_generation_prompts
 from src.utils.logging import logger
 from src.utils.usage_tracking import UsageTracker, log_usage
 
@@ -59,8 +59,6 @@ class NewsQuestionGenerationStage(PipelineStage[Article, Question]):
 
         self.article_retrieval_tool = ArticleRetrievalTool(db_path=db_path)
 
-        # Prompt generator
-        self.prompts = QuestionGenerationPrompts()
         self.base_agent = None
 
         # Usage tracking
@@ -144,8 +142,7 @@ class NewsQuestionGenerationStage(PipelineStage[Article, Question]):
             if self.article_config and self.article_config.sources:
                 sources_list = [s.name for s in self.article_config.sources]
 
-            # Get instruction from prompts module (NEW METHOD)
-            instruction = self.prompts.get_article_instruction(
+            instruction = question_generation_prompts.get_article_instruction(
                 current_date=current_date,
                 articles=filtered_articles,
                 max_questions=remaining_needed,

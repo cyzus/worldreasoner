@@ -141,7 +141,7 @@ class QuestionSourceRunner(ABC):
         from src.domain.models.domain import Domain
         from src.core.llm import LiteLLMClient
         from src.config import get_config
-        from src.pipelines.prompts import QuestionCategorizationPrompts
+        from src.pipelines.prompts import question_categorization as _categorization_prompts
         from src.core.llm import parse_json_response
 
         try:
@@ -149,17 +149,13 @@ class QuestionSourceRunner(ABC):
             config = get_config()
             llm_client = LiteLLMClient(config.llm.model_dump(exclude_none=True))
 
-            # Create prompt generator
-            prompt_generator = QuestionCategorizationPrompts()
-
             # Batch categorize - 10 questions at a time for speed
             batch_size = 10
 
             for batch_idx in range(0, len(questions), batch_size):
                 batch = questions[batch_idx : batch_idx + batch_size]
 
-                # Generate prompt using the prompt generator
-                prompt = prompt_generator.get_instruction(questions=batch)
+                prompt = _categorization_prompts.get_instruction(questions=batch)
 
                 logger.info(
                     f"Categorizing batch {batch_idx // batch_size + 1} ({len(batch)} questions)..."

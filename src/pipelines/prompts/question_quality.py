@@ -1,9 +1,6 @@
 """Prompts for assessing the quality of forecast questions."""
 
 from textwrap import dedent
-from .base import PromptTemplate
-
-# Note: Using smol_prompts for lightweight, dependency-free templating.
 
 # ==============================================================================
 # STRUCTURED OUTPUT SCHEMA (for parsing LLM response)
@@ -169,7 +166,4 @@ _quality_assessment_template = dedent("""
     }}
 """)
 
-QUESTION_QUALITY_ASSESSMENT_PROMPT = PromptTemplate(
-    template=_quality_assessment_template,
-    required_vars=["num_questions", "questions_json"],
-)
+QUESTION_QUALITY_ASSESSMENT_PROMPT = _quality_assessment_template

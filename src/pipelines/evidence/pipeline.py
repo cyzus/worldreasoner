@@ -16,7 +16,7 @@ from datetime import datetime, timezone, timedelta
 
 from src.pipelines.base import Pipeline, PipelineStageResult, PipelineStageStatus
 from src.config.pipeline import SATISFACTION_DEFAULTS
-from src.pipelines.prompts import HindsightCausalAnalysisPrompts
+from src.pipelines.prompts import hindsight_causal_analysis as hindsight_prompts
 from src.config.pipeline import EvidencePipelineConfig
 from src.config import DatabaseConfig
 from src.domain.models import Question, Article, CausalHypothesis
@@ -84,9 +84,6 @@ class EvidencePipeline(Pipeline):
 
         # Pipeline-level usage tracking
         self.usage_tracker = UsageTracker()
-
-        # Initialize prompt generator
-        self.prompts = HindsightCausalAnalysisPrompts()
 
         logger.info("Adaptive multi-agent evidence pipeline initialized")
 
@@ -290,7 +287,7 @@ class EvidencePipeline(Pipeline):
             logger.debug(f"[{question.id}] Created context-aware HindsightAgent")
 
             # 4. Create Prompt
-            prompt = self.prompts.get_agent_prompt(
+            prompt = hindsight_prompts.get_prompt(
                 question=question,
                 min_graph_depth=self.min_graph_depth,
                 evidence_window_days=self.evidence_config.evidence_window_days,

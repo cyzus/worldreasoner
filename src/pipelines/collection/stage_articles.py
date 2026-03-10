@@ -10,7 +10,7 @@ from src.domain.models import Article
 from src.agents.factory import AgentFactory
 from src.tools import ArticleCollectorTool, RssFetchTool
 from src.core.collectors import ResultCollector
-from src.pipelines.prompts import ArticleCollectionPrompts
+from src.pipelines.prompts import article_collection as article_collection_prompts
 from src.utils.logging import logger
 from src.utils.usage_tracking import UsageTracker, log_usage
 
@@ -66,8 +66,6 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
         # Create WebAgent using factory
         self.web_agent = AgentFactory.create_web_agent(tools=[self.article_tool])
 
-        # Prompt generator
-        self.prompts = ArticleCollectionPrompts()
 
         # Usage tracking
         self.usage_tracker = UsageTracker()
@@ -266,7 +264,7 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
                 logger.debug("No domain context available")
 
             # Get instruction from prompts module
-            instruction = self.prompts.get_instruction(
+            instruction = article_collection_prompts.get_instruction(
                 current_date=current_date,
                 source_name=source.name,
                 days_back=days_back,

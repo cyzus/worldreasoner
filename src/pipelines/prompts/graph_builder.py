@@ -2,7 +2,9 @@
 
 from src.domain.models import Question
 from src.config.pipeline import SATISFACTION_DEFAULTS
-from .base import BasePromptGenerator, PromptTemplate
+
+from .base import format_datetime
+
 
 GRAPH_BUILDER_DESCRIPTION = """
 You are a highly analytical agent that converts natural language causal explanations
@@ -58,44 +60,19 @@ PROCESS:
 """
 
 
-class GraphBuilderPrompts(BasePromptGenerator[Question]):
-    """Prompts for building the graph structure from an NL explanation."""
-
-    AGENT_TEMPLATE = PromptTemplate(
-        template=GRAPH_BUILDER_DESCRIPTION,
-        required_vars=[
-            "question_text",
-            "resolution_date",
-            "ground_truth",
-            "actual_outcome_event_id",
-            "causal_explanation",
-            "min_graph_depth",
-            "min_events",
-        ],
+def get_prompt(
+    question: Question,
+    actual_outcome_event_id: str,
+    min_graph_depth: int = SATISFACTION_DEFAULTS.min_graph_depth,
+    min_events: int = SATISFACTION_DEFAULTS.min_graph_events,
+) -> str:
+    explanation = question.causal_explanation or "No explanation was saved."
+    return GRAPH_BUILDER_DESCRIPTION.format(
+        question_text=question.question_text,
+        resolution_date=format_datetime(question.resolution_date),
+        ground_truth=str(question.ground_truth),
+        actual_outcome_event_id=actual_outcome_event_id,
+        causal_explanation=explanation,
+        min_graph_depth=min_graph_depth,
+        min_events=min_events,
     )
-
-    def format_item(self, item: Question, idx: int, **context) -> str:
-        return f"{idx}. {item.question_text}"
-
-    def get_instruction(self, **kwargs) -> str:
-        return self.get_agent_prompt(**kwargs)
-
-    def get_agent_prompt(
-        self,
-        question: Question,
-        actual_outcome_event_id: str,
-        min_graph_depth: int = SATISFACTION_DEFAULTS.min_graph_depth,
-        min_events: int = SATISFACTION_DEFAULTS.min_graph_events,
-        **kwargs,
-    ) -> str:
-        explanation = question.causal_explanation or "No explanation was saved."
-
-        return self.AGENT_TEMPLATE.format(
-            question_text=question.question_text,
-            resolution_date=self.format_datetime(question.resolution_date),
-            ground_truth=str(question.ground_truth),
-            actual_outcome_event_id=actual_outcome_event_id,
-            causal_explanation=explanation,
-            min_graph_depth=min_graph_depth,
-            min_events=min_events,
-        )
