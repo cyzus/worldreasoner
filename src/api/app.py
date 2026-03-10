@@ -4,6 +4,8 @@ This module creates the FastAPI app with all routes, middleware,
 and WebSocket support for real-time graph updates.
 """
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -116,7 +118,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
-            "http://localhost:3000",
+            f"http://localhost:{os.getenv('FRONTEND_PORT', '3100')}",
             "http://localhost:5173",
         ],  # React dev servers
         allow_credentials=True,

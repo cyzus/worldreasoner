@@ -1,6 +1,25 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { visualizer } from 'rollup-plugin-visualizer'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
+
+function loadDotEnv() {
+  try {
+    const raw = readFileSync(resolve(__dirname, '../.env'), 'utf-8')
+    return Object.fromEntries(
+      raw.split('\n')
+        .filter(line => line.includes('=') && !line.startsWith('#'))
+        .map(line => line.split('=').map(s => s.trim()))
+    )
+  } catch {
+    return {}
+  }
+}
+
+const env = loadDotEnv()
+const FRONTEND_PORT = parseInt(env.FRONTEND_PORT ?? '3100')
+const BACKEND_PORT = parseInt(env.BACKEND_PORT ?? '7699')
 
 export default defineConfig({
   plugins: [
@@ -49,14 +68,14 @@ export default defineConfig({
   },
 
   server: {
-    port: 3000,
+    port: FRONTEND_PORT,
     proxy: {
       '/api': {
-        target: 'http://localhost:8018',
+        target: `http://localhost:${BACKEND_PORT}`,
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://localhost:8018',
+        target: `ws://localhost:${BACKEND_PORT}`,
         ws: true,
       },
     },
