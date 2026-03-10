@@ -100,14 +100,7 @@ class HindsightAgent(BaseAgent):
                 WebSearchTool(
                     db_path=db_path, question_id=question_id
                 ),  # Provenance-aware
-        ]
-
-        # Manager tools: coordination + save explanation
-        tools = tools + [
-            # QuestionArticlesTool(db_path=db_path, question_id=question_id),
-            # GraphInspectorTool(db_path=db_path, question_id=question_id),
-            ArticleInspectorTool(db_path=db_path, question_id=question_id),
-            SaveExplanationTool(db_path=db_path, question_id=question_id),
+                SaveExplanationTool(db_path=db_path, question_id=question_id),
         ]
 
         super().__init__(
