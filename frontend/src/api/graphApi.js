@@ -8,8 +8,11 @@ const API_BASE_URL = '/api'
 export async function fetchGraph(params = {}) {
   const queryParams = new URLSearchParams()
 
-  if (params.nodeTypes?.length) {
+  if (params.nodeTypes !== undefined) {
     queryParams.append('node_types', params.nodeTypes.join(','))
+  }
+  if (params.nodeIds && params.nodeIds.length > 0) {
+    queryParams.append('node_ids', params.nodeIds.join(','))
   }
   if (params.center_node_id) {
     queryParams.append('center_node_id', params.center_node_id)
@@ -366,5 +369,21 @@ export async function fetchBenchmarkConditions() {
  */
 export async function fetchQuestionArticles(questionId) {
   const response = await axios.get(`${API_BASE_URL}/questions/${questionId}/articles`)
+  return response.data
+}
+
+/**
+ * Review a single event using LLM
+ */
+export async function reviewEvent(eventId) {
+  const response = await axios.post(`${API_BASE_URL}/events/${eventId}/review`)
+  return response.data
+}
+
+/**
+ * Review all pending events for a question using LLM
+ */
+export async function reviewQuestionEvents(questionId) {
+  const response = await axios.post(`${API_BASE_URL}/questions/${questionId}/events/review`)
   return response.data
 }

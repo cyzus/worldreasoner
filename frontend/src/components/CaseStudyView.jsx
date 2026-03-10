@@ -77,6 +77,7 @@ function CaseStudyView({
         impacts={impacts}
         articleMap={articleMap}
         groundTruthScenario={groundTruthScenario}
+        questionId={selectedQuestion?.id}
       />
 
       <InformationStream

@@ -416,15 +416,15 @@ class SQLiteGraphService(GraphService):
             ]
 
         # Apply node ID filtering
-        if query.node_ids:
+        if query.node_ids is not None:
             node_id_set = set(query.node_ids)
             events = [e for e in events if e.id in node_id_set]
 
         # Apply node type filtering (by domain)
-        if query.node_types:
+        if query.node_types is not None:
             events = [e for e in events if e.domain in query.node_types]
 
-        if query.exclude_node_types:
+        if query.exclude_node_types is not None:
             events = [e for e in events if e.domain not in query.exclude_node_types]
 
         return events
@@ -540,6 +540,8 @@ class SQLiteGraphService(GraphService):
                 ),
                 "article_ids": getattr(event, "article_ids", []),
                 "source_article_id": getattr(event, "source_article_id", None),
+                "review_status": getattr(event.review_status, "value", str(event.review_status)) if getattr(event, "review_status", None) else "pending",
+                "review_note": getattr(event, "review_note", None),
             },
             size=getattr(event, "importance", 1.0),
             color=self._domain_to_color(event.domain),
@@ -578,7 +580,7 @@ class SQLiteGraphService(GraphService):
                 continue
 
             # Apply edge type filtering
-            if query and query.edge_types:
+            if query and query.edge_types is not None:
                 if hypothesis.relation_type not in query.edge_types:
                     continue
 

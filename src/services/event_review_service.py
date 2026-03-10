@@ -157,7 +157,7 @@ class EventReviewService(ServiceBase):
                 rejected_count += 1
                 event.review_status = ReviewStatus.REJECTED
 
-            event.review_note = f"LLM Review: {review.reasoning[:200]}"
+            event.review_note = f"LLM Review: {review.reasoning}"
             event.updated_at = datetime.now(timezone.utc)
             self.db.save(Event, event)
 

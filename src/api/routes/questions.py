@@ -42,6 +42,7 @@ class QuestionListItem(BaseModel):
     quality_score: Optional[float] = None
     resolution_date: Optional[str] = None
     estimated_start_time: Optional[str] = None
+    causal_explanation: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     article_count: int = 0
     forecast_count: int = 0
@@ -592,6 +593,7 @@ async def get_questions(
                 estimated_start_time=q.estimated_start_time.isoformat()
                 if q.estimated_start_time
                 else None,
+                causal_explanation=q.causal_explanation,
                 metadata=q.metadata,
                 article_count=article_counts.get(q.id, 0),
                 forecast_count=forecast_stats.get(q.id, {}).get("count", 0),
@@ -642,6 +644,7 @@ async def get_question(
             resolution_date=question.resolution_date.isoformat()
             if question.resolution_date
             else None,
+            causal_explanation=question.causal_explanation,
             metadata=question.metadata,
             estimated_start_time=question.estimated_start_time.isoformat()
             if question.estimated_start_time
@@ -752,6 +755,41 @@ async def get_question_events(
         raise
     except Exception as e:
         logger.error(f"Failed to fetch question events: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{question_id}/events/review")
+async def review_question_events(
+    question_id: str,
+    db: GenericDatabase = Depends(get_database),
+):
+    """Review all events for a question using EventReviewService.
+    
+    Args:
+        question_id: Question identifier
+        
+    Returns:
+        EventReviewReport
+    """
+    try:
+        from src.services.event_review_service import EventReviewService
+        
+        # Verify question exists
+        question = db.get(Question, question_id)
+        if not question:
+            raise HTTPException(
+                status_code=404, detail=f"Question {question_id} not found"
+            )
+
+        service = EventReviewService(db)
+        report = await service.review_events_for_question(question_id)
+        
+        return report
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Review question events failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

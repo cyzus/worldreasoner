@@ -208,3 +208,54 @@ async def get_event_questions(event_id: str):
     except Exception as e:
         logger.error(f"Get event questions failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{event_id}/review")
+async def review_event(event_id: str):
+    """Review a single event using the EventReviewService."""
+    try:
+        from src.services.event_review_service import EventReviewService
+        from src.domain.models import ReviewStatus
+        import datetime
+
+        db = get_db()
+        event = db.get(Event, event_id)
+
+        if not event:
+            raise HTTPException(status_code=404, detail=f"Event {event_id} not found")
+
+        service = EventReviewService(db)
+        
+        # Build question context if possible
+        question_context = "No question context available"
+        if event.extracted_for_question_id:
+            question = db.get(Question, event.extracted_for_question_id)
+            if question:
+                question_context = service._build_question_context(question)
+
+        # Run review
+        review = await service._review_single_event(event, question_context)
+
+        # Update event status
+        if review.approved:
+            event.review_status = ReviewStatus.APPROVED
+        else:
+            event.review_status = ReviewStatus.REJECTED
+
+        event.review_note = f"LLM Review: {review.reasoning[:200]}"
+        event.updated_at = datetime.datetime.now(datetime.timezone.utc)
+        
+        db.save(Event, event)
+
+        return {
+            "status": "success",
+            "review_status": event.review_status,
+            "approved": review.approved,
+            "reasoning": review.reasoning
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Review event failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

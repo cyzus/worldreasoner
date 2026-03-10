@@ -290,6 +290,72 @@ export const useGraphTraversal = (questions) => {
             console.log(`Orphaned (extracted but not in hypotheses): ${questionEventsData.orphaned_events}`)
             console.log(`Total seed events: ${questionEventsData.total_events}`)
 
+            console.log(`Total seed events: ${questionEventsData.total_events}`)
+
+            // Debug: Check if seed events exist in fullGraphData
+            const missingEventIds = Array.from(seedEventIds).filter(id => !fullGraphData.nodes.find(n => n.id === id))
+
+            // Local copy of graph data that we might augment
+            let currentGraphNodes = [...fullGraphData.nodes]
+            let currentGraphLinks = [...fullGraphData.links]
+
+            if (missingEventIds.length > 0) {
+                console.warn(`⚠️ ${missingEventIds.length} seed events NOT found in fullGraphData. Fetching them...`)
+                try {
+                    const { fetchGraph } = await import('../api/graphApi')
+                    const missingSubgraph = await fetchGraph({
+                        nodeIds: Array.from(seedEventIds),
+                        includeOutcomes: true,
+                        maxNodes: 2000,
+                        maxEdges: 5000
+                    })
+
+                    // Merge missing nodes into currentGraphNodes
+                    const currentNodesMap = new Map(currentGraphNodes.map(n => [n.id, n]))
+                    missingSubgraph.nodes.forEach(node => {
+                        currentNodesMap.set(node.id, {
+                            id: node.id,
+                            name: node.label,
+                            type: node.node_type,
+                            domain: node.properties?.domain || node.domain || 'general',
+                            size: node.size,
+                            color: node.color,
+                            properties: node.properties,
+                            isOutcome: node.properties?.is_outcome || false
+                        })
+                    })
+                    currentGraphNodes = Array.from(currentNodesMap.values())
+
+                    // Merge missing links into currentGraphLinks
+                    const currentLinksMap = new Map()
+                    currentGraphLinks.forEach(l => {
+                        const src = typeof l.source === 'object' ? l.source.id : l.source
+                        const tgt = typeof l.target === 'object' ? l.target.id : l.target
+                        currentLinksMap.set(`${src}-${tgt}-${l.type}`, l)
+                    })
+
+                    if (missingSubgraph.edges) {
+                        missingSubgraph.edges.forEach(e => {
+                            const src = e.source_id
+                            const tgt = e.target_id
+                            currentLinksMap.set(`${src}-${tgt}-${e.edge_type}`, {
+                                source: src,
+                                target: tgt,
+                                type: e.edge_type,
+                                label: e.label,
+                                weight: e.weight,
+                                properties: e.properties
+                            })
+                        })
+                    }
+                    currentGraphLinks = Array.from(currentLinksMap.values())
+
+                    console.log(`Successfully merged ${missingSubgraph.nodes.length} nodes and ${missingSubgraph.edges ? missingSubgraph.edges.length : 0} edges into local graph copy.`)
+                } catch (err) {
+                    console.error('Failed to fetch missing subgraph for question:', err)
+                }
+            }
+
             // BFS to find neighborhood around these events
             const visited = new Set(seedEventIds)
             const queue = Array.from(seedEventIds).map(id => ({ id, depth: 0 }))
@@ -300,7 +366,7 @@ export const useGraphTraversal = (questions) => {
                 if (currentDepth >= depth) continue
 
                 // Find connected nodes (both incoming and outgoing)
-                fullGraphData.links.forEach(link => {
+                currentGraphLinks.forEach(link => {
                     const sourceId = typeof link.source === 'object' ? link.source.id : link.source
                     const targetId = typeof link.target === 'object' ? link.target.id : link.target
 
@@ -320,25 +386,17 @@ export const useGraphTraversal = (questions) => {
 
             console.log(`Expanded to ${visited.size} nodes (from ${seedEventIds.size} seed events, depth ${depth})`)
 
-            // Debug: Check if seed events exist in fullGraphData
-            const missingEventIds = Array.from(seedEventIds).filter(id => !fullGraphData.nodes.find(n => n.id === id))
-            if (missingEventIds.length > 0) {
-                console.warn(`⚠️ ${missingEventIds.length} seed events NOT found in fullGraphData:`, missingEventIds.slice(0, 5))
-                console.log(`Full graph has ${fullGraphData.nodes.length} nodes`)
-                console.log('💡 TIP: Increase "Max Nodes" in Controls panel or refresh the graph to load more events')
-            }
-
             // Filter nodes to include the neighborhood
-            const filteredNodes = fullGraphData.nodes.filter(node => visited.has(node.id))
+            const filteredNodes = currentGraphNodes.filter(node => visited.has(node.id))
 
             // Filter links to only include those between visible nodes
-            const filteredLinks = fullGraphData.links.filter(link => {
+            const filteredLinks = currentGraphLinks.filter(link => {
                 const sourceId = typeof link.source === 'object' ? link.source.id : link.source
                 const targetId = typeof link.target === 'object' ? link.target.id : link.target
                 return visited.has(sourceId) && visited.has(targetId)
             })
 
-            console.log(`Filtered graph: ${filteredNodes.length} nodes, ${filteredLinks.length} links (from ${fullGraphData.links.length} total links)`)
+            console.log(`Filtered graph: ${filteredNodes.length} nodes, ${filteredLinks.length} links (from ${currentGraphLinks.length} total links)`)
 
             // Mark outcome nodes from backend is_outcome / is_actual_outcome properties
             const outcomeNodeId = filteredNodes.find(n => n.properties?.is_actual_outcome)?.id

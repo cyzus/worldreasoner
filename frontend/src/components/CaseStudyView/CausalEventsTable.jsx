@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { reviewEvent, reviewQuestionEvents } from '../../api/graphApi'
 
 const formatDate = (dateString) => {
     if (!dateString) return 'Unknown Date'
@@ -35,9 +36,13 @@ export function CausalEventsTable({
     events,
     impacts,
     articleMap,
-    groundTruthScenario
+    groundTruthScenario,
+    questionId
 }) {
     const [expandedRows, setExpandedRows] = useState(new Set())
+    const [localReviewStatus, setLocalReviewStatus] = useState({})
+    const [localReviewNotes, setLocalReviewNotes] = useState({})
+    const [isReviewingAll, setIsReviewingAll] = useState(false)
 
     const toggleRow = (id) => {
         const newExpanded = new Set(expandedRows)
@@ -46,10 +51,48 @@ export function CausalEventsTable({
         setExpandedRows(newExpanded)
     }
 
+    const handleReviewAll = async () => {
+        if (!questionId) return
+        setIsReviewingAll(true)
+        try {
+            const result = await reviewQuestionEvents(questionId)
+            alert(`Review complete: ${result.approved_events} approved, ${result.rejected_events} rejected.`)
+
+            // Update local state for all reviewed events
+            const newStatuses = { ...localReviewStatus }
+            const newNotes = { ...localReviewNotes }
+            result.event_reviews.forEach(r => {
+                newStatuses[r.event_id] = r.approved ? 'approved' : 'rejected'
+                newNotes[r.event_id] = `LLM Review: ${r.reasoning}`
+            })
+            setLocalReviewStatus(newStatuses)
+            setLocalReviewNotes(newNotes)
+        } catch (error) {
+            console.error('Error auto-reviewing events:', error)
+            alert('Failed to auto-review events.')
+        } finally {
+            setIsReviewingAll(false)
+        }
+    }
+
     return (
         <div className="cs-section">
-            <h3 className="cs-section-title">⚡ Causal Events</h3>
-            <p className="cs-section-subtitle">Chronological progression of key events extracted from the evidence</p>
+            <div className="cs-section-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                    <h3 className="cs-section-title">⚡ Causal Events</h3>
+                    <p className="cs-section-subtitle">Chronological progression of key events extracted from the evidence</p>
+                </div>
+                {questionId && events.length > 0 && (
+                    <button
+                        className="cs-btn-review-all"
+                        onClick={handleReviewAll}
+                        disabled={isReviewingAll}
+                        style={{ padding: '6px 12px', fontSize: '0.85rem', cursor: 'pointer', borderRadius: '4px', border: '1px solid #dee2e6', backgroundColor: '#fff' }}
+                    >
+                        {isReviewingAll ? '⏳ Reviewing...' : '🤖 Auto-Review Pending'}
+                    </button>
+                )}
+            </div>
 
             {events.length === 0 ? (
                 <div className="cs-empty">No events found in the current graph.</div>
@@ -61,6 +104,7 @@ export function CausalEventsTable({
                                 <th>Date</th>
                                 <th>Event Summary</th>
                                 <th>Impact</th>
+                                <th>Review</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -79,6 +123,9 @@ export function CausalEventsTable({
                                     event.impact_direction ||
                                     event.properties?.impact_direction
 
+
+                                const actualReviewStatus = localReviewStatus[event.id] || event.review_status || event.properties?.review_status || 'pending'
+                                const actualReviewNote = localReviewNotes[event.id] || event.review_note || event.properties?.review_note
                                 const isExpanded = expandedRows.has(event.id)
 
                                 return (
@@ -104,6 +151,13 @@ export function CausalEventsTable({
                                                     </span>
                                                 )}
                                             </td>
+                                            <td className="cs-td-review">
+                                                <div className="cs-review-cell" style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                                                    <span className={`cs-badge-review cs-review-${actualReviewStatus.toLowerCase()}`}>
+                                                        {actualReviewStatus.toUpperCase()}
+                                                    </span>
+                                                </div>
+                                            </td>
                                         </tr>
                                         {isExpanded && (
                                             <tr className="cs-row-details">
@@ -111,6 +165,13 @@ export function CausalEventsTable({
                                                     <div className="cs-details-content">
                                                         <div className="cs-details-header">
                                                             <p><strong>Description:</strong> {event.description || event.properties?.description || 'No description available.'}</p>
+
+                                                            {actualReviewNote && (
+                                                                <div className="cs-review-note" style={{ marginTop: '8px', padding: '10px 12px', backgroundColor: '#f8f9fa', borderLeft: '3px solid #868e96', fontSize: '0.9rem', borderRadius: '0 4px 4px 0' }}>
+                                                                    <strong>🤖 Review Reason:</strong>
+                                                                    <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', color: '#495057' }}>{actualReviewNote}</div>
+                                                                </div>
+                                                            )}
 
                                                             <div className="cs-evidence-section">
                                                                 <span className="cs-evidence-label">Source Evidence:</span>

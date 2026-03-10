@@ -275,9 +275,10 @@ export function drawTimeSeriesChart(svgElement, params) {
             }
 
             if (!isTarget && eventsInTimeRange.length <= 15 && level < 2) {
+                const title = event.title || event.name || event.label || event.properties?.title || 'EVT'
                 g.append('text').attr('x', x).attr('y', yOffset - 10).attr('text-anchor', 'middle')
                     .style('fill', markerColor).style('font-size', '9px').style('font-weight', 'bold')
-                    .style('text-shadow', '0 1px 2px rgba(0,0,0,0.1)').text(event.title.substring(0, 3).toUpperCase())
+                    .style('text-shadow', '0 1px 2px rgba(0,0,0,0.1)').text(title.substring(0, 3).toUpperCase())
             }
 
             if (impact && impact.direction !== 'neutral') {

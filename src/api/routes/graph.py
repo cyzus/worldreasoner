@@ -71,13 +71,20 @@ async def get_graph(
     """
     try:
         # Parse comma-separated lists
-        node_ids_list = node_ids.split(",") if node_ids else None
-        node_types_list = node_types.split(",") if node_types else None
-        exclude_types_list = (
-            exclude_node_types.split(",") if exclude_node_types else None
+        node_ids_list = (
+            [n.strip() for n in node_ids.split(",") if n.strip()] if node_ids is not None else None
         )
-        edge_types_list = edge_types.split(",") if edge_types else None
-
+        node_types_list = (
+            [t.strip() for t in node_types.split(",") if t.strip()] if node_types is not None else None
+        )
+        exclude_types_list = (
+            [t.strip() for t in exclude_node_types.split(",") if t.strip()]
+            if exclude_node_types is not None
+            else None
+        )
+        edge_types_list = (
+            [t.strip() for t in edge_types.split(",") if t.strip()] if edge_types is not None else None
+        )
         # Build query
         query = GraphQuery(
             node_ids=node_ids_list,
