@@ -10,7 +10,7 @@ function QuestionPreviewList({ questions, onSaveSelected, loading, source }) {
   const [searchText, setSearchText] = useState('')
   const [domainFilter, setDomainFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
-  const [sortBy, setSortBy] = useState('difficulty')
+  const [sortBy, setSortBy] = useState('default')
 
   // Extract unique domains and types from questions (with safety check)
   const availableDomains = useMemo(() => {
@@ -50,20 +50,26 @@ function QuestionPreviewList({ questions, onSaveSelected, loading, source }) {
     }
 
     // Sort
-    filtered = [...filtered].sort((a, b) => {
-      switch (sortBy) {
-        case 'difficulty':
-          return b.difficulty - a.difficulty
-        case 'date':
-          if (!a.resolution_date) return 1
-          if (!b.resolution_date) return -1
-          return new Date(b.resolution_date) - new Date(a.resolution_date)
-        case 'quality':
-          return (b.quality_score || 0) - (a.quality_score || 0)
-        default:
-          return 0
-      }
-    })
+    if (sortBy !== 'default') {
+      filtered = [...filtered].sort((a, b) => {
+        switch (sortBy) {
+          case 'difficulty':
+            return (b.difficulty || 0) - (a.difficulty || 0)
+          case 'date':
+            if (!a.resolution_date) return 1
+            if (!b.resolution_date) return -1
+            return new Date(b.resolution_date) - new Date(a.resolution_date)
+          case 'quality':
+            return (b.quality_score || 0) - (a.quality_score || 0)
+          case 'volume':
+            const volA = a.metadata?.volume_usd || a.metadata?.volume || 0;
+            const volB = b.metadata?.volume_usd || b.metadata?.volume || 0;
+            return volB - volA;
+          default:
+            return 0;
+        }
+      })
+    }
 
     return filtered
   }, [questions, searchText, domainFilter, typeFilter, sortBy])
@@ -174,6 +180,8 @@ function QuestionPreviewList({ questions, onSaveSelected, loading, source }) {
                 className="filter-select"
                 disabled={loading}
               >
+                <option value="default">Default / Trending</option>
+                <option value="volume">Sort by Volume</option>
                 <option value="difficulty">Sort by Difficulty</option>
                 <option value="date">Sort by Date</option>
                 <option value="quality">Sort by Quality</option>

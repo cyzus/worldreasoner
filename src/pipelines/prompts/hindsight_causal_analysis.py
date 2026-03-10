@@ -84,12 +84,12 @@ When recording outcome impacts for events, use the outcome_event_ids listed abov
 PROCESS:
 
 1. COLLECT EVIDENCE:
-   Call evidence_collector to gather relevant articles:
    - collect and store relevant evidence to db using article_collector
    - Time window: {window_start} to {resolution_date} ({actual_window_days} days)
    - Target: {min_evidence_articles}+ high-quality articles across different dates
    - Use article_inspector to verify coverage; if insufficient, broaden search
    {turning_points_evidence_hint}
+   
 MANAGER AGENT: Inspect the evidence/article collection yourself. If insufficient, repeat step 1.
 
 NOTE - if evidence collection constantly fails, there's no way you can build a event graph. You should keep trying until you get enough evidence.
@@ -106,9 +106,8 @@ NOTE - if evidence collection constantly fails, there's no way you can build a e
    - Outcome clearly identified: "This resulted in [OutcomeEventTitle], which is the actual outcome."
    - Impact on each possible outcome: "Impact on Option A: positive - because..."
 
-   Call save_explanation to store it. The GraphBuilderAgent will read this explanation later
-   to build the structured graph.
-"""
+   Call save_explanation to store it. The GraphBuilderAgent will read this explanation later to build the structured graph.
+""" + EVIDENCE_AGENT_DESCRIPTION,
 
 
 class HindsightCausalAnalysisPrompts(BasePromptGenerator[Question]):

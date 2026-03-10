@@ -227,6 +227,7 @@ class PolymarketClient:
         self,
         limit: int = 100,
         closed: bool = False,
+        active: bool = True,
         tag_slugs: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """Fetch events (grouped markets) from Polymarket API.
@@ -235,12 +236,19 @@ class PolymarketClient:
         detection of multi-market questions (e.g. categorical).
         """
         url = f"{self.API_BASE}/events"
+        
+        # We manually construct a list of params to handle duplicate keys like multiple tag_slugs properly if needed,
+        # but aiohttp supports list values natively.
         params = {
             "limit": limit,
             "closed": str(closed).lower(),
+            "active": str(active).lower(),
             "order": "volume24hr",
             "ascending": "false",
         }
+        
+        if tag_slugs:
+            params["tag_slug"] = tag_slugs
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -254,13 +262,17 @@ class PolymarketClient:
                         return []
 
                     payload = await response.json()
+                    events_list = []
                     if isinstance(payload, list):
-                        return payload
+                        events_list = payload
                     elif isinstance(payload, dict):
-                        return (
-                            payload.get("events", []) or payload.get("data", []) or []
-                        )
-                    return []
+                        events_list = payload.get("events", []) or payload.get("data", []) or []
+                    
+                    # Robust local sorting fallback
+                    if events_list:
+                        events_list.sort(key=lambda e: float(e.get("volume24hr", e.get("volume", 0))), reverse=True)
+                        
+                    return events_list
         except Exception as e:
             logger.error(f"Failed to fetch events: {e}")
             return []

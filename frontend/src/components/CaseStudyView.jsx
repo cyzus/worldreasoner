@@ -5,6 +5,7 @@ import { ForecastComparison } from './CaseStudyView/ForecastComparison'
 import { CausalEventsTable } from './CaseStudyView/CausalEventsTable'
 import { InformationStream } from './CaseStudyView/InformationStream'
 import { ForecastGraphModal } from './CaseStudyView/ForecastGraphModal'
+import ReactMarkdown from 'react-markdown'
 import './CaseStudyView.css'
 
 /**
@@ -60,6 +61,16 @@ function CaseStudyView({
         onViewForecastGraph={handleViewForecastGraph}
         loadingGraph={loadingGraph}
       />
+
+      {selectedQuestion?.causal_explanation && (
+        <div className="cs-section">
+          <h3 className="cs-section-title">💡 Causal Explanation</h3>
+          <p className="cs-section-subtitle">Auto-generated explanation of the causal dynamics</p>
+          <div className="cs-impact-details markdown-body" style={{ marginTop: 0 }}>
+            <ReactMarkdown>{selectedQuestion.causal_explanation}</ReactMarkdown>
+          </div>
+        </div>
+      )}
 
       <CausalEventsTable
         events={events}
