@@ -110,7 +110,7 @@ NOTE - if evidence collection constantly fails, there's no way you can build a e
    - Impact on each possible outcome: "Impact on Option A: positive - because..."
 
    Call save_explanation to store it. The GraphBuilderAgent will read this explanation later to build the structured graph.
-""" + EVIDENCE_AGENT_DESCRIPTION
+"""
 
 
 def _format_outcome_events(outcome_events: Optional[List]) -> str:

@@ -68,28 +68,9 @@ class HindsightAgent(BaseAgent):
 
         # Evidence gathering specialist (web search, article collection)
         # Tools get question_id for provenance tracking
-        # evidence_agent = CodeAgent(
-        #     model=llm_model,
-        #     tools=[
-        #         ArticleCollectorTool(
-        #             db_path=db_path, question_id=question_id
-        #         ),  # Provenance-aware
-        #         ArticleInspectorTool(
-        #             db_path=db_path, question_id=question_id
-        #         ),  # Check coverage
-        #         WebFetchTool(),
-        #         WebSearchTool(
-        #             db_path=db_path, question_id=question_id
-        #         ),  # Provenance-aware
-        #     ],
-        #     max_steps=15,
-        #     stream_outputs=False,
-        #     additional_authorized_imports=["json"],  # Allow json imports in code agent
-        #     name="evidence_collector",
-        #     description=EVIDENCE_AGENT_DESCRIPTION,
-        # )
-
-        tools = tools + [
+        evidence_agent = CodeAgent(
+            model=llm_model,
+            tools=[
                 ArticleCollectorTool(
                     db_path=db_path, question_id=question_id
                 ),  # Provenance-aware
@@ -100,6 +81,25 @@ class HindsightAgent(BaseAgent):
                 WebSearchTool(
                     db_path=db_path, question_id=question_id
                 ),  # Provenance-aware
+            ],
+            max_steps=15,
+            stream_outputs=False,
+            additional_authorized_imports=["json"],  # Allow json imports in code agent
+            name="evidence_collector",
+            description=EVIDENCE_AGENT_DESCRIPTION,
+        )
+
+        tools = tools + [
+                ArticleCollectorTool(
+                    db_path=db_path, question_id=question_id
+                ),  # Provenance-aware
+                ArticleInspectorTool(
+                    db_path=db_path, question_id=question_id
+                ),  # Check coverage
+                # WebFetchTool(),
+                # WebSearchTool(
+                #     db_path=db_path, question_id=question_id
+                # ),  # Provenance-aware
                 SaveExplanationTool(db_path=db_path, question_id=question_id),
         ]
 
@@ -108,5 +108,5 @@ class HindsightAgent(BaseAgent):
             tools=tools,
             max_steps=max_steps,
             is_code=is_code,
-            managed_agents=[],
+            managed_agents=[evidence_agent],
         )
