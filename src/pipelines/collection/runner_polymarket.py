@@ -715,6 +715,15 @@ class PolymarketRunner(QuestionSourceRunner):
             total_liquidity = sum(m.get("liquidityNum", 0) or 0 for m in valid_markets)
 
             # Metadata
+            
+            # Extract clob_token_ids for each option
+            clob_token_ids = []
+            for label in options:
+                m = option_map[label]
+                clob_ids_raw = m.get("clobTokenIds", "[]")
+                clob_ids = json.loads(clob_ids_raw) if isinstance(clob_ids_raw, str) else clob_ids_raw
+                if clob_ids:
+                    clob_token_ids.append(clob_ids[0])
 
             mq = MarketQuestion(
                 market_id=f"event_{event.get('id')}",
@@ -736,6 +745,7 @@ class PolymarketRunner(QuestionSourceRunner):
                     "event_id": event.get("id"),
                     "is_aggregated": True,
                     "sub_markets": [m.get("id") for m in valid_markets],
+                    "clob_token_ids": clob_token_ids,
                     "ground_truth": ground_truth,
                     "resolution_reasoning": resolution_reasoning,
                     "tags": event.get("tags", []),

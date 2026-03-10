@@ -74,7 +74,7 @@ const getEventMarkerColor = (event, isTarget) => {
 
 export function drawTimeSeriesChart(svgElement, params) {
     const {
-        priceHistory, events, turningPoints, leadChanges, outcomes,
+        priceHistory, events, turningPoints, leadChanges, outcomes, tokenOutcomes,
         width, height,
         setHoveredEvent, setHoveredEventImpact, setHoveredTurningPoint,
         setHoveredLeadChange, setHoveredPrice
@@ -92,7 +92,7 @@ export function drawTimeSeriesChart(svgElement, params) {
                     timestamp: point.t * 1000,
                     price: point.p,
                     tokenId: tokenId,
-                    outcome: outcomes[idx] || `Outcome ${idx + 1}`
+                    outcome: (tokenOutcomes && tokenOutcomes[tokenId]) ? tokenOutcomes[tokenId] : (outcomes[idx] || `Outcome ${idx + 1}`)
                 })
             })
         }

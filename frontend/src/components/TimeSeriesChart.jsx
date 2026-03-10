@@ -12,6 +12,7 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
   turningPoints = [],
   leadChanges = [],
   outcomes = ['Yes', 'No'],
+  tokenOutcomes = {},
   width = 900,
   height = 400,
   activeInterval = 'max',
@@ -30,12 +31,12 @@ const TimeSeriesChart = memo(function TimeSeriesChart({
     if (!priceHistory || typeof priceHistory !== 'object' || Object.keys(priceHistory).length === 0) return
 
     drawTimeSeriesChart(svgRef.current, {
-      priceHistory, events, turningPoints, leadChanges, outcomes,
+      priceHistory, events, turningPoints, leadChanges, outcomes, tokenOutcomes,
       width, height,
       setHoveredEvent, setHoveredEventImpact, setHoveredTurningPoint,
       setHoveredLeadChange, setHoveredPrice
     })
-  }, [priceHistory, events, turningPoints, leadChanges, outcomes, width, height, isExpanded])
+  }, [priceHistory, events, turningPoints, leadChanges, outcomes, tokenOutcomes, width, height, isExpanded])
 
   // Count events in time range for title
   const eventsInRange = (Array.isArray(events) && events.length > 0) ? events.filter(event => {

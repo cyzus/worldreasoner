@@ -565,6 +565,7 @@ const ForecastPage = ({
                           turningPoints={priceHistoryData.turning_points || []}
                           leadChanges={priceHistoryData.lead_changes || []}
                           outcomes={priceHistoryData.outcomes || ['Yes', 'No']}
+                          tokenOutcomes={priceHistoryData.token_outcomes || {}}
                           activeInterval={priceHistoryInterval}
                           onIntervalChange={handleIntervalChange}
                         />

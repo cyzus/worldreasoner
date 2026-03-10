@@ -987,6 +987,14 @@ async def get_question_price_history(
         options = metadata.get("options", ["Yes", "No"])
         market_id = metadata.get("market_id")
 
+        # Map token IDs explicitly to their options
+        token_outcomes = {}
+        for i, token_id in enumerate(clob_token_ids):
+            if i < len(options):
+                token_outcomes[token_id] = options[i]
+            else:
+                token_outcomes[token_id] = f"Option {i+1}"
+
         logger.info(
             f"Fetched price history for question {question_id}: "
             f"{len(price_history)} tokens, {sum(len(h) for h in price_history.values())} total points"
@@ -998,6 +1006,7 @@ async def get_question_price_history(
             "interval": interval,
             "price_history": price_history,
             "outcomes": options,
+            "token_outcomes": token_outcomes,
         }
 
         # Optionally include turning points analysis
