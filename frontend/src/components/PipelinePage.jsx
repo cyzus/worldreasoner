@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import QuestionList from './QuestionList'
 import PipelineControl from './PipelineControl'
-import PipelineControl from './PipelineControl'
 import { JobSidebar, JobDetails } from './JobManager'
 import { usePipelineJobs } from '../hooks/usePipelineJobs'
 import './PipelinePage.css'
