@@ -481,7 +481,7 @@ def identify_forecast_event(
         )
 
         return tool.forward(
-            title, description, domain, occurred_date, event_type, source_article_ids
+            title, description, occurred_date, domain, event_type, source_article_ids
         ).model_dump()
     except Exception as e:
         logger.error(f"Error identifying forecast event: {e}")
@@ -581,6 +581,14 @@ def submit_forecast(
     This records your prediction about a future event, based only on information
     available before the simulated date.
 
+    Args:
+        ctx: MCP context
+        prediction: Predicted outcome (string, number, or boolean "True"/"False")
+        confidence: Confidence level as a float between 0.0 and 1.0 (e.g., 0.85).
+                   Values > 1.0 will be automatically normalized (divided by 100).
+        reasoning: Detailed explanation of the prediction
+        articles_accessed: List of article IDs used as evidence
+
     Returns:
         JSON string with forecast ID and confirmation
     """
@@ -590,6 +598,12 @@ def submit_forecast(
         question = context_service.get_question_for_context(forecast_context)
 
         logger.info(f"Submitting forecast for question {forecast_context.question_id}")
+
+        # Auto-normalize confidence if agent provided a percentage (0-100) instead of 0-1
+        if confidence > 1.0:
+            original_conf = confidence
+            confidence = confidence / 100.0
+            logger.warning(f"Normalizing confidence from {original_conf} to {confidence}")
 
         # Ensure prediction is a string
         prediction_str = str(prediction)

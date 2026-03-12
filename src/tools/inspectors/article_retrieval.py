@@ -63,7 +63,22 @@ class ArticleRetrievalTool(DatabaseAwareTool, ToolResponseMixin):
         article = self.db.get(Article, article_id)
 
         if not article:
-            return self.not_found_response("Article", article_id, Article)
+            import json
+            error_json = self.not_found_response("Article", article_id, Article)
+            try:
+                error_dict = json.loads(error_json)
+                error_msg = error_dict.get("error", "Not found")
+                avail = ", ".join(error_dict.get("available_items", []))
+                content_msg = f"Error: {error_msg}. Available items: {avail}"
+            except Exception:
+                content_msg = f"Error: {error_json}"
+            return ArticleRetrievalOutput(
+                id="error",
+                title="Error",
+                url="",
+                content=content_msg,
+                word_count=0
+            )
 
         # Return Pydantic output model directly (smolagents passes through as-is)
         return ArticleRetrievalOutput(

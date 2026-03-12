@@ -101,6 +101,9 @@ class HindsightAgent(BaseAgent):
                 #     db_path=db_path, question_id=question_id
                 # ),  # Provenance-aware
                 SaveExplanationTool(db_path=db_path, question_id=question_id),
+                QuestionArticlesTool(
+                    db_path=db_path, question_id=question_id
+                ),
         ]
 
         super().__init__(

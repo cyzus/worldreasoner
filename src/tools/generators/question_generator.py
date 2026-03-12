@@ -206,7 +206,11 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
                 "This is essential for calculating the question's time horizon.\n"
                 "Please regenerate with a valid estimated_start_time (ISO 8601)."
             )
-            return json.dumps({"error": error_msg, "status": "rejected"})
+            return QuestionOutput(
+                id="error",
+                question_text=question_text,
+                status=f"rejected: {error_msg}",
+            )
 
         # CRITICAL VALIDATION: Ground truth questions must have past/present resolution dates
         current_time = datetime.now(timezone.utc)
@@ -217,7 +221,11 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
                 f"This question is about a RESOLVED event - the resolution date must be when the outcome became known (in the past).\n"
                 f"Please regenerate with resolution_date on or before {current_time.date()}."
             )
-            return json.dumps({"error": error_msg, "status": "rejected"})
+            return QuestionOutput(
+                id="error",
+                question_text=question_text,
+                status=f"rejected: {error_msg}",
+            )
 
         # CRITICAL VALIDATION: Ground truth cannot contain future dates
         if self.require_ground_truth and ground_truth:

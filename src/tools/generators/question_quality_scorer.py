@@ -122,7 +122,7 @@ class QuestionQualityScorer(Tool):
             A JSON string containing the quality assessments for each question.
         """
         if not questions:
-            return json.dumps({"assessments": []})
+            return QuestionQualityOutput(scores=[], overall_quality="unknown")
 
         questions_json = self._prepare_question_json(questions)
 
@@ -146,11 +146,9 @@ class QuestionQualityScorer(Tool):
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON from LLM response: {e}")
             logger.debug(f"Raw response: {response_str[:500]}...")
-            return json.dumps(
-                {
-                    "error": "Invalid JSON response from LLM",
-                    "response": response_str[:500],
-                }
+            return QuestionQualityOutput(
+                scores=[{"error": "Invalid JSON response from LLM", "response": response_str[:500]}],
+                overall_quality="error"
             )
 
         # Assuming response_json is a dict

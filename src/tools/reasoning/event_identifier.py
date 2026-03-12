@@ -205,17 +205,19 @@ class EventIdentifierTool(CollectorAwareTool[Event], ToolResponseMixin):
                                 )
 
                 if missing_ids:
-                    return self.error_response(
-                        "The following article IDs do not exist in database",
-                        error="missing_article_ids",
-                        missing_ids=missing_ids,
+                    return EventOutput(
+                        id="error",
+                        title=title,
+                        domain=domain,
+                        status=f"error: missing_article_ids - The following article IDs do not exist in database: {', '.join(missing_ids)}"
                     )
 
                 if invalid_date_articles:
-                    return self.error_response(
-                        "The following articles have dates prior to the event occurring date, meaning they cannot be the source of this event",
-                        error="invalid_article_dates",
-                        invalid_articles=invalid_date_articles,
+                    return EventOutput(
+                        id="error",
+                        title=title,
+                        domain=domain,
+                        status=f"error: invalid_article_dates - The following articles have dates prior to the event occurring date, meaning they cannot be the source of this event: {', '.join(invalid_date_articles)}"
                     )
 
                 # Date proximity check: flag only if ALL source articles are published before the event date

@@ -71,7 +71,14 @@ class EventDetailsTool(DatabaseAwareTool, ToolResponseMixin):
         # Fetch event from database
         event = self.db.get(Event, event_id)
         if not event:
-            return self.not_found_response("Event", event_id, Event)
+            import json
+            error_json = self.not_found_response("Event", event_id, Event)
+            error_dict = json.loads(error_json)
+            return EventDetailsOutput(
+                event={"id": "error", "error": error_dict.get("error", "Not found"), "available_items": error_dict.get("available_items", [])},
+                linked_articles=[],
+                summary=f"Error: {error_dict.get('error', 'Not found')}",
+            )
 
         # Fetch linked articles from database
         linked_articles = []
