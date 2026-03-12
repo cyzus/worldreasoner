@@ -4,7 +4,7 @@ from rich.console import Console
 from src.core.database import GenericDatabase
 from src.domain.models import Question
 from src.pipelines.graph_builder.pipeline import GraphBuilderPipeline
-from src.utils.logging import configure_logging
+from src.utils.logging import setup_logging
 
 app = typer.Typer(help="Manage graph building and auditing.")
 console = Console()
@@ -25,7 +25,8 @@ def build_graphs(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose logging"),
 ):
     """Run the GraphBuilder pipeline on pending questions."""
-    configure_logging(verbose=verbose)
+    level = "DEBUG" if verbose else "INFO"
+    setup_logging(level=level)
 
     pipeline = GraphBuilderPipeline(db_path=db_path, model_id=model_id, temperature=0.2)
 
@@ -77,7 +78,8 @@ def audit_graph(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose logging"),
 ):
     """Run the Graph Audit pipeline on a specific question."""
-    configure_logging(verbose=verbose)
+    level = "DEBUG" if verbose else "INFO"
+    setup_logging(level=level)
     from src.pipelines.graph_builder.audit import GraphAuditPipeline
 
     pipeline = GraphAuditPipeline(db_path=db_path)
