@@ -157,6 +157,21 @@ class ProposeSubgraphTool(Tool, ToolResponseMixin):
                     continue
 
                 event_id = getattr(resp, "id", None)
+                event_status = str(getattr(resp, "status", "")).strip()
+
+                # EventIdentifierTool may return EventOutput(id="error", status="error: ...")
+                # for validation failures. Treat these as failures and do not register aliases.
+                if event_id == "error" or event_status.lower().startswith("error"):
+                    reason = event_status or "Event validation failed"
+                    failed_items.append(
+                        {
+                            "type": "event",
+                            "alias": alias,
+                            "reason": reason,
+                        }
+                    )
+                    continue
+
                 if not event_id:
                     failed_items.append(
                         {
