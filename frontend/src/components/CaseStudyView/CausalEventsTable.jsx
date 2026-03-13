@@ -9,26 +9,32 @@ const formatDate = (dateString) => {
     })
 }
 
+const getOutcomeAlignedImpacts = (impacts, groundTruthScenario) => {
+    if (!impacts || impacts.length === 0) return []
+
+    // Prefer impacts tied to the explicit actual outcome when present.
+    const actualOutcomeImpacts = impacts.filter(imp => imp.outcomeIsActual)
+    if (actualOutcomeImpacts.length > 0) return actualOutcomeImpacts
+
+    // Fallback: align to the scenario resolved by ground truth.
+    if (groundTruthScenario) {
+        const truthAligned = impacts.filter(imp => imp.outcomeScenario === groundTruthScenario)
+        if (truthAligned.length > 0) return truthAligned
+    }
+
+    return impacts
+}
+
 const computeNetDirection = (impacts) => {
     if (!impacts || impacts.length === 0) return null
-    const normalized = impacts
-        .map(imp => {
-            const dir = imp.impact_direction
-            if (!dir || dir === 'neutral') return null
-            const scenario = imp.outcomeScenario || ''
-            const isNegative = scenario === 'negative_resolution' ||
-                (imp.outcomeTitle || '').trim().toLowerCase().startsWith('no ')
 
-            if (isNegative) {
-                if (dir === 'positive') return 'negative'
-                if (dir === 'negative') return 'positive'
-            }
-            return dir
-        })
-        .filter(Boolean)
-    if (normalized.length === 0) return null
-    if (normalized.every(d => d === 'positive')) return 'positive'
-    if (normalized.every(d => d === 'negative')) return 'negative'
+    const directions = impacts
+        .map(imp => imp.impact_direction)
+        .filter(dir => dir && dir !== 'neutral')
+
+    if (directions.length === 0) return null
+    if (directions.every(d => d === 'positive')) return 'positive'
+    if (directions.every(d => d === 'negative')) return 'negative'
     return 'mixed'
 }
 
@@ -119,7 +125,11 @@ export function CausalEventsTable({
                                 const titleStr = title.length > 100 ? title.substring(0, 100) + '...' : title
 
                                 const outcomeImpacts = impacts[event.id] || []
-                                const impactDirection = computeNetDirection(outcomeImpacts) ||
+                                const alignedImpacts = getOutcomeAlignedImpacts(
+                                    outcomeImpacts,
+                                    groundTruthScenario
+                                )
+                                const impactDirection = computeNetDirection(alignedImpacts) ||
                                     event.impact_direction ||
                                     event.properties?.impact_direction
 

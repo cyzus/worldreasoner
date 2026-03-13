@@ -93,6 +93,11 @@ def run(
         "--min-depth",
         help="Minimum graph depth for adaptive pipeline",
     ),
+    skip_indexing: bool = typer.Option(
+        False,
+        "--skip-indexing",
+        help="Skip automatic search indexing after completion",
+    ),
     db_path: str = db_option(),
     sample: Optional[int] = sample_option(),
     seed: Optional[int] = seed_option(),
@@ -226,6 +231,7 @@ def run(
                 adaptive,
                 agent_max_steps,
                 min_graph_depth,
+                skip_indexing,
             )
         )
 
@@ -248,6 +254,7 @@ async def _run_evidence_pipeline_async(
     adaptive: bool = False,
     agent_max_steps: int = 30,
     min_graph_depth: int = SATISFACTION_DEFAULTS.min_graph_depth,
+    skip_indexing: bool = False,
 ):
     """Execute the evidence pipeline on selected questions using PipelineRunner."""
     runner = PipelineRunner(db_path=db_path)
@@ -288,11 +295,13 @@ async def _run_evidence_pipeline_async(
                 {
                     "agent_max_steps": agent_max_steps,
                     "min_graph_depth": min_graph_depth,
+                    "skip_indexing": skip_indexing,
                 }
             )
         else:
             # Standard pipeline parameters
             pipeline_kwargs["force_reprocess"] = force_reprocess
+            pipeline_kwargs["skip_indexing"] = skip_indexing
 
         # Run pipeline with progress callback
         result = await runner.run(

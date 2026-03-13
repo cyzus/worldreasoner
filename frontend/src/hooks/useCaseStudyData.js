@@ -59,6 +59,10 @@ export function useCaseStudyData(selectedQuestion, graphData) {
                     outcomeId,
                     outcomeTitle,
                     outcomeScenario,
+                    outcomeIsActual: Boolean(
+                        outcomeNode?.is_actual_outcome ||
+                        outcomeNode?.properties?.is_actual_outcome
+                    ),
                     impact_direction: imp.impact_direction || imp.properties?.impact_direction,
                     impact_magnitude: imp.impact_magnitude ?? imp.properties?.impact_magnitude ?? imp.weight ?? 0,
                     confidence: imp.confidence ?? imp.properties?.confidence ?? 1.0,

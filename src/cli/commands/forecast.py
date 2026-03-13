@@ -70,6 +70,11 @@ def run(
         "--slot",
         help="Simulated date position within forecast window: early (20%), mid (50%), late (80%)",
     ),
+    skip_indexing: bool = typer.Option(
+        False,
+        "--skip-indexing",
+        help="Skip automatic search indexing after completion",
+    ),
     db_path: str = db_option(),
 ):
     """Run forecast on a question.
@@ -149,6 +154,7 @@ def run(
                 mode,
                 enable_causal_tools,
                 slot,
+                skip_indexing,
             )
         )
 
@@ -171,6 +177,7 @@ async def _run_forecast_async(
     mode: str = "container",
     enable_causal_tools: bool = False,
     slot: str = "mid",
+    skip_indexing: bool = False,
 ):
     """Execute forecast on questions using PipelineRunner."""
     runner = PipelineRunner(db_path=db_path)
@@ -203,6 +210,7 @@ async def _run_forecast_async(
             mode=mode,
             enable_causal_tools=enable_causal_tools,
             slot=slot,
+            skip_indexing=skip_indexing,
         )
 
     return result
