@@ -11,6 +11,7 @@ import json
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch, AsyncMock
+from pydantic import BaseModel
 
 from src.services.forecast_context_service import ForecastContext
 from src.domain.models import Question, Article
@@ -36,6 +37,17 @@ def _get_tool_fn(tool_obj):
         return tool_obj.fn
     # Fallback: if it's already callable (e.g. during testing without FastMCP)
     return tool_obj
+
+
+def _to_data(result):
+    """Normalize tool output to dict for assertions."""
+    if isinstance(result, BaseModel):
+        return result.model_dump(by_alias=True)
+    if isinstance(result, str):
+        return json.loads(result)
+    if isinstance(result, dict):
+        return result
+    raise TypeError(f"Unsupported tool result type: {type(result)}")
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +160,7 @@ class TestGetQuestionTool:
 
         try:
             result = fn(mock_ctx)
-            data = json.loads(result)
+            data = _to_data(result)
 
             assert data["question"]["id"] == "q123"
             assert data["question"]["question_type"] == "binary"
@@ -169,7 +181,7 @@ class TestGetQuestionTool:
         token = _current_context.set(None)
         try:
             result = fn(mock_ctx)
-            data = json.loads(result)
+            data = _to_data(result)
             assert "error" in data
         finally:
             _current_context.reset(token)
@@ -202,7 +214,7 @@ class TestFetchArticleTool:
 
             try:
                 result = fn(mock_ctx, "art_001")
-                data = json.loads(result)
+                data = _to_data(result)
 
                 assert data["id"] == "art_001"
                 assert data["title"] == "Inflation Report Q1 2024"
@@ -233,7 +245,7 @@ class TestFetchArticleTool:
 
             try:
                 result = fn(mock_ctx, "nonexistent")
-                data = json.loads(result)
+                data = _to_data(result)
                 assert "error" in data
             finally:
                 _current_context.reset(token)
@@ -260,7 +272,7 @@ class TestFetchArticleTool:
 
             try:
                 result = fn(mock_ctx, "art_future")
-                data = json.loads(result)
+                data = _to_data(result)
                 assert "error" in data
             finally:
                 _current_context.reset(token)
@@ -301,7 +313,7 @@ class TestTemporalSearchArticlesTool:
 
             try:
                 result = await fn(mock_ctx, "inflation report")
-                data = json.loads(result)
+                data = _to_data(result)
 
                 assert data["count"] == 1
                 assert data["articles"][0]["id"] == "art_001"
@@ -335,7 +347,7 @@ class TestTemporalSearchArticlesTool:
 
             try:
                 result = await fn(mock_ctx, "nonexistent topic")
-                data = json.loads(result)
+                data = _to_data(result)
                 assert data["count"] == 0
                 assert data["articles"] == []
             finally:
@@ -394,7 +406,7 @@ class TestSubmitForecastTool:
                 reasoning="Analysis of economic indicators suggests...",
                 articles_accessed=["art_001", "art_002"],
             )
-            data = json.loads(result)
+            data = _to_data(result)
 
             assert data["forecast_id"] == "forecast_001"
             assert data["prediction"] == 0.75
@@ -444,7 +456,7 @@ class TestSubmitForecastTool:
                 reasoning="Bad prediction",
                 articles_accessed=[],
             )
-            data = json.loads(result)
+            data = _to_data(result)
             assert "error" in data
             assert "between 0 and 1" in data["error"]
         finally:
