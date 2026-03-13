@@ -52,7 +52,7 @@ _PROCESS = """
 1. Call get_question_articles to get the list of articles with their aliases
    (e.g. A1:BBCSanctions, A2:ReutersOil). These aliases map to real article IDs.
 2. Read the explanation carefully. Identify ALL events — root causes, intermediate
-   causes, and the final outcome. You need at least {{min_events}} events total.
+   causes, and the final outcome. You need at least {min_events} events total.
    Match article IDs in the explanation (e.g. [art_tech_20240101_001_abc]) to the
    aliases from step 1. Call article_retrieval for any article you need to read in full.
 3. Build a structured JSON payload for propose_subgraph:
@@ -61,7 +61,7 @@ _PROCESS = """
    - Every event MUST have at least one source article alias.
    - Define ALL causal edges using aliases as "source" and "target".
      Each edge needs relation, strength (0-1), confidence (0-1), reasoning.
-   - The deepest chain must end at the ACTUAL OUTCOME EVENT ID: {{actual_outcome_event_id}}
+   - The deepest chain must end at the ACTUAL OUTCOME EVENT ID: {actual_outcome_event_id}
 4. Call propose_subgraph with the full JSON. Review the result.
    - If events failed, fix and retry those specific events using event_identifier.
    - If edges failed (chronology/cycle), adjust dates or edge direction and retry
@@ -70,16 +70,31 @@ _PROCESS = """
    - If you created an event with wrong data, use delete_event to remove it and recreate correctly.
    - If you created a bad causal edge, use delete_hypothesis to remove it and retry.
    - Repeat until the graph is complete. Multiple propose_subgraph calls are fine.
-5. Call graph_inspector to check depth and event count. If max_depth < {{min_graph_depth}}
-   or total events < {{min_events}}:
+5. Call graph_inspector to check depth and event count. If max_depth < {min_graph_depth}
+   or total events < {min_events}:
    - Add more intermediate cause events between existing nodes.
    - Extract sub-causes from the explanation that haven't been modelled yet.
    - Keep building until BOTH thresholds are met.
    - If max_depth is 0, the outcome event is disconnected — add the final causal link.
-6. For each significant event, call record_outcome_impact for BOTH outcome options.
+6. For each significant event, call record_outcome_impact for BOTH outcome events (YES and NO).
+   The graph_inspector output lists all outcome events with their IDs — use those IDs.
+   - direction is RELATIVE to the specific outcome being evaluated:
+     * positive = this event catalyzes / makes THIS outcome MORE likely to happen
+     * negative = this event hinders / makes THIS outcome LESS likely to happen
+   - Complementary rule: opposite outcomes must have opposite directions.
+     If event E is positive for the YES outcome → it must be negative for the NO outcome.
+     If event E is negative for the YES outcome → it must be positive for the NO outcome.
+   - Example: "OPEC cuts oil supply" → positive for "Oil price exceeds $100" (YES),
+     negative for "Oil price stays below $100" (NO).
+   - IMPORTANT: This is a COMPREHENSIVE causal analysis, not a post-hoc rationalization.
+     Even though the actual outcome is known ({ground_truth}), real-world events include
+     both factors that pushed TOWARD the outcome and factors that pushed AGAINST it.
+     Record both catalysts and obstacles honestly — do not force every event to align
+     with the known outcome. A factor that hindered the actual outcome is still valuable
+     and should be recorded as negative for the actual outcome event.
 7. Call graph_inspector one final time to confirm:
-   - Max Depth >= {{min_graph_depth}}
-   - Total events >= {{min_events}}
+   - Max Depth >= {min_graph_depth}
+   - Total events >= {min_events}
    - Actual outcome event is NOT an orphan
 8. Call mark_graph_built(success=True) only when both thresholds are confirmed.
    If you cannot reach the thresholds after exhausting the explanation, call
@@ -90,17 +105,17 @@ _GRAPH_BUILDER_TEMPLATE = (
     _ROLE
     + """
 # Context
-- **Question:** {{question_text}}
-- **Resolution date:** {{resolution_date}}
-- **Actual outcome:** {{ground_truth}}
-- **Actual outcome event ID:** {{actual_outcome_event_id}}
+- **Question:** {question_text}
+- **Resolution date:** {resolution_date}
+- **Actual outcome:** {ground_truth}
+- **Actual outcome event ID:** {actual_outcome_event_id}
 
 # Causal Explanation
-{{causal_explanation}}
+{causal_explanation}
 
 # Goal
-Build a DEEP causal graph with at least {{min_graph_depth}} levels of depth and
-at least {{min_events}} events. Every significant event mentioned in the explanation
+Build a DEEP causal graph with at least {min_graph_depth} levels of depth and
+at least {min_events} events. Every significant event mentioned in the explanation
 must become a node. Shallow or sparse graphs are unacceptable — keep adding
 intermediate cause events until both thresholds are met.
 """

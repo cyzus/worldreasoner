@@ -34,7 +34,15 @@ class RecordOutcomeImpactTool(Tool, ToolResponseMixin):
         },
         "direction": {
             "type": "string",
-            "description": "positive (makes outcome more likely), negative (less likely), or neutral",
+            "description": (
+                "How this event affects THIS specific outcome: "
+                "positive = event catalyzes / makes this outcome MORE likely to occur; "
+                "negative = event hinders / makes this outcome LESS likely to occur; "
+                "neutral = no clear directional effect. "
+                "Direction is relative to the outcome being evaluated — "
+                "for complementary outcomes (YES vs NO), directions should be opposite "
+                "(e.g. positive for YES → negative for NO)."
+            ),
             "enum": ["positive", "negative", "neutral"],
         },
         "magnitude": {
