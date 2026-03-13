@@ -31,6 +31,23 @@ class ProposeSubgraphTool(Tool, ToolResponseMixin):
     output_type = "object"
     output_schema = pydantic_to_output_schema(SubgraphOutput)
 
+    @staticmethod
+    def _clean_edge_error(reason: str) -> str:
+        """Normalize internal tool errors into concise user-facing messages."""
+        if not reason:
+            return "Unknown validation error"
+
+        cleaned = " ".join(str(reason).split())
+        lowered = cleaned.lower()
+
+        if lowered.startswith("chronology violation"):
+            return cleaned.replace(
+                "Chronology violation:",
+                "Invalid chronology:",
+                1,
+            )
+        return cleaned
+
     def __init__(
         self,
         event_identifier_tool,
@@ -174,6 +191,22 @@ class ProposeSubgraphTool(Tool, ToolResponseMixin):
             source_id = self.alias_registry.resolve(source_alias) or source_alias
             target_id = self.alias_registry.resolve(target_alias) or target_alias
 
+            # Alias resolver can carry unresolved values as "error".
+            if source_id == "error" or target_id == "error":
+                unresolved = source_alias if source_id == "error" else target_alias
+                failed_items.append(
+                    {
+                        "type": "edge",
+                        "source": source_alias,
+                        "target": target_alias,
+                        "reason": (
+                            f"Unresolved event alias '{unresolved}'. "
+                            "Create that event first, then retry this edge."
+                        ),
+                    }
+                )
+                continue
+
             try:
                 # Call CausalReasonerTool
                 resp = self.reasoner_tool.forward(
@@ -193,7 +226,14 @@ class ProposeSubgraphTool(Tool, ToolResponseMixin):
                         reason = err.get("message") or err.get("error") or resp
                     except Exception:
                         reason = resp
-                    failed_items.append({"type": "edge", "source": source_alias, "target": target_alias, "reason": reason})
+                    failed_items.append(
+                        {
+                            "type": "edge",
+                            "source": source_alias,
+                            "target": target_alias,
+                            "reason": self._clean_edge_error(reason),
+                        }
+                    )
                 elif getattr(resp, "status", "error") == "error":
                     error_msg = getattr(resp, "error", "Unknown validation error")
                     failed_items.append(
@@ -201,7 +241,7 @@ class ProposeSubgraphTool(Tool, ToolResponseMixin):
                             "type": "edge",
                             "source": source_alias,
                             "target": target_alias,
-                            "reason": error_msg,
+                            "reason": self._clean_edge_error(error_msg),
                         }
                     )
                 else:

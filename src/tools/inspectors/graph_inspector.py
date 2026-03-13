@@ -3,6 +3,7 @@
 from typing import Optional, Dict, List, Set
 from collections import defaultdict
 
+from src.config.pipeline import SATISFACTION_DEFAULTS
 from src.tools.base.database_mixin import DatabaseAwareTool
 from src.domain.models import CausalHypothesis, Event
 from src.analysis.graph_visualization import GraphVisualizer
@@ -22,14 +23,11 @@ from src.tools.inspectors.formatting import (
 class GraphInspectorTool(DatabaseAwareTool):
     """Inspect causal graph structure to evaluate depth and quality.
 
-    This tool helps the agent:
-    1. Measure causal chain depth (longest path)
-    2. Count events and hypotheses
-    3. Evaluate graph quality
-    4. Identify gaps to fill for deeper explanations
+    Computes a quality score (0–1) weighted: depth 40%, confidence 30%,
+    strength 20%, evidence 10%. Depth saturates at min_required_depth (default 3).
+    Also analyses temporal distribution of events within the evidence window.
 
-    Use this tool to check if your causal explanation is deep enough,
-    then iterate to add more depth if needed.
+    See docs/inspectors.md for full scoring criteria and thresholds.
     """
 
     name = "graph_inspector"
@@ -43,7 +41,7 @@ class GraphInspectorTool(DatabaseAwareTool):
     - Evidence support for each hypothesis
     - Quality metrics and recommendations
 
-    If max_depth < 2, your graph is TOO SHALLOW - you need to:
+    If max_depth < min_required_depth (see EvidenceSatisfactionConfig.min_graph_depth), your graph is TOO SHALLOW - you need to:
     1. Pick the most important immediate causes
     2. Ask "What caused THIS?" for each
     3. Create intermediate events using event_identifier
@@ -199,7 +197,10 @@ class GraphInspectorTool(DatabaseAwareTool):
     def _get_recommendation(self, stats: Dict) -> str:
         """Generate recommendation based on graph statistics."""
         return GraphVisualizer.get_recommendation(
-            stats["max_depth"], stats["quality_score"]
+            stats["max_depth"],
+            stats["quality_score"],
+            min_depth=SATISFACTION_DEFAULTS.min_graph_depth,
+            min_quality=SATISFACTION_DEFAULTS.min_confidence,
         )
 
     def _format_empty_graph(self) -> str:
@@ -601,6 +602,15 @@ RECOMMENDATION:
         graph_recommendation = self._get_recommendation(stats)
         builder.add_kv("Graph", graph_recommendation, indent=2)
 
+        if stats["event_count"] < SATISFACTION_DEFAULTS.min_graph_events:
+            missing = SATISFACTION_DEFAULTS.min_graph_events - stats["event_count"]
+            builder.add_kv(
+                "Events",
+                f"Only {stats['event_count']}/{SATISFACTION_DEFAULTS.min_graph_events} events. "
+                f"Identify {missing} more intermediate events to reach the minimum.",
+                indent=2,
+            )
+
         if temporal_data and temporal_quality:
             temporal_recommendation = get_event_temporal_recommendation(
                 temporal_quality,
@@ -609,6 +619,20 @@ RECOMMENDATION:
                 question.estimated_start_time if question else None,
             )
             builder.add_kv("Temporal", temporal_recommendation, indent=2)
+
+        if outcome_impacts:
+            coverage = outcome_impacts.get("coverage", {})
+            total = coverage.get("total_non_outcome_events", 0)
+            covered = coverage.get("events_with_impacts", 0)
+            if total > 0:
+                pct = covered / total
+                if pct < 1.0:
+                    missing_count = total - covered
+                    impact_rec = (
+                        f"Impact coverage {covered}/{total} ({pct:.0%}). "
+                        f"Call record_outcome_impact for the {missing_count} missing event(s)."
+                    )
+                    builder.add_kv("Impact", impact_rec, indent=2)
 
         builder.add_line()
 

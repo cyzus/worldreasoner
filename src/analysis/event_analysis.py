@@ -233,8 +233,13 @@ def calculate_event_temporal_quality(
     # otherwise fall back to event span (earliest to latest)
     timeline_span = timeline_data.get("expected_span_days", timeline_data["span_days"])
 
-    # Gap severity penalty
+    # Gap severity penalty — attenuated when events span most of the window.
+    # If span_coverage >= 80%, interior gaps matter less: severity scales down
+    # linearly so that full span coverage reduces it by up to 40%.
     gap_severity = calculate_event_gap_severity(gaps, timeline_span)
+    if timeline_span > 0 and gap_severity > 0:
+        span_coverage = min(timeline_data["span_days"] / timeline_span, 1.0)
+        gap_severity *= max(1.0 - span_coverage * 0.4, 0.6)
 
     # Early coverage gap penalty
     early_gap_penalty = 0.0

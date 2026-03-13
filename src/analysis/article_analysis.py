@@ -120,21 +120,22 @@ def identify_gaps(timeline_data: Dict, min_gap_days: int = 7) -> List[Dict]:
     return gaps
 
 
-def calculate_volume_score(article_count: int) -> float:
+def calculate_volume_score(article_count: int, min_articles: int = 20) -> float:
     """Calculate quality score based on article count.
 
     Args:
         article_count: Number of articles
+        min_articles: Target minimum article count (from EvidenceSatisfactionConfig)
 
     Returns:
-        Volume score (0-1), where 5-10 articles is optimal
+        Volume score (0-1), saturating at min_articles
     """
-    if article_count >= 10:
+    if article_count >= min_articles:
         return 1.0
-    elif article_count >= 5:
-        return 0.5 + (article_count - 5) * 0.1
-    else:
-        return article_count * 0.1
+    half = min_articles // 2
+    if article_count >= half:
+        return 0.5 + (article_count - half) * (0.5 / half)
+    return article_count * (0.5 / half)
 
 
 def calculate_diversity_score(unique_sources: int) -> float:
@@ -262,6 +263,7 @@ def calculate_quality(
     source_data: Dict,
     gaps: List[Dict],
     coverage_start: datetime = None,
+    min_articles: int = 20,
 ) -> Dict:
     """Calculate overall coverage quality score.
 
@@ -284,8 +286,8 @@ def calculate_quality(
         - distribution_score: Score based on temporal distribution evenness (0-1)
         - gap_severity: Total gap severity penalty (0-1)
     """
-    # Volume score (5-10 articles = optimal)
-    volume_score = calculate_volume_score(len(articles))
+    # Volume score — saturates at min_articles
+    volume_score = calculate_volume_score(len(articles), min_articles=min_articles)
 
     # Improved diversity score (stricter penalties for 1-3 sources)
     diversity_score = calculate_diversity_score(source_data["unique_sources"])
@@ -301,6 +303,13 @@ def calculate_quality(
         # Gap severity penalty (considers both absolute and relative gap sizes)
         # Now calculated relative to the EXPECTED coverage window, not just article span
         gap_severity = calculate_gap_severity(gaps, timeline_span)
+
+        # Attenuate gap severity when articles span most of the expected window.
+        # Full span coverage reduces severity by up to 40%; floor of 0.6 ensures
+        # gaps are never fully ignored.
+        if timeline_span > 0 and gap_severity > 0:
+            span_coverage = min(timeline_data["span_days"] / timeline_span, 1.0)
+            gap_severity *= max(1.0 - span_coverage * 0.4, 0.6)
 
         # Early coverage gap penalty
         early_gap_penalty = 0.0
@@ -335,7 +344,11 @@ def calculate_quality(
 
 
 def get_recommendation(
-    quality: Dict, gaps: List[Dict], source_data: Dict, timeline_data: Dict
+    quality: Dict,
+    gaps: List[Dict],
+    source_data: Dict,
+    timeline_data: Dict,
+    min_articles: int = 20,
 ) -> str:
     """Generate actionable recommendation based on coverage analysis.
 
@@ -354,7 +367,7 @@ def get_recommendation(
     issues = []
 
     if quality["volume_score"] < 0.5:
-        issues.append("Need more articles (aim for 5-10)")
+        issues.append(f"Need more articles (aim for {min_articles})")
 
     if quality["diversity_score"] < 0.6:
         issues.append(

@@ -27,12 +27,31 @@ def _pydantic_aware_default(self, obj):
 json.JSONEncoder.default = _pydantic_aware_default
 
 
+class OutputModelBase(BaseModel):
+    """Base model for tool outputs with dict-like compatibility helpers."""
+
+    def __getitem__(self, key: str) -> Any:
+        return getattr(self, key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return getattr(self, key, default)
+
+    def keys(self):
+        return self.model_dump().keys()
+
+    def items(self):
+        return self.model_dump().items()
+
+    def values(self):
+        return self.model_dump().values()
+
+
 # =============================================================================
 # Article Tools
 # =============================================================================
 
 
-class ArticleOutput(BaseModel):
+class ArticleOutput(OutputModelBase):
     """Output model for ArticleCollectorTool."""
 
     id: str = Field(description="Article ID")
@@ -46,7 +65,7 @@ class ArticleOutput(BaseModel):
     )
 
 
-class ArticleRetrievalOutput(BaseModel):
+class ArticleRetrievalOutput(OutputModelBase):
     """Output model for ArticleRetrievalTool."""
 
     id: str = Field(description="Article ID")
@@ -58,7 +77,7 @@ class ArticleRetrievalOutput(BaseModel):
     word_count: Optional[int] = Field(default=None, description="Word count")
 
 
-class ArticleListItem(BaseModel):
+class ArticleListItem(OutputModelBase):
     """Single article in a list response."""
 
     id: str = Field(description="Article ID")
@@ -72,7 +91,7 @@ class ArticleListItem(BaseModel):
     word_count: Optional[int] = Field(default=None, description="Word count")
 
 
-class QuestionArticlesOutput(BaseModel):
+class QuestionArticlesOutput(OutputModelBase):
     """Output model for QuestionArticlesTool."""
 
     articles: List[ArticleListItem] = Field(description="List of articles")
@@ -86,7 +105,7 @@ class QuestionArticlesOutput(BaseModel):
 # =============================================================================
 
 
-class EventOutput(BaseModel):
+class EventOutput(OutputModelBase):
     """Output model for EventIdentifierTool."""
 
     id: str = Field(description="Event ID")
@@ -110,8 +129,7 @@ class EventOutput(BaseModel):
         description="ID of the actual ground-truth outcome event (if known/available)",
     )
 
-
-class EventDetailsOutput(BaseModel):
+class EventDetailsOutput(OutputModelBase):
     """Output model for EventDetailsTool."""
 
     event: Dict[str, Any] = Field(description="Full event details dictionary")
@@ -121,7 +139,7 @@ class EventDetailsOutput(BaseModel):
     summary: str = Field(description="Brief summary of event and articles")
 
 
-class OutcomeEventItem(BaseModel):
+class OutcomeEventItem(OutputModelBase):
     """Single outcome event in list response."""
 
     id: str = Field(description="Event ID")
@@ -136,7 +154,7 @@ class OutcomeEventItem(BaseModel):
     )
 
 
-class RegularEventItem(BaseModel):
+class RegularEventItem(OutputModelBase):
     """Single regular event in list response."""
 
     id: str = Field(description="Event ID")
@@ -145,7 +163,7 @@ class RegularEventItem(BaseModel):
     predicted_date: Optional[str] = Field(default=None, description="When predicted")
 
 
-class QuestionEventsOutput(BaseModel):
+class QuestionEventsOutput(OutputModelBase):
     """Output model for QuestionEventsTool."""
 
     outcome_events: List[OutcomeEventItem] = Field(description="Outcome events list")
@@ -153,7 +171,7 @@ class QuestionEventsOutput(BaseModel):
     total: int = Field(description="Total events count")
 
 
-class OutcomeImpactOutput(BaseModel):
+class OutcomeImpactOutput(OutputModelBase):
     """Output model for RecordOutcomeImpactTool."""
 
     status: str = Field(description="Operation status (recorded/error)")
@@ -168,7 +186,7 @@ class OutcomeImpactOutput(BaseModel):
 # =============================================================================
 
 
-class HypothesisOutput(BaseModel):
+class HypothesisOutput(OutputModelBase):
     """Output model for CausalReasonerTool."""
 
     status: str = Field(description="Operation status (created/updated/error)")
@@ -190,8 +208,7 @@ class HypothesisOutput(BaseModel):
         default=None, description="Error message if status is error"
     )
 
-
-class ForecastHypothesisOutput(BaseModel):
+class ForecastHypothesisOutput(OutputModelBase):
     """Output model for ForecastCausalReasonerTool."""
 
     status: str = Field(description="Operation status (created)")
@@ -206,15 +223,22 @@ class ForecastHypothesisOutput(BaseModel):
 # =============================================================================
 
 
-class SaveExplanationOutput(BaseModel):
+class SaveExplanationOutput(OutputModelBase):
     """Output model for SaveExplanationTool."""
 
     status: str = Field(description="Operation status")
     question_id: str = Field(description="ID of the question")
     message: str = Field(description="Status message")
+    article_references_found: int = Field(
+        default=0, description="Number of article ID references detected in the explanation"
+    )
+    warnings: Optional[List[str]] = Field(
+        default=None,
+        description="Validation warnings — explanation was saved but may be weak. Address these before finishing.",
+    )
 
 
-class SubgraphOutput(BaseModel):
+class SubgraphOutput(OutputModelBase):
     """Output model for ProposeSubgraphTool."""
 
     status: str = Field(description="Operation status")
@@ -235,7 +259,7 @@ class SubgraphOutput(BaseModel):
 # =============================================================================
 
 
-class ForecastEventOutput(BaseModel):
+class ForecastEventOutput(OutputModelBase):
     """Output model for ForecastEventIdentifierTool."""
 
     status: str = Field(description="Operation status (created/reused)")
@@ -247,7 +271,7 @@ class ForecastEventOutput(BaseModel):
 # =============================================================================
 
 
-class QuestionOutput(BaseModel):
+class QuestionOutput(OutputModelBase):
     """Output model for QuestionGeneratorTool."""
 
     id: str = Field(description="Question ID")
@@ -255,14 +279,14 @@ class QuestionOutput(BaseModel):
     status: str = Field(description="Question status")
 
 
-class QualityScore(BaseModel):
+class QualityScore(OutputModelBase):
     """Quality score details."""
 
     score: float = Field(description="Score value 0.0-1.0")
     feedback: str = Field(description="Feedback message")
 
 
-class QuestionQualityOutput(BaseModel):
+class QuestionQualityOutput(OutputModelBase):
     """Output model for QuestionQualityScorerTool."""
 
     scores: List[Dict[str, Any]] = Field(
@@ -276,7 +300,7 @@ class QuestionQualityOutput(BaseModel):
 # =============================================================================
 
 
-class WebFetchOutput(BaseModel):
+class WebFetchOutput(OutputModelBase):
     """Output model for WebFetchTool."""
 
     url: str = Field(description="Fetched URL")
@@ -290,7 +314,7 @@ class WebFetchOutput(BaseModel):
     error: Optional[str] = Field(default=None, description="Error message")
 
 
-class RssFeedItem(BaseModel):
+class RssFeedItem(OutputModelBase):
     """Single item from RSS feed."""
 
     title: str = Field(description="Item title")
@@ -299,7 +323,7 @@ class RssFeedItem(BaseModel):
     summary: str = Field(description="Item summary/content")
 
 
-class RssFetchOutput(BaseModel):
+class RssFetchOutput(OutputModelBase):
     """Output model for RssFetchTool."""
 
     feed_url: str = Field(description="Feed URL")

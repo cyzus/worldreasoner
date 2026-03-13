@@ -157,7 +157,10 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
                     relation=f"{source_event_id} causes {target_event_id}",
                     strength=0.0,
                     confidence=0.0,
-                    error=f"target_event_id '{target_event_id}' not found. Create it first with event_identifier.",
+                    error=(
+                        f"Target event '{target_event_id}' was not found. "
+                        "Create the event first with event_identifier."
+                    ),
                 )
 
         # Validate and parse relation type
@@ -198,7 +201,10 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
                 relation=f"{source_event_id} causes {target_event_id}",
                 strength=0.0,
                 confidence=0.0,
-                error=f"Chronology violation: source event occurred {source_date}, target event occurred {target_date}. Cause must precede effect.",
+                error=(
+                    "Invalid chronology: cause must happen before effect "
+                    f"(source={source_date}, target={target_date})."
+                ),
             )
 
         # Validate DAG

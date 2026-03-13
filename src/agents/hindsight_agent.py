@@ -6,6 +6,7 @@ from smolagents import CodeAgent, LiteLLMModel
 from src.tools import (
     # Evidence
     ArticleCollectorTool,
+    ArticleRetrievalTool,
     WebFetchTool,
     WebSearchTool,
     # Inspector
@@ -96,6 +97,7 @@ class HindsightAgent(BaseAgent):
                 ArticleInspectorTool(
                     db_path=db_path, question_id=question_id
                 ),  # Check coverage
+                ArticleRetrievalTool(db_path=db_path),  # Read full article content
                 # WebFetchTool(),
                 # WebSearchTool(
                 #     db_path=db_path, question_id=question_id

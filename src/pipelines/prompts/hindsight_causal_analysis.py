@@ -7,10 +7,17 @@ from src.domain.models import Question
 from .base import format_datetime
 
 
-EVIDENCE_AGENT_DESCRIPTION = """
-Specialist agent for collecting evidence articles.
+# ---------------------------------------------------------------------------
+# Evidence agent
+# ---------------------------------------------------------------------------
 
-Guidelines:
+_EVIDENCE_ROLE = """
+# Role
+Specialist agent for collecting evidence articles.
+"""
+
+_EVIDENCE_GUIDELINES = """
+# Guidelines
 - Be multifaceted - look for causes supporting ground truth AND alternative outcome paths
 - Work backwards from resolution date
 - Prioritize high-quality sources and diverse perspectives
@@ -20,98 +27,95 @@ Guidelines:
 - Fill any gaps by collecting more articles from those periods
 """
 
-GRAPH_AGENT_DESCRIPTION = """
-Specialist agent for building deep event graphs and analyzing outcome impacts.
+EVIDENCE_AGENT_DESCRIPTION = _EVIDENCE_ROLE + _EVIDENCE_GUIDELINES
 
-Guidelines:
-- Call get_question_articles FIRST to get article aliases (e.g. A1:BBCSanctions, A2:ReutersOil)
-- Use these short aliases instead of full article IDs in source_article_ids and evidence_article_ids
-- Call get_question_events to see existing events and OUTCOME events (look for is_actual_outcome=True in the list)
-- When you use event_identifier, its response will now include actual_outcome_event_id. Use this ID for your final causal links.
-- If outcomes are provided, use EventDetailsTool to understand them
-- Create outcome event(s) (outcome from ground truth) using event_identifier with is_outcome=True if not provided
-- Create events with source_article_ids using aliases (remember to check the tool output like event ids to see status)
-- Identify relationships between events
 
-⚠️ DATE ACCURACY (CRITICAL):
-- NEVER guess or infer event dates. Extract the EXACT date from the article text.
-- Look for explicit date mentions in the article (e.g., "on January 15", "last Tuesday", "March 2024").
-- The occurred_date MUST be derived from what the article says, NOT from the article's published_date.
-- If the article doesn't mention a specific date for the event, use the article's published_date as a conservative estimate and note uncertainty.
-- Check the YEAR carefully - articles from 2025 should not produce events dated 2024 unless the article explicitly references a past event.
-- After creating each event, CHECK THE TOOL OUTPUT for warnings. If you see DATE ACCURACY WARNINGs, re-examine the source article and correct the date.
+# ---------------------------------------------------------------------------
+# Manager agent
+# ---------------------------------------------------------------------------
 
-EVENT VERIFICATION:
-- Each event MUST be directly supported by at least one source article.
-- Do NOT create events that are your own inferences or extrapolations - only events explicitly described in articles.
-- If an article discusses a general trend without a specific event, DO NOT fabricate a discrete event from it.
-- Re-read the relevant article passage before setting the occurred_date.
-
-CRITICAL - CONNECTING TO OUTCOME:
-- After building intermediate event chains, you MUST use causal_reasoner to create the FINAL LINK
-- The final link connects your last intermediate event(s) to the OUTCOME EVENT
-- Example: If you have "Negative Reviews" → "Critics Snub", you need one more link: "Critics Snub" → [OUTCOME EVENT]
-- Without this final link, the graph will show Max Depth: 0 and appear disconnected!
-- Use the outcome_event_id matching the ground truth (e.g., "Yes" or "No" scenario)
-
-OUTCOME IMPACT ANALYSIS:
-- For each significant event, assess its impact on BOTH outcomes (Yes/No or all MCQ options)
-- Use the record_outcome_impact tool to record impacts (do NOT use the deprecated outcome_impacts parameter on event_identifier):
-  - Call record_outcome_impact for EACH outcome the event impacts
-  - direction: "positive" (increases likelihood) or "negative" (decreases likelihood)
-  - magnitude: 0.0-1.0 (0.5=moderate, 0.7+=strong, 1.0=decisive)
-  - confidence: 0.0-1.0 (your certainty in this assessment)
-  - reasoning: Explain WHY and HOW this event impacts the outcome
-- Consider: An event making one outcome more likely often makes the opposite less likely
-- Focus on events with magnitude >= 0.5 (significant impacts)
-
-FINAL VERIFICATION:
-- Use graph_inspector to check the quality, depth, and outcome impacts
-- If Max Depth is 0, you have NOT connected to the outcome - go back and add the final link!
-- If you made a mistake (created an event with wrong dates or created a circular link), use delete_event or delete_hypothesis to prune the bad data.
+_MANAGER_ROLE = """
+Your task: make a comprehensive causal analysis for this question with hindsight.
+The question has already been resolved with a known ground truth.
 """
 
-MANAGER_AGENT_DESCRIPTION = """Your task: Make a comprehensive event analysis for this question with hindsight.
+_MANAGER_CONTEXT = """
+# Context
+- **Question:** {question_text}
+- **Resolution date:** {resolution_date}
+- **Ground truth (known outcome):** {ground_truth}
 
-NOTE: the question has already been resolved on {resolution_date} with known ground truth.
-
-QUESTION: {question_text}
-RESOLUTION DATE: {resolution_date}
-GROUND TRUTH (the KNOWN outcome): {ground_truth}
-
-AVAILABLE OUTCOME EVENTS (pre-created for this question):
+# Outcome Events
 {outcome_events_info}
 {market_turning_points_section}
-When recording outcome impacts for events, use the outcome_event_ids listed above.
-
-PROCESS:
-
-1. COLLECT EVIDENCE:
-   - collect and store relevant evidence to db using article_collector
-   - Time window: {window_start} to {resolution_date} ({actual_window_days} days)
-   - Target: {min_evidence_articles}+ high-quality articles across different dates
-   - Use article_inspector to verify coverage; if insufficient, broaden search
-   {turning_points_evidence_hint}
-
-MANAGER AGENT: Inspect the evidence/article collection yourself. If insufficient, repeat step 1.
-
-NOTE - if evidence collection constantly fails, there's no way you can build a event graph. You should keep trying until you get enough evidence.
-
-2. WRITE CAUSAL EXPLANATION:
-   First, call get_question_articles to get the list of collected articles with their EXACT IDs.
-
-   With hindsight (ground truth: {ground_truth}), write a detailed NL explanation
-   of HOW the outcome came about based on your collected evidence.
-   Follow the explanation format exactly:
-   - For each significant event: "Event Title occurred on YYYY-MM-DD [art_tech_20240101_001_abc]. Description..."
-   - Use EXACT article IDs from get_question_articles. Do NOT invent shorthand IDs like [art1] or [a1].
-   - Explicit causal language between events (e.g. "This caused/triggered [Next Event]")
-   - Outcome clearly identified: "This resulted in [OutcomeEventTitle], which is the actual outcome."
-   - Impact on each possible outcome: "Impact on Option A: positive - because..."
-
-   Call save_explanation to store it. The GraphBuilderAgent will read this explanation later to build the structured graph.
 """
 
+_MANAGER_COLLECT_EVIDENCE = """
+# Step 1 — Collect Evidence
+- Delegate to `evidence_collector` to gather and store relevant articles
+- Time window: {window_start} to {resolution_date} ({actual_window_days} days)
+- Target: {min_evidence_articles}+ high-quality articles spread across different dates
+- After collection, inspect the results yourself with article_inspector
+- If coverage is insufficient, repeat — without enough evidence there is no causal graph
+{turning_points_evidence_hint}
+"""
+
+_MANAGER_WRITE_EXPLANATION = """
+# Step 2 — Write Causal Explanation
+1. Call get_question_articles to get the collected articles and their exact IDs
+2. Use article_retrieval to read full content of key articles before writing
+
+Write a rich, natural language narrative explaining **how and why** the outcome came about:
+- Describe each significant event in plain prose, including approximate dates
+- Cite sources inline using exact article IDs (e.g. "According to [art_tech_20240101_001_abc], ...")
+- Make causal connections explicit ("This caused...", "As a result...", "Which triggered...")
+- Trace the chain from root causes through intermediate events to the final outcome
+- Keep it readable — the graph builder will extract structure from your narrative
+
+Call save_explanation to store it. If it returns warnings, address them and save again before finishing.
+"""
+
+_MANAGER_TEMPLATE = (
+    _MANAGER_ROLE
+    + _MANAGER_CONTEXT
+    + _MANAGER_COLLECT_EVIDENCE
+    + _MANAGER_WRITE_EXPLANATION
+)
+
+# Public alias used by HindsightAgent (imports this name)
+MANAGER_AGENT_DESCRIPTION = _MANAGER_TEMPLATE
+
+
+# ---------------------------------------------------------------------------
+# Market signal templates
+# ---------------------------------------------------------------------------
+
+_LEAD_CHANGES_SECTION = """
+## Lead Changes (market prediction flipped)
+These are moments when the favored outcome changed — critical events to investigate:
+{items}
+"""
+
+_TURNING_POINTS_SECTION = """
+## Turning Points (significant price reversals)
+Moments when market sentiment shifted significantly:
+{items}
+"""
+
+_CRITICAL_DATES_HINT = (
+    "- **Critical dates** (lead changes — prediction flipped): {dates}\n"
+    "  Find what news caused the market to flip its prediction on these dates."
+)
+
+_PRIORITY_DATES_HINT = (
+    "- **Priority dates** (turning points): {dates}\n"
+    "  Search for news around these dates — they mark significant sentiment shifts."
+)
+
+
+# ---------------------------------------------------------------------------
+# Formatting helpers
+# ---------------------------------------------------------------------------
 
 def _format_outcome_events(outcome_events: Optional[List]) -> str:
     if not outcome_events:
@@ -124,51 +128,45 @@ def _format_outcome_events(outcome_events: Optional[List]) -> str:
     return "\n".join(lines)
 
 
+def _format_lead_change(lc: dict) -> str:
+    from datetime import datetime as dt
+    lc_time = dt.fromtimestamp(lc["timestamp"])
+    price_pct = lc["price"] * 100
+    prev_pct = lc["previous_price"] * 100
+    if lc["direction"] == "above":
+        desc = f"'Yes' became favored (crossed above 50%: {prev_pct:.1f}% → {price_pct:.1f}%)"
+    else:
+        desc = f"'No' became favored (crossed below 50%: {prev_pct:.1f}% → {price_pct:.1f}%)"
+    time_info = ""
+    if lc.get("time_in_previous_state_hours"):
+        time_info = f" [held previous state for {lc['time_in_previous_state_hours']:.1f}h]"
+    return f"- {lc_time.strftime('%Y-%m-%d %H:%M')}: {desc}{time_info}"
+
+
+def _format_turning_point(tp: dict) -> str:
+    from datetime import datetime as dt
+    tp_time = dt.fromtimestamp(tp["timestamp"])
+    if tp["type"] == "peak":
+        direction_desc = f"rose {tp['change_before']:.1f}pp then fell {abs(tp['change_after']):.1f}pp"
+    else:
+        direction_desc = f"dropped {abs(tp['change_before']):.1f}pp then recovered {tp['change_after']:.1f}pp"
+    return (
+        f"- {tp['type'].capitalize()} on {tp_time.strftime('%Y-%m-%d %H:%M')}: "
+        f"price {direction_desc} (significance: {tp['significance']:.1f})"
+    )
+
+
 def _format_turning_points_section(
     turning_points: Optional[List], lead_changes: Optional[List] = None
 ) -> str:
-    from datetime import datetime as dt
-
-    lines = []
-
+    parts = []
     if lead_changes:
-        lines.append("\nLEAD CHANGES (when market prediction flipped):")
-        lines.append(
-            "These are moments when the favored outcome changed. CRITICAL events to investigate:"
-        )
-        for lc in lead_changes:
-            lc_time = dt.fromtimestamp(lc["timestamp"])
-            price_pct = lc["price"] * 100
-            prev_pct = lc["previous_price"] * 100
-            if lc["direction"] == "above":
-                desc = f"'Yes' became favored (crossed above 50%: {prev_pct:.1f}% -> {price_pct:.1f}%)"
-            else:
-                desc = f"'No' became favored (crossed below 50%: {prev_pct:.1f}% -> {price_pct:.1f}%)"
-            time_info = ""
-            if lc.get("time_in_previous_state_hours"):
-                time_info = f" [was in previous state for {lc['time_in_previous_state_hours']:.1f}h]"
-            lines.append(
-                f"- {lc_time.strftime('%Y-%m-%d %H:%M')}: {desc}{time_info}"
-            )
-
+        items = "\n".join(_format_lead_change(lc) for lc in lead_changes)
+        parts.append(_LEAD_CHANGES_SECTION.format(items=items))
     if turning_points:
-        if lines:
-            lines.append("")
-        lines.append("TURNING POINTS (significant price reversals):")
-        lines.append("These are moments when market sentiment shifted significantly:")
-        for tp in turning_points[:5]:
-            tp_time = dt.fromtimestamp(tp["timestamp"])
-            tp_type = tp["type"].upper()
-            if tp["type"] == "peak":
-                direction_desc = f"rose {tp['change_before']:.1f}pp then fell {abs(tp['change_after']):.1f}pp"
-            else:
-                direction_desc = f"dropped {abs(tp['change_before']):.1f}pp then recovered {tp['change_after']:.1f}pp"
-            lines.append(
-                f"- {tp_type} on {tp_time.strftime('%Y-%m-%d %H:%M')}: "
-                f"price {direction_desc} (significance: {tp['significance']:.1f})"
-            )
-
-    return "\n".join(lines) if lines else ""
+        items = "\n".join(_format_turning_point(tp) for tp in turning_points[:5])
+        parts.append(_TURNING_POINTS_SECTION.format(items=items))
+    return "\n".join(parts)
 
 
 def _format_turning_points_hint(
@@ -191,24 +189,11 @@ def _format_turning_points_hint(
             if date_str not in priority_dates and date_str not in critical_dates:
                 priority_dates.append(date_str)
 
-    if not critical_dates and not priority_dates:
-        return ""
-
     lines = []
     if critical_dates:
-        lines.append(
-            f"\n   CRITICAL DATES (lead changes - market prediction flipped): {', '.join(critical_dates)}"
-        )
-        lines.append(
-            "   These are the MOST IMPORTANT dates - find what news caused the market to flip its prediction."
-        )
+        lines.append(_CRITICAL_DATES_HINT.format(dates=", ".join(critical_dates)))
     if priority_dates:
-        lines.append(
-            f"\n   PRIORITY DATES (from turning points): {', '.join(priority_dates)}"
-        )
-        lines.append(
-            "   Search for news around these dates - they mark significant sentiment shifts."
-        )
+        lines.append(_PRIORITY_DATES_HINT.format(dates=", ".join(priority_dates)))
     return "\n".join(lines)
 
 

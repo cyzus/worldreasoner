@@ -175,23 +175,30 @@ class GraphVisualizer:
         return all_chains
 
     @staticmethod
-    def get_recommendation(max_depth: int, quality_score: float) -> str:
+    def get_recommendation(
+        max_depth: int,
+        quality_score: float,
+        min_depth: int = 3,
+        min_quality: float = 0.6,
+    ) -> str:
         """Generate recommendation based on graph statistics.
 
         Args:
             max_depth: Maximum depth of the graph
             quality_score: Quality score (0-1)
+            min_depth: Minimum depth for a satisfactory graph (from EvidenceSatisfactionConfig)
+            min_quality: Minimum quality score threshold (from EvidenceSatisfactionConfig)
 
         Returns:
             Recommendation string
         """
         if max_depth == 0:
             return "No causal graph yet. Start by identifying events and their causal relationships."
-        elif max_depth == 1:
-            return "Graph is SHALLOW (1 level). You need deeper chains! For each immediate cause, ask 'What caused THIS?' and create intermediate events."
-        elif max_depth == 2:
-            return "Graph has some depth (2 levels). Consider going deeper on the most important causal chains."
-        elif quality_score < 0.6:
+        elif max_depth < min_depth - 1:
+            return f"Graph is SHALLOW ({max_depth} level). You need deeper chains! For each immediate cause, ask 'What caused THIS?' and create intermediate events."
+        elif max_depth < min_depth:
+            return f"Graph has some depth ({max_depth} levels). Consider going deeper on the most important causal chains."
+        elif quality_score < min_quality:
             return "Graph depth is good, but quality is low. Add more evidence citations and improve confidence scores."
         else:
             return "Graph depth and quality look good. Feel free to finalize or add minor improvements."

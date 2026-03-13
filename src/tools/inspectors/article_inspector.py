@@ -2,6 +2,7 @@
 
 from typing import Optional, List, Dict
 
+from src.config.pipeline import SATISFACTION_DEFAULTS
 from src.tools.base.database_mixin import DatabaseAwareTool
 from src.domain.models import Article, Question
 from src.analysis.article_analysis import (
@@ -23,16 +24,11 @@ from src.tools.inspectors.formatting import (
 class ArticleInspectorTool(DatabaseAwareTool):
     """Inspect collected articles to identify timeline gaps and coverage issues.
 
-    This tool helps the agent:
-    1. Visualize article timeline distribution
-    2. Identify time gaps that need more articles
-    3. Check domain/source diversity
-    4. Evaluate overall evidence coverage quality
+    Computes a quality score (0–1) weighted: coverage 40%, volume 35%,
+    diversity 25%. Coverage penalises gaps > 7 days and uneven distribution.
+    Volume saturates at 10 articles; diversity saturates at ~9 unique sources.
 
-    Use this tool after initial collection to determine if you need to:
-    - Search for articles in specific time periods
-    - Diversify sources
-    - Collect more recent or historical context
+    See docs/inspectors.md for full scoring criteria and thresholds.
     """
 
     name = "article_inspector"
@@ -107,6 +103,7 @@ class ArticleInspectorTool(DatabaseAwareTool):
             source_data,
             gaps,
             coverage_start=question.estimated_start_time,
+            min_articles=SATISFACTION_DEFAULTS.min_articles,
         )
 
         return self._format_visualization(
@@ -226,7 +223,13 @@ ERROR: {error}
         builder.add_line()
 
         # Recommendation
-        recommendation = get_recommendation(quality, gaps, source_data, timeline_data)
+        recommendation = get_recommendation(
+            quality,
+            gaps,
+            source_data,
+            timeline_data,
+            min_articles=SATISFACTION_DEFAULTS.min_articles,
+        )
         builder.add_section_header("RECOMMENDATION")
         builder.add_line(recommendation, indent=2)
         builder.add_line()
