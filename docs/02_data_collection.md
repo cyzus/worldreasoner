@@ -313,20 +313,34 @@ Time horizon is computed as `resolution_date - estimated_start_time`. For Polyma
 
 ### Collection Commands
 
-```bash
-# View collection plan (dry run)
-python scripts/run_experiment_collection.py --dry-run
+**Config:** `config/collection_goal_experiment.yaml` | **DB:** `experiment.db`
 
+Use `wr question goal` for most collection tasks:
+
+```bash
 # Full collection (Polymarket + News)
-python scripts/run_experiment_collection.py
+wr question goal --goal config/collection_goal_experiment.yaml --db experiment.db
 
 # Polymarket only (faster, mostly binary/MCQ)
-python scripts/run_experiment_collection.py --no-news
+wr question goal --goal config/collection_goal_experiment.yaml --db experiment.db --no-news
 
-# Resume from previous run (auto-deduplication)
+# News only
+wr question goal --goal config/collection_goal_experiment.yaml --db experiment.db --no-polymarket
+
+# Run sources sequentially; skip auto-indexing
+wr question goal --goal config/collection_goal_experiment.yaml --db experiment.db --sequential --skip-indexing
+```
+
+The following are only available via the script (no CLI equivalent):
+
+```bash
+# Preview the collection plan without running
+python scripts/run_experiment_collection.py --dry-run
+
+# Control max orchestration iterations (default: 3)
 python scripts/run_experiment_collection.py --db experiment.db --max-iterations 5
 
-# Export dataset summary
+# Export dataset summary to JSON
 python scripts/run_experiment_collection.py --export dataset_summary.json
 ```
 

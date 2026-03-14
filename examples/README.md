@@ -1,65 +1,26 @@
 # WorldReasoner Examples
 
-This directory contains example scripts demonstrating how to use the WorldReasoner library.
-These examples are designed to be minimal and educational.
+For most tasks, use the `wr` CLI — see [Appendix A: CLI Reference](../docs/appendix/A_cli_reference.md).
 
-Most scripts use an **in-memory database** (`:memory:`) by default to avoid side effects. You can persist data by providing a path via `--db my.db`.
+The scripts in this directory are for specialized use cases not covered by the CLI.
 
-
-## 📥 Question Generation
-
-### `run_goal_collection.py`
-Demonstrates the goal-oriented data collection orchestrator.
-```bash
-python examples/run_goal_collection.py
-```
-
-## 🧠 Evidence Collection
-
-### `run_evidence.py`
-Demonstrates evidence retrieval and causal analysis with seeded data (Articles).
-```bash
-python examples/run_evidence.py
-```
-
-
-## 🔮 Forecasting
-
-### `run_forecast.py`
-Run a single forecast on a question.
-```bash
-python examples/run_forecast.py --question-id <ID>
-```
-
-### `run_realtime_forecast.py`
-Run a forecast with full web access enabled (search, fetch).
-```bash
-python examples/run_realtime_forecast.py --query "Will X happen?"
-```
-
-## 📊 Evaluation & Benchmarking
-
-### `run_benchmark_evaluation.py`
-Run forecasts on all resolved questions in the DB to measure performance.
-```bash
-python examples/run_benchmark_evaluation.py --max-questions 10
-```
-
-### `evaluate_forecasts.py`
-Evaluate existing forecast records against ground truth.
-```bash
-python examples/evaluate_forecasts.py
-```
+## Visualization
 
 ### `visualize_benchmarks.py`
-Generate charts from benchmark JSON results.
+Generate charts from benchmark JSON results (accuracy, Brier score, log score).
 ```bash
-python examples/visualize_benchmarks.py --benchmarks-dir benchmarks
+python examples/visualize_benchmarks.py
+python examples/visualize_benchmarks.py --metric accuracy
+python examples/visualize_benchmarks.py --output benchmarks/figures/results.png
+python examples/visualize_benchmarks.py --table  # text summary, no GUI
 ```
+Reads `benchmarks/autobench_*.json` files produced by `wr benchmark run`.
+
+## Temporal Analysis
 
 ### `run_temporal_forecast_analysis.py`
-Analyze how forecast accuracy evolves as the resolution date approaches.
+Analyze how forecast accuracy evolves as the resolution date approaches for a single question.
 ```bash
-python examples/run_temporal_forecast_analysis.py --question-id <ID>
+python examples/run_temporal_forecast_analysis.py --question-id <ID> --num-points 5
 ```
-
+No CLI equivalent — use this for in-depth per-question temporal analysis.

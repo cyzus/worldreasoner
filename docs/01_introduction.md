@@ -17,7 +17,7 @@ WorldReasoner addresses these limitations through three coordinated subsystems:
 
 1. **Temporal Gateway** — An MCP (Model Context Protocol) server that acts as a strict information firewall. The agent is given a `simulated_date` and can only retrieve articles and events published before that date. Ground truth is withheld until evaluation time.
 
-2. **Evidence Pipeline** — An automated pipeline that collects news articles, builds causal event graphs, and analyzes Polymarket price curves to identify significant turning points and lead changes. Evidence is quality-scored and reviewed before forecasting.
+2. **Evidence Pipeline** — An automated pipeline that collects news articles/webpages, builds causal event graphs, and analyzes Polymarket price curves to identify significant turning points and lead changes. Evidence is quality-scored and reviewed before forecasting.
 
 3. **Benchmarking Framework** — A structured evaluation harness supporting six experimental conditions (from pure LLM recall to full evidence-augmented reasoning) and four scoring metrics. Results are persisted as JSON and visualized as comparative charts.
 
