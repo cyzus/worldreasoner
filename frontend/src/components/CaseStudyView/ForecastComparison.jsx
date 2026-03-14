@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 export function ForecastComparison({
     selectedQuestion,
@@ -38,7 +39,7 @@ export function ForecastComparison({
                             )}
                             {fc.rationale && (
                                 <div className="cs-fc-rationale markdown-body">
-                                    <ReactMarkdown>{fc.rationale}</ReactMarkdown>
+                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{fc.rationale}</ReactMarkdown>
                                 </div>
                             )}
                             <div className="cs-fc-footer">

@@ -6,6 +6,7 @@ import { CausalEventsTable } from './CaseStudyView/CausalEventsTable'
 import { InformationStream } from './CaseStudyView/InformationStream'
 import { ForecastGraphModal } from './CaseStudyView/ForecastGraphModal'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import './CaseStudyView.css'
 
 /**
@@ -67,7 +68,7 @@ function CaseStudyView({
           <h3 className="cs-section-title">💡 Causal Explanation</h3>
           <p className="cs-section-subtitle">Auto-generated explanation of the causal dynamics</p>
           <div className="cs-impact-details markdown-body" style={{ marginTop: 0 }}>
-            <ReactMarkdown>{selectedQuestion.causal_explanation}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedQuestion.causal_explanation}</ReactMarkdown>
           </div>
         </div>
       )}

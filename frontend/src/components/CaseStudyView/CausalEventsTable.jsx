@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { reviewEvent, reviewQuestionEvents } from '../../api/graphApi'
 
 const formatDate = (dateString) => {
@@ -228,7 +229,7 @@ export function CausalEventsTable({
                                                                             </span>
                                                                         </div>
                                                                         <div className="cs-impact-reasoning markdown-body">
-                                                                            <ReactMarkdown>{imp.reasoning}</ReactMarkdown>
+                                                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{imp.reasoning}</ReactMarkdown>
                                                                         </div>
 
                                                                         {imp.articleIds?.length > 0 && (

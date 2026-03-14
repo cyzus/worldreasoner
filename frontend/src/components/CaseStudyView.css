@@ -685,3 +685,25 @@
 .markdown-body a:hover {
   color: #1c7ed6;
 }
+
+.markdown-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 8px;
+  font-size: 0.85em;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid #dee2e6;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.markdown-body thead tr {
+  background-color: #f1f3f5;
+}
+
+.markdown-body tbody tr:nth-child(even) {
+  background-color: #f8f9fa;
+}

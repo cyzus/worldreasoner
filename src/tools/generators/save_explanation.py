@@ -12,6 +12,39 @@ from src.utils.logging import logger
 
 _ARTICLE_ID_PATTERN = re.compile(r"\bart_[a-z0-9_]{5,}\b")
 _MIN_LENGTH = 300
+_MARKDOWN_HEADING_PATTERN = re.compile(r"(?m)^\s{0,3}#{2,6}\s+(.+?)\s*$")
+
+# Required markdown sections for a graph-ready hindsight report.
+_REQUIRED_SECTION_ALIASES = {
+    "executive_summary": ["executive summary"],
+    "timeline": ["timeline of key events", "timeline"],
+    "causal_chain": ["causal chain analysis", "causal chain"],
+    "countervailing": ["countervailing factors", "counterfactual factors"],
+    "event_inventory": ["event candidate inventory", "event candidates"],
+    "evidence_table": ["evidence mapping table", "evidence table"],
+    "uncertainties": [
+        "uncertainties and alternative paths",
+        "uncertainties",
+        "alternative paths",
+    ],
+}
+
+
+def _extract_markdown_headings(text: str) -> List[str]:
+    """Extract normalized markdown headings (h2-h6)."""
+    return [h.strip().lower() for h in _MARKDOWN_HEADING_PATTERN.findall(text)]
+
+
+def _has_required_section(headings: List[str], aliases: List[str]) -> bool:
+    """Check if any alias appears in extracted markdown headings."""
+    return any(alias in headings for alias in aliases)
+
+
+def _has_markdown_table(text: str) -> bool:
+    """Lightweight markdown table check: header row plus separator row."""
+    has_header = bool(re.search(r"(?m)^\s*\|.+\|\s*$", text))
+    has_separator = bool(re.search(r"(?m)^\s*\|?\s*[-:]{3,}\s*(\|\s*[-:]{3,}\s*)+\|?\s*$", text))
+    return has_header and has_separator
 
 
 def _validate_explanation(explanation: str):
@@ -34,6 +67,28 @@ def _validate_explanation(explanation: str):
             "No explicit causal language detected. Use words like 'caused', 'triggered', "
             "'led to', 'resulted in' to connect events."
         )
+
+    headings = _extract_markdown_headings(explanation)
+    missing_sections = []
+    for section_key, aliases in _REQUIRED_SECTION_ALIASES.items():
+        if not _has_required_section(headings, aliases):
+            missing_sections.append(section_key)
+
+    if missing_sections:
+        pretty = ", ".join(missing_sections)
+        warnings.append(
+            "Missing required markdown sections for structured causal report: "
+            f"{pretty}. Use markdown headings exactly as requested in the prompt."
+        )
+
+    # Evidence section is expected to include a markdown table for claim-to-source traceability.
+    if _has_required_section(headings, _REQUIRED_SECTION_ALIASES["evidence_table"]):
+        if not _has_markdown_table(explanation):
+            warnings.append(
+                "Evidence Mapping Table section found, but no valid markdown table detected. "
+                "Add a table with header and separator rows."
+            )
+
     return warnings, len(set(refs))
 
 

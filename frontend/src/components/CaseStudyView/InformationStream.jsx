@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 const formatDate = (dateString) => {
     if (!dateString) return 'Unknown Date'
@@ -48,7 +49,7 @@ export function InformationStream({ articles }) {
                                     </div>
                                     {summary && expandedArticles.has(article.id) && (
                                         <div className="cs-article-summary markdown-body">
-                                            <ReactMarkdown>{summary}</ReactMarkdown>
+                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{summary}</ReactMarkdown>
                                         </div>
                                     )}
                                 </div>

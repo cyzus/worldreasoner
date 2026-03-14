@@ -65,12 +65,46 @@ _MANAGER_WRITE_EXPLANATION = """
 1. Call get_question_articles to get the collected articles and their exact IDs
 2. Use article_retrieval to read full content of key articles before writing
 
-Write a rich, natural language narrative explaining **how and why** the outcome came about:
-- Describe each significant event in plain prose, including approximate dates
-- Cite sources inline using exact article IDs (e.g. "According to [art_tech_20240101_001_abc], ...")
-- Make causal connections explicit ("This caused...", "As a result...", "Which triggered...")
-- Trace the chain from root causes through intermediate events to the final outcome
-- Keep it readable — the graph builder will extract structure from your narrative
+Write a comprehensive markdown report explaining **how and why** the outcome came about.
+Use the exact heading structure below so downstream validation and graph extraction can rely on it.
+
+# Required Output Format (use these exact section headings)
+
+## Executive Summary
+- 3-6 sentences summarizing the dominant causal path to the known outcome.
+
+## Timeline Of Key Events
+- Chronological bullet list with explicit dates (YYYY-MM-DD when possible).
+- Include event-level article citations inline.
+
+## Causal Chain Analysis
+- Explain root causes -> intermediate mechanisms -> proximate triggers -> final outcome.
+- Use explicit causal language (caused, triggered, led to, resulted in, because).
+- Include at least one citation for each major causal step.
+
+## Countervailing Factors
+- Document important forces that pushed against the actual outcome.
+- Explain why they failed or were overwhelmed.
+
+## Event Candidate Inventory
+- Enumerate graph-ready event candidates as E1, E2, E3... in markdown bullets.
+- For each event candidate include:
+    - title
+    - date (or bounded date range with uncertainty note)
+    - why it matters causally
+    - source article IDs
+
+## Evidence Mapping Table
+- Add a markdown table mapping major claims/events to evidence.
+- Use columns: Claim/Event | Article IDs | Date Support | Confidence (0-1) | Notes
+
+## Uncertainties And Alternative Paths
+- Briefly list unresolved uncertainty and plausible alternative causal paths.
+
+Quality requirements:
+- Provide broad source coverage (do not rely on only a few articles).
+- Cite exact article IDs inline (e.g. [art_tech_20240101_001_abc]).
+- Keep the report specific and evidence-grounded, not generic.
 
 Call save_explanation to store it. If it returns warnings, address them and save again before finishing.
 """

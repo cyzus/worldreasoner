@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 export function ForecastGraphModal({ activeForecastGraph, onClose }) {
     if (!activeForecastGraph) return null
@@ -32,7 +33,7 @@ export function ForecastGraphModal({ activeForecastGraph, onClose }) {
                                             <span className="cs-hyp-node">{tgt?.title || hyp.target_event_id}</span>
                                         </div>
                                         <div className="cs-hyp-reasoning markdown-body">
-                                            <ReactMarkdown>{hyp.reasoning}</ReactMarkdown>
+                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{hyp.reasoning}</ReactMarkdown>
                                         </div>
                                     </div>
                                 )
