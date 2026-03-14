@@ -1,4 +1,4 @@
-# WorldReasoner CLI Reference
+# Appendix A: WorldReasoner CLI Reference
 
 ## Overview
 
@@ -10,6 +10,8 @@ wr [OPTIONS] COMMAND [ARGS]...
 --verbose, -v    Enable verbose output
 --help           Show help
 ```
+
+---
 
 ## Commands
 
@@ -54,6 +56,8 @@ wr db build-index --model text-embedding-3-large
 wr db build-index --db experiment.db
 ```
 
+---
+
 ### 2. Question Management (`wr question`)
 
 ```bash
@@ -81,6 +85,8 @@ wr question goal --goal config/my_goal.yaml
 wr question goal --no-news
 wr question goal --sequential
 ```
+
+---
 
 ### 3. Evidence Pipeline (`wr evidence`)
 
@@ -156,6 +162,7 @@ wr evidence reset --status rejected
 wr evidence reset -q q_abc123
 ```
 
+---
 
 ### 4. Graph Builder (`wr graph`)
 
@@ -171,6 +178,8 @@ wr graph build -q <question_id>
 wr graph audit -q <question_id>
 ```
 
+---
+
 ### 5. Forecasting (`wr forecast`)
 
 ```bash
@@ -184,7 +193,9 @@ wr forecast batch -q q_1 -q q_2 -q q_3
 wr forecast batch --source polymarket --domain politics --limit 10
 ```
 
-### 5. Benchmark (`wr benchmark`)
+---
+
+### 6. Benchmark (`wr benchmark`)
 
 ```bash
 # Run full benchmark (all 6 conditions)
@@ -214,6 +225,8 @@ wr benchmark run --resume -y
 wr benchmark run --offset-days 7 -y
 ```
 
+---
+
 ## Shared Options
 
 Most commands accept these common options:
@@ -230,12 +243,14 @@ Most commands accept these common options:
 | `--json` | Output as JSON | False |
 
 Common databases:
-- `worldreasoner.db` — Main database
-- `experiment.db` — Experiment dataset
+- `worldreasoner.db` — Main development database
+- `experiment.db` — Benchmark experiment dataset
+
+---
 
 ## Examples
 
-### Full Evidence & Graph Workflow
+### Full Evidence and Graph Workflow
 
 ```bash
 # 1. Collect evidence for questions (creates NL explanation)
@@ -263,6 +278,8 @@ wr benchmark run -c worldreasoner -y
 # 3. Compare results
 python examples/visualize_benchmarks.py
 ```
+
+---
 
 ## Troubleshooting
 
