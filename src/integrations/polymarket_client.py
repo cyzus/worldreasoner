@@ -21,6 +21,9 @@ class PolymarketClient:
 
     API_BASE = "https://gamma-api.polymarket.com"
 
+    # Gamma API page size cap (empirically 100 per request)
+    PAGE_SIZE = 100
+
     # Cache for tag slug -> tag ID mapping
     _tag_id_cache: Dict[str, Optional[str]] = {}
 
@@ -60,6 +63,44 @@ class PolymarketClient:
             logger.warning(f"Failed to fetch tag ID for '{slug}': {e}")
             self._tag_id_cache[slug] = None
             return None
+
+    async def _fetch_paginated(
+        self,
+        url: str,
+        params: Dict[str, Any],
+        total_limit: int,
+    ) -> List[Dict[str, Any]]:
+        """Fetch results from a list-returning endpoint with offset pagination.
+
+        Loops over pages (each PAGE_SIZE items) until total_limit is reached
+        or the API returns a short page indicating end of results.
+
+        Args:
+            url: Endpoint URL
+            params: Base query params (must not include 'limit' or 'offset')
+            total_limit: Maximum total items to return
+
+        Returns:
+            Accumulated list of result dicts
+        """
+        results: List[Dict[str, Any]] = []
+        offset = 0
+
+        while len(results) < total_limit:
+            page_params = {
+                **params,
+                "limit": self.PAGE_SIZE,
+                "offset": offset,
+            }
+            page = await self.call_api(url=url, params=page_params)
+            if not page:
+                break
+            results.extend(page)
+            if len(page) < self.PAGE_SIZE:
+                break  # last page
+            offset += self.PAGE_SIZE
+
+        return results[:total_limit]
 
     async def search_markets(
         self,
@@ -160,15 +201,12 @@ class PolymarketClient:
             List of market dictionaries from API
         """
         url = f"{self.API_BASE}/markets"
-        params = {
-            "limit": limit,
-            "offset": 0,
-        }
+        base_params: Dict[str, Any] = {}
 
         # Add tag filter if specified (for domain-specific fetching)
         # Convert slug to numeric ID first
+        tag_ids: List[str] = []
         if tag_slugs:
-            tag_ids = []
             for slug in tag_slugs:
                 tag_id = await self.get_tag_id(slug)
                 if tag_id:
@@ -180,31 +218,30 @@ class PolymarketClient:
 
         # For ground truth, query closed markets sorted by resolution time
         if require_ground_truth:
-            lookback_days = self._get_lookback_days(quality_requirements)
-
-            # Query only closed markets, sorted by closedTime (most recent first)
-            params["closed"] = "true"
-            params["order"] = "volume,closedTime"
-            params["ascending"] = "false"
+            base_params["closed"] = "true"
+            base_params["order"] = "volume,closedTime"
+            base_params["ascending"] = "false"
             logger.info(
                 "API filtering for closed markets sorted by closedTime (most recent first)"
             )
-        market_list = []
+
+        market_list: List[Dict[str, Any]] = []
         if tag_slugs and tag_ids:
-            params_list = [params.copy() for _ in tag_ids]
-            for i, tag_id in enumerate(tag_ids):
-                params_list[i]["tag_id"] = tag_id
-                markets = await self.call_api(
+            for tag_id in tag_ids:
+                markets = await self._fetch_paginated(
                     url=url,
-                    params=params_list[i],
+                    params={**base_params, "tag_id": tag_id},
+                    total_limit=limit,
                 )
                 market_list.extend(markets)
         else:
-            markets = await self.call_api(
+            market_list = await self._fetch_paginated(
                 url=url,
-                params=params,
+                params=base_params,
+                total_limit=limit,
             )
-            market_list.extend(markets)
+
+        logger.info(f"fetch_markets: collected {len(market_list)} markets total")
 
         # Log filtering criteria for ground truth
         if require_ground_truth:
@@ -234,52 +271,79 @@ class PolymarketClient:
 
         This endpoint (/events) returns markets grouped by event, allowing
         detection of multi-market questions (e.g. categorical).
+        Paginates with offset until limit is reached or API is exhausted.
         """
         url = f"{self.API_BASE}/events"
-        
-        # We manually construct a list of params to handle duplicate keys like multiple tag_slugs properly if needed,
-        # but aiohttp supports list values natively.
-        params = {
-            "limit": limit,
+
+        base_params: Dict[str, Any] = {
             "closed": str(closed).lower(),
             "active": str(active).lower(),
-            "order": "volume24hr",
+            "archived": "false",
+            "order": "closedTime" if closed else "volume24hr",
             "ascending": "false",
+            "exclude_tag_id": [100639, 102169],
         }
-        
+
         if tag_slugs:
-            params["tag_slug"] = tag_slugs
+            base_params["tag_slug"] = tag_slugs
+
+        events_list: List[Dict[str, Any]] = []
+        offset = 0
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    url, params=params, timeout=aiohttp.ClientTimeout(total=30)
-                ) as response:
-                    if response.status != 200:
-                        logger.error(
-                            f"Polymarket Events API returned {response.status}"
-                        )
-                        return []
+                while len(events_list) < limit:
+                    page_params = {
+                        **base_params,
+                        "limit": self.PAGE_SIZE,
+                        "offset": offset,
+                    }
+                    async with session.get(
+                        url, params=page_params, timeout=aiohttp.ClientTimeout(total=30)
+                    ) as response:
+                        if response.status != 200:
+                            logger.error(
+                                f"Polymarket Events API returned {response.status}"
+                            )
+                            break
 
-                    payload = await response.json()
-                    events_list = []
-                    if isinstance(payload, list):
-                        events_list = payload
-                    elif isinstance(payload, dict):
-                        events_list = payload.get("events", []) or payload.get("data", []) or []
-                    
-                    # Robust local sorting fallback
-                    if events_list:
-                        events_list.sort(key=lambda e: float(e.get("volume24hr", e.get("volume", 0))), reverse=True)
-                        
-                    return events_list
+                        payload = await response.json()
+                        if isinstance(payload, list):
+                            page = payload
+                        elif isinstance(payload, dict):
+                            page = payload.get("events", []) or payload.get("data", []) or []
+                        else:
+                            break
+
+                        events_list.extend(page)
+                        logger.debug(
+                            f"fetch_events page offset={offset}: got {len(page)} events "
+                            f"(total so far: {len(events_list)})"
+                        )
+
+                        if len(page) < self.PAGE_SIZE:
+                            break  # last page
+                        offset += self.PAGE_SIZE
+
         except Exception as e:
             logger.error(f"Failed to fetch events: {e}")
-            return []
+
+        events_list = events_list[:limit]
+
+        # Robust local sorting fallback
+        if events_list:
+            events_list.sort(
+                key=lambda e: float(e.get("volume24hr", e.get("volume", 0))),
+                reverse=True,
+            )
+
+        logger.info(f"fetch_events: collected {len(events_list)} events total")
+        return events_list
 
     async def call_api(
         self, url: str, params: Optional[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
+        """Fetch a single page from a list-returning Gamma API endpoint."""
         async with aiohttp.ClientSession() as session:
             async with session.get(
                 url, params=params, timeout=aiohttp.ClientTimeout(total=30)
@@ -295,7 +359,7 @@ class PolymarketClient:
                     logger.error(f"Unexpected response format: {type(market_list)}")
                     return []
 
-                logger.info(f"Polymarket Gamma API returned {len(market_list)} markets")
+                logger.debug(f"Polymarket Gamma API returned {len(market_list)} items")
 
                 return market_list
 

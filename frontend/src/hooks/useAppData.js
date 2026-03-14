@@ -183,7 +183,7 @@ export const useAppData = () => {
         console.log('Question updated:', updatedQuestion.id)
         // Update questions list in state
         setQuestions(prevQuestions =>
-            prevQuestions.map(q => q.id === updatedQuestion.id ? updatedQuestion : q)
+            prevQuestions.map(q => q.id === updatedQuestion.id ? { ...q, ...updatedQuestion } : q)
         )
     }, [])
 

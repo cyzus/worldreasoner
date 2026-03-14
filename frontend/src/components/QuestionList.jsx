@@ -305,14 +305,14 @@ const QuestionList = memo(function QuestionList({
               actions={
                 <>
                   <button
-                    className="action-btn edit-btn"
+                    className="question-action-btn question-edit-btn"
                     onClick={(e) => handleEdit(q, e)}
                     title="Edit question"
                   >
                     ✏️
                   </button>
                   <button
-                    className="action-btn delete-btn"
+                    className="question-action-btn question-delete-btn"
                     onClick={(e) => handleDelete(q.id, e)}
                     title="Delete question"
                   >

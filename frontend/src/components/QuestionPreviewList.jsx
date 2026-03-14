@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import QuestionCard from './QuestionCard'
+import { useQuestions } from '../hooks/useQueries'
 import './QuestionPreviewList.css'
 
 /**
@@ -11,6 +12,12 @@ function QuestionPreviewList({ questions, onSaveSelected, loading, source }) {
   const [domainFilter, setDomainFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
   const [sortBy, setSortBy] = useState('default')
+
+  const { data: dbQuestions } = useQuestions()
+  const dbIds = useMemo(() => {
+    const list = Array.isArray(dbQuestions) ? dbQuestions : (dbQuestions?.questions ?? [])
+    return new Set(list.map(q => q.id))
+  }, [dbQuestions])
 
   // Extract unique domains and types from questions (with safety check)
   const availableDomains = useMemo(() => {
@@ -75,6 +82,7 @@ function QuestionPreviewList({ questions, onSaveSelected, loading, source }) {
   }, [questions, searchText, domainFilter, typeFilter, sortBy])
 
   const handleToggleSelect = (questionId) => {
+    if (dbIds.has(questionId)) return
     setSelectedIds(prev => {
       const newSet = new Set(prev)
       if (newSet.has(questionId)) {
@@ -87,7 +95,7 @@ function QuestionPreviewList({ questions, onSaveSelected, loading, source }) {
   }
 
   const handleSelectAll = () => {
-    setSelectedIds(new Set(filteredQuestions.map(q => q.id)))
+    setSelectedIds(new Set(filteredQuestions.filter(q => !dbIds.has(q.id)).map(q => q.id)))
   }
 
   const handleClearAll = () => {
@@ -119,7 +127,12 @@ function QuestionPreviewList({ questions, onSaveSelected, loading, source }) {
     <div className="preview-list">
       <div className="preview-header">
         <h3>
-          📋 Preview ({filteredQuestions.length} of {safeQuestions.length})
+          📋 Preview ({filteredQuestions.length} of {safeQuestions.length}
+          {dbIds.size > 0 && filteredQuestions.some(q => dbIds.has(q.id)) && (
+            <span style={{ fontSize: '0.8em', color: '#888', fontWeight: 'normal', marginLeft: '6px' }}>
+              · {filteredQuestions.filter(q => dbIds.has(q.id)).length} already saved
+            </span>
+          )})
         </h3>
         {selectedCount > 0 && (
           <button
@@ -217,6 +230,7 @@ function QuestionPreviewList({ questions, onSaveSelected, loading, source }) {
                 onToggleSelect={() => handleToggleSelect(question.id)}
                 showCheckbox={true}
                 showSelectionStyle={true}
+                isInDb={dbIds.has(question.id)}
                 actions={
                   source === 'polymarket' && question.metadata?.market_slug && (
                     <a

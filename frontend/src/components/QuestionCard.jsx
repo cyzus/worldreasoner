@@ -15,11 +15,13 @@ const QuestionCard = memo(({
     actions,
     showCheckbox = false,
     showSelectionStyle = true,
-    isCollecting = false
+    isCollecting = false,
+    isInDb = false
 }) => {
     const q = question
 
     const handleCardClick = (e) => {
+        if (isInDb) return
         if (onClick) {
             onClick(e)
         } else if (onToggleSelect) {
@@ -29,23 +31,30 @@ const QuestionCard = memo(({
 
     return (
         <div
-            className={`question-list-item ${isSelected && showSelectionStyle ? 'selected' : ''
-                } ${isMultiSelected && showSelectionStyle ? 'multi-selected' : ''}`}
+            className={`question-list-item ${isSelected && showSelectionStyle && !isInDb ? 'selected' : ''
+                } ${isMultiSelected && showSelectionStyle && !isInDb ? 'multi-selected' : ''
+                } ${isInDb ? 'in-db' : ''}`}
             onClick={handleCardClick}
         >
             {showCheckbox && (
                 <input
                     type="checkbox"
                     checked={isMultiSelected || isSelected}
-                    onChange={onToggleSelect}
+                    onChange={isInDb ? undefined : onToggleSelect}
                     onClick={(e) => e.stopPropagation()}
                     className="question-checkbox"
+                    disabled={isInDb}
                 />
             )}
 
             <div className="question-item-content">
                 <div className="question-item-header">
                     <div className="question-item-badges">
+                        {isInDb && (
+                            <span className="badge in-db-badge">
+                                ✓ Already saved
+                            </span>
+                        )}
                         {isCollecting && (
                             <span className="badge collecting-badge" style={{ backgroundColor: '#e3f2fd', color: '#0d47a1', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <span className="spinner-small" style={{ width: '10px', height: '10px', border: '2px solid #0d47a1', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></span>
@@ -53,9 +62,6 @@ const QuestionCard = memo(({
                             </span>
                         )}
                         <span className="badge domain">{q.domain}</span>
-                        <span className={`badge difficulty difficulty-${q.difficulty}`}>
-                            Lvl {q.difficulty}
-                        </span>
                         {q.article_count !== undefined && (
                             <span className="badge article-count" title={`${q.article_count} articles collected`}>
                                 📄 {q.article_count}

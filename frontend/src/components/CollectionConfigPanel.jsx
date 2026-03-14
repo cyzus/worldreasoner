@@ -125,12 +125,12 @@ function CollectionConfigPanel({ source, onFetch, loading }) {
       <div className="config-section">
         <label className="config-label">
           Number of Questions
-          <span className="label-hint">(1-100)</span>
+          <span className="label-hint">(1-500)</span>
         </label>
         <input
           type="number"
           min="1"
-          max="100"
+          max="500"
           value={config.count}
           onChange={(e) => handleInputChange('count', parseInt(e.target.value))}
           className="config-input"

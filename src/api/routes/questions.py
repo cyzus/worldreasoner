@@ -94,7 +94,7 @@ class QuestionPreviewRequest(BaseModel):
 
     source: str = Field(description="Source to collect from: 'polymarket' or 'news'")
     count: int = Field(
-        default=20, ge=1, le=100, description="Number of questions to fetch (1-100)"
+        default=20, ge=1, le=500, description="Number of questions to fetch (1-500)"
     )
     domains: Optional[List[str]] = Field(default=None, description="Filter by domains")
     question_types: Optional[List[str]] = Field(
@@ -1568,9 +1568,21 @@ class QuestionUpdateRequest(BaseModel):
     question_text: Optional[str] = None
     question_type: Optional[str] = None
     domain: Optional[str] = None
+    source: Optional[str] = None
     difficulty: Optional[int] = Field(None, ge=1, le=5)
+    resolution_date: Optional[datetime] = None
+    estimated_start_time: Optional[datetime] = None
     resolution_criteria: Optional[str] = None
+    resolution_reasoning: Optional[str] = None
+    context: Optional[str] = None
     ground_truth: Optional[Any] = None
+    target_event_id: Optional[str] = None
+    outcome_event_ids: Optional[List[str]] = None
+    related_event_ids: Optional[List[str]] = None
+    related_article_ids: Optional[List[str]] = None
+    options: Optional[List[str]] = None
+    quantity_unit: Optional[str] = None
+    quantity_bounds: Optional[Dict[str, float]] = None
     metadata: Optional[Dict[str, Any]] = None
 
 
@@ -1604,15 +1616,49 @@ async def update_question(
         if request.question_text is not None:
             question.question_text = request.question_text
         if request.question_type is not None:
-            question.question_type = QuestionType[request.question_type.upper()]
+            qtype = request.question_type.lower()
+            legacy_qtype_map = {
+                "multiple_choice": "mcq",
+                "numeric": "quantity",
+                "date": "timeframe",
+            }
+            question.question_type = QuestionType(legacy_qtype_map.get(qtype, qtype))
         if request.domain is not None:
-            question.domain = Domain[request.domain.upper()]
+            domain_value = request.domain.lower()
+            legacy_domain_map = {
+                "technology": "tech",
+            }
+            question.domain = Domain(legacy_domain_map.get(domain_value, domain_value))
+        if request.source is not None:
+            question.source = request.source
         if request.difficulty is not None:
             question.difficulty = request.difficulty
+        if request.resolution_date is not None:
+            question.resolution_date = request.resolution_date
+        if request.estimated_start_time is not None:
+            question.estimated_start_time = request.estimated_start_time
         if request.resolution_criteria is not None:
             question.resolution_criteria = request.resolution_criteria
+        if request.resolution_reasoning is not None:
+            question.resolution_reasoning = request.resolution_reasoning
+        if request.context is not None:
+            question.context = request.context
         if request.ground_truth is not None:
             question.ground_truth = request.ground_truth
+        if request.target_event_id is not None:
+            question.target_event_id = request.target_event_id
+        if request.outcome_event_ids is not None:
+            question.outcome_event_ids = request.outcome_event_ids
+        if request.related_event_ids is not None:
+            question.related_event_ids = request.related_event_ids
+        if request.related_article_ids is not None:
+            question.related_article_ids = request.related_article_ids
+        if request.options is not None:
+            question.options = request.options
+        if request.quantity_unit is not None:
+            question.quantity_unit = request.quantity_unit
+        if request.quantity_bounds is not None:
+            question.quantity_bounds = request.quantity_bounds
         if request.metadata is not None:
             question.metadata = request.metadata
 
@@ -1634,6 +1680,10 @@ async def update_question(
             resolution_date=question.resolution_date.isoformat()
             if question.resolution_date
             else None,
+            estimated_start_time=question.estimated_start_time.isoformat()
+            if question.estimated_start_time
+            else None,
+            causal_explanation=question.causal_explanation,
             metadata=question.metadata,
         )
 
