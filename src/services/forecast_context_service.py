@@ -95,11 +95,10 @@ class ForecastContextService(ServiceBase):
 
         # Parse dates
         simulated_date = parse_flexible_datetime(simulated_date_str)
-        knowledge_cutoff = (
-            parse_flexible_datetime(knowledge_cutoff_str)
-            if knowledge_cutoff_str
-            else None
-        )
+        
+        knowledge_cutoff = None
+        if knowledge_cutoff_str and knowledge_cutoff_str.lower() != "unknown":
+            knowledge_cutoff = parse_flexible_datetime(knowledge_cutoff_str)
 
         # Generate session ID if not provided
         if not session_id:

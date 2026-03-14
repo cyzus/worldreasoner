@@ -192,6 +192,14 @@
       "source": "[Source](https://platform.openai.com/docs/models/o4-mini)",
       "company": "OpenAI"
     },
+    "gpt-oss": {
+      "model_name": "GPT-oss",
+      "provider": "OpenAI",
+      "cutoff_date": "2024-06-01",
+      "cutoff_date_raw": "2024.06",
+      "source": "[Source](https://arxiv.org/pdf/2508.10925v1)",
+      "company": "OpenAI"
+    },
     "gpt-5": {
       "model_name": "GPT-5",
       "provider": "OpenAI",
@@ -230,6 +238,14 @@
       "cutoff_date": "2024-09-30",
       "cutoff_date_raw": "2024.09.30",
       "source": "[Source](https://platform.openai.com/docs/models/gpt-5.1)",
+      "company": "OpenAI"
+    },
+    "gpt-5.2-instant-thinking-pro": {
+      "model_name": "GPT-5.2 Instant, Thinking, Pro",
+      "provider": "OpenAI",
+      "cutoff_date": "2025-08-01",
+      "cutoff_date_raw": "2025.08",
+      "source": "[Source](https://platform.openai.com/docs/guides/latest-model)",
       "company": "OpenAI"
     },
     "gemini-1.0-pro": {
@@ -288,6 +304,14 @@
       "source": "[Source](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models)",
       "company": "Google"
     },
+    "gemini-2.5-flash-lite": {
+      "model_name": "Gemini 2.5 Flash-Lite",
+      "provider": "Google",
+      "cutoff_date": "2025-01-01",
+      "cutoff_date_raw": "2025.01",
+      "source": "[Source](https://ai.google.dev/gemini-api/docs/models?hl=zh-cn#gemini-2.5-flash-lite)",
+      "company": "Google"
+    },
     "gemini-2.5-flash": {
       "model_name": "Gemini 2.5 Flash",
       "provider": "Google",
@@ -312,100 +336,140 @@
       "source": "[Source](https://deepmind.google/models/gemini/pro/)",
       "company": "Google"
     },
+    "gemini-3-flash": {
+      "model_name": "Gemini 3 Flash",
+      "provider": "Google",
+      "cutoff_date": "2025-01-01",
+      "cutoff_date_raw": "2025.01",
+      "source": "[Source](https://deepmind.google/models/gemini/flash/)",
+      "company": "Google"
+    },
     "claude-instant-1.2": {
       "model_name": "Claude Instant 1.2",
       "provider": "Anthropic",
-      "cutoff_date": "2023-01-01",
-      "cutoff_date_raw": "2023.01",
+      "cutoff_date": null,
+      "cutoff_date_raw": "-",
       "source": "[Source](https://docsbot.ai/models/claude-instant-1-2)",
       "company": "Anthropic"
     },
     "claude-2": {
       "model_name": "Claude 2",
       "provider": "Anthropic",
-      "cutoff_date": "2023-01-01",
-      "cutoff_date_raw": "early 2023",
+      "cutoff_date": null,
+      "cutoff_date_raw": "-",
       "source": "[Source](https://docsbot.ai/models/claude-2)",
       "company": "Anthropic"
     },
     "claude-2.1": {
       "model_name": "Claude 2.1",
       "provider": "Anthropic",
-      "cutoff_date": "2023-01-01",
-      "cutoff_date_raw": "2023.01",
+      "cutoff_date": null,
+      "cutoff_date_raw": "-",
       "source": "[Source](https://docsbot.ai/models/claude-2-1)",
       "company": "Anthropic"
     },
     "claude-3-opus": {
       "model_name": "Claude 3 Opus",
       "provider": "Anthropic",
-      "cutoff_date": "2023-08-01",
-      "cutoff_date_raw": "2023.08",
+      "cutoff_date": null,
+      "cutoff_date_raw": "-",
       "source": "[Source](https://docs.anthropic.com/en/docs/about-claude/models)",
       "company": "Anthropic"
     },
     "claude-3-sonnet": {
       "model_name": "Claude 3 Sonnet",
       "provider": "Anthropic",
-      "cutoff_date": "2023-08-01",
-      "cutoff_date_raw": "2023.08",
+      "cutoff_date": null,
+      "cutoff_date_raw": "-",
       "source": "[Source](https://docs.anthropic.com/en/docs/about-claude/models)",
       "company": "Anthropic"
     },
     "claude-3-haiku": {
       "model_name": "Claude 3 Haiku",
       "provider": "Anthropic",
-      "cutoff_date": "2023-08-01",
-      "cutoff_date_raw": "2023.08",
-      "source": "[Source](https://docs.anthropic.com/en/docs/about-claude/models)",
+      "cutoff_date": null,
+      "cutoff_date_raw": "-",
+      "source": "[Source](https://web.archive.org/web/20250829090806/https://docs.anthropic.com/en/docs/about-claude/models/overview)",
       "company": "Anthropic"
     },
     "claude-3.5-sonnet": {
       "model_name": "Claude 3.5 Sonnet",
       "provider": "Anthropic",
-      "cutoff_date": "2024-04-01",
-      "cutoff_date_raw": "2024.04",
+      "cutoff_date": null,
+      "cutoff_date_raw": "-",
       "source": "[Source](https://docs.anthropic.com/en/docs/about-claude/models)",
       "company": "Anthropic"
     },
     "claude-3.5-haiku": {
       "model_name": "Claude 3.5 Haiku",
       "provider": "Anthropic",
-      "cutoff_date": "2024-07-01",
-      "cutoff_date_raw": "2024.07",
-      "source": "[Source](https://docs.anthropic.com/en/docs/about-claude/models)",
+      "cutoff_date": null,
+      "cutoff_date_raw": "-",
+      "source": "[Source](https://web.archive.org/web/20250829090806/https://docs.anthropic.com/en/docs/about-claude/models/overview)",
       "company": "Anthropic"
     },
     "claude-3.7-sonnet": {
       "model_name": "Claude 3.7 Sonnet",
       "provider": "Anthropic",
-      "cutoff_date": "2024-11-01",
-      "cutoff_date_raw": "2024.11",
-      "source": "[Source](https://docs.anthropic.com/en/docs/about-claude/models)",
+      "cutoff_date": "2024-10-01",
+      "cutoff_date_raw": "2024.10",
+      "source": "[Source](https://web.archive.org/web/20250829090806/https://docs.anthropic.com/en/docs/about-claude/models/overview)",
       "company": "Anthropic"
     },
     "claude-4-opus": {
       "model_name": "Claude 4 Opus",
       "provider": "Anthropic",
-      "cutoff_date": "2025-03-01",
-      "cutoff_date_raw": "2025.03",
-      "source": "[Source](https://docs.anthropic.com/en/docs/about-claude/models/overview)",
+      "cutoff_date": null,
+      "cutoff_date_raw": "-",
+      "source": "[Source](https://web.archive.org/web/20250829090806/https://docs.anthropic.com/en/docs/about-claude/models/overview)",
       "company": "Anthropic"
     },
     "claude-4-sonnet": {
       "model_name": "Claude 4 Sonnet",
       "provider": "Anthropic",
-      "cutoff_date": "2025-03-01",
-      "cutoff_date_raw": "2025.03",
-      "source": "[Source](https://docs.anthropic.com/en/docs/about-claude/models/overview)",
+      "cutoff_date": null,
+      "cutoff_date_raw": "-",
+      "source": "[Source](https://web.archive.org/web/20250829090806/https://docs.anthropic.com/en/docs/about-claude/models/overview)",
+      "company": "Anthropic"
+    },
+    "claude-4.1-opus": {
+      "model_name": "Claude 4.1 Opus",
+      "provider": "Anthropic",
+      "cutoff_date": null,
+      "cutoff_date_raw": "-",
+      "source": "[Source](https://web.archive.org/web/20250829090806/https://docs.anthropic.com/en/docs/about-claude/models/overview)",
       "company": "Anthropic"
     },
     "claude-4.5-sonnet": {
       "model_name": "Claude 4.5 Sonnet",
       "provider": "Anthropic",
-      "cutoff_date": "2025-07-01",
-      "cutoff_date_raw": "2025.07",
-      "source": "[Source](https://docs.anthropic.com/en/docs/about-claude/models/overview)",
+      "cutoff_date": "2025-01-01",
+      "cutoff_date_raw": "2025.01",
+      "source": "[Source](https://web.archive.org/web/20251217180521/https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison)",
+      "company": "Anthropic"
+    },
+    "claude-4.5-haiku": {
+      "model_name": "Claude 4.5 Haiku",
+      "provider": "Anthropic",
+      "cutoff_date": "2025-02-01",
+      "cutoff_date_raw": "2025.02",
+      "source": "[Source](https://web.archive.org/web/20251217180521/https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison)",
+      "company": "Anthropic"
+    },
+    "claude-4.5-opus": {
+      "model_name": "Claude 4.5 Opus",
+      "provider": "Anthropic",
+      "cutoff_date": "2025-05-01",
+      "cutoff_date_raw": "2025.05",
+      "source": "[Source](https://web.archive.org/web/20251217180521/https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison)",
+      "company": "Anthropic"
+    },
+    "claude-4.6-opus": {
+      "model_name": "Claude 4.6 Opus",
+      "provider": "Anthropic",
+      "cutoff_date": "2025-05-01",
+      "cutoff_date_raw": "2025.05",
+      "source": "[Source](https://web.archive.org/web/20260212023515/https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison)",
       "company": "Anthropic"
     },
     "llama-2-7b13b70b": {
@@ -544,22 +608,6 @@
       "source": "[Source](https://github.com/deepseek-ai/DeepSeek-Coder-V2/issues/1)",
       "company": "DeepSeek"
     },
-    "deepseek-v3": {
-      "model_name": "DeepSeek-V3",
-      "provider": "DeepSeek",
-      "cutoff_date": "2024-12-01",
-      "cutoff_date_raw": "2024.12",
-      "source": "[Source](https://explodingtopics.com/blog/list-of-llms)",
-      "company": "DeepSeek"
-    },
-    "deepseek-r1": {
-      "model_name": "DeepSeek-R1",
-      "provider": "DeepSeek",
-      "cutoff_date": "2025-01-01",
-      "cutoff_date_raw": "2025.01",
-      "source": "[Source](https://explodingtopics.com/blog/list-of-llms)",
-      "company": "DeepSeek"
-    },
     "phi-3": {
       "model_name": "Phi-3-*",
       "provider": "Microsoft",
@@ -568,17 +616,41 @@
       "source": "[Source](https://console.cloud.google.com/vertex-ai/publishers/microsoft/model-garden/phi3?pli=1)",
       "company": "Microsoft"
     },
+    "grok-2": {
+      "model_name": "Grok 2",
+      "provider": "xAI",
+      "cutoff_date": "2023-09-01",
+      "cutoff_date_raw": "2023.09",
+      "source": "[Source](https://aimlapi.com/models/grok-2-beta-api)",
+      "company": "xAI"
+    },
+    "grok-3": {
+      "model_name": "Grok 3",
+      "provider": "xAI",
+      "cutoff_date": "2024-11-01",
+      "cutoff_date_raw": "2024.11",
+      "source": "[Source](https://docs.x.ai/docs/models)",
+      "company": "xAI"
+    },
+    "grok-4": {
+      "model_name": "Grok 4",
+      "provider": "xAI",
+      "cutoff_date": "2024-11-01",
+      "cutoff_date_raw": "2024.11",
+      "source": "[Source](https://docs.x.ai/docs/models)",
+      "company": "xAI"
+    },
+    "mimo-v2-flash": {
+      "model_name": "MiMo-V2-Flash",
+      "provider": "Xiaomi",
+      "cutoff_date": "2024-12-01",
+      "cutoff_date_raw": "2024.12",
+      "source": "[Source](https://github.com/XiaomiMiMo/MiMo-V2-Flash)",
+      "company": "XiaomiMiMo"
+    },
     "mistral-series": {
       "model_name": "Mistral series",
       "provider": "Mistral AI",
-      "cutoff_date": null,
-      "cutoff_date_raw": "unknown",
-      "source": "",
-      "company": "Unknown"
-    },
-    "grok": {
-      "model_name": "Grok-*",
-      "provider": "xAI",
       "cutoff_date": null,
       "cutoff_date_raw": "unknown",
       "source": "",
@@ -587,7 +659,7 @@
   },
   "metadata": {
     "source_url": "https://github.com/HaoooWang/llm-knowledge-cutoff-dates",
-    "parsed_at": "2025-12-10T22:44:16.041978Z",
-    "total_models": 73
+    "parsed_at": "2026-03-14T23:25:40.770964Z",
+    "total_models": 82
   }
 }

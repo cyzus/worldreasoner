@@ -10,6 +10,23 @@ from src.services.forecast_context_service import ForecastContext, ForecastConte
 from src.utils.logging import logger
 
 
+def _extract_http_request(fastmcp_context):
+    """Extract HTTP request from FastMCP context across API versions."""
+    # New FastMCP API: dependency getter with no args inside request scope.
+    try:
+        from fastmcp.server.dependencies import get_http_request
+
+        return get_http_request()
+    except Exception:
+        pass
+
+    # Backward-compatible fallback for older FastMCP versions.
+    if hasattr(fastmcp_context, "get_http_request"):
+        return fastmcp_context.get_http_request()
+
+    return None
+
+
 class ForecastContextMiddleware(Middleware):
     """Capture and cache forecasting context from request headers."""
 
@@ -31,7 +48,7 @@ class ForecastContextMiddleware(Middleware):
 
         if context.fastmcp_context:
             try:
-                request = context.fastmcp_context.get_http_request()
+                request = _extract_http_request(context.fastmcp_context)
                 if request and hasattr(request, "headers"):
                     headers = {
                         k: v
@@ -75,7 +92,7 @@ def get_context_from_mcp(
     if context_service is not None:
         try:
             if hasattr(ctx, "fastmcp_context") and ctx.fastmcp_context:
-                request = ctx.fastmcp_context.get_http_request()
+                request = _extract_http_request(ctx.fastmcp_context)
                 if request and hasattr(request, "headers"):
                     headers = {
                         k: v
