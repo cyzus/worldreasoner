@@ -186,6 +186,39 @@ class TestGetQuestionTool:
         finally:
             _current_context.reset(token)
 
+    def test_falls_back_to_metadata_options_when_missing(self, mock_ctx, forecast_context):
+        """Should include metadata options in response if top-level options is None."""
+        from src.api.mcp_forecasting_server import get_question, _current_context
+        import src.api.mcp_forecasting_server as server
+
+        fn = _get_tool_fn(get_question)
+
+        question = Question(
+            id="q_meta_opts",
+            question_text="Will policy X pass by June 2026?",
+            question_type=QuestionType.MCQ,
+            domain=Domain.POLITICS,
+            source="polymarket",
+            difficulty=3,
+            resolution_date=datetime(2026, 6, 1, tzinfo=timezone.utc),
+            options=None,
+            metadata={"options": ["Yes", "No"]},
+        )
+
+        token = _current_context.set(forecast_context)
+        mock_context_service = Mock()
+        mock_context_service.get_question_for_context.return_value = question
+        original = server.context_service
+        server.context_service = mock_context_service
+
+        try:
+            result = fn(mock_ctx)
+            data = _to_data(result)
+            assert data["question"]["options"] == ["Yes", "No"]
+        finally:
+            _current_context.reset(token)
+            server.context_service = original
+
 
 # ---------------------------------------------------------------------------
 # fetch_article tool tests

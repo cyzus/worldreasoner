@@ -36,6 +36,12 @@ SLOT_FRACTIONS: dict = {
 }
 
 
+# Minimum effective forecast window used for slot placement.
+# If context-derived windows are too narrow (e.g., all context appears just before
+# resolution), we backfill window_start so early/mid/late remain meaningful.
+MIN_EFFECTIVE_SLOT_WINDOW_DAYS = 7
+
+
 def get_forecast_date_for_slot(
     question: Question,
     slot: ForecastSlot = ForecastSlot.MID,
@@ -75,20 +81,33 @@ def get_forecast_date_for_slot(
         question, db=db, min_context_items=min_context_items
     )
 
-    span = window_end - window_start
+    # Ensure slots remain meaningful even when context arrives very late.
+    # Without this guard, a ~1 day window makes early/mid/late nearly identical.
+    min_window_start = window_end - timedelta(days=MIN_EFFECTIVE_SLOT_WINDOW_DAYS)
+    effective_window_start = window_start
+    if window_start > min_window_start:
+        effective_window_start = min_window_start
+        logger.warning(
+            f"Question {question.id} has narrow context window "
+            f"({window_start.date()} -> {window_end.date()}); "
+            f"expanding slot window start to {effective_window_start.date()} "
+            f"for stable slot behavior"
+        )
+
+    span = window_end - effective_window_start
     fraction = SLOT_FRACTIONS[slot]
-    simulated_date = window_start + span * fraction
+    simulated_date = effective_window_start + span * fraction
 
     logger.info(
         f"Forecast slot '{slot.value}' for question {question.id}: "
         f"simulated_date={simulated_date.date()} "
-        f"(window {window_start.date()} → {window_end.date()}, "
+        f"(window {effective_window_start.date()} → {window_end.date()}, "
         f"{span.days}d span, {fraction * 100:.0f}% elapsed)"
     )
 
     return {
         "simulated_date": simulated_date,
-        "window_start": window_start,
+        "window_start": effective_window_start,
         "window_end": window_end,
         "slot": slot.value,
         "horizon_days": span.days,

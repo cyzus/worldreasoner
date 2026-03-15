@@ -96,9 +96,11 @@ from src.api.mcp_forecasting.dependencies import (
     get_hybrid_search,
 )
 from src.api.mcp_forecasting.runtime import run_server
-from src.api.mcp_forecasting.models import (
+from src.tools.base.output_models import (
     ErrorResponse,
     FetchArticleResponse,
+    ForecastEventOutput,
+    ForecastHypothesisOutput,
     GetQuestionResponse,
     QuestionInfo,
     SearchArticleItem,
@@ -106,7 +108,6 @@ from src.api.mcp_forecasting.models import (
     TemporalContextInfo,
     TemporalSearchArticlesResponse,
 )
-from src.tools.base.output_models import ForecastEventOutput, ForecastHypothesisOutput
 
 # Initialize MCP server
 mcp = FastMCP("worldreasoner-forecasting")
@@ -242,6 +243,18 @@ def get_question(ctx: Context) -> GetQuestionResponse | ErrorResponse:
 
         # Load question using service (optionally passing db)
         question = context_service.get_question_for_context(forecast_context)
+        question_metadata = question.metadata or {}
+        response_options = question.options
+        if response_options is None:
+            metadata_options = question_metadata.get("options")
+            if isinstance(metadata_options, list):
+                response_options = metadata_options
+
+        response_quantity_unit = question.quantity_unit
+        if response_quantity_unit is None:
+            metadata_quantity_unit = question_metadata.get("quantity_unit")
+            if isinstance(metadata_quantity_unit, str):
+                response_quantity_unit = metadata_quantity_unit
 
         return GetQuestionResponse(
             question=QuestionInfo(
@@ -250,8 +263,8 @@ def get_question(ctx: Context) -> GetQuestionResponse | ErrorResponse:
                 question_type=question.question_type.value,
                 domain=serialize_domain(question.domain),
                 difficulty=question.difficulty,
-                options=question.options,
-                quantity_unit=question.quantity_unit,
+                options=response_options,
+                quantity_unit=response_quantity_unit,
             ),
             temporal_context=TemporalContextInfo(
                 knowledge_cutoff_date=forecast_context.knowledge_cutoff.isoformat()

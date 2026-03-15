@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from src.domain.models.question_helpers import (
     ForecastSlot,
+    MIN_EFFECTIVE_SLOT_WINDOW_DAYS,
     SLOT_FRACTIONS,
     get_forecast_date_for_slot,
 )
@@ -206,3 +207,18 @@ class TestGetForecastDateForSlot:
         assert result["slot"] == "mid"
         span = w_end - w_start
         assert result["simulated_date"] == w_start + span * 0.50
+
+    def test_narrow_window_is_expanded_for_stable_slots(self):
+        """Very narrow windows should be backfilled before slot placement."""
+        q = _make_question(90)
+        w_start = datetime(2024, 3, 31, tzinfo=timezone.utc)
+        w_end = datetime(2024, 4, 1, tzinfo=timezone.utc)
+
+        result = self._call_with_fixed_window(q, ForecastSlot.MID, w_start, w_end)
+
+        expected_start = w_end - timedelta(days=MIN_EFFECTIVE_SLOT_WINDOW_DAYS)
+        expected_mid = expected_start + (w_end - expected_start) * 0.50
+
+        assert result["window_start"] == expected_start
+        assert result["simulated_date"] == expected_mid
+        assert result["simulated_date"].date() < w_start.date()

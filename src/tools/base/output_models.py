@@ -267,6 +267,98 @@ class ForecastEventOutput(OutputModelBase):
 
 
 # =============================================================================
+# MCP Forecasting API Outputs
+# =============================================================================
+
+
+class ErrorResponse(OutputModelBase):
+    """Standard error payload for MCP tool responses."""
+
+    error: str = Field(description="Error message")
+
+
+class QuestionInfo(OutputModelBase):
+    """Question details for forecasting context."""
+
+    id: str
+    question_text: str
+    question_type: str
+    domain: str
+    difficulty: Optional[int] = None
+    options: Optional[List[str]] = None
+    quantity_unit: Optional[str] = None
+
+
+class TemporalContextInfo(OutputModelBase):
+    """Temporal setup details for a forecast session."""
+
+    knowledge_cutoff_date: Optional[str] = None
+    today_date: str = Field(alias="today's date")
+    explanation: str
+
+
+class GetQuestionResponse(OutputModelBase):
+    """Response payload for get_question MCP tool."""
+
+    question: QuestionInfo
+    temporal_context: TemporalContextInfo
+    instructions: str
+
+
+class SearchArticleItem(OutputModelBase):
+    """Single article summary item in temporal search responses."""
+
+    id: str
+    title: str
+    url: Optional[str] = None
+    source: Optional[str] = None
+    domain: str
+    published_date: str
+    word_count: Optional[int] = None
+    excerpt: str
+
+
+class TemporalSearchArticlesResponse(OutputModelBase):
+    """Response payload for temporal_search_articles MCP tool."""
+
+    query: str
+    simulated_date: str
+    note: str
+    count: int
+    articles: List[SearchArticleItem]
+
+
+class FetchArticleResponse(OutputModelBase):
+    """Response payload for fetch_article MCP tool."""
+
+    id: str
+    title: str
+    url: Optional[str] = None
+    source: Optional[str] = None
+    domain: str
+    published_date: str
+    author: Optional[str] = None
+    word_count: Optional[int] = None
+    tags: Optional[List[str]] = None
+    content: str
+    event_ids: Optional[List[str]] = None
+
+
+class SubmitForecastResponse(OutputModelBase):
+    """Response payload for submit_forecast MCP tool."""
+
+    forecast_id: str
+    question_id: str
+    prediction: Any
+    confidence: float
+    simulated_date: str
+    submitted_at: str
+    status: str
+    graph_links: Dict[str, int]
+    note: str
+
+
+# =============================================================================
 # Question Tools
 # =============================================================================
 
