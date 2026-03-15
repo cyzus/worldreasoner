@@ -221,7 +221,110 @@ Recommendations fire when `quality.score < 0.8`:
 
 ---
 
-## 6.3 Shared Infrastructure
+## 6.3 Causal Pressure Trajectory
+
+The **Causal Pressure Trajectory** is a time-series visualization of how evidence accumulated toward (or against) the resolved outcome as events occurred over time. It is displayed in the **Case Study View** under the "Evidence Accumulation" section, between the Causal Explanation and the Causal Events Table.
+
+### Concept
+
+Each event in the causal graph has a recorded `EventOutcomeImpact` toward the question's outcome event. This impact has three scalar attributes:
+
+| Attribute | Range | Meaning |
+|-----------|-------|---------|
+| `impact_direction` | positive / negative / neutral / mixed | Which way the event pushed the outcome |
+| `impact_magnitude` | [0, 1] | How strongly the event pushed |
+| `confidence` | [0, 1] | How certain the system is of this assessment |
+
+These are combined into a single **weighted contribution** per event:
+
+```
+contribution = sign(direction) × magnitude × confidence
+
+where sign: positive → +1, negative → −1, neutral/mixed → 0
+```
+
+Events are then sorted by `occurred_date` and the contributions are accumulated into a running **cumulative pressure** signal:
+
+```
+cumulative_pressure(t) = Σ contribution_i   for all events i where occurred_date ≤ t
+```
+
+The result is a step function that rises as positive-direction events occur and falls as negative-direction events occur, giving an intuitive picture of how the causal evidence "tilted" over time.
+
+### Outcome Selection
+
+When a question has multiple outcome events (e.g. a `POSITIVE_RESOLUTION` and a `NEGATIVE_RESOLUTION` node), the trajectory targets the most relevant one using this priority order:
+
+1. The outcome node flagged `is_actual_outcome = True`
+2. The outcome node whose `outcome_scenario` matches `ground_truth` (e.g. `positive_resolution` for a "Yes" answer)
+3. The first available outcome node
+
+### Visualization
+
+The chart is an SVG step chart rendered directly in the Case Study View:
+
+| Element | Description |
+|---------|-------------|
+| **Step line** | Green if net pressure is positive, red if negative |
+| **Shaded area** | Filled area between the step line and the zero baseline |
+| **Colored dots** | One per event: green = positive, red = negative, purple = mixed, grey = neutral |
+| **Hover tooltip** | Shows event title, date, direction, magnitude %, confidence %, individual `Δ` contribution, and market price at that moment |
+| **Blue smooth line** | Polymarket price for the **actual outcome token** (right Y axis, 0–100%). Only shown for Polymarket questions. Token is selected by matching the actual outcome event node's title against `token_outcomes` labels (case-insensitive). Works for binary and MCQ questions without hardcoding. |
+| **Dashed blue line at 50%** | Lead-change threshold on the price axis |
+| **Yellow dashed line** | Resolution date |
+| **Net label** | Final cumulative value (e.g. `+0.412`) displayed top-right |
+
+### API Endpoint
+
+The same trajectory can be fetched via the REST API for programmatic use:
+
+```
+GET /api/outcomes/{outcome_id}/trajectory
+```
+
+**Response:**
+```json
+{
+    "outcome_event_id": "evt_outcome_yes_q123",
+    "trajectory": [
+        {
+            "date": "2024-01-15T00:00:00+00:00",
+            "event_id": "evt_abc",
+            "event_title": "Fed raises interest rates",
+            "direction": "positive",
+            "magnitude": 0.7,
+            "confidence": 0.85,
+            "weighted_contribution": 0.595,
+            "cumulative_pressure": 0.595
+        },
+        ...
+    ],
+    "summary": {
+        "net_pressure": 0.412,
+        "event_count": 7,
+        "avg_confidence": 0.74,
+        "dominant_direction": "positive"
+    }
+}
+```
+
+Events with no recorded `occurred_date` or `predicted_date` are excluded. Events are sorted chronologically before accumulation.
+
+### Interpretation
+
+| Net Pressure Range | Interpretation |
+|--------------------|----------------|
+| > +0.3 | Strong positive evidence accumulation toward this outcome |
+| +0.1 to +0.3 | Moderate positive lean |
+| −0.1 to +0.1 | Ambiguous or balanced evidence |
+| −0.1 to −0.3 | Moderate negative evidence (events pushed away from this outcome) |
+| < −0.3 | Strong evidence against this outcome |
+
+Note that because `EventOutcomeImpact` assessments are made in **hindsight** (after the question has resolved), the cumulative pressure is biased toward the actual outcome — it reflects the explanatory power of the causal graph, not a prospective forecast.
+
+---
+
+## 6.4 Shared Infrastructure
 
 Both inspectors rely on the following shared components:
 
@@ -235,4 +338,4 @@ The evidence window defines the time range `[estimated_start_time, resolution_da
 
 ---
 
-*For CLI commands to invoke the inspectors, see [Appendix A](appendix/A_cli_reference.md). For the evidence criteria thresholds used by the pipeline, see [Section 3.2](03_evidence_pipeline.md#32-evidence-criteria).*
+*For CLI commands to invoke the inspectors, see [Appendix A](appendix/A_cli_reference.md). For the evidence criteria thresholds used by the pipeline, see [Section 3.2](03_evidence_pipeline.md#32-evidence-criteria). For evaluation metrics used to score forecasts, see [Section 5](05_evaluation.md).*

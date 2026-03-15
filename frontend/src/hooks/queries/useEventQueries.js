@@ -3,7 +3,8 @@ import {
     fetchEventArticles,
     fetchEventQuestions,
     fetchEventImpacts,
-    fetchOutcomeImpacts
+    fetchOutcomeImpacts,
+    fetchOutcomeTrajectory
 } from '../../api/graphApi'
 
 export const useEventArticles = (eventId, enabled = true) => {
@@ -29,6 +30,15 @@ export const useEventImpacts = (eventId, enabled = true) => {
         queryKey: ['eventImpacts', eventId],
         queryFn: () => fetchEventImpacts(eventId),
         enabled: !!eventId && enabled,
+        staleTime: 5 * 60 * 1000
+    })
+}
+
+export const useOutcomeTrajectory = (outcomeId, enabled = true) => {
+    return useQuery({
+        queryKey: ['outcomeTrajectory', outcomeId],
+        queryFn: () => fetchOutcomeTrajectory(outcomeId),
+        enabled: !!outcomeId && enabled,
         staleTime: 5 * 60 * 1000
     })
 }

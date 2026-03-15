@@ -315,6 +315,15 @@ export async function fetchOutcomeImpacts(outcomeId, minConfidence = null, impac
 }
 
 /**
+ * Fetch chronological causal-pressure trajectory toward an outcome event.
+ * Returns sorted trajectory points with cumulative_pressure and a summary.
+ */
+export async function fetchOutcomeTrajectory(outcomeId) {
+  const response = await axios.get(`${API_BASE_URL}/outcomes/${outcomeId}/trajectory`)
+  return response.data
+}
+
+/**
  * Fetch impact edges from a specific event
  */
 export async function fetchEventImpacts(eventId, minConfidence = null, impactDirection = null) {

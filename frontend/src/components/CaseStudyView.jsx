@@ -1,8 +1,9 @@
 import React, { useState } from 'react'
 import { useCaseStudyData } from '../hooks/useCaseStudyData'
-import { useForecastGraph } from '../hooks/queries/useQuestionQueries'
+import { useForecastGraph, useQuestionPriceHistory } from '../hooks/queries/useQuestionQueries'
 import { ForecastComparison } from './CaseStudyView/ForecastComparison'
 import { CausalEventsTable } from './CaseStudyView/CausalEventsTable'
+import { CausalPressureChart } from './CaseStudyView/CausalPressureChart'
 import { InformationStream } from './CaseStudyView/InformationStream'
 import { ForecastGraphModal } from './CaseStudyView/ForecastGraphModal'
 import ReactMarkdown from 'react-markdown'
@@ -37,6 +38,8 @@ function CaseStudyView({
     isFetching: loadingGraph
   } = useForecastGraph(activeForecastId)
 
+  const { data: priceHistoryData } = useQuestionPriceHistory(selectedQuestion?.id)
+
   const handleViewForecastGraph = (forecastId) => {
     setActiveForecastId(forecastId)
   }
@@ -70,6 +73,23 @@ function CaseStudyView({
           <div className="cs-impact-details markdown-body" style={{ marginTop: 0 }}>
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedQuestion.causal_explanation}</ReactMarkdown>
           </div>
+        </div>
+      )}
+
+      {Object.keys(impacts).length > 0 && (
+        <div className="cs-section">
+          <h3 className="cs-section-title">📈 Evidence Accumulation</h3>
+          <p className="cs-section-subtitle">
+            Cumulative causal pressure toward the resolved outcome — each step is one event
+          </p>
+          <CausalPressureChart
+            events={events}
+            impacts={impacts}
+            groundTruthScenario={groundTruthScenario}
+            resolutionDate={selectedQuestion?.resolution_date}
+            priceHistory={priceHistoryData?.price_history || null}
+            priceOutcomes={priceHistoryData?.token_outcomes || priceHistoryData?.outcomes || null}
+          />
         </div>
       )}
 

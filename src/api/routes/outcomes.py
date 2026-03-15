@@ -3,12 +3,13 @@
 Provides REST API for querying outcome events and their impacts.
 """
 
-from typing import Optional, List
-from fastapi import APIRouter, Query, HTTPException, Depends
+from typing import Any, Dict, List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from src.services.graph import GraphNode, GraphEdge, SQLiteGraphService
 from src.api.routes.database import get_current_db_path
 from src.core.database import GenericDatabase
+from src.domain.models.event import Event
+from src.services.graph import GraphEdge, GraphNode, SQLiteGraphService
 from src.services.outcome_event_service import OutcomeEventService
 from src.utils.logging import logger
 
@@ -171,6 +172,109 @@ async def mark_actual_outcome(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to mark outcome {outcome_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+_DIRECTION_SIGN: Dict[str, float] = {
+    "positive": 1.0,
+    "negative": -1.0,
+    "neutral": 0.0,
+    "mixed": 0.0,
+}
+
+
+@router.get("/outcomes/{outcome_id}/trajectory")
+async def get_outcome_trajectory(
+    outcome_id: str,
+    graph_service: SQLiteGraphService = Depends(get_graph_service),
+) -> Dict[str, Any]:
+    """Compute a chronological causal-pressure trajectory toward an outcome.
+
+    For each event that has a recorded impact on this outcome, retrieves the
+    event's occurred_date and computes a weighted contribution:
+
+        contribution = sign(direction) × magnitude × confidence
+
+    Returns points sorted by date with a running cumulative_pressure field,
+    giving a time-series view of how evidence accumulated toward or against
+    the outcome.
+
+    Args:
+        outcome_id: Outcome event ID
+
+    Returns:
+        trajectory: list of dated pressure points (sorted by date)
+        summary: net_pressure, event_count, avg_confidence, dominant_direction
+    """
+    try:
+        node = await graph_service.get_node(outcome_id)
+        if not node:
+            raise HTTPException(
+                status_code=404, detail=f"Outcome {outcome_id} not found"
+            )
+
+        impacts = await graph_service.get_impact_edges(outcome_event_id=outcome_id)
+        db = GenericDatabase(get_current_db_path())
+
+        points: List[Dict[str, Any]] = []
+        for impact in impacts:
+            event = db.get(Event, impact.source_id)
+            if not event:
+                continue
+            date = event.occurred_date or event.predicted_date
+            if not date:
+                continue
+
+            direction = impact.properties.get("impact_direction", "neutral")
+            magnitude = float(impact.properties.get("impact_magnitude", 0.0))
+            confidence = float(impact.properties.get("confidence", 0.0))
+            contribution = _DIRECTION_SIGN.get(direction, 0.0) * magnitude * confidence
+
+            points.append(
+                {
+                    "date": date.isoformat(),
+                    "event_id": event.id,
+                    "event_title": event.title,
+                    "direction": direction,
+                    "magnitude": magnitude,
+                    "confidence": confidence,
+                    "weighted_contribution": round(contribution, 4),
+                }
+            )
+
+        points.sort(key=lambda p: p["date"])
+        cumulative = 0.0
+        for point in points:
+            cumulative += point["weighted_contribution"]
+            point["cumulative_pressure"] = round(cumulative, 4)
+
+        avg_confidence = (
+            sum(p["confidence"] for p in points) / len(points) if points else 0.0
+        )
+        dominant = (
+            "positive" if cumulative > 0 else "negative" if cumulative < 0 else "neutral"
+        )
+
+        logger.info(
+            f"Computed trajectory for outcome {outcome_id}: "
+            f"{len(points)} points, net_pressure={cumulative:.3f}"
+        )
+
+        return {
+            "outcome_event_id": outcome_id,
+            "trajectory": points,
+            "summary": {
+                "net_pressure": round(cumulative, 4),
+                "event_count": len(points),
+                "avg_confidence": round(avg_confidence, 4),
+                "dominant_direction": dominant,
+            },
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to compute trajectory for outcome {outcome_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

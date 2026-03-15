@@ -1,8 +1,18 @@
 import { useQuery } from '@tanstack/react-query'
 import {
     fetchQuestionArticles,
-    fetchForecastGraph
+    fetchForecastGraph,
+    fetchQuestionPriceHistory
 } from '../../api/graphApi'
+
+export const useQuestionPriceHistory = (questionId, enabled = true) => {
+    return useQuery({
+        queryKey: ['questionPriceHistory', questionId],
+        queryFn: () => fetchQuestionPriceHistory(questionId, 'max', false),
+        enabled: !!questionId && enabled,
+        staleTime: 10 * 60 * 1000
+    })
+}
 
 export const useQuestionArticles = (questionId, enabled = true) => {
     return useQuery({
