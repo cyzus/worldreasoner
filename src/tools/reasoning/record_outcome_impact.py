@@ -47,11 +47,18 @@ class RecordOutcomeImpactTool(Tool, ToolResponseMixin):
         },
         "magnitude": {
             "type": "number",
-            "description": "How strong is this impact? (0.0 to 1.0)",
+            "description": (
+                "How strong is this impact? (0.0 to 1.0). "
+                "Use non-negative magnitude only; direction is captured separately "
+                "by the direction field."
+            ),
         },
         "confidence": {
             "type": "number",
-            "description": "How confident are you in this assessment? (0.0 to 1.0)",
+            "description": (
+                "How confident are you in this assessment? (0.0 to 1.0). "
+                "Confidence should reflect evidence quality and directness."
+            ),
         },
         "reasoning": {
             "type": "string",
@@ -123,6 +130,13 @@ class RecordOutcomeImpactTool(Tool, ToolResponseMixin):
         # Clamp values
         magnitude = max(0.0, min(1.0, float(magnitude)))
         confidence = max(0.0, min(1.0, float(confidence)))
+
+        # Keep neutral effects low-intensity to match data-model semantics.
+        if dir_enum == ImpactDirection.NEUTRAL and magnitude > 0.3:
+            logger.warning(
+                f"Clamping neutral impact magnitude from {magnitude} to 0.3"
+            )
+            magnitude = 0.3
 
         # Create impact record
         impact_id = f"imp_{uuid.uuid4().hex[:8]}"

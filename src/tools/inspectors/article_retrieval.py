@@ -19,12 +19,6 @@ class ArticleRetrievalTool(DatabaseAwareTool, ToolResponseMixin):
 
     Use this tool when you have an article ID and need to read its full content.
     Article IDs can be found in event details (event.article_ids) or other sources.
-
-    Args:
-        article_id (str): The ID of the article to retrieve (e.g., "art_tech_20251101_001_abc123")
-
-    Returns:
-        JSON string with full article content
     """
 
     inputs = {

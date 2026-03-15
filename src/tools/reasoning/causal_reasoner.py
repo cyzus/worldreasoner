@@ -46,11 +46,18 @@ class CausalReasonerTool(Tool, ToolResponseMixin):
         },
         "strength": {
             "type": "number",
-            "description": "Causal strength 0.0-1.0 (how strong the effect)",
+            "description": (
+                "Causal strength 0.0-1.0 (how strong the effect is). "
+                "Use higher values for major drivers or near-decisive triggers, "
+                "and lower values for weak contributing factors."
+            ),
         },
         "confidence": {
             "type": "number",
-            "description": "Confidence 0.0-1.0 (how sure you are)",
+            "description": (
+                "Confidence 0.0-1.0 (how sure you are this edge is real and correctly specified). "
+                "Confidence should reflect evidence quality, temporal fit, and mechanism clarity."
+            ),
         },
         "reasoning": {
             "type": "string",

@@ -38,17 +38,6 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
     Use this tool AFTER you've found article URLs using web_search.
     IMPORTANT: make sure the published_date is correct.
     This tool will internally fetch the full article content to save tokens.
-    
-    Args:
-        url (str): Source URL to fetch the article from
-        title (str): Article headline/title from search results
-        source (str): Publication name (e.g., "TechCrunch", "BBC News")
-        domain (str): Article domain category - one of: {", ".join(enum_to_list(Domain))}
-        published_date: Publication date in ISO format with time zone
-        author (str, optional): Author name if available
-    
-    Returns:
-        ArticleOutput: Structured article object with ID, metadata, and status
     """
 
     # Auto-generate inputs from Enum classes (single source of truth)

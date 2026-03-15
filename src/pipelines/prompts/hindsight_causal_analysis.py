@@ -74,7 +74,8 @@ Use the exact heading structure below so downstream validation and graph extract
 - 3-6 sentences summarizing the dominant causal path to the known outcome.
 
 ## Timeline Of Key Events
-- Chronological bullet list with explicit dates (YYYY-MM-DD when possible).
+- Chronological bullet list with explicit dates (and times when possible).
+- Events should span the full window but focus on critical moments.
 - Include event-level article citations inline.
 
 ## Causal Chain Analysis

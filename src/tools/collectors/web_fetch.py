@@ -29,20 +29,6 @@ class WebFetchTool(Tool):
     It returns clean markdown content suitable for LLM processing.
     
     IMPORTANT: this tool doesn't automatically store articles to the database.
-    Args:
-        url (str): The URL to fetch content from
-        timeout (int, optional): Maximum time to wait in seconds. Default: 30
-        timestamp (str, optional): Target timestamp for historical versions (Wayback Machine). 
-            Format: ISO string or YYYYMMDDhhmmss.
-    
-    Returns:
-        str: JSON string containing:
-            - url: The fetched URL
-            - title: Page title
-            - markdown: Clean markdown content
-            - metadata: Additional metadata (description, etc.)
-            - success: Boolean indicating if fetch was successful
-            - error: Error message if fetch failed
     """
 
     inputs = {
