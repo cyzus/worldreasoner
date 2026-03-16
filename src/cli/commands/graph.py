@@ -1,6 +1,7 @@
 import typer
 from rich.console import Console
 
+from src.config import get_config
 from src.core.database import GenericDatabase
 from src.domain.models import Question
 from src.pipelines.graph_builder.pipeline import GraphBuilderPipeline
@@ -20,7 +21,9 @@ def build_graphs(
         None, "--question", "-q", help="Specific question ID"
     ),
     model_id: str = typer.Option(
-        "claude-3-5-sonnet-20241022", "--model", help="Model ID"
+        None,
+        "--model",
+        help="Model ID (defaults to config.llm.model)",
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose logging"),
 ):
@@ -28,7 +31,12 @@ def build_graphs(
     level = "DEBUG" if verbose else "INFO"
     setup_logging(level=level)
 
-    pipeline = GraphBuilderPipeline(db_path=db_path, model_id=model_id, temperature=0.2)
+    selected_model_id = model_id or get_config().llm.model
+    pipeline = GraphBuilderPipeline(
+        db_path=db_path,
+        model_id=selected_model_id,
+        temperature=0.2,
+    )
 
     if question_id:
         db = GenericDatabase(db_path)

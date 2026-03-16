@@ -1,7 +1,8 @@
 """Graph Builder pipeline for asynchronous background processing."""
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
+from src.config import get_config
 from src.core.database import GenericDatabase
 from src.domain.models import Question, Event
 from src.agents.graph_builder_agent import GraphBuilderAgentFactory
@@ -16,7 +17,7 @@ class GraphBuilderPipeline:
     def __init__(
         self,
         db_path: str,
-        model_id: str = "claude-3-5-sonnet-20241022",
+        model_id: Optional[str] = None,
         temperature: float = 0.2,
         min_graph_depth: int = SATISFACTION_DEFAULTS.min_graph_depth,
         min_events: int = SATISFACTION_DEFAULTS.min_graph_events,
@@ -24,7 +25,7 @@ class GraphBuilderPipeline:
         """Initialize the pipeline."""
         self.db_path = db_path
         self.db = GenericDatabase(db_path)
-        self.model_id = model_id
+        self.model_id = model_id or get_config().llm.model
         self.temperature = temperature
         self.min_graph_depth = min_graph_depth
         self.min_events = min_events
