@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Optional
 
 from src.config import get_config
 from src.core.database import GenericDatabase
-from src.domain.models import Question, Event
+from src.domain.models import Article, Event, Question
 from src.agents.graph_builder_agent import GraphBuilderAgentFactory
 from src.pipelines.prompts import graph_builder as graph_builder_prompts
 from src.config.pipeline import SATISFACTION_DEFAULTS
@@ -31,9 +31,37 @@ class GraphBuilderPipeline:
         self.min_events = min_events
 
     def _load_pending_questions(self) -> List[Question]:
-        """Find questions that have explanations but no graph."""
+        """Find graph-eligible questions waiting for graph building."""
         all_questions = self.db.get_many(Question)
-        return [q for q in all_questions if q.causal_explanation and not q.graph_built]
+        pending = [q for q in all_questions if q.causal_explanation and not q.graph_built]
+        eligible = [q for q in pending if self._has_evidence_articles(q.id)]
+
+        skipped = len(pending) - len(eligible)
+        if skipped > 0:
+            logger.info(
+                f"Skipping {skipped} pending question(s) with no collected articles."
+            )
+
+        return eligible
+
+    def _has_evidence_articles(self, question_id: str) -> bool:
+        """Return True if the question has at least one linked article."""
+        # Primary provenance field used by current evidence pipeline.
+        direct_articles = self.db.get_many(
+            Article,
+            filters={"collected_for_question_id": question_id},
+        )
+        if direct_articles:
+            return True
+
+        # Backward-compatible fallback for legacy metadata-only provenance.
+        all_articles = self.db.get_many(Article)
+        for article in all_articles:
+            related_ids = article.metadata.get("related_question_ids", [])
+            if question_id in related_ids:
+                return True
+
+        return False
 
     def process_pending(self, limit: int = 10) -> Dict[str, Any]:
         """Process all pending questions."""
@@ -61,6 +89,17 @@ class GraphBuilderPipeline:
     def _process_single_question(self, question: Question) -> bool:
         """Process a single question's graph."""
         try:
+            if not self._has_evidence_articles(question.id):
+                reason = (
+                    "No evidence articles found for this question "
+                    "(collected_for_question_id / related_question_ids). "
+                    "Run `wr evidence run` first."
+                )
+                logger.warning(f"Skipping graph build for {question.id}: {reason}")
+                question.graph_build_error = reason
+                self.db.save(Question, question)
+                return False
+
             # 1. Find actual outcome event
             events = self.db.get_many(Event)
             actual_outcome_id = "unknown"
