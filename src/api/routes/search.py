@@ -36,6 +36,7 @@ class SearchIndexBuildRequest(BaseModel):
     rebuild: bool = False
     embedding_model: Optional[str] = None
     batch_size: int = 2
+    fts_only: bool = False
 
 
 class SearchIndexBuildResponse(BaseModel):
@@ -80,7 +81,7 @@ async def get_search_index_status():
         total_articles = len(db.get_many(Article))
         stats = search.get_index_stats()
 
-        needs_indexing = total_articles > stats["embeddings_indexed"]
+        needs_indexing = total_articles > stats["fts_indexed"]
 
         return SearchIndexStatus(
             total_articles=total_articles,
@@ -142,6 +143,7 @@ async def build_search_index(request: SearchIndexBuildRequest):
             db_path=db_path,
             embedding_model=embedding_model,
             skip_existing=skip_existing,
+            fts_only=request.fts_only,
         )
 
         # Build response based on result

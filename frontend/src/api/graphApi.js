@@ -215,11 +215,12 @@ export async function fetchSearchIndexStatus() {
 /**
  * Build or rebuild search indexes
  */
-export async function buildSearchIndex(rebuild = false, embeddingModel = null, batchSize = 2) {
+export async function buildSearchIndex(rebuild = false, embeddingModel = null, batchSize = 2, ftsOnly = true) {
   const response = await axios.post(`${API_BASE_URL}/search/build-index`, {
     rebuild,
     embedding_model: embeddingModel,
-    batch_size: batchSize
+    batch_size: batchSize,
+    fts_only: ftsOnly
   })
   return response.data
 }

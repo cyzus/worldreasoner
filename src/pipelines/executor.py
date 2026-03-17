@@ -160,7 +160,7 @@ class PipelineExecutor:
 
         try:
             logger.info("Indexing articles for hybrid search...")
-            index_stats = await auto_index_articles(db_path=self.db_path)
+            index_stats = await auto_index_articles(db_path=self.db_path, fts_only=True)
             if index_stats["status"] == "success":
                 logger.info(
                     f"Indexed {index_stats['newly_indexed']} new articles "

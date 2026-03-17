@@ -151,29 +151,38 @@ class HybridSearch:
 
             conn.commit()
 
-    async def index_articles_batch(self, articles: List[Article], batch_size: int = 10):
+    async def index_articles_batch(
+        self, articles: List[Article], batch_size: int = 10, fts_only: bool = False
+    ):
         """Index multiple articles efficiently using async batching.
 
         Args:
             articles: List of articles to index
             batch_size: Number of articles to process at once for embeddings
+            fts_only: If True, only build the FTS index (skip embedding generation)
         """
         logger.info(f"Checking {len(articles)} articles for indexing...")
 
-        # Filter out articles that already have embeddings for this model
         with self._get_connection() as conn:
             cursor = conn.cursor()
-
-            # Get article IDs that already have embeddings for current model
             article_ids = [a.id for a in articles]
             placeholders = ",".join(["?"] * len(article_ids))
-            cursor.execute(
-                f"""
-                SELECT article_id FROM article_embeddings
-                WHERE model_name = ? AND article_id IN ({placeholders})
-            """,
-                [self.embedding_model] + article_ids,
-            )
+
+            if fts_only:
+                # Check which articles are already in the FTS table
+                cursor.execute(
+                    f"SELECT article_id FROM articles_fts WHERE article_id IN ({placeholders})",
+                    article_ids,
+                )
+            else:
+                # Check which articles already have embeddings for this model
+                cursor.execute(
+                    f"""
+                    SELECT article_id FROM article_embeddings
+                    WHERE model_name = ? AND article_id IN ({placeholders})
+                    """,
+                    [self.embedding_model] + article_ids,
+                )
 
             already_indexed = {row["article_id"] for row in cursor.fetchall()}
 
@@ -212,6 +221,10 @@ class HybridSearch:
                 fts_data,
             )
             conn.commit()
+
+        if fts_only:
+            logger.info(f"Successfully indexed {len(articles_to_index)} articles (FTS only)")
+            return
 
         # Generate embeddings in batches and persist immediately
         total_batches = (len(articles_to_index) - 1) // batch_size + 1
@@ -309,7 +322,7 @@ class HybridSearch:
                     FROM articles_fts
                     JOIN articles ON articles_fts.article_id = articles.id
                     WHERE articles_fts MATCH ?
-                    AND datetime(articles.published_date) < datetime(?)
+                    AND articles.published_date < ?
                     ORDER BY score
                     LIMIT ?
                 """
@@ -364,7 +377,7 @@ class HybridSearch:
             params = [self.embedding_model]
 
             if cutoff_date:
-                sql += " AND datetime(a.published_date) < datetime(?)"
+                sql += " AND a.published_date < ?"
                 params.append(cutoff_date.isoformat())
 
             cursor.execute(sql, params)

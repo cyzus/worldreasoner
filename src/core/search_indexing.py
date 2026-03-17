@@ -12,6 +12,7 @@ async def auto_index_articles(
     db_path: str = "worldreasoner.db",
     embedding_model: Optional[str] = None,
     skip_existing: bool = True,
+    fts_only: bool = False,
 ) -> dict:
     """Automatically index articles for hybrid search after pipeline runs.
 
@@ -44,7 +45,7 @@ async def auto_index_articles(
 
     # Get current index stats
     stats = search.get_index_stats()
-    already_indexed = stats["embeddings_indexed"]
+    already_indexed = stats["fts_indexed"] if fts_only else stats["embeddings_indexed"]
 
     logger.info(f"Total articles in database: {len(all_articles)}")
     logger.info(f"Already indexed: {already_indexed}")
@@ -53,13 +54,13 @@ async def auto_index_articles(
         # Get list of already indexed article IDs
         with search._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT article_id FROM article_embeddings
-                WHERE model_name = ?
-            """,
-                (search.embedding_model,),
-            )
+            if fts_only:
+                cursor.execute("SELECT article_id FROM articles_fts")
+            else:
+                cursor.execute(
+                    "SELECT article_id FROM article_embeddings WHERE model_name = ?",
+                    (search.embedding_model,),
+                )
             indexed_ids = {row["article_id"] for row in cursor.fetchall()}
 
         # Filter to only new articles
@@ -82,7 +83,7 @@ async def auto_index_articles(
 
     # Index the articles
     try:
-        await search.index_articles_batch(articles_to_index)
+        await search.index_articles_batch(articles_to_index, fts_only=fts_only)
 
         # Get final stats
         final_stats = search.get_index_stats()

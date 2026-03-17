@@ -310,14 +310,19 @@ def build_index(
     show_stats: bool = typer.Option(
         True, "--stats/--no-stats", help="Show index statistics"
     ),
+    fts_only: bool = typer.Option(
+        False, "--fts-only", help="Only build FTS index, skip embedding generation"
+    ),
 ):
     """Build or rebuild search indexes for hybrid search.
 
     Indexes articles for both FTS5 (full-text search) and semantic embeddings.
     By default, only indexes new articles. Use --rebuild to reindex everything.
+    Use --fts-only to build only the keyword search index (no embedding API calls).
 
     Examples:
         wr db build-index
+        wr db build-index --fts-only
         wr db build-index --rebuild
         wr db build-index --model text-embedding-3-large
         wr db build-index --db data/worldreasoner.db --batch-size 10
@@ -357,13 +362,14 @@ def build_index(
         return
 
     # Determine what to do
+    already_count = before_stats["fts_indexed"] if fts_only else before_stats["embeddings_indexed"]
     if rebuild:
         console.print(
             "\n[bold yellow]Rebuilding all indexes from scratch...[/bold yellow]"
         )
         skip_existing = False
     else:
-        to_index = total_articles - before_stats["embeddings_indexed"]
+        to_index = total_articles - already_count
         if to_index == 0:
             console.print("[green]All articles already indexed.[/green]")
             return
@@ -375,7 +381,10 @@ def build_index(
         with console.status("[bold green]Indexing articles..."):
             result = asyncio.run(
                 auto_index_articles(
-                    db_path=db_path, embedding_model=model, skip_existing=skip_existing
+                    db_path=db_path,
+                    embedding_model=model,
+                    skip_existing=skip_existing,
+                    fts_only=fts_only,
                 )
             )
 

@@ -330,7 +330,7 @@ async def temporal_search_articles(
             simulated_date=forecast_context.simulated_date,
             domain=domain,
             max_results=max_results,
-            search_method="fts",
+            question_id=forecast_context.question_id,
         )
 
         # Format response
