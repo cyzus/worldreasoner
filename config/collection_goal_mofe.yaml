@@ -1,0 +1,42 @@
+# MoFE Dataset Collection Goal
+# =============================
+# Target: ~170 binary questions with ground truth across diverse domains.
+# Combined with 29 existing questions from data/worldreasoner.db → ~200 total.
+#
+# Strategy:
+#   - Polymarket: relax domain quotas (let it contribute what it can)
+#   - News: generate questions across all domains to fill gaps
+#   - Both sources contribute roughly equally
+
+total_questions: 170
+
+type_distribution:
+  binary: 170
+
+# Relaxed domain quotas - minimums are low to let Polymarket contribute
+# News pipeline will fill the harder-to-find domains
+category_distribution:
+  politics: 15
+  tech: 15
+  finance: 15
+  health: 10
+  science: 10
+  climate: 10
+  sports: 15
+  general: 10
+  business: 10
+  culture: 10
+
+quality:
+  min_difficulty: 2
+  max_difficulty: 5
+  min_resolution_days: -365
+  max_resolution_days: 0
+  require_resolution_criteria: true
+  min_confidence_score: 0.5
+
+require_ground_truth: true
+
+source_minimums:
+  polymarket: 70
+  news: 70

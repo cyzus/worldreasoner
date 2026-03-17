@@ -252,6 +252,19 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
                             status=f"rejected: {error_msg}",
                         )
 
+        # CRITICAL VALIDATION: Ground truth mode requires ground_truth to be provided
+        if self.require_ground_truth and not ground_truth:
+            error_msg = (
+                "REJECTED: require_ground_truth is enabled but ground_truth is MISSING.\n"
+                "You MUST provide a verified ground_truth (YES or NO) for this question.\n"
+                "If you cannot verify the outcome, do NOT create this question."
+            )
+            return QuestionOutput(
+                id="error",
+                question_text=question_text,
+                status="rejected: ground_truth required but missing",
+            )
+
         # CRITICAL VALIDATION: If ground_truth provided, resolution_reasoning must be provided
         if ground_truth and not resolution_reasoning:
             error_msg = (

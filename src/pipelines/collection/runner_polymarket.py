@@ -605,10 +605,12 @@ class PolymarketRunner(QuestionSourceRunner):
             # Use fetch_events to get grouped structure
             # Adjust limit because events contain multiple markets
             # Fetching 1000 events might yield 1000+ markets
+            page_size = min(limit, 500)
+            max_pages = max(1, (limit + page_size - 1) // page_size)
             events_list = await self.client.fetch_events(
-                limit=limit,
+                limit=page_size,
                 closed=self.require_ground_truth,
-                # quality_requirements not passed to fetch_events yet, client handles closed/active
+                max_pages=max_pages,
             )
 
             if not events_list:

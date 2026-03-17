@@ -39,6 +39,7 @@ app.add_typer(evidence.app, name="evidence", help="Evidence pipeline commands")
 app.add_typer(forecast.app, name="forecast", help="Forecasting commands")
 app.add_typer(graph.app, name="graph", help="Graph building and audit commands")
 app.add_typer(benchmark.app, name="benchmark", help="LLM benchmark research commands")
+app.add_typer(graph.app, name="graph", help="Graph builder and audit commands")
 
 
 @app.callback()

@@ -29,6 +29,10 @@ class LLMConfig(BaseModel):
         default="gemini/gemini-embedding-001",
         description="LiteLLM embedding model identifier",
     )
+    evidence_model: Optional[str] = Field(
+        default=None,
+        description="LiteLLM model for evidence collection (falls back to 'model' if unset)",
+    )
     review_model: Optional[str] = Field(
         default=None,
         description="LiteLLM model identifier for event review (optional)",

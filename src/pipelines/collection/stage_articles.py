@@ -190,9 +190,12 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
 
             logger.info(f"[RSS] Feed returned {len(items)} items for {source.name}")
 
-            # Fetch all items concurrently using asyncio.gather
+            # Fetch all items concurrently with per-item timeout
             logger.debug(f"[RSS] Fetching {len(items)} items concurrently...")
-            tasks = [self._fetch_rss_item_async(item, source) for item in items]
+            tasks = [
+                asyncio.wait_for(self._fetch_rss_item_async(item, source), timeout=90)
+                for item in items
+            ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             # Count successful fetches (ignore exceptions)
