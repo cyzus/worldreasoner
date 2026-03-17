@@ -621,10 +621,10 @@ class GenericDatabase(Generic[T]):
         # Note: Uses < (strictly before) not <= to exclude items at cutoff
         if self.gateway is not None:
             if model == Article:
-                query += " AND published_date < ?"
+                query += " AND datetime(published_date) < datetime(?)"
                 params.append(self.cutoff_date.isoformat())
             elif model == Event:
-                query += " AND occurred_date < ?"
+                query += " AND datetime(occurred_date) < datetime(?)"
                 params.append(self.cutoff_date.isoformat())
 
         # Add field filters (validate field names against model to prevent SQL injection)

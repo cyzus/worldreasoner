@@ -309,7 +309,7 @@ class HybridSearch:
                     FROM articles_fts
                     JOIN articles ON articles_fts.article_id = articles.id
                     WHERE articles_fts MATCH ?
-                    AND articles.published_date < ?
+                    AND datetime(articles.published_date) < datetime(?)
                     ORDER BY score
                     LIMIT ?
                 """
@@ -364,7 +364,7 @@ class HybridSearch:
             params = [self.embedding_model]
 
             if cutoff_date:
-                sql += " AND a.published_date < ?"
+                sql += " AND datetime(a.published_date) < datetime(?)"
                 params.append(cutoff_date.isoformat())
 
             cursor.execute(sql, params)
