@@ -589,17 +589,16 @@ class EvidencePipeline(Pipeline):
         ]
         self.db_resolved_questions = len(resolved_with_ground_truth)
 
-        # Get all existing causal hypotheses to check which questions were already processed
-        # Always load this - needed both for skip mode AND force-reprocess mode
-        processed_question_ids = set()
+        # Determine which questions have already been processed.
+        # Delegates to QuestionMonitorService which is the single source of truth
+        # for evidence completion (articles >= min_articles AND causal_explanation set).
         try:
-            existing_hypotheses = db.get_many(CausalHypothesis, filters={})
-            # Collect all question IDs from discovered_by_question_ids lists
-            for h in existing_hypotheses:
-                processed_question_ids.update(h.discovered_by_question_ids)
+            from src.services.question_monitor_service import QuestionMonitorService
+
+            monitor = QuestionMonitorService(db, self.evidence_config.satisfaction)
+            processed_question_ids = monitor.get_processed_question_ids(all_questions)
         except Exception as e:
-            # Table might not exist on first run - that's okay
-            logger.debug(f"Could not load existing hypotheses (first run?): {e}")
+            logger.debug(f"Could not determine processed questions (first run?): {e}")
             processed_question_ids = set()
 
         # Count unprocessed: resolved questions that haven't been processed yet

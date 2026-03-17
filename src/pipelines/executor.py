@@ -137,43 +137,21 @@ class PipelineExecutor:
             db_path=self.db_path,
         )
 
-    def _check_sufficient_evidence(
-        self,
-        question: Question,
-        min_depth: int,
-    ) -> Optional[str]:
-        """Check if a question already has evidence meeting the minimum graph depth.
+    def _check_sufficient_evidence(self, question: Question) -> Optional[str]:
+        """Check if a question already has completed evidence.
 
-        Returns a skip-reason string if sufficient, None if processing is needed.
+        Delegates to QuestionMonitorService as the single source of truth.
+        Returns a skip-reason string if complete, None if processing is needed.
         """
-        from src.analysis.graph_analysis import (
-            resolve_target_event_id,
-            calculate_graph_quality,
-        )
+        from src.services.question_monitor_service import QuestionMonitorService
 
-        all_hypotheses = self.db.get_many(CausalHypothesis)
-        hypotheses = [
-            h for h in all_hypotheses if question.id in h.discovered_by_question_ids
-        ]
-
-        if not hypotheses:
-            return None
-
-        target = resolve_target_event_id(question, self.db, hypotheses)
-        metrics = calculate_graph_quality(hypotheses, target)
-        graph_depth = metrics["max_depth"]
-
-        if graph_depth >= min_depth:
+        satisfaction = QuestionMonitorService(self.db).check_satisfaction(question.id)
+        if satisfaction.is_satisfied:
             logger.info(
-                f"Question {question.id} already has {len(hypotheses)} hypotheses "
-                f"(depth {graph_depth}), skipping"
+                f"Question {question.id} already has sufficient evidence "
+                f"({satisfaction.article_count} articles, causal_explanation present), skipping"
             )
-            return f"Already has {len(hypotheses)} hypotheses (depth {graph_depth})"
-
-        logger.info(
-            f"Question {question.id} has {len(hypotheses)} hypotheses but "
-            f"insufficient depth ({graph_depth} < {min_depth}), reprocessing"
-        )
+            return f"Already has sufficient evidence ({satisfaction.article_count} articles)"
         return None
 
     async def _auto_index_articles(self) -> None:
@@ -564,7 +542,7 @@ class PipelineExecutor:
                     continue
 
                 if not force_reprocess:
-                    skip_reason = self._check_sufficient_evidence(question, min_depth=min_graph_depth)
+                    skip_reason = self._check_sufficient_evidence(question)
                     if skip_reason:
                         results.skipped.append({"id": qid, "reason": skip_reason})
                         continue
@@ -619,6 +597,7 @@ class PipelineExecutor:
         agent_max_steps: int = 30,
         min_graph_depth: int = SATISFACTION_DEFAULTS.min_graph_depth,
         skip_indexing: bool = False,
+        force_reprocess: bool = False,
         **kwargs,
     ) -> PipelineResult:
         """Run adaptive multi-agent evidence pipeline."""
@@ -656,12 +635,11 @@ class PipelineExecutor:
                     results.failed.append({"id": qid, "error": "Question not found"})
                     continue
 
-                skip_reason = self._check_sufficient_evidence(
-                    question, min_depth=min_graph_depth
-                )
-                if skip_reason:
-                    results.skipped.append({"id": qid, "reason": skip_reason})
-                    continue
+                if not force_reprocess:
+                    skip_reason = self._check_sufficient_evidence(question)
+                    if skip_reason:
+                        results.skipped.append({"id": qid, "reason": skip_reason})
+                        continue
 
                 logger.info(f"Running adaptive evidence pipeline on question: {qid}")
                 pipeline_results = await pipeline.run([question])

@@ -24,18 +24,17 @@ class QuestionService:
         self.db = db
 
     def has_evidence(self, question_id: str) -> bool:
-        """Check if question has evidence (causal hypotheses)."""
-        hypotheses = self.db.get_many(CausalHypothesis)
-        return any(question_id in h.discovered_by_question_ids for h in hypotheses)
+        """Check if question has completed evidence (articles + causal_explanation)."""
+        from src.services.question_monitor_service import QuestionMonitorService
+
+        return QuestionMonitorService(self.db).check_satisfaction(question_id).is_satisfied
 
     def get_evidence_status(self, questions: List[Question]) -> Dict[str, bool]:
-        """Bulk check if questions have evidence."""
-        hypotheses = self.db.get_many(CausalHypothesis)
-        question_ids_with_evidence = set()
-        for h in hypotheses:
-            question_ids_with_evidence.update(h.discovered_by_question_ids)
+        """Bulk check if questions have completed evidence."""
+        from src.services.question_monitor_service import QuestionMonitorService
 
-        return {q.id: (q.id in question_ids_with_evidence) for q in questions}
+        processed = QuestionMonitorService(self.db).get_processed_question_ids(questions)
+        return {q.id: (q.id in processed) for q in questions}
 
     def analyze_cascade(self, question_id: str) -> Dict:
         """Analyze what would be deleted if this question is removed.

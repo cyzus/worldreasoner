@@ -3,7 +3,6 @@
 from typing import Optional, Dict, List, Set
 from collections import defaultdict
 
-from src.config.pipeline import SATISFACTION_DEFAULTS
 from src.tools.base.database_mixin import DatabaseAwareTool
 from src.domain.models import CausalHypothesis, Event
 from src.analysis.graph_visualization import GraphVisualizer
@@ -196,11 +195,14 @@ class GraphInspectorTool(DatabaseAwareTool):
 
     def _get_recommendation(self, stats: Dict) -> str:
         """Generate recommendation based on graph statistics."""
+        from src.services.question_monitor_service import QuestionMonitorService
+
+        monitor = QuestionMonitorService(self.db)
         return GraphVisualizer.get_recommendation(
             stats["max_depth"],
             stats["quality_score"],
-            min_depth=SATISFACTION_DEFAULTS.min_graph_depth,
-            min_quality=SATISFACTION_DEFAULTS.min_confidence,
+            min_depth=monitor.config.min_graph_depth,
+            min_quality=monitor.config.min_confidence,
         )
 
     def _format_empty_graph(self) -> str:
@@ -598,16 +600,23 @@ RECOMMENDATION:
         builder.add_line()
 
         # Recommendations
+        from src.services.question_monitor_service import QuestionMonitorService
+
+        monitor = QuestionMonitorService(self.db)
+        missing_reqs = monitor.evaluate_graph_requirements(
+            stats["max_depth"], stats["event_count"]
+        )
+
         builder.add_section_header("RECOMMENDATION")
         graph_recommendation = self._get_recommendation(stats)
         builder.add_kv("Graph", graph_recommendation, indent=2)
 
-        if stats["event_count"] < SATISFACTION_DEFAULTS.min_graph_events:
-            missing = SATISFACTION_DEFAULTS.min_graph_events - stats["event_count"]
+        if any("events" in r for r in missing_reqs):
+            needed = monitor.config.min_graph_events - stats["event_count"]
             builder.add_kv(
                 "Events",
-                f"Only {stats['event_count']}/{SATISFACTION_DEFAULTS.min_graph_events} events. "
-                f"Identify {missing} more intermediate events to reach the minimum.",
+                f"Only {stats['event_count']}/{monitor.config.min_graph_events} events. "
+                f"Identify {needed} more intermediate events to reach the minimum.",
                 indent=2,
             )
 

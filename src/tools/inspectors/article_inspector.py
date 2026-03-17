@@ -2,8 +2,8 @@
 
 from typing import Optional, List, Dict
 
-from src.config.pipeline import SATISFACTION_DEFAULTS
 from src.tools.base.database_mixin import DatabaseAwareTool
+from src.services.question_monitor_service import QuestionMonitorService
 from src.domain.models import Article, Question
 from src.analysis.article_analysis import (
     analyze_timeline,
@@ -97,17 +97,18 @@ class ArticleInspectorTool(DatabaseAwareTool):
         )
         source_data = analyze_sources(filtered_articles)
         gaps = identify_gaps(timeline_data)
+        monitor = QuestionMonitorService(self.db)
         quality = calculate_quality(
             filtered_articles,
             timeline_data,
             source_data,
             gaps,
             coverage_start=question.estimated_start_time,
-            min_articles=SATISFACTION_DEFAULTS.min_articles,
+            min_articles=monitor.config.min_articles,
         )
 
         return self._format_visualization(
-            filtered_articles, timeline_data, source_data, gaps, question, quality
+            filtered_articles, timeline_data, source_data, gaps, question, quality, monitor
         )
 
     def _format_empty(self, question: Question) -> str:
@@ -154,6 +155,7 @@ ERROR: {error}
         gaps: List[Dict],
         question: Question,
         quality: Dict,
+        monitor: QuestionMonitorService,
     ) -> str:
         """Format the article analysis as visual text."""
         builder = InspectorReportBuilder("ARTICLE COVERAGE INSPECTOR")
@@ -223,13 +225,18 @@ ERROR: {error}
         builder.add_line()
 
         # Recommendation
+        missing_reqs = monitor.evaluate_article_requirements(
+            len(articles), question.causal_explanation
+        )
         recommendation = get_recommendation(
             quality,
             gaps,
             source_data,
             timeline_data,
-            min_articles=SATISFACTION_DEFAULTS.min_articles,
+            min_articles=monitor.config.min_articles,
         )
+        if missing_reqs:
+            recommendation += f"\nRequirements not met: {'; '.join(missing_reqs)}"
         builder.add_section_header("RECOMMENDATION")
         builder.add_line(recommendation, indent=2)
         builder.add_line()

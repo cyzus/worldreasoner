@@ -13,10 +13,8 @@ from src.config.pipeline import EvidenceSatisfactionConfig
 from src.core.database import GenericDatabase
 from src.domain.models.question import Question
 from src.domain.models.forecast import Forecast, ForecastMode
-from src.domain.models.causal_hypothesis import CausalHypothesis
 from src.domain.models.article import Article
 from src.services.service_base import ServiceBase
-from src.analysis.graph_analysis import calculate_graph_quality
 
 
 @dataclass
@@ -83,6 +81,89 @@ class QuestionMonitorService(ServiceBase):
         super().__init__(db)
         self.config = config or EvidenceSatisfactionConfig()
 
+    def has_evidence_articles(self, question_id: str) -> bool:
+        """Return True if the question has at least one linked article.
+
+        Checks the primary provenance field first, then falls back to legacy
+        metadata-based provenance for backward compatibility.
+        """
+        direct_articles = self.db.get_many(
+            Article, filters={"collected_for_question_id": question_id}
+        )
+        if direct_articles:
+            return True
+
+        # Backward-compatible fallback for legacy metadata-only provenance.
+        all_articles = self.db.get_many(Article)
+        for article in all_articles:
+            if question_id in article.metadata.get("related_question_ids", []):
+                return True
+
+        return False
+
+    def evaluate_article_requirements(
+        self, article_count: int, causal_explanation: Optional[str]
+    ) -> List[str]:
+        """Return missing evidence requirements given pre-computed data.
+
+        This is the single source of truth for article-level satisfaction checks.
+        Both check_satisfaction (DB-querying) and get_processed_question_ids (bulk)
+        delegate here, as do the inspector tools.
+        """
+        missing = []
+        if article_count < self.config.min_articles:
+            missing.append(f"articles ({article_count} < {self.config.min_articles})")
+        if not causal_explanation:
+            missing.append("causal_explanation missing")
+        return missing
+
+    def evaluate_graph_requirements(self, max_depth: int, event_count: int) -> List[str]:
+        """Return missing graph requirements given pre-computed stats.
+
+        Single source of truth for graph-level satisfaction checks.
+        Used by check_graph_satisfaction and GraphInspectorTool.
+        """
+        missing = []
+        if max_depth < self.config.min_graph_depth:
+            missing.append(
+                f"graph_depth ({max_depth} < {self.config.min_graph_depth})"
+            )
+        if event_count < self.config.min_graph_events:
+            missing.append(
+                f"events ({event_count} < {self.config.min_graph_events})"
+            )
+        return missing
+
+    def _is_evidence_complete(self, question: Question, article_count: int) -> bool:
+        """Return True if a question meets evidence completion requirements."""
+        return not self.evaluate_article_requirements(
+            article_count, question.causal_explanation
+        )
+
+    def get_processed_question_ids(self, questions: List[Question]) -> set:
+        """Bulk check which questions have completed evidence processing.
+
+        Loads articles once and checks all questions efficiently.
+
+        Args:
+            questions: Questions to check
+
+        Returns:
+            Set of question IDs that are fully processed
+        """
+        all_articles = self.db.get_many(Article)
+        article_counts: Dict[str, int] = {}
+        for a in all_articles:
+            qid = getattr(a, "collected_for_question_id", None)
+            if qid:
+                article_counts[qid] = article_counts.get(qid, 0) + 1
+
+        return {
+            q.id
+            for q in questions
+            if self._is_evidence_complete(q, article_counts.get(q.id, 0))
+        }
+
     def get_evidence_needs(
         self,
         min_quality_score: Optional[float] = None,
@@ -107,12 +188,6 @@ class QuestionMonitorService(ServiceBase):
         """
         questions = self.db.get_many(Question)
 
-        # Get all hypotheses to check which questions have evidence
-        hypotheses = self.db.get_many(CausalHypothesis)
-        questions_with_evidence = set()
-        for h in hypotheses:
-            questions_with_evidence.update(h.discovered_by_question_ids)
-
         needs_evidence = []
         for q in questions:
             # Must be resolved
@@ -133,10 +208,8 @@ class QuestionMonitorService(ServiceBase):
                     continue
 
             # Check if already has sufficient evidence
-            if q.id in questions_with_evidence:
-                satisfaction = self.check_satisfaction(q.id)
-                if satisfaction.is_satisfied:
-                    continue
+            if self.check_satisfaction(q.id).is_satisfied:
+                continue
 
             needs_evidence.append(q)
 
@@ -146,83 +219,57 @@ class QuestionMonitorService(ServiceBase):
         return needs_evidence
 
     def check_satisfaction(self, question_id: str) -> EvidenceSatisfaction:
-        """Check if a question's evidence meets satisfaction requirements.
-
-        Args:
-            question_id: Question ID to check
-
-        Returns:
-            EvidenceSatisfaction with status and details
-        """
-        # Get hypotheses for this question
-        all_hypotheses = self.db.get_many(CausalHypothesis)
-        question_hypotheses = [
-            h for h in all_hypotheses if question_id in h.discovered_by_question_ids
-        ]
-
-        hypothesis_count = len(question_hypotheses)
-
-        # Get evidence articles count efficiently
-        # Note: We are now counting "collected articles" instead of "evidence articles in hypotheses"
-        # to match the frontend behavior and be more robust.
-        # Ideally, we should check satisfaction based on collected articles first.
-
-        # If we strictly want "used in hypothesis", we'd keep the old logic.
-        # But the User asked to keep it DRY and consistent with the mismatch fix,
-        # which implies switching to 'collected' count.
-
-        # However, for 'check_satisfaction', maybe we *do* care about hypothesis usage?
-        # The monitor defines "evidence satisfaction". Usually, that implies raw material availability.
-        # "Reasoning satisfaction" would cover hypotheses.
-        # So using collected article count is likely correct for "evidence status".
-
-        # We can't easily filter count_group_by by a specific ID in the current implementation efficiently
-        # without fetching all counts or adding a filter to count_group_by.
-        # Since we are inside check_satisfaction for a single ID, a simple count() with filter is better.
-
+        """Check if a question's evidence meets satisfaction requirements."""
+        question = self.db.get(Question, question_id)
         article_count = self.db.count(
             Article, filters={"collected_for_question_id": question_id}
         )
-
-        # Calculate graph depth
-        graph_depth = 0
-        if question_hypotheses:
-            question = self.db.get(Question, question_id)
-            from src.analysis.graph_analysis import resolve_target_event_id
-
-            target_event_id = resolve_target_event_id(
-                question, self.db, question_hypotheses
-            )
-
-            if target_event_id:
-                quality_metrics = calculate_graph_quality(
-                    hypotheses=question_hypotheses,
-                    target_event_id=target_event_id,
-                    min_depth_for_full_score=self.config.min_graph_depth,
-                )
-                graph_depth = quality_metrics.get("max_depth", 0)
-            else:
-                # Without target, can't calculate depth properly
-                graph_depth = 1 if hypothesis_count > 0 else 0
-
-        # Check requirements
-        missing = []
-        if graph_depth < self.config.min_graph_depth:
-            missing.append(
-                f"graph_depth ({graph_depth} < {self.config.min_graph_depth})"
-            )
-        if article_count < self.config.min_articles:
-            missing.append(f"articles ({article_count} < {self.config.min_articles})")
-        if hypothesis_count < self.config.min_hypotheses:
-            missing.append(
-                f"hypotheses ({hypothesis_count} < {self.config.min_hypotheses})"
-            )
-
+        missing = self.evaluate_article_requirements(
+            article_count, question.causal_explanation if question else None
+        )
         return EvidenceSatisfaction(
-            is_satisfied=len(missing) == 0,
-            graph_depth=graph_depth,
+            is_satisfied=not missing,
+            graph_depth=0,
             article_count=article_count,
-            hypothesis_count=hypothesis_count,
+            hypothesis_count=0,
+            missing_requirements=missing,
+        )
+
+    def check_graph_satisfaction(self, question_id: str) -> EvidenceSatisfaction:
+        """Check if a question's causal graph meets satisfaction requirements."""
+        from src.domain.models.causal_hypothesis import CausalHypothesis
+        from src.analysis.graph_analysis import calculate_graph_quality, resolve_target_event_id
+
+        question = self.db.get(Question, question_id)
+        hypotheses = self.db.get_many(
+            CausalHypothesis,
+            filters={"discovered_by_question_ids__like": f'%"{question_id}"%'},
+        )
+
+        max_depth = 0
+        if hypotheses:
+            target_event_id = resolve_target_event_id(question, self.db, hypotheses)
+            metrics = calculate_graph_quality(
+                hypotheses=hypotheses,
+                target_event_id=target_event_id,
+                min_depth_for_full_score=self.config.min_graph_depth,
+            )
+            max_depth = metrics.get("max_depth", 0)
+
+        event_count = len(hypotheses)  # approximation; each hypothesis contributes events
+        # Use actual unique event count from hypotheses
+        event_ids = set()
+        for h in hypotheses:
+            event_ids.add(h.source_event_id)
+            event_ids.add(h.target_event_id)
+        event_count = len(event_ids)
+
+        missing = self.evaluate_graph_requirements(max_depth, event_count)
+        return EvidenceSatisfaction(
+            is_satisfied=not missing,
+            graph_depth=max_depth,
+            article_count=0,
+            hypothesis_count=len(hypotheses),
             missing_requirements=missing,
         )
 

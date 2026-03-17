@@ -4,10 +4,11 @@ from typing import Dict, Any, List, Optional
 
 from src.config import get_config
 from src.core.database import GenericDatabase
-from src.domain.models import Article, Event, Question
+from src.domain.models import Event, Question
 from src.agents.graph_builder_agent import GraphBuilderAgentFactory
 from src.pipelines.prompts import graph_builder as graph_builder_prompts
 from src.config.pipeline import SATISFACTION_DEFAULTS
+from src.services.question_monitor_service import QuestionMonitorService
 from src.utils.logging import logger
 
 
@@ -34,7 +35,8 @@ class GraphBuilderPipeline:
         """Find graph-eligible questions waiting for graph building."""
         all_questions = self.db.get_many(Question)
         pending = [q for q in all_questions if q.causal_explanation and not q.graph_built]
-        eligible = [q for q in pending if self._has_evidence_articles(q.id)]
+        monitor = QuestionMonitorService(self.db)
+        eligible = [q for q in pending if monitor.has_evidence_articles(q.id)]
 
         skipped = len(pending) - len(eligible)
         if skipped > 0:
@@ -43,25 +45,6 @@ class GraphBuilderPipeline:
             )
 
         return eligible
-
-    def _has_evidence_articles(self, question_id: str) -> bool:
-        """Return True if the question has at least one linked article."""
-        # Primary provenance field used by current evidence pipeline.
-        direct_articles = self.db.get_many(
-            Article,
-            filters={"collected_for_question_id": question_id},
-        )
-        if direct_articles:
-            return True
-
-        # Backward-compatible fallback for legacy metadata-only provenance.
-        all_articles = self.db.get_many(Article)
-        for article in all_articles:
-            related_ids = article.metadata.get("related_question_ids", [])
-            if question_id in related_ids:
-                return True
-
-        return False
 
     def process_pending(self, limit: int = 10) -> Dict[str, Any]:
         """Process all pending questions."""
@@ -89,7 +72,8 @@ class GraphBuilderPipeline:
     def _process_single_question(self, question: Question) -> bool:
         """Process a single question's graph."""
         try:
-            if not self._has_evidence_articles(question.id):
+            monitor = QuestionMonitorService(self.db)
+            if not monitor.has_evidence_articles(question.id):
                 reason = (
                     "No evidence articles found for this question "
                     "(collected_for_question_id / related_question_ids). "
@@ -150,14 +134,25 @@ class GraphBuilderPipeline:
 
             # Refresh question from DB to check if tool marked it success
             refreshed_q = self.db.get(Question, question.id)
-            if refreshed_q.graph_built:
-                logger.info(f"Successfully built graph for Q: {question.id}")
-                return True
-            else:
+            if not refreshed_q.graph_built:
                 logger.error(
                     f"Agent finished but graph_built is still False for Q: {question.id}"
                 )
                 return False
+
+            # Independently verify the graph meets requirements
+            monitor = QuestionMonitorService(self.db)
+            graph_sat = monitor.check_graph_satisfaction(question.id)
+            if not graph_sat.is_satisfied:
+                reason = f"Graph requirements not met: {graph_sat.missing_requirements}"
+                logger.error(f"[{question.id}] {reason}")
+                refreshed_q.graph_built = False
+                refreshed_q.graph_build_error = reason
+                self.db.save(Question, refreshed_q)
+                return False
+
+            logger.info(f"Successfully built graph for Q: {question.id}")
+            return True
 
         except Exception as e:
             logger.error(f"Failed to process graph for {question.id}: {str(e)}")
