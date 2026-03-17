@@ -727,12 +727,7 @@ class PipelineExecutor:
                 except ValueError:
                     forecast_slot = ForecastSlot.MID
 
-                forecast_setup = get_forecast_date_for_slot(
-                    question,
-                    slot=forecast_slot,
-                    db=self.db,
-                    min_context_items=min_context_items,
-                )
+                forecast_setup = get_forecast_date_for_slot(question, slot=forecast_slot)
 
                 # Create forecast agent with correct parameters
                 agent = ForecastAgent(

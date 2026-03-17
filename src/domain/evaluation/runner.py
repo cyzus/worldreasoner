@@ -30,9 +30,7 @@ class BenchmarkRunner:
                 continue
             try:
                 # Check context availability
-                question.get_forecast_context_window(
-                    db=self.db, min_context_items=min_context_items
-                )
+                question.get_forecast_context_window()
                 resolved.append(question)
             except ValueError:
                 continue
@@ -56,12 +54,7 @@ class BenchmarkRunner:
             except ValueError:
                 forecast_slot = ForecastSlot.MID
 
-            forecast_setup = get_forecast_date_for_slot(
-                question,
-                slot=forecast_slot,
-                db=self.db,
-                min_context_items=min_context_items,
-            )
+            forecast_setup = get_forecast_date_for_slot(question, slot=forecast_slot)
 
             if verbose:
                 print(f"\\nQuestion: {question.id}")

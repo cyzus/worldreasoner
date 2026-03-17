@@ -27,6 +27,7 @@ from src.cli.ui.tables import (
     display_article_table,
 )
 from src.domain.models import Event, Article
+from src.domain.models.question import Question
 from src.core.search_indexing import auto_index_articles
 from src.config.settings import get_config
 
@@ -422,3 +423,80 @@ def build_index(
 
         console.print(f"[dim]{traceback.format_exc()}[/dim]")
         raise typer.Exit(1)
+
+
+@app.command("backfill-start-times")
+def backfill_start_times(
+    db_path: str = db_option(),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would change without writing"),
+):
+    """Backfill estimated_start_time for questions that are missing it.
+
+    Only fixes questions where a reliable source of truth exists:
+    - polymarket: metadata['start_date'] (the market open date from the API)
+
+    News questions are skipped — there is no reliable date to recover from
+    existing data.  They will use the 30-day-before-resolution fallback at
+    runtime until re-collected with the current pipeline (which requires the
+    LLM to provide estimated_start_time).
+    """
+    from datetime import timezone
+    from src.utils.date_utils import parse_iso_datetime
+
+    db = GenericDatabase(db_path)
+    questions = db.get_many(Question)
+    missing = [q for q in questions if q.estimated_start_time is None]
+
+    console.print(f"Questions missing estimated_start_time: [yellow]{len(missing)}[/yellow] / {len(questions)}")
+
+    fixed = skipped = 0
+    rows = []
+
+    for q in missing:
+        start = None
+        source = None
+
+        if q.source == "polymarket":
+            raw = (q.metadata or {}).get("start_date")
+            if raw:
+                try:
+                    start = parse_iso_datetime(raw)
+                    source = "metadata.start_date"
+                except Exception:
+                    pass
+
+        if start is None:
+            rows.append((q.id, q.source, "[dim]no reliable source[/dim]", ""))
+            skipped += 1
+            continue
+
+        # Ensure tz-aware and before resolution
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=timezone.utc)
+        res = q.resolution_date.replace(tzinfo=timezone.utc) if q.resolution_date.tzinfo is None else q.resolution_date
+        if start >= res:
+            rows.append((q.id, q.source, f"[red]start >= resolution ({start.date()})[/red]", ""))
+            skipped += 1
+            continue
+
+        rows.append((q.id, q.source, str(start.date()), source))
+
+        if not dry_run:
+            q.estimated_start_time = start
+            db.save(Question, q)
+
+        fixed += 1
+
+    table = Table(title="Backfill Results", show_header=True)
+    table.add_column("Question ID", style="cyan", no_wrap=True, max_width=50)
+    table.add_column("Source", style="dim")
+    table.add_column("estimated_start_time")
+    table.add_column("From")
+    for row in rows:
+        table.add_row(*row)
+    console.print(table)
+
+    action = "Would fix" if dry_run else "Fixed"
+    console.print(f"\n{action}: [green]{fixed}[/green]  Skipped (no data): [yellow]{skipped}[/yellow]")
+    if dry_run:
+        console.print("[dim]Run without --dry-run to apply changes.[/dim]")

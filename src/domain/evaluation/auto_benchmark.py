@@ -202,12 +202,7 @@ class AutoBenchmarkService:
             forecast_slot = ForecastSlot.MID
 
         try:
-            setup = get_forecast_date_for_slot(
-                question,
-                slot=forecast_slot,
-                db=self.db,
-                min_context_items=0,
-            )
+            setup = get_forecast_date_for_slot(question, slot=forecast_slot)
             return setup["simulated_date"]
         except (ValueError, KeyError):
             # Fallback: use resolution_date - 1 day

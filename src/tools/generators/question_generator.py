@@ -6,6 +6,7 @@ from typing import Optional
 import uuid
 
 from src.domain.models import Question, QuestionType, Domain
+from src.config.collection_goal import TimeHorizon
 from src.utils.enums import enum_to_list
 from src.utils.date_utils import parse_iso_datetime, ensure_timezone_aware
 from src.tools.base.schema_helper import pydantic_to_output_schema
@@ -94,7 +95,13 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
         },
         "estimated_start_time": {
             "type": "string",
-            "description": "ISO 8601 datetime with timezone indicating when the question becomes forecastable with meaningful information. Should be set far enough before resolution_date (e.g., 1 week to several months, or even 1+ year for long-term questions) to allow sufficient time for evidence gathering and forecast updates, but not so early that relevant context doesn't yet exist.",
+            "description": "ISO 8601 datetime with timezone for when the question becomes forecastable (e.g. when the event was first announced). Use this when you know the specific date. Provide at least one of estimated_start_time or time_horizon_days.",
+            "nullable": True,
+        },
+        "time_horizon": {
+            "type": "string",
+            "enum": ["short", "medium", "long"],
+            "description": "Rough forecast lead time when the exact start date is unknown. 'short' = up to 7 days before resolution, 'medium' = ~30 days, 'long' = ~180 days. Provide at least one of estimated_start_time or time_horizon.",
             "nullable": True,
         },
     }
@@ -126,6 +133,8 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
         difficulty: int,
         resolution_date: str,
         resolution_criteria: str,
+        estimated_start_time: str = None,
+        time_horizon: str = None,
         related_event_ids: str = None,
         related_article_ids: str = None,
         ground_truth: str = None,
@@ -134,7 +143,6 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
         options: str = None,
         quantity_unit: str = None,
         quantity_bounds: str = None,
-        estimated_start_time: str = None,
     ) -> str:
         """Store question data and return as structured JSON.
 
@@ -145,14 +153,15 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
             difficulty: Difficulty level
             resolution_date: When question can be resolved
             resolution_criteria: Objective rules for how to verify/resolve this question
+            estimated_start_time: Exact ISO 8601 datetime when forecasting becomes viable
+            time_horizon: 'short' / 'medium' / 'long' fallback when exact date is unknown
             related_event_ids: Optional comma-separated event IDs
             ground_truth: Optional answer if resolved
-            resolution_reasoning: Optional evidence/explanation for why ground_truth is what it is (only if ground_truth provided)
-            context: Optional background information to help understand the question
+            resolution_reasoning: Optional evidence/explanation for why ground_truth is what it is
+            context: Optional background information
             options: Optional MCQ choices (comma-separated)
             quantity_unit: Optional unit for quantity questions
             quantity_bounds: Optional bounds for quantity questions
-            estimated_start_time: Optional start time when question becomes valid for forecasting
 
         Returns:
             JSON string of Question object
@@ -163,48 +172,46 @@ class QuestionGeneratorTool(CollectorAwareTool[Question]):
         )
         res_date = ensure_timezone_aware(res_date)
 
-        # Parse estimated start time
+        # Resolve estimated_start_time — prefer explicit date, fall back to horizon offset
         est_start_time = None
         if estimated_start_time:
             try:
-                est_start_time = parse_iso_datetime(estimated_start_time)
-                est_start_time = ensure_timezone_aware(est_start_time)
-
-                # Validate: must be before resolution_date
+                est_start_time = ensure_timezone_aware(parse_iso_datetime(estimated_start_time))
                 if est_start_time >= res_date:
                     from src.utils.logging import logger
-
                     logger.warning(
-                        f"estimated_start_time ({est_start_time}) >= resolution_date ({res_date}), "
-                        f"ignoring estimated_start_time"
+                        f"estimated_start_time ({est_start_time}) >= resolution_date ({res_date}), ignoring"
                     )
                     est_start_time = None
             except Exception as e:
                 from src.utils.logging import logger
-
                 logger.debug(f"Failed to parse estimated_start_time: {e}")
-                # For ground truth mode, strict validation requires valid date
-                if self.require_ground_truth:
-                    est_start_time = None
-                else:
-                    # Default to now if parsing fails for future questions
-                    est_start_time = datetime.now(timezone.utc)
-        else:
-            # If not provided
-            if self.require_ground_truth:
-                est_start_time = None
-            else:
-                # Default to now for future questions
-                est_start_time = datetime.now(timezone.utc)
 
-        # CRITICAL VALIDATION: estimated_start_time is REQUIRED for ground truth
+        if est_start_time is None and time_horizon:
+            _horizon_days = {
+                TimeHorizon.SHORT: 7,
+                TimeHorizon.MEDIUM: 30,
+                TimeHorizon.LONG: 180,
+            }
+            try:
+                horizon_enum = TimeHorizon(time_horizon)
+                est_start_time = res_date - timedelta(days=_horizon_days[horizon_enum])
+            except Exception as e:
+                from src.utils.logging import logger
+                logger.debug(f"Failed to apply time_horizon '{time_horizon}': {e}")
+
+        if est_start_time is None and not self.require_ground_truth:
+            # Future questions: default to now so the window is valid
+            est_start_time = datetime.now(timezone.utc)
+
+        # CRITICAL VALIDATION: at least one of the two must resolve for ground truth
         if self.require_ground_truth and not est_start_time:
             error_msg = (
-                "REJECTED: estimated_start_time is MISSING or INVALID.\n"
-                "For ground truth questions (past events), you MUST provide the estimated_start_time "
-                "(when the question would have become viable to forecast).\n"
-                "This is essential for calculating the question's time horizon.\n"
-                "Please regenerate with a valid estimated_start_time (ISO 8601)."
+                "REJECTED: Neither estimated_start_time nor time_horizon was provided (or both were invalid).\n"
+                "For ground truth questions you MUST supply one of:\n"
+                "  - estimated_start_time: ISO 8601 datetime when the question became forecastable\n"
+                "  - time_horizon: 'short', 'medium', or 'long'\n"
+                "Please regenerate with one of these fields."
             )
             return QuestionOutput(
                 id="error",

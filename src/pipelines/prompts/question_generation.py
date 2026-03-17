@@ -32,14 +32,17 @@ QUALITY:
 - MCQ options from actual event participants only
 - Use FUTURE tense when formating all the questions
 
-ESTIMATED START TIME:
-- When forecasting this question would have become viable with meaningful information
-  * Set far enough before resolution_date (1 week to 1+ year depending on scope)
-  * But not so early that relevant context didn't yet exist
-  * For event-based questions: when event was first announced/became public knowledge
-  * For trend questions: when baseline data became available for analysis
-  * For policy questions: when policy was first proposed/publicly discussed
-  * MUST be BEFORE resolution_date (use ISO 8601 format with timezone)
+FORECAST WINDOW (provide at least one):
+- estimated_start_time: exact ISO 8601 datetime when the question became forecastable
+  * For event-based questions: when the event was first announced/publicly known
+  * For trend questions: when baseline data became available
+  * For policy questions: when the policy was first proposed
+  * MUST be before resolution_date
+- time_horizon: 'short' / 'medium' / 'long' when the exact date is unknown
+  * short = up to 7 days (e.g. match result, earnings release)
+  * medium = ~30 days (e.g. monthly policy decision, product launch)
+  * long = ~180 days (e.g. annual election, multi-month trend)
+- Prefer estimated_start_time when the specific announcement date is known
 
 RESOLUTION DATE:
 - When the event has already been resolved
@@ -58,7 +61,7 @@ Article {idx} (Source: {source}):
 """
 
 RULES_GROUND_TRUTH = """RULES:
-- Today: {current_date} → MAKE SURE that: {current_date} >= resolution_date >= estimated_start_time
+- Today: {current_date} → MAKE SURE that: {current_date} >= resolution_date >= estimated_start_time (or resolution_date - time_horizon offset)
 - ground_truth = past outcome only (YES/NO/value, never future dates)
 - resolution_date: when the event has already been resolved
 - Alternate binary answers: YES, NO, YES, NO (avoid bias)
@@ -67,7 +70,7 @@ RULES_GROUND_TRUTH = """RULES:
 - Natural deadlines ("by end of Q4 202X" or "by end of Oct 202X" not "by Oct 27")"""
 
 RULES_FUTURE = """RULES:
-- Today: {current_date} → MAKE SURE that: resolution_date > {current_date} >= estimated_start_time
+- Today: {current_date} → MAKE SURE that: resolution_date > {current_date} >= estimated_start_time (or resolution_date - time_horizon offset)
 - NO ground_truth (outcomes unknown)
 - resolution_date: 1 week to 1+ year in future
 - Balance binary predictions: ~50% likely YES, ~50% likely NO

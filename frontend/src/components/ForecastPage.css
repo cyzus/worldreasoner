@@ -3,6 +3,93 @@
   /* No layout properties needed */
 }
 
+/* ── Slot preview ─────────────────────────────────────────── */
+.slot-preview {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #f5f7fa;
+  border: 1px solid #dde2ea;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.slot-preview-title {
+  font-weight: 600;
+  color: #444;
+  margin-bottom: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.slot-preview-question {
+  font-weight: 400;
+  color: #777;
+  font-size: 11px;
+}
+
+.slot-preview-loading {
+  color: #999;
+  font-size: 12px;
+}
+
+.slot-preview-bar-wrap {
+  margin-bottom: 4px;
+}
+
+.slot-preview-bar {
+  position: relative;
+  height: 8px;
+  background: #dde2ea;
+  border-radius: 4px;
+  overflow: visible;
+}
+
+.slot-preview-fill {
+  height: 100%;
+  background: #4a90d9;
+  border-radius: 4px 0 0 4px;
+  opacity: 0.5;
+}
+
+.slot-preview-marker {
+  position: absolute;
+  top: -4px;
+  transform: translateX(-50%);
+  width: 3px;
+  height: 16px;
+  background: #2563eb;
+  border-radius: 2px;
+  cursor: default;
+}
+
+.slot-preview-labels {
+  display: flex;
+  justify-content: space-between;
+  color: #888;
+  font-size: 10px;
+  margin-top: 4px;
+}
+
+.slot-preview-sim-date {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.slot-preview-meta {
+  display: flex;
+  justify-content: space-between;
+  color: #666;
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+.slot-preview-error {
+  color: #c0392b;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
 .forecast-header {
   /* Using global page-header primarily, but keeping this for specific tweaks if needed */
   /* Remove duplicates from page-header if any */

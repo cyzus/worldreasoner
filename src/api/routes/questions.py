@@ -1785,3 +1785,68 @@ async def get_question_articles(
 
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{question_id}/slot_preview")
+async def get_question_slot_preview(
+    question_id: str,
+    slot: str = "mid",
+    db: GenericDatabase = Depends(get_database),
+):
+    """Return the simulated date and evidence availability for a forecast slot.
+
+    Args:
+        question_id: Question identifier
+        slot: Forecast slot — 'early', 'mid', or 'late' (default 'mid')
+
+    Returns:
+        dict with window_start, window_end, simulated_date, horizon_days, slot,
+        evidence_count_at_date (articles published before simulated_date),
+        total_evidence (all articles collected for this question).
+    """
+    from src.domain.models.question_helpers import ForecastSlot, get_forecast_date_for_slot
+    from datetime import timezone
+
+    question = db.get(Question, question_id)
+    if not question:
+        raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
+
+    try:
+        forecast_slot = ForecastSlot(slot)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid slot '{slot}'. Must be 'early', 'mid', or 'late'.",
+        )
+
+    try:
+        setup = get_forecast_date_for_slot(question, slot=forecast_slot)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    simulated_date = setup["simulated_date"]
+    if simulated_date.tzinfo is None:
+        simulated_date = simulated_date.replace(tzinfo=timezone.utc)
+
+    # Count articles collected for this question, and how many were available by simulated_date
+    articles = db.get_many(Article, filters={"collected_for_question_id": question_id})
+    total_evidence = len(articles)
+    evidence_count_at_date = sum(
+        1 for a in articles
+        if a.published_date is not None
+        and (
+            a.published_date.replace(tzinfo=timezone.utc)
+            if a.published_date.tzinfo is None
+            else a.published_date
+        ) <= simulated_date
+    )
+
+    return {
+        "window_start": setup["window_start"].isoformat(),
+        "window_end": setup["window_end"].isoformat(),
+        "simulated_date": simulated_date.isoformat(),
+        "horizon_days": setup["horizon_days"],
+        "slot": setup["slot"],
+        "evidence_count_at_date": evidence_count_at_date,
+        "total_evidence": total_evidence,
+    }

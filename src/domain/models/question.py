@@ -239,31 +239,22 @@ class Question(BaseModel):
         self.cutoff_date = cutoff_date
         return self
 
-    def get_forecast_context_window(self, db=None, min_context_items: int = 3):
+    def get_forecast_context_window(self):
         """Get the valid temporal window for forecasting this question.
 
-        Returns the date range during which a forecast can be made:
-        - Start: When sufficient context becomes available (Nth earliest context item)
-        - End: When the answer becomes known (resolution_date)
-
-        Args:
-            db: Database instance for fetching related events/articles
-            min_context_items: Minimum number of context items needed (default: 3)
+        Returns ``(window_start, window_end)`` derived from ``estimated_start_time``
+        and ``resolution_date``.  Falls back to 30 days before resolution when
+        ``estimated_start_time`` is not set.
 
         Returns:
             (window_start, window_end) datetime tuple
 
         Example:
-            >>> # Opens when 3rd context item available (default)
-            >>> start, end = question.get_forecast_context_window(db)
-            >>> # Opens when 5th context item available
-            >>> start, end = question.get_forecast_context_window(db, min_context_items=5)
+            >>> start, end = question.get_forecast_context_window()
         """
         from .question_helpers import calculate_forecast_context_window
 
-        return calculate_forecast_context_window(
-            self, db=db, min_context_items=min_context_items
-        )
+        return calculate_forecast_context_window(self)
 
     def validate_simulated_date(
         self, simulated_date: datetime, window_start: datetime, window_end: datetime
@@ -281,7 +272,7 @@ class Question(BaseModel):
             (is_valid, error_message) tuple
 
         Example:
-            >>> window_start, window_end = question.get_forecast_context_window(db)
+            >>> window_start, window_end = question.get_forecast_context_window()
             >>> valid, error = question.validate_simulated_date(datetime(2025, 11, 3), window_start, window_end)
             >>> if not valid:
             >>>     raise ValueError(error)
@@ -309,7 +300,7 @@ class Question(BaseModel):
             Suggested datetime for simulation
 
         Example:
-            >>> window_start, window_end = question.get_forecast_context_window(db)
+            >>> window_start, window_end = question.get_forecast_context_window()
             >>> simulated_date = question.suggest_simulated_date(window_start, window_end, offset_days_before_resolution=14)
         """
         from .question_helpers import suggest_simulated_date

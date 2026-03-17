@@ -291,7 +291,7 @@ class QuestionMonitorService(ServiceBase):
         # Check temporal status
         temporal_status = {}
         try:
-            window_start, window_end = question.get_forecast_context_window(self.db)
+            window_start, window_end = question.get_forecast_context_window()
             temporal_status = {
                 "window_start": window_start.isoformat() if window_start else None,
                 "window_end": window_end.isoformat() if window_end else None,

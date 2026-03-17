@@ -382,6 +382,13 @@ export async function fetchQuestionArticles(questionId) {
   return response.data
 }
 
+export async function fetchQuestionSlotPreview(questionId, slot = 'mid') {
+  const response = await axios.get(
+    `${API_BASE_URL}/questions/${questionId}/slot_preview?slot=${slot}`
+  )
+  return response.data
+}
+
 /**
  * Review a single event using LLM
  */

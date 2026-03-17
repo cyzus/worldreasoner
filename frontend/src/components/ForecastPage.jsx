@@ -1,12 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import { fetchQuestions, fetchQuestionPriceHistory, fetchQuestionEvents } from '../api/graphApi';
-import TimeSeriesChart from './TimeSeriesChart';
+import { fetchQuestions, fetchQuestionSlotPreview } from '../api/graphApi';
 import ForecastGraph from './ForecastGraph';
 import EvaluationDashboard from './EvaluationDashboard';
 import QuestionCard from './QuestionCard';
 import { JobSidebar, JobDetails } from './JobManager';
 import { usePipelineJobs } from '../hooks/usePipelineJobs';
 import './ForecastPage.css';
+
+/** Visual timeline bar showing where the simulated date falls in the forecast window. */
+const SlotPreviewBar = ({ preview }) => {
+  const start = new Date(preview.window_start);
+  const end = new Date(preview.window_end);
+  const sim = new Date(preview.simulated_date);
+  const pct = Math.round(((sim - start) / (end - start)) * 100);
+  const fmt = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
+  return (
+    <div className="slot-preview-bar-wrap">
+      <div className="slot-preview-bar">
+        <div className="slot-preview-fill" style={{ width: `${pct}%` }} />
+        <div className="slot-preview-marker" style={{ left: `${pct}%` }} title={`Simulated: ${fmt(sim)}`} />
+      </div>
+      <div className="slot-preview-labels">
+        <span>{fmt(start)}</span>
+        <span className="slot-preview-sim-date">{fmt(sim)}</span>
+        <span>{fmt(end)}</span>
+      </div>
+    </div>
+  );
+};
 
 const ForecastPage = ({
   onQuestionSelect
@@ -20,20 +42,18 @@ const ForecastPage = ({
   const [filterForecastStatus, setFilterForecastStatus] = useState('all');
   const [filterForecastMode, setFilterForecastMode] = useState('all');
 
-  // Price history state
-  const [priceHistoryData, setPriceHistoryData] = useState(null);
-  const [loadingPriceHistory, setLoadingPriceHistory] = useState(false);
-  const [priceHistoryInterval, setPriceHistoryInterval] = useState('max');
-  const [questionRelatedEvents, setQuestionRelatedEvents] = useState([]);
-
   // Forecast configuration state (matches backend pipeline_runner.py parameters)
   const [forecastConfig, setForecastConfig] = useState({
     model: null,
     slot: 'mid',
     mode: 'container',
     enable_causal_tools: false,
-    min_context_items: 3
   });
+
+  // Slot preview for the highlighted question
+  const [slotPreview, setSlotPreview] = useState(null);
+  const [slotPreviewError, setSlotPreviewError] = useState(null);
+  const [loadingSlotPreview, setLoadingSlotPreview] = useState(false);
 
   // Job management via shared hook
   const {
@@ -59,6 +79,28 @@ const ForecastPage = ({
     loadQuestions();
   }, []);
 
+  useEffect(() => {
+    if (!selectedQuestion) {
+      setSlotPreview(null);
+      setSlotPreviewError(null);
+      return;
+    }
+    let cancelled = false;
+    setLoadingSlotPreview(true);
+    setSlotPreviewError(null);
+    fetchQuestionSlotPreview(selectedQuestion.id, forecastConfig.slot)
+      .then(data => { if (!cancelled) { setSlotPreview(data); setSlotPreviewError(null); } })
+      .catch(err => {
+        if (!cancelled) {
+          setSlotPreview(null);
+          const msg = err?.response?.data?.detail || err?.message || 'Unknown error';
+          setSlotPreviewError(msg);
+        }
+      })
+      .finally(() => { if (!cancelled) setLoadingSlotPreview(false); });
+    return () => { cancelled = true; };
+  }, [selectedQuestion?.id, forecastConfig.slot]);
+
   const loadQuestions = async () => {
     try {
       const data = await fetchQuestions();
@@ -70,56 +112,8 @@ const ForecastPage = ({
 
 
 
-  const handleQuestionClick = async (question) => {
-    try {
-      const questionId = question.id;
-      setSelectedQuestion(question);
-
-      if (question.source === 'polymarket') {
-        await loadPriceHistory(questionId, priceHistoryInterval, questionId);
-      }
-    } catch (error) {
-      console.error('Error handling question click:', error);
-    }
-  };
-
-  const loadPriceHistory = async (questionId, interval = priceHistoryInterval, expectedQuestionId = null) => {
-    setLoadingPriceHistory(true);
-    try {
-      // Include turning points for full history view
-      const includeTurningPoints = interval === 'max';
-      const data = await fetchQuestionPriceHistory(
-        questionId,
-        interval,
-        includeTurningPoints,
-        5.0  // min change for turning points (5 percentage points)
-      );
-
-      // Only update state if this is still the expected question
-      // This prevents race conditions when clicking multiple questions quickly
-      if (expectedQuestionId === null || expectedQuestionId === questionId) {
-        setPriceHistoryData(data);
-        // Note: fetchQuestionEvents returns metadata (event_ids, counts), not full event objects
-        // For now, we'll pass an empty array to TimeSeriesChart
-        // TODO: Fetch full event details if needed for visualization
-        setQuestionRelatedEvents([]);
-      }
-    } catch (error) {
-      console.error('Error fetching price history:', error);
-      if (expectedQuestionId === null || expectedQuestionId === questionId) {
-        setPriceHistoryData(null);
-        setQuestionRelatedEvents([]);
-      }
-    } finally {
-      setLoadingPriceHistory(false);
-    }
-  };
-
-  const handleIntervalChange = async (interval) => {
-    setPriceHistoryInterval(interval);
-    if (selectedQuestion) {
-      await loadPriceHistory(selectedQuestion.id, interval, selectedQuestion.id);
-    }
+  const handleQuestionClick = (question) => {
+    setSelectedQuestion(question);
   };
 
   const toggleQuestionSelection = (questionId) => {
@@ -315,22 +309,6 @@ const ForecastPage = ({
 
                   <div className="config-item">
                     <label>
-                      Min Context Items
-                      <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#888', marginLeft: '4px' }}>
-                        - Minimum evidence items to use
-                      </span>
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="20"
-                      value={forecastConfig.min_context_items}
-                      onChange={(e) => setForecastConfig({ ...forecastConfig, min_context_items: parseInt(e.target.value) || 1 })}
-                    />
-                  </div>
-
-                  <div className="config-item">
-                    <label>
                       Forecast Mode
                       <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#888', marginLeft: '4px' }}>
                         - What information can the agent access?
@@ -369,12 +347,37 @@ const ForecastPage = ({
                   </div>
                 </div>
 
+                {/* Slot preview for the currently highlighted question */}
+                {selectedQuestion && (
+                  <div className="slot-preview">
+                    <div className="slot-preview-title">
+                      Simulated date preview
+                      <span className="slot-preview-question">{selectedQuestion.question_text.slice(0, 60)}{selectedQuestion.question_text.length > 60 ? '…' : ''}</span>
+                    </div>
+                    {loadingSlotPreview ? (
+                      <div className="slot-preview-loading">Calculating…</div>
+                    ) : slotPreview ? (
+                      <>
+                        <SlotPreviewBar preview={slotPreview} />
+                        <div className="slot-preview-meta">
+                          <span>{slotPreview.horizon_days}d window</span>
+                          <span>{slotPreview.evidence_count_at_date} / {slotPreview.total_evidence} articles available</span>
+                        </div>
+                      </>
+                    ) : slotPreviewError ? (
+                      <div className="slot-preview-error">{slotPreviewError}</div>
+                    ) : (
+                      <div className="slot-preview-loading">No window data</div>
+                    )}
+                  </div>
+                )}
+
                 <button
                   className="run-forecast-btn"
                   onClick={startForecastPipeline}
                   disabled={selectedQuestions.length === 0}
                 >
-                  🎯 Run Forecast ({selectedQuestions.length} questions)
+                  Run Forecast ({selectedQuestions.length} questions)
                 </button>
               </div>
 
@@ -538,42 +541,6 @@ const ForecastPage = ({
                     </div>
                   </div>
 
-                  {/* Price History Visualization */}
-                  {selectedQuestion && selectedQuestion.source === 'polymarket' && (
-                    <div className="price-history-section">
-                      <div className="price-history-header">
-                        <h3>Price History - {selectedQuestion.question_text}</h3>
-                        <div className="interval-selector">
-                          {['1h', '6h', '1d', '1w', 'max'].map(interval => (
-                            <button
-                              key={interval}
-                              className={`interval-btn ${priceHistoryInterval === interval ? 'active' : ''}`}
-                              onClick={() => handleIntervalChange(interval)}
-                            >
-                              {interval}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {loadingPriceHistory ? (
-                        <div className="loading">Loading price history...</div>
-                      ) : priceHistoryData && priceHistoryData.price_history ? (
-                        <TimeSeriesChart
-                          priceHistory={priceHistoryData.price_history}
-                          events={questionRelatedEvents}
-                          turningPoints={priceHistoryData.turning_points || []}
-                          leadChanges={priceHistoryData.lead_changes || []}
-                          outcomes={priceHistoryData.outcomes || ['Yes', 'No']}
-                          tokenOutcomes={priceHistoryData.token_outcomes || {}}
-                          activeInterval={priceHistoryInterval}
-                          onIntervalChange={handleIntervalChange}
-                        />
-                      ) : (
-                        <div className="no-data">No price history available</div>
-                      )}
-                    </div>
-                  )}
                 </>
               )
               }
