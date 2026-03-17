@@ -266,18 +266,15 @@ class PolymarketClient:
         closed: bool = False,
         active: bool = True,
         tag_slugs: Optional[List[str]] = None,
-        max_pages: int = 1,
     ) -> List[Dict[str, Any]]:
         """Fetch events (grouped markets) from Polymarket API.
 
         This endpoint (/events) returns markets grouped by event, allowing
         detection of multi-market questions (e.g. categorical).
-
-        Args:
-            max_pages: Number of pages to fetch (each page = limit events).
-                       Set >1 to paginate and retrieve historical data.
+        Paginates with offset until limit is reached or API is exhausted.
         """
         url = f"{self.API_BASE}/events"
+
         base_params: Dict[str, Any] = {
             "closed": str(closed).lower(),
             "active": str(active).lower(),
@@ -290,76 +287,58 @@ class PolymarketClient:
         if tag_slugs:
             base_params["tag_slug"] = tag_slugs
 
-        all_events: List[Dict[str, Any]] = []
-        seen_ids = set()
+        events_list: List[Dict[str, Any]] = []
+        offset = 0
 
         try:
             async with aiohttp.ClientSession() as session:
-                for page_idx in range(max_pages):
-                    if len(all_events) >= limit:
-                        break
-
-                    offset = page_idx * self.PAGE_SIZE
+                while len(events_list) < limit:
                     page_params = {
                         **base_params,
                         "limit": self.PAGE_SIZE,
                         "offset": offset,
                     }
-
                     async with session.get(
                         url, params=page_params, timeout=aiohttp.ClientTimeout(total=30)
                     ) as response:
                         if response.status != 200:
                             logger.error(
-                                f"Polymarket Events API returned {response.status} (page {page_idx})"
+                                f"Polymarket Events API returned {response.status}"
                             )
                             break
 
                         payload = await response.json()
-                        page_events: List[Dict[str, Any]] = []
                         if isinstance(payload, list):
-                            page_events = payload
+                            page = payload
                         elif isinstance(payload, dict):
-                            page_events = (
-                                payload.get("events", []) or payload.get("data", []) or []
-                            )
-
-                        if not page_events:
-                            logger.info(
-                                f"No more events at page {page_idx} (offset {offset})"
-                            )
+                            page = payload.get("events", []) or payload.get("data", []) or []
+                        else:
                             break
 
-                        new_count = 0
-                        for ev in page_events:
-                            eid = ev.get("id")
-                            if eid in seen_ids:
-                                continue
-                            seen_ids.add(eid)
-                            all_events.append(ev)
-                            new_count += 1
-                            if len(all_events) >= limit:
-                                break
-
-                        logger.info(
-                            f"Fetched page {page_idx + 1}/{max_pages}: {len(page_events)} events, "
-                            f"{new_count} new (total: {len(all_events)})"
+                        events_list.extend(page)
+                        logger.debug(
+                            f"fetch_events page offset={offset}: got {len(page)} events "
+                            f"(total so far: {len(events_list)})"
                         )
 
-                        if len(page_events) < self.PAGE_SIZE:
-                            break
+                        if len(page) < self.PAGE_SIZE:
+                            break  # last page
+                        offset += self.PAGE_SIZE
+
         except Exception as e:
             logger.error(f"Failed to fetch events: {e}")
 
-        if all_events:
-            all_events.sort(
+        events_list = events_list[:limit]
+
+        # Robust local sorting fallback
+        if events_list:
+            events_list.sort(
                 key=lambda e: float(e.get("volume24hr", e.get("volume", 0))),
                 reverse=True,
             )
-            all_events = all_events[:limit]
 
-        logger.info(f"fetch_events: collected {len(all_events)} events total")
-        return all_events
+        logger.info(f"fetch_events: collected {len(events_list)} events total")
+        return events_list
 
     async def call_api(
         self, url: str, params: Optional[Dict[str, Any]]

@@ -283,7 +283,7 @@ def _create_news_runner(article_sources, domains, question_types, goal):
         sources=article_sources,
         start_date=datetime.now(timezone.utc) - timedelta(days=days_back),
         end_date=datetime.now(timezone.utc),
-        max_articles_per_source=8,
+        max_articles_per_source=15,
         domains=domain_strs,
     )
 

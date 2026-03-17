@@ -1,5 +1,4 @@
 from typing import Optional
-from datetime import datetime
 
 from src.agents.base import BaseAgent
 from src.config import Config, get_config
@@ -61,47 +60,40 @@ class HindsightAgent(BaseAgent):
         self.question_id = question_id
         self.target_event_id = target_event_id
 
-        evidence_model_id = config.llm.evidence_model or config.llm.model
         llm_model = LiteLLMModel(
-            model_id=evidence_model_id,
+            model_id=config.llm.model,
             **config.llm.model_dump(
-                exclude={"model", "embedding_model", "evidence_model"},
-                exclude_none=True,
+                exclude={"model", "embedding_model"}, exclude_none=True
             ),
         )
 
-        date_instructions = (
-            f"Today's date is {datetime.now().strftime('%Y-%m-%d')}. "
-            "All question resolution dates and evidence windows are in the past. "
-            "Search the web normally — do NOT skip searches assuming events are in the future."
-        )
-
+        # Evidence gathering specialist (web search, article collection)
+        # Tools get question_id for provenance tracking
         evidence_agent = CodeAgent(
             model=llm_model,
             tools=[
                 ArticleCollectorTool(
                     db_path=db_path, question_id=question_id
-                ),
+                ),  # Provenance-aware
                 ArticleInspectorTool(
                     db_path=db_path, question_id=question_id
-                ),
+                ),  # Check coverage
                 WebFetchTool(),
                 WebSearchTool(
                     db_path=db_path, question_id=question_id
-                ),
+                ),  # Provenance-aware
             ],
             max_steps=15,
             stream_outputs=False,
-            additional_authorized_imports=["json"],
+            additional_authorized_imports=["json"],  # Allow json imports in code agent
             name="evidence_collector",
             description=EVIDENCE_AGENT_DESCRIPTION,
-            instructions=date_instructions,
         )
 
         tools = tools + [
                 ArticleCollectorTool(
                     db_path=db_path, question_id=question_id
-                ),
+                ),  # Provenance-aware
                 ArticleInspectorTool(
                     db_path=db_path, question_id=question_id
                 ),  # Check coverage
@@ -122,5 +114,4 @@ class HindsightAgent(BaseAgent):
             max_steps=max_steps,
             is_code=is_code,
             managed_agents=[evidence_agent],
-            instructions=date_instructions,
         )

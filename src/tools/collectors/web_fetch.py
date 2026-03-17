@@ -333,7 +333,7 @@ class WebFetchTool(Tool):
 
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(run_in_thread)
-                result = future.result(timeout=timeout + 30)
+                result = future.result()
         except RuntimeError:
             # No event loop running, safe to create one
             result = asyncio.run(self._fetch_async(url, timeout, timestamp))
