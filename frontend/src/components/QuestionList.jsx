@@ -10,6 +10,7 @@ const QuestionList = memo(function QuestionList({
   onQuestionSelect,
   onClose,
   multiSelectMode = false,
+  statusFilterVariant = 'pipeline',
   onQuestionsSelected = null,
   onQuestionUpdated = null,
   onQuestionDeleted = null,
@@ -21,9 +22,11 @@ const QuestionList = memo(function QuestionList({
   const [difficultyFilter, setDifficultyFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [articleCountFilter, setArticleCountFilter] = useState('all')
+  const [pipelineStatusFilter, setPipelineStatusFilter] = useState('all')
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [editingQuestion, setEditingQuestion] = useState(null)
   const [deletingQuestionId, setDeletingQuestionId] = useState(null)
+  const isEventGraphFilter = statusFilterVariant === 'eventgraph'
 
   // Compute collecting IDs
   const collectingIds = useMemo(() => {
@@ -88,9 +91,32 @@ const QuestionList = memo(function QuestionList({
         return false
       }
 
+      if (isEventGraphFilter) {
+        if (pipelineStatusFilter === 'evidence_collected' && articleCount === 0) {
+          return false
+        }
+        if (pipelineStatusFilter === 'graph_collected' && !q.graph_built) {
+          return false
+        }
+        if (pipelineStatusFilter === 'forecasted' && (q.forecast_count || 0) === 0) {
+          return false
+        }
+      } else {
+        // Original pipeline filters
+        if (pipelineStatusFilter === 'needs_evidence' && articleCount > 0) {
+          return false
+        }
+        if (pipelineStatusFilter === 'needs_graph' && !(articleCount > 0 && !q.graph_built)) {
+          return false
+        }
+        if (pipelineStatusFilter === 'complete' && !(articleCount > 0 && q.graph_built)) {
+          return false
+        }
+      }
+
       return true
     })
-  }, [questions, debouncedSearchTerm, domainFilter, difficultyFilter, sourceFilter, articleCountFilter])
+  }, [questions, debouncedSearchTerm, domainFilter, difficultyFilter, sourceFilter, articleCountFilter, pipelineStatusFilter, isEventGraphFilter])
 
   const handleClearFilters = () => {
     setSearchTerm('')
@@ -98,10 +124,35 @@ const QuestionList = memo(function QuestionList({
     setDifficultyFilter('all')
     setSourceFilter('all')
     setArticleCountFilter('all')
+    setPipelineStatusFilter('all')
   }
 
   // Show "Clear" button immediately when user types (before debounce delay)
-  const hasActiveFilters = searchTerm || domainFilter !== 'all' || difficultyFilter !== 'all' || sourceFilter !== 'all' || articleCountFilter !== 'all'
+  const hasActiveFilters = searchTerm || domainFilter !== 'all' || difficultyFilter !== 'all' || sourceFilter !== 'all' || articleCountFilter !== 'all' || pipelineStatusFilter !== 'all'
+
+  // Counts for Event Graph status filters
+  const eventGraphStatusCounts = useMemo(() => {
+    const counts = { evidence_collected: 0, graph_collected: 0, forecasted: 0 }
+    questions.forEach(q => {
+      const articles = q.article_count || 0
+      if (articles > 0) counts.evidence_collected++
+      if (q.graph_built) counts.graph_collected++
+      if ((q.forecast_count || 0) > 0) counts.forecasted++
+    })
+    return counts
+  }, [questions])
+
+  // Counts for original pipeline filters
+  const pipelineStageCounts = useMemo(() => {
+    const counts = { needs_evidence: 0, needs_graph: 0, complete: 0 }
+    questions.forEach(q => {
+      const articles = q.article_count || 0
+      if (articles === 0) counts.needs_evidence++
+      else if (!q.graph_built) counts.needs_graph++
+      else counts.complete++
+    })
+    return counts
+  }, [questions])
 
   // Multi-select handlers
   const toggleSelection = (id, event) => {
@@ -218,6 +269,70 @@ const QuestionList = memo(function QuestionList({
 
 
       <div className="question-list-filters">
+        {isEventGraphFilter && (
+          <div className="pipeline-status-filter">
+            <button
+              className={`status-filter-btn ${pipelineStatusFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setPipelineStatusFilter('all')}
+            >
+              All ({questions.length})
+            </button>
+            <button
+              className={`status-filter-btn evidence-collected ${pipelineStatusFilter === 'evidence_collected' ? 'active' : ''}`}
+              onClick={() => setPipelineStatusFilter('evidence_collected')}
+              title="Questions with at least one evidence article"
+            >
+              Evidence Collected ({eventGraphStatusCounts.evidence_collected})
+            </button>
+            <button
+              className={`status-filter-btn graph-collected ${pipelineStatusFilter === 'graph_collected' ? 'active' : ''}`}
+              onClick={() => setPipelineStatusFilter('graph_collected')}
+              title="Questions with causal graph built"
+            >
+              Graph Collected ({eventGraphStatusCounts.graph_collected})
+            </button>
+            <button
+              className={`status-filter-btn forecasted ${pipelineStatusFilter === 'forecasted' ? 'active' : ''}`}
+              onClick={() => setPipelineStatusFilter('forecasted')}
+              title="Questions with at least one forecast"
+            >
+              Forecasted ({eventGraphStatusCounts.forecasted})
+            </button>
+          </div>
+        )}
+
+        {!isEventGraphFilter && multiSelectMode && (
+          <div className="pipeline-status-filter">
+            <button
+              className={`status-filter-btn ${pipelineStatusFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setPipelineStatusFilter('all')}
+            >
+              All ({questions.length})
+            </button>
+            <button
+              className={`status-filter-btn needs-evidence ${pipelineStatusFilter === 'needs_evidence' ? 'active' : ''}`}
+              onClick={() => setPipelineStatusFilter('needs_evidence')}
+              title="Questions with no articles collected"
+            >
+              Needs Evidence ({pipelineStageCounts.needs_evidence})
+            </button>
+            <button
+              className={`status-filter-btn needs-graph ${pipelineStatusFilter === 'needs_graph' ? 'active' : ''}`}
+              onClick={() => setPipelineStatusFilter('needs_graph')}
+              title="Questions with articles but no graph built"
+            >
+              Needs Graph ({pipelineStageCounts.needs_graph})
+            </button>
+            <button
+              className={`status-filter-btn complete ${pipelineStatusFilter === 'complete' ? 'active' : ''}`}
+              onClick={() => setPipelineStatusFilter('complete')}
+              title="Questions with articles and graph built"
+            >
+              Complete ({pipelineStageCounts.complete})
+            </button>
+          </div>
+        )}
+
         <input
           type="text"
           className="search-box"

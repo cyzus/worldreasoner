@@ -1,27 +1,27 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { useCaseStudyData } from '../hooks/useCaseStudyData'
-import { useForecastGraph, useQuestionPriceHistory } from '../hooks/queries/useQuestionQueries'
-import { ForecastComparison } from './CaseStudyView/ForecastComparison'
+import { useQuestionPriceHistory } from '../hooks/queries/useQuestionQueries'
 import { CausalEventsTable } from './CaseStudyView/CausalEventsTable'
 import { CausalPressureChart } from './CaseStudyView/CausalPressureChart'
 import { InformationStream } from './CaseStudyView/InformationStream'
-import { ForecastGraphModal } from './CaseStudyView/ForecastGraphModal'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import './CaseStudyView.css'
 
-/**
- * CaseStudyView - Displays a clean, chronological view of articles and events
- * bypassing the heavy force-directed graph. Also handles forecast comparison.
- */
-function CaseStudyView({
-  graphData,
-  forecasts,
-  selectedQuestion
-}) {
-  const [activeForecastId, setActiveForecastId] = useState(null)
+const formatDate = (value) => {
+  if (!value) return 'N/A'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return String(value)
+  return parsed.toLocaleDateString()
+}
 
-  // Use our custom hook to fetch and memoize data
+const formatValue = (value) => {
+  if (value === null || value === undefined || value === '') return 'N/A'
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  return String(value)
+}
+
+function CaseStudyView({ graphData, selectedQuestion }) {
   const {
     articles,
     events,
@@ -32,83 +32,94 @@ function CaseStudyView({
     loadingImpacts
   } = useCaseStudyData(selectedQuestion, graphData)
 
-  // Use React Query for the modal data loading (enabled only when an ID is active)
-  const {
-    data: activeForecastGraph,
-    isFetching: loadingGraph
-  } = useForecastGraph(activeForecastId)
-
   const { data: priceHistoryData } = useQuestionPriceHistory(selectedQuestion?.id)
 
-  const handleViewForecastGraph = (forecastId) => {
-    setActiveForecastId(forecastId)
-  }
+  const hasExplanation = !!selectedQuestion?.causal_explanation
+  const hasCausal = Object.keys(impacts).length > 0
 
-  const handleCloseForecastGraph = () => {
-    setActiveForecastId(null)
-  }
-
-  // Show a loading state if data is being fetched
-  if (loadingArticles || loadingImpacts) {
-    return (
-      <div className="case-study-view" style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
-        <p>Loading case study data...</p>
-      </div>
-    )
+  if (!selectedQuestion) {
+    return <div className="cs-empty">Select a question to open its case study.</div>
   }
 
   return (
     <div className="case-study-view">
-      <ForecastComparison
-        selectedQuestion={selectedQuestion}
-        forecasts={forecasts}
-        onViewForecastGraph={handleViewForecastGraph}
-        loadingGraph={loadingGraph}
-      />
-
-      {selectedQuestion?.causal_explanation && (
-        <div className="cs-section">
-          <h3 className="cs-section-title">💡 Causal Explanation</h3>
-          <p className="cs-section-subtitle">Auto-generated explanation of the causal dynamics</p>
-          <div className="cs-impact-details markdown-body" style={{ marginTop: 0 }}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedQuestion.causal_explanation}</ReactMarkdown>
+      <section className="cs-section cs-section-panel cs-question-overview">
+        <div className="cs-readable">
+          <h2 className="cs-question-title">{selectedQuestion.question_text}</h2>
+          <div className="cs-meta-grid">
+            <span className="cs-meta-chip"><strong>Source:</strong> {formatValue(selectedQuestion.source)}</span>
+            <span className="cs-meta-chip"><strong>Domain:</strong> {formatValue(selectedQuestion.domain)}</span>
+            <span className="cs-meta-chip"><strong>Difficulty:</strong> {formatValue(selectedQuestion.difficulty)}</span>
+            <span className="cs-meta-chip"><strong>Ground Truth:</strong> {formatValue(selectedQuestion.ground_truth)}</span>
+            <span className="cs-meta-chip"><strong>Resolution:</strong> {formatDate(selectedQuestion.resolution_date)}</span>
+            <span className="cs-meta-chip"><strong>Forecasts:</strong> {formatValue(selectedQuestion.forecast_count)}</span>
           </div>
         </div>
+      </section>
+
+      {hasExplanation && (
+        <section className="cs-section cs-section-panel">
+          <div className="cs-readable">
+            <h3 className="cs-section-title">Causal Explanation</h3>
+            <p className="cs-section-subtitle">Auto-generated explanation of the causal dynamics.</p>
+            <div className="cs-impact-details markdown-body">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {selectedQuestion.causal_explanation}
+              </ReactMarkdown>
+            </div>
+          </div>
+        </section>
       )}
 
-      {Object.keys(impacts).length > 0 && (
-        <div className="cs-section">
-          <h3 className="cs-section-title">📈 Evidence Accumulation</h3>
-          <p className="cs-section-subtitle">
-            Cumulative causal pressure toward the resolved outcome — each step is one event
-          </p>
-          <CausalPressureChart
+      <section className="cs-section cs-section-panel">
+        <h3 className="cs-section-title">Causal Events</h3>
+        <p className="cs-section-subtitle">Chronological progression of extracted events.</p>
+        {(loadingArticles || loadingImpacts) ? (
+          <div className="cs-empty">Loading evidence data...</div>
+        ) : (
+          <CausalEventsTable
             events={events}
             impacts={impacts}
+            articleMap={articleMap}
             groundTruthScenario={groundTruthScenario}
-            resolutionDate={selectedQuestion?.resolution_date}
-            priceHistory={priceHistoryData?.price_history || null}
-            priceOutcomes={priceHistoryData?.token_outcomes || priceHistoryData?.outcomes || null}
+            questionId={selectedQuestion?.id}
+            showHeader={false}
           />
-        </div>
+        )}
+      </section>
+
+      {hasCausal && (
+        <section className="cs-section cs-section-panel">
+          <h3 className="cs-section-title">Evidence Accumulation</h3>
+          <p className="cs-section-subtitle">
+            Cumulative causal pressure toward the resolved outcome; each step is one event.
+          </p>
+          {(loadingArticles || loadingImpacts) ? (
+            <div className="cs-empty">Loading evidence data...</div>
+          ) : (
+            <CausalPressureChart
+              events={events}
+              impacts={impacts}
+              groundTruthScenario={groundTruthScenario}
+              resolutionDate={selectedQuestion?.resolution_date}
+              priceHistory={priceHistoryData?.price_history || null}
+              priceOutcomes={priceHistoryData?.token_outcomes || priceHistoryData?.outcomes || null}
+            />
+          )}
+        </section>
       )}
 
-      <CausalEventsTable
-        events={events}
-        impacts={impacts}
-        articleMap={articleMap}
-        groundTruthScenario={groundTruthScenario}
-        questionId={selectedQuestion?.id}
-      />
-
-      <InformationStream
-        articles={articles}
-      />
-
-      <ForecastGraphModal
-        activeForecastGraph={activeForecastGraph}
-        onClose={handleCloseForecastGraph}
-      />
+      <section className="cs-section cs-section-panel">
+        <div className="cs-readable">
+          <h3 className="cs-section-title">Appendix: Information Stream</h3>
+          <p className="cs-section-subtitle">Articles collected chronologically.</p>
+        </div>
+        {(loadingArticles || loadingImpacts) ? (
+          <div className="cs-empty">Loading evidence data...</div>
+        ) : (
+          <InformationStream articles={articles} showHeader={false} />
+        )}
+      </section>
     </div>
   )
 }

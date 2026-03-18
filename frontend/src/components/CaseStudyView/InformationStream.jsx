@@ -9,7 +9,7 @@ const formatDate = (dateString) => {
     })
 }
 
-export function InformationStream({ articles }) {
+export function InformationStream({ articles, showHeader = true }) {
     const [expandedArticles, setExpandedArticles] = useState(new Set())
 
     const toggleArticle = (id) => {
@@ -21,8 +21,12 @@ export function InformationStream({ articles }) {
 
     return (
         <div className="cs-section">
-            <h3 className="cs-section-title">📰 Information Stream</h3>
-            <p className="cs-section-subtitle">Articles collected chronologically</p>
+            {showHeader && (
+                <>
+                    <h3 className="cs-section-title">Information Stream</h3>
+                    <p className="cs-section-subtitle">Articles collected chronologically</p>
+                </>
+            )}
 
             {articles.length === 0 ? (
                 <div className="cs-empty">No articles found in the current graph.</div>

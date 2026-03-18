@@ -3,6 +3,92 @@
   /* No layout properties needed, handled by page-container */
 }
 
+.event-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 16px 20px 0 20px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e9ecef;
+}
+
+.event-toolbar-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.event-toolbar-title {
+  margin: 0;
+  font-size: 18px;
+  color: #212529;
+}
+
+.event-toolbar-count {
+  font-size: 13px;
+  color: #6c757d;
+}
+
+.event-toolbar-btn {
+  border: 1px solid #ced4da;
+  background: #fff;
+  color: #495057;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.event-toolbar-btn.active {
+  background: #f1f8ff;
+  border-color: #74c0fc;
+  color: #1864ab;
+}
+
+.event-main {
+  padding: 0 16px 16px 16px;
+  overflow-y: auto;
+}
+
+.event-statistics-panel {
+  margin-bottom: 16px;
+}
+
+.event-view-toggle-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+.event-view-toggle-row .view-toggle-group {
+  display: flex;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.event-view-toggle-row .view-toggle-group button {
+  padding: 8px 16px;
+  background: #fff;
+  border: none;
+  cursor: pointer;
+  color: #495057;
+  font-weight: 500;
+}
+
+.event-view-toggle-row .view-toggle-group button + button {
+  border-left: 1px solid #ced4da;
+}
+
+.event-view-toggle-row .view-toggle-group button.active {
+  background: #e9ecef;
+  font-weight: 700;
+}
+
 /* Nested tabs */
 .event-graphs-page .nested-tabs {
   display: flex;
@@ -84,6 +170,20 @@
 }
 
 @media (max-width: 768px) {
+  .event-toolbar {
+    margin: 8px 8px 0;
+    padding: 10px 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .event-toolbar-left {
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-start;
+  }
+
   .event-graphs-page .nested-tabs {
     margin: 8px 8px 0;
     padding: 8px;

@@ -12,6 +12,66 @@
   background: #fafafa;
 }
 
+.pipeline-status-filter {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.status-filter-btn {
+  padding: 5px 10px;
+  border: 1px solid #d0d0d0;
+  border-radius: 16px;
+  font-size: 12px;
+  cursor: pointer;
+  background: white;
+  color: #555;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.status-filter-btn:hover {
+  border-color: #888;
+  color: #333;
+}
+
+.status-filter-btn.active {
+  background: #1a73e8;
+  border-color: #1a73e8;
+  color: white;
+}
+
+.status-filter-btn.evidence-collected.active {
+  background: #e65100;
+  border-color: #e65100;
+}
+
+.status-filter-btn.graph-collected.active {
+  background: #6a1b9a;
+  border-color: #6a1b9a;
+}
+
+.status-filter-btn.forecasted.active {
+  background: #2e7d32;
+  border-color: #2e7d32;
+}
+
+.status-filter-btn.needs-evidence.active {
+  background: #e65100;
+  border-color: #e65100;
+}
+
+.status-filter-btn.needs-graph.active {
+  background: #6a1b9a;
+  border-color: #6a1b9a;
+}
+
+.status-filter-btn.complete.active {
+  background: #2e7d32;
+  border-color: #2e7d32;
+}
+
 .search-box {
   width: 100%;
   padding: 10px 12px;

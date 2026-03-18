@@ -40,8 +40,8 @@ function EventGraphsPage({
   onQuestionDeleted,
   timeFilter,
 }) {
-  const [nestedTab, setNestedTab] = useState('questions') // 'questions', 'statistics', 'controls'
   const [presentationMode, setPresentationMode] = useState('casestudy') // 'casestudy' or 'graph'
+  const [showStatistics, setShowStatistics] = useState(false)
 
   // Outcome impacts toggle (from graph store)
   const includeOutcomes = useGraphStore(state => state.includeOutcomes)
@@ -70,93 +70,69 @@ function EventGraphsPage({
 
   return (
     <div className="event-graphs-page page-container">
-      <div className="nested-tabs">
-        <button
-          className={`nested-tab ${nestedTab === 'questions' ? 'active' : ''}`}
-          onClick={() => setNestedTab('questions')}
-        >
-          📋 Questions ({questions.length})
-        </button>
-        <button
-          className={`nested-tab ${nestedTab === 'statistics' ? 'active' : ''}`}
-          onClick={() => setNestedTab('statistics')}
-        >
-          📊 Statistics
-        </button>
+      <div className="event-toolbar">
+        <div className="event-toolbar-left">
+          <h2 className="event-toolbar-title">Event Graph Explorer</h2>
+          <span className="event-toolbar-count">{questions.length} questions</span>
+        </div>
+        <div className="event-toolbar-actions">
+          <button
+            className={`event-toolbar-btn ${showStatistics ? 'active' : ''}`}
+            onClick={() => setShowStatistics(prev => !prev)}
+          >
+            {showStatistics ? 'Hide Statistics' : 'Show Statistics'}
+          </button>
+        </div>
       </div>
 
       {/* Main layout with sidebar and graph */}
       <div className="page-content">
         <div className="page-sidebar">
           <div className="scroll-container">
-
-            {nestedTab === 'statistics' && (
-              <div style={{ padding: '12px', color: '#868e96', fontStyle: 'italic', textAlign: 'center', marginTop: '50px' }}>
-                <p>Statistics Dashboard is now full-screen 👉</p>
-              </div>
-            )}
-
-            {nestedTab === 'questions' && (
-              <QuestionList
-                questions={questions}
-                selectedQuestionId={selectedQuestionId}
-                onQuestionSelect={(questionId) => {
-                  onQuestionFilter(questionId)
-                }}
-                onClose={() => { }} /* Controls are removed so no-op on close */
-                onQuestionUpdated={onQuestionUpdated}
-                onQuestionDeleted={onQuestionDeleted}
-              />
-            )}
+            <QuestionList
+              questions={questions}
+              selectedQuestionId={selectedQuestionId}
+              statusFilterVariant="eventgraph"
+              onQuestionSelect={(questionId) => {
+                onQuestionFilter(questionId)
+              }}
+              onClose={() => { }}
+              onQuestionUpdated={onQuestionUpdated}
+              onQuestionDeleted={onQuestionDeleted}
+            />
           </div>
         </div>
 
-        <div className="page-main" style={{ padding: '0 16px 16px 16px', overflowY: 'auto' }}>
-          {nestedTab === 'statistics' ? (
-            <QuestionStatistics questions={questions} />
-          ) : (
-            <>
-              {/* Top Bar for Graph/Case Study Toggle */}
-              {selectedQuestionId && (
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'flex-end',
-                  marginBottom: '16px'
-                }}>
-                  <div className="view-toggle-group" style={{ display: 'flex', border: '1px solid #ced4da', borderRadius: '4px', overflow: 'hidden' }}>
-                    <button
-                      onClick={() => setPresentationMode('graph')}
-                      style={{
-                        padding: '8px 16px',
-                        backgroundColor: presentationMode === 'graph' ? '#e9ecef' : '#fff',
-                        border: 'none',
-                        borderRight: '1px solid #ced4da',
-                        cursor: 'pointer',
-                        fontWeight: presentationMode === 'graph' ? '600' : 'normal',
-                        color: '#495057'
-                      }}
-                    >
-                      🕸️ Interactive Graph
-                    </button>
-                    <button
-                      onClick={() => setPresentationMode('casestudy')}
-                      style={{
-                        padding: '8px 16px',
-                        backgroundColor: presentationMode === 'casestudy' ? '#e9ecef' : '#fff',
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontWeight: presentationMode === 'casestudy' ? '600' : 'normal',
-                        color: '#495057'
-                      }}
-                    >
-                      📚 Case Study View
-                    </button>
-                  </div>
-                </div>
-              )}
+        <div className="page-main event-main">
+          {showStatistics && (
+            <div className="event-statistics-panel">
+              <QuestionStatistics questions={questions} />
+            </div>
+          )}
 
-              {/* Forecast controls - show when question is selected */}
-              {selectedQuestionId && presentationMode === 'graph' && (
+          {/* Top Bar for Graph/Case Study Toggle */}
+          {selectedQuestionId && (
+            <div className="event-view-toggle-row">
+              <div className="view-toggle-group">
+                <button
+                  onClick={() => setPresentationMode('graph')}
+                  className={presentationMode === 'graph' ? 'active' : ''}
+                >
+                  Interactive Graph
+                </button>
+                <button
+                  onClick={() => setPresentationMode('casestudy')}
+                  className={presentationMode === 'casestudy' ? 'active' : ''}
+                >
+                  Case Study
+                </button>
+              </div>
+            </div>
+          )}
+
+          <>
+            {/* Forecast controls - show when question is selected */}
+            {selectedQuestionId && presentationMode === 'graph' && (
                 <div style={{
                   display: 'flex',
                   gap: '16px',
@@ -327,7 +303,6 @@ function EventGraphsPage({
               ) : presentationMode === 'casestudy' ? (
                 <CaseStudyView
                   graphData={graphData}
-                  forecasts={forecasts}
                   selectedQuestion={questions.find(q => q.id === selectedQuestionId)}
                 />
               ) : (
@@ -459,8 +434,7 @@ function EventGraphsPage({
                   )}
                 </div>
               )}
-            </>
-          )}
+          </>
 
         </div>
       </div>

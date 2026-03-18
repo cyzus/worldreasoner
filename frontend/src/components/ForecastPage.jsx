@@ -1,11 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchQuestions, fetchQuestionSlotPreview } from '../api/graphApi';
 import ForecastGraph from './ForecastGraph';
 import EvaluationDashboard from './EvaluationDashboard';
 import QuestionCard from './QuestionCard';
 import { JobSidebar, JobDetails } from './JobManager';
 import { usePipelineJobs } from '../hooks/usePipelineJobs';
+import { ForecastTab } from './CaseStudyView/ForecastTab';
 import './ForecastPage.css';
+
+const formatDate = (value) => {
+  if (!value) return 'N/A';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return parsed.toLocaleDateString();
+};
+
+const formatValue = (value) => {
+  if (value === null || value === undefined || value === '') return 'N/A';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  return String(value);
+};
 
 /** Visual timeline bar showing where the simulated date falls in the forecast window. */
 const SlotPreviewBar = ({ preview }) => {
@@ -74,10 +88,25 @@ const ForecastPage = ({
 
   // View state
   const [activeView, setActiveView] = useState('management'); // 'management' or 'evaluation'
+  const listPaneRef = useRef(null);
+  const detailPaneRef = useRef(null);
 
   useEffect(() => {
     loadQuestions();
   }, []);
+
+  useEffect(() => {
+    if (selectedQuestion) {
+      if (detailPaneRef.current) {
+        detailPaneRef.current.scrollTop = 0;
+      }
+      return;
+    }
+
+    if (listPaneRef.current) {
+      listPaneRef.current.scrollTop = 0;
+    }
+  }, [selectedQuestion?.id]);
 
   useEffect(() => {
     if (!selectedQuestion) {
@@ -114,6 +143,9 @@ const ForecastPage = ({
 
   const handleQuestionClick = (question) => {
     setSelectedQuestion(question);
+    if (onQuestionSelect) {
+      onQuestionSelect(question.id);
+    }
   };
 
   const toggleQuestionSelection = (questionId) => {
@@ -218,6 +250,34 @@ const ForecastPage = ({
 
   const domains = [...new Set(questions.map(q => q.domain))].filter(Boolean);
   const sources = [...new Set(questions.map(q => q.source))].filter(Boolean);
+
+  const forecastStatusCounts = useMemo(() => {
+    const counts = {
+      all: questions.length,
+      forecasted: 0,
+      not_forecasted: 0,
+    };
+    questions.forEach((q) => {
+      if ((q.forecast_count || 0) > 0) counts.forecasted += 1;
+      else counts.not_forecasted += 1;
+    });
+    return counts;
+  }, [questions]);
+
+  const hasFilterOverrides =
+    searchTerm ||
+    filterDomain !== 'all' ||
+    filterSource !== 'all' ||
+    filterForecastStatus !== 'all' ||
+    filterForecastMode !== 'all';
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setFilterDomain('all');
+    setFilterSource('all');
+    setFilterForecastStatus('all');
+    setFilterForecastMode('all');
+  };
 
   const allFilteredSelected = filteredQuestions.length > 0 && filteredQuestions.every(q => selectedQuestions.includes(q.id));
 
@@ -441,7 +501,7 @@ const ForecastPage = ({
 
           {/* Right Main Content - Job Details or Questions & Price History */}
           <div className="page-main">
-            <div className="scroll-container">
+            <div className="scroll-container forecast-main-scroll">
               {selectedJobId && jobDetails ? (
                 <JobDetails
                   job={jobDetails}
@@ -453,95 +513,194 @@ const ForecastPage = ({
                   <div>Loading job details...</div>
                 </div>
               ) : (
-                <>
-                  {/* Question Selection */}
-                  <div className="forecast-questions-panel">
-                    <div className="questions-header">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <input
-                          type="checkbox"
-                          checked={allFilteredSelected}
-                          onChange={handleSelectAll}
-                          title="Select all filtered questions"
-                          style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#4CAF50' }}
-                        />
-                        <h3>Questions</h3>
+                <div className={`forecast-slide-shell ${selectedQuestion ? 'show-detail' : ''}`}>
+                  <div className="forecast-slide-track">
+                    <section ref={listPaneRef} className="forecast-pane forecast-pane-list">
+                      <div className="forecast-questions-panel">
+                        <div className="questions-header">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <input
+                              type="checkbox"
+                              checked={allFilteredSelected}
+                              onChange={handleSelectAll}
+                              title="Select all filtered questions"
+                              style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#4CAF50' }}
+                            />
+                            <h3>Questions</h3>
+                          </div>
+                          <div className="selection-info">
+                            {selectedQuestions.length} selected
+                          </div>
+                        </div>
+
+                        <div className="questions-filters">
+                          <input
+                            type="text"
+                            placeholder="Search questions..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="search-input"
+                          />
+
+                          <div className="forecast-filter-row">
+                            <select
+                              value={filterDomain}
+                              onChange={(e) => setFilterDomain(e.target.value)}
+                              className="filter-select"
+                            >
+                              <option value="all">All Domains</option>
+                              {domains.map(domain => (
+                                <option key={domain} value={domain}>{domain}</option>
+                              ))}
+                            </select>
+
+                            <select
+                              value={filterSource}
+                              onChange={(e) => setFilterSource(e.target.value)}
+                              className="filter-select"
+                            >
+                              <option value="all">All Sources</option>
+                              {sources.map(source => (
+                                <option key={source} value={source}>{source}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="forecast-chip-group" aria-label="Forecast status filter">
+                            <button
+                              type="button"
+                              className={`forecast-chip ${filterForecastStatus === 'all' ? 'active' : ''}`}
+                              onClick={() => setFilterForecastStatus('all')}
+                            >
+                              All ({forecastStatusCounts.all})
+                            </button>
+                            <button
+                              type="button"
+                              className={`forecast-chip status-forecasted ${filterForecastStatus === 'forecasted' ? 'active' : ''}`}
+                              onClick={() => setFilterForecastStatus('forecasted')}
+                            >
+                              Forecasted ({forecastStatusCounts.forecasted})
+                            </button>
+                            <button
+                              type="button"
+                              className={`forecast-chip status-missing ${filterForecastStatus === 'not_forecasted' ? 'active' : ''}`}
+                              onClick={() => setFilterForecastStatus('not_forecasted')}
+                            >
+                              Missing Forecast ({forecastStatusCounts.not_forecasted})
+                            </button>
+                          </div>
+
+                          <div className="forecast-chip-group" aria-label="Forecast mode filter">
+                            <button
+                              type="button"
+                              className={`forecast-chip ${filterForecastMode === 'all' ? 'active' : ''}`}
+                              onClick={() => setFilterForecastMode('all')}
+                            >
+                              All Modes
+                            </button>
+                            <button
+                              type="button"
+                              className={`forecast-chip mode-knowledge ${filterForecastMode === 'knowledge_only' ? 'active' : ''}`}
+                              onClick={() => setFilterForecastMode('knowledge_only')}
+                            >
+                              Knowledge Only
+                            </button>
+                            <button
+                              type="button"
+                              className={`forecast-chip mode-container ${filterForecastMode === 'container' ? 'active' : ''}`}
+                              onClick={() => setFilterForecastMode('container')}
+                            >
+                              Container
+                            </button>
+                            <button
+                              type="button"
+                              className={`forecast-chip mode-realtime ${filterForecastMode === 'real_time' ? 'active' : ''}`}
+                              onClick={() => setFilterForecastMode('real_time')}
+                            >
+                              Real-Time
+                            </button>
+                          </div>
+
+                          <div className="forecast-filter-meta">
+                            <span>{filteredQuestions.length} questions shown</span>
+                            {hasFilterOverrides && (
+                              <button type="button" className="forecast-clear-btn" onClick={clearFilters}>
+                                Clear filters
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="questions-list">
+                          {filteredQuestions.map(question => (
+                            <QuestionCard
+                              key={question.id}
+                              question={question}
+                              isSelected={selectedQuestion?.id === question.id}
+                              isMultiSelected={selectedQuestions.includes(question.id)}
+                              onToggleSelect={() => toggleQuestionSelection(question.id)}
+                              onClick={() => handleQuestionClick(question)}
+                              showCheckbox={true}
+                              showSelectionStyle={true}
+                            />
+                          ))}
+                        </div>
                       </div>
-                      <div className="selection-info">
-                        {selectedQuestions.length} selected
+                    </section>
+
+                    <section ref={detailPaneRef} className="forecast-pane forecast-pane-detail">
+                      <div className="forecast-history-panel">
+                        <div className="forecast-history-header">
+                          <button
+                            className="forecast-back-btn"
+                            onClick={() => setSelectedQuestion(null)}
+                            type="button"
+                          >
+                            Back to questions
+                          </button>
+                          <h3>Forecast History</h3>
+                          <span className="forecast-history-question">
+                            {selectedQuestion?.question_text || 'Select a question to view forecast history.'}
+                          </span>
+                        </div>
+                        {selectedQuestion && (
+                          <div className="forecast-question-brief">
+                            <div className="forecast-question-meta-grid">
+                              <span className="forecast-question-chip"><strong>Source:</strong> {formatValue(selectedQuestion.source)}</span>
+                              <span className="forecast-question-chip"><strong>Domain:</strong> {formatValue(selectedQuestion.domain)}</span>
+                              <span className="forecast-question-chip"><strong>Type:</strong> {formatValue(selectedQuestion.question_type)}</span>
+                              <span className="forecast-question-chip"><strong>Difficulty:</strong> {formatValue(selectedQuestion.difficulty)}</span>
+                              <span className="forecast-question-chip"><strong>Ground Truth:</strong> {formatValue(selectedQuestion.ground_truth)}</span>
+                              <span className="forecast-question-chip"><strong>Resolution:</strong> {formatDate(selectedQuestion.resolution_date)}</span>
+                              <span className="forecast-question-chip"><strong>Quality:</strong> {formatValue(selectedQuestion.quality_score)}</span>
+                              <span className="forecast-question-chip"><strong>Forecasts:</strong> {formatValue(selectedQuestion.forecast_count)}</span>
+                            </div>
+
+                            {(selectedQuestion.context || selectedQuestion.resolution_criteria) && (
+                              <div className="forecast-question-extra">
+                                {selectedQuestion.context && (
+                                  <p>
+                                    <strong>Context:</strong> {selectedQuestion.context}
+                                  </p>
+                                )}
+                                {selectedQuestion.resolution_criteria && (
+                                  <p>
+                                    <strong>Resolution Criteria:</strong> {selectedQuestion.resolution_criteria}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {selectedQuestion ? (
+                          <ForecastTab selectedQuestion={selectedQuestion} />
+                        ) : (
+                          <div className="cs-empty">Select a question from the list to view its forecasts.</div>
+                        )}
                       </div>
-                    </div>
-
-                    <div className="questions-filters">
-                      <input
-                        type="text"
-                        placeholder="Search questions..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="search-input"
-                      />
-
-                      <select
-                        value={filterDomain}
-                        onChange={(e) => setFilterDomain(e.target.value)}
-                        className="filter-select"
-                      >
-                        <option value="all">All Domains</option>
-                        {domains.map(domain => (
-                          <option key={domain} value={domain}>{domain}</option>
-                        ))}
-                      </select>
-
-                      <select
-                        value={filterSource}
-                        onChange={(e) => setFilterSource(e.target.value)}
-                        className="filter-select"
-                      >
-                        <option value="all">All Sources</option>
-                        {sources.map(source => (
-                          <option key={source} value={source}>{source}</option>
-                        ))}
-                      </select>
-
-                      <select
-                        value={filterForecastStatus}
-                        onChange={(e) => setFilterForecastStatus(e.target.value)}
-                        className="filter-select"
-                      >
-                        <option value="all">All Forecast Status</option>
-                        <option value="forecasted">Forecasted</option>
-                        <option value="not_forecasted">Not Forecasted</option>
-                      </select>
-
-                      <select
-                        value={filterForecastMode}
-                        onChange={(e) => setFilterForecastMode(e.target.value)}
-                        className="filter-select"
-                      >
-                        <option value="all">All Forecast Modes</option>
-                        <option value="knowledge_only">Knowledge Only</option>
-                        <option value="container">Container</option>
-                        <option value="real_time">Real-Time</option>
-                      </select>
-                    </div>
-
-                    <div className="questions-list">
-                      {filteredQuestions.map(question => (
-                        <QuestionCard
-                          key={question.id}
-                          question={question}
-                          isSelected={selectedQuestion?.id === question.id}
-                          isMultiSelected={selectedQuestions.includes(question.id)}
-                          onToggleSelect={() => toggleQuestionSelection(question.id)}
-                          onClick={() => handleQuestionClick(question)}
-                          showCheckbox={true}
-                          showSelectionStyle={true}
-                        />
-                      ))}
-                    </div>
+                    </section>
                   </div>
-
-                </>
+                </div>
               )
               }
             </div >

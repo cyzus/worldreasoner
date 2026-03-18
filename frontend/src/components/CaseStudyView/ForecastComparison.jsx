@@ -27,21 +27,53 @@ export function ForecastComparison({
                     {forecasts.map(fc => (
                         <div key={fc.id} className="cs-forecast-card">
                             <div className="cs-fc-header">
-                                <span className="cs-fc-mode">{fc.mode}</span>
-                                <span className="cs-fc-prob">
-                                    {fc.probability !== null ? `${(fc.probability * 100).toFixed(1)}%` : 'N/A'}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <span className="cs-fc-mode">{fc.mode}</span>
+                                    {fc.enabled_tools?.length > 0 && (
+                                        <span style={{ fontSize: '11px', color: '#666' }}>
+                                            🔧 {fc.enabled_tools.join(', ')}
+                                        </span>
+                                    )}
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div className="cs-fc-prob" title="Probability assigned to the 'Yes' outcome">
+                                        {fc.probability != null ? `${(fc.probability * 100).toFixed(1)}%` : 'N/A'}
+                                    </div>
+                                    <div style={{ fontSize: '10px', color: '#868e96', marginTop: '2px' }}>P(Yes)</div>
+                                </div>
+                            </div>
+
+                            <div className="cs-fc-prediction-row">
+                                <span className="cs-fc-prediction-label">Prediction</span>
+                                <span className={`cs-fc-prediction-value ${fc.expected_outcome === 'Yes' ? 'yes' : fc.expected_outcome === 'No' ? 'no' : ''}`}>
+                                    {fc.expected_outcome ?? 'N/A'}
+                                </span>
+                                <span className="cs-fc-confidence" title="Model's confidence in its own prediction">
+                                    {(fc.confidence * 100).toFixed(0)}% confident
                                 </span>
                             </div>
-                            {fc.expected_outcome && (
-                                <div className="cs-fc-outcome">
-                                    <strong>Prediction:</strong> {fc.expected_outcome}
+
+                            {fc.is_correct != null && (
+                                <div className={`cs-fc-correctness ${fc.is_correct ? 'correct' : 'incorrect'}`}>
+                                    {fc.is_correct ? '✓ Correct' : '✗ Incorrect'}
                                 </div>
                             )}
-                            {fc.rationale && (
-                                <div className="cs-fc-rationale markdown-body">
-                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{fc.rationale}</ReactMarkdown>
+
+                            {fc.simulated_date && (
+                                <div style={{ fontSize: '11px', color: '#868e96', marginBottom: '8px' }}>
+                                    Forecasted as of {new Date(fc.simulated_date).toLocaleDateString()}
                                 </div>
                             )}
+
+                            {fc.reasoning && (
+                                <details className="cs-fc-reasoning-details">
+                                    <summary>Reasoning</summary>
+                                    <div className="cs-fc-rationale markdown-body">
+                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{fc.reasoning}</ReactMarkdown>
+                                    </div>
+                                </details>
+                            )}
+
                             <div className="cs-fc-footer">
                                 <button
                                     className="cs-btn-view-graph"

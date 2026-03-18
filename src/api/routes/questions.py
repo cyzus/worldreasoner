@@ -42,9 +42,11 @@ class QuestionListItem(BaseModel):
     quality_score: Optional[float] = None
     resolution_date: Optional[str] = None
     estimated_start_time: Optional[str] = None
+    ground_truth: Optional[Any] = None
     causal_explanation: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     article_count: int = 0
+    graph_built: bool = False
     forecast_count: int = 0
     forecast_modes: List[str] = Field(default_factory=list)
 
@@ -593,9 +595,11 @@ async def get_questions(
                 estimated_start_time=q.estimated_start_time.isoformat()
                 if q.estimated_start_time
                 else None,
+                ground_truth=q.ground_truth,
                 causal_explanation=q.causal_explanation,
                 metadata=q.metadata,
                 article_count=article_counts.get(q.id, 0),
+                graph_built=q.graph_built,
                 forecast_count=forecast_stats.get(q.id, {}).get("count", 0),
                 forecast_modes=list(forecast_stats.get(q.id, {}).get("modes", [])),
             )
@@ -644,6 +648,7 @@ async def get_question(
             resolution_date=question.resolution_date.isoformat()
             if question.resolution_date
             else None,
+            ground_truth=question.ground_truth,
             causal_explanation=question.causal_explanation,
             metadata=question.metadata,
             estimated_start_time=question.estimated_start_time.isoformat()
@@ -829,22 +834,76 @@ async def get_question_forecasts(
 
         # Convert to dicts
         forecasts_data = []
+
+        def _coerce_bool(value: Any) -> Optional[bool]:
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float)):
+                return bool(value)
+            if isinstance(value, str):
+                normalized = value.strip().lower()
+                if normalized in {"yes", "true", "1"}:
+                    return True
+                if normalized in {"no", "false", "0"}:
+                    return False
+            return None
+
         for f in forecasts:
             # Get timestamp - try timestamp first, fall back to created_at
             ts = getattr(f, "timestamp", getattr(f, "created_at", None))
+
+            # Compute is_correct on the fly if not already evaluated
+            is_correct = getattr(f, "is_correct", None)
+            if is_correct is None and question.ground_truth is not None:
+                prediction_bool = _coerce_bool(f.prediction)
+                ground_truth_bool = _coerce_bool(question.ground_truth)
+
+                if prediction_bool is not None and ground_truth_bool is not None:
+                    is_correct = prediction_bool == ground_truth_bool
+                elif f.prediction is not None:
+                    is_correct = (
+                        str(f.prediction).strip().lower()
+                        == str(question.ground_truth).strip().lower()
+                    )
+
+            # Compute probability of "Yes/True" outcome
+            raw_prob = getattr(f, "probability", None)
+            if raw_prob is not None:
+                probability = raw_prob
+            elif isinstance(f.prediction, bool):
+                # prediction=True means model says "Yes"; probability of Yes = confidence
+                # prediction=False means model says "No"; probability of Yes = 1 - confidence
+                probability = f.confidence if f.prediction else (1.0 - f.confidence)
+            elif isinstance(f.prediction, (int, float)):
+                probability = float(f.prediction)
+            else:
+                probability = None
+
+            # Human-readable prediction label
+            if isinstance(f.prediction, bool):
+                expected_outcome = "Yes" if f.prediction else "No"
+            else:
+                expected_outcome = str(f.prediction) if f.prediction is not None else None
+
             forecast_dict = {
                 "id": f.id,
                 "question_id": f.question_id,
-                "probability": getattr(
-                    f, "probability", getattr(f, "prediction", None)
-                ),
+                "probability": probability,
                 "confidence": f.confidence,
+                "expected_outcome": expected_outcome,
                 "reasoning": f.reasoning,
                 "mode": f.mode.value
                 if hasattr(f.mode, "value")
                 else str(f.mode)
                 if f.mode
                 else "container",
+                "is_correct": is_correct,
+                "brier_score": getattr(f, "brier_score", None),
+                "simulated_date": f.simulated_date.isoformat() if getattr(f, "simulated_date", None) else None,
+                "model_name": getattr(f, "model_name", None),
+                "model_version": getattr(f, "model_version", None),
+                "articles_accessed_count": len(getattr(f, "articles_accessed", []) or []),
+                "enabled_tools": getattr(f, "enabled_tools", []),
                 "db": getattr(f, "db", None),
                 "session_id": f.session_id,
                 "created_at": ts.isoformat() if ts else None,

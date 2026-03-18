@@ -44,7 +44,8 @@ export function CausalEventsTable({
     impacts,
     articleMap,
     groundTruthScenario,
-    questionId
+    questionId,
+    showHeader = true
 }) {
     const [expandedRows, setExpandedRows] = useState(new Set())
     const [localReviewStatus, setLocalReviewStatus] = useState({})
@@ -85,10 +86,12 @@ export function CausalEventsTable({
     return (
         <div className="cs-section">
             <div className="cs-section-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                    <h3 className="cs-section-title">⚡ Causal Events</h3>
-                    <p className="cs-section-subtitle">Chronological progression of key events extracted from the evidence</p>
-                </div>
+                {showHeader && (
+                    <div>
+                        <h3 className="cs-section-title">Causal Events</h3>
+                        <p className="cs-section-subtitle">Chronological progression of key events extracted from the evidence</p>
+                    </div>
+                )}
                 {questionId && events.length > 0 && (
                     <button
                         className="cs-btn-review-all"
