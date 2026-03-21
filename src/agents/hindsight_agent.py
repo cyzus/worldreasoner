@@ -1,4 +1,5 @@
 from typing import Optional
+from datetime import datetime
 
 from src.agents.base import BaseAgent
 from src.config import Config, get_config
@@ -67,6 +68,12 @@ class HindsightAgent(BaseAgent):
             ),
         )
 
+        date_instructions = (
+            f"Today's date is {datetime.now().strftime('%Y-%m-%d')}. "
+            "All question resolution dates and evidence windows are in the past. "
+            "Search the web normally — do NOT skip searches assuming events are in the future."
+        )
+
         # Evidence gathering specialist (web search, article collection)
         # Tools get question_id for provenance tracking
         evidence_agent = CodeAgent(
@@ -88,6 +95,7 @@ class HindsightAgent(BaseAgent):
             additional_authorized_imports=["json"],  # Allow json imports in code agent
             name="evidence_collector",
             description=EVIDENCE_AGENT_DESCRIPTION,
+            instructions=date_instructions,
         )
 
         tools = tools + [
@@ -114,4 +122,5 @@ class HindsightAgent(BaseAgent):
             max_steps=max_steps,
             is_code=is_code,
             managed_agents=[evidence_agent],
+            instructions=date_instructions,
         )
