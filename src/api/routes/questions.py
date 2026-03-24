@@ -17,6 +17,7 @@ from src.utils.logging import logger
 from src.integrations.polymarket import get_price_history_for_market
 from src.analysis.article_analysis import analyze_article_coverage
 from src.config.collection_goal import QualityRequirements
+from src.services.question_monitor_service import QuestionMonitorService
 
 
 router = APIRouter()
@@ -49,6 +50,7 @@ class QuestionListItem(BaseModel):
     graph_built: bool = False
     forecast_count: int = 0
     forecast_modes: List[str] = Field(default_factory=list)
+    evidence_satisfied: bool = False
 
 
 class PolymarketSearchRequest(BaseModel):
@@ -557,6 +559,10 @@ async def get_questions(
 
         article_counts = db.count_group_by(Article, "collected_for_question_id")
 
+        # Evidence completion status via monitor service (single source of truth)
+        monitor_service = QuestionMonitorService(db)
+        processed_question_ids = monitor_service.get_processed_question_ids(questions)
+
         # Get all forecasts and aggregate by question
         from src.domain.models.forecast import Forecast
 
@@ -602,6 +608,7 @@ async def get_questions(
                 graph_built=q.graph_built,
                 forecast_count=forecast_stats.get(q.id, {}).get("count", 0),
                 forecast_modes=list(forecast_stats.get(q.id, {}).get("modes", [])),
+                evidence_satisfied=q.id in processed_question_ids,
             )
             for q in questions
         ]
@@ -654,6 +661,9 @@ async def get_question(
             estimated_start_time=question.estimated_start_time.isoformat()
             if question.estimated_start_time
             else None,
+            evidence_satisfied=QuestionMonitorService(db)
+            .check_satisfaction(question.id)
+            .is_satisfied,
         )
 
     except HTTPException:
@@ -1744,6 +1754,9 @@ async def update_question(
             else None,
             causal_explanation=question.causal_explanation,
             metadata=question.metadata,
+            evidence_satisfied=QuestionMonitorService(db)
+            .check_satisfaction(question.id)
+            .is_satisfied,
         )
 
     except HTTPException:

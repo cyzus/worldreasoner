@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from src.utils.logging import logger
+from src.core.database import GenericDatabase
 
 
 router = APIRouter()
@@ -377,7 +378,7 @@ class DatabaseState:
     """Singleton to manage current database path."""
 
     _instance = None
-    _current_db_path: str = "worldreasoner.db"
+    _current_db_path: str = str(Path("worldreasoner.db").resolve())
 
     def __new__(cls):
         if cls._instance is None:
@@ -391,9 +392,11 @@ class DatabaseState:
 
     @current_db_path.setter
     def current_db_path(self, value: str):
-        """Set current database path."""
-        self._current_db_path = value
-        logger.info(f"Database path updated to: {value}")
+        """Set current database path to absolute path."""
+        # Always resolve to absolute path to avoid working directory issues
+        resolved_path = str(Path(value).resolve())
+        self._current_db_path = resolved_path
+        logger.info(f"Database path updated to: {resolved_path}")
 
 
 # Singleton instance
@@ -445,10 +448,12 @@ async def list_databases():
         current_path = db_state.current_db_path
 
         for db_file in sorted(db_files):
-            is_current = str(db_file) == current_path or db_file.name == current_path
-            databases.append(
+                # Normalize both paths to absolute for comparison
+                resolved_db_file = str(db_file.resolve())
+                is_current = resolved_db_file == current_path
+                databases.append(
                 DatabaseInfo(
-                    path=str(db_file),
+                        path=resolved_db_file,
                     name=db_file.name,
                     size_bytes=db_file.stat().st_size if db_file.exists() else 0,
                     exists=db_file.exists(),
@@ -495,7 +500,7 @@ async def switch_database(request: DatabaseSwitchRequest):
         Success status and message
     """
     try:
-        db_path = Path(request.db_path)
+        db_path = Path(request.db_path).resolve()
 
         # Validate the database file exists
         if not db_path.exists():
@@ -517,6 +522,16 @@ async def switch_database(request: DatabaseSwitchRequest):
         db_state.current_db_path = str(db_path)
 
         logger.info(f"Switched to database: {db_path}")
+
+        # Initialize all tables in the switched database
+        # This ensures the schema is up-to-date and prevents errors when querying tables
+        try:
+            db = GenericDatabase(str(db_path))
+            tables_count = db.initialize_all_tables()
+            logger.info(f"Initialized {tables_count} tables in switched database")
+        except Exception as init_err:
+            logger.error(f"Warning: Failed to initialize tables in new database: {init_err}")
+            # Don't fail the switch if table initialization fails - user can still try
 
         # NO LONGER RESTARTING MCP SERVER!
         # The MCP server now supports per-request database switching via X-Database-Path header

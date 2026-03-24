@@ -102,14 +102,18 @@ const QuestionList = memo(function QuestionList({
           return false
         }
       } else {
-        // Original pipeline filters
-        if (pipelineStatusFilter === 'needs_evidence' && articleCount > 0) {
+        // Pipeline stage filters: progress from needs_evidence → needs_graph → complete
+        const isNeedsEvidence = !q.evidence_satisfied
+        const isNeedsGraph = q.evidence_satisfied && !q.graph_built
+        const isComplete = q.evidence_satisfied && q.graph_built
+
+        if (pipelineStatusFilter === 'needs_evidence' && !isNeedsEvidence) {
           return false
         }
-        if (pipelineStatusFilter === 'needs_graph' && !(articleCount > 0 && !q.graph_built)) {
+        if (pipelineStatusFilter === 'needs_graph' && !isNeedsGraph) {
           return false
         }
-        if (pipelineStatusFilter === 'complete' && !(articleCount > 0 && q.graph_built)) {
+        if (pipelineStatusFilter === 'complete' && !isComplete) {
           return false
         }
       }
@@ -142,14 +146,17 @@ const QuestionList = memo(function QuestionList({
     return counts
   }, [questions])
 
-  // Counts for original pipeline filters
+  // Counts for pipeline progress stages
   const pipelineStageCounts = useMemo(() => {
     const counts = { needs_evidence: 0, needs_graph: 0, complete: 0 }
     questions.forEach(q => {
-      const articles = q.article_count || 0
-      if (articles === 0) counts.needs_evidence++
-      else if (!q.graph_built) counts.needs_graph++
-      else counts.complete++
+      if (q.evidence_satisfied && q.graph_built) {
+        counts.complete++
+      } else if (q.evidence_satisfied && !q.graph_built) {
+        counts.needs_graph++
+      } else {
+        counts.needs_evidence++
+      }
     })
     return counts
   }, [questions])
@@ -312,7 +319,7 @@ const QuestionList = memo(function QuestionList({
             <button
               className={`status-filter-btn needs-evidence ${pipelineStatusFilter === 'needs_evidence' ? 'active' : ''}`}
               onClick={() => setPipelineStatusFilter('needs_evidence')}
-              title="Questions with no articles collected"
+              title="Questions not yet evidence-satisfied"
             >
               Needs Evidence ({pipelineStageCounts.needs_evidence})
             </button>
@@ -326,7 +333,7 @@ const QuestionList = memo(function QuestionList({
             <button
               className={`status-filter-btn complete ${pipelineStatusFilter === 'complete' ? 'active' : ''}`}
               onClick={() => setPipelineStatusFilter('complete')}
-              title="Questions with articles and graph built"
+              title="Questions meeting monitor evidence requirements"
             >
               Complete ({pipelineStageCounts.complete})
             </button>
