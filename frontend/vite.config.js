@@ -18,8 +18,10 @@ function loadDotEnv() {
 }
 
 const env = loadDotEnv()
-const FRONTEND_PORT = parseInt(env.FRONTEND_PORT ?? '3100')
+const FRONTEND_PORT = parseInt(env.FRONTEND_PORT ?? '5173')
+const FRONTEND_HOST = env.FRONTEND_HOST ?? '127.0.0.1'
 const BACKEND_PORT = parseInt(env.BACKEND_PORT ?? '7699')
+const BACKEND_HOST = env.BACKEND_HOST ?? '127.0.0.1'
 
 export default defineConfig({
   plugins: [
@@ -68,14 +70,15 @@ export default defineConfig({
   },
 
   server: {
+    host: FRONTEND_HOST,
     port: FRONTEND_PORT,
     proxy: {
       '/api': {
-        target: `http://localhost:${BACKEND_PORT}`,
+        target: `http://${BACKEND_HOST}:${BACKEND_PORT}`,
         changeOrigin: true,
       },
       '/ws': {
-        target: `ws://localhost:${BACKEND_PORT}`,
+        target: `ws://${BACKEND_HOST}:${BACKEND_PORT}`,
         ws: true,
       },
     },
