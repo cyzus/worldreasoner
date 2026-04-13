@@ -18,7 +18,7 @@ export const usePipelineJobs = (pipelineType = null, refreshInterval = 5000) => 
         // But we need to know if it's loading initially.
         // We'll manage local 'isPolling' if needed, but for now simple logic.
         try {
-            const response = await fetch('http://localhost:8018/api/pipelines/jobs?limit=20');
+            const response = await fetch('/api/pipelines/jobs?limit=20');
             if (!response.ok) throw new Error('Failed to fetch jobs');
 
             const data = await response.json();
@@ -63,7 +63,7 @@ export const usePipelineJobs = (pipelineType = null, refreshInterval = 5000) => 
         setSelectedJobId(jobId);
         setLoadingDetails(true);
         try {
-            const response = await fetch(`http://localhost:8018/api/pipelines/jobs/${jobId}`);
+            const response = await fetch(`/api/pipelines/jobs/${jobId}`);
             if (response.ok) {
                 const data = await response.json();
                 setJobDetails(data);

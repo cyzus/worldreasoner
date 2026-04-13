@@ -197,7 +197,7 @@ function QuestionEditModal({ question, onClose, onSave }) {
         return
       }
 
-      const response = await fetch(`http://localhost:8018/api/questions/${question.id}`, {
+      const response = await fetch(`/api/questions/${question.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

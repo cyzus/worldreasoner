@@ -163,7 +163,7 @@ const ForecastPage = ({
     }
 
     try {
-      const response = await fetch('http://localhost:8018/api/pipelines/jobs', {
+      const response = await fetch('/api/pipelines/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -185,7 +185,7 @@ const ForecastPage = ({
   const fetchForecastResults = async (jobId) => {
     setLoadingResults(true);
     try {
-      const response = await fetch(`http://localhost:8018/api/pipelines/jobs/${jobId}/results`);
+      const response = await fetch(`/api/pipelines/jobs/${jobId}/results`);
       const data = await response.json();
       setForecastResults(data);
     } catch (error) {
@@ -197,7 +197,7 @@ const ForecastPage = ({
 
   const fetchForecastGraph = async (forecastId) => {
     try {
-      const response = await fetch(`http://localhost:8018/api/forecasts/${forecastId}/graph`);
+      const response = await fetch(`/api/forecasts/${forecastId}/graph`);
       if (response.ok) {
         const data = await response.json();
         setForecastGraphData(data);

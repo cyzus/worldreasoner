@@ -114,13 +114,18 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    frontend_port = os.getenv("FRONTEND_PORT", "5173")
+    frontend_host = os.getenv("FRONTEND_HOST", "localhost")
+    cors_origins = {
+        f"http://{frontend_host}:{frontend_port}",
+        f"http://localhost:{frontend_port}",
+        f"http://127.0.0.1:{frontend_port}",
+    }
+
     # CORS middleware for frontend
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            f"http://localhost:{os.getenv('FRONTEND_PORT', '3100')}",
-            "http://localhost:5173",
-        ],  # React dev servers
+        allow_origins=sorted(cors_origins),  # React dev servers
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

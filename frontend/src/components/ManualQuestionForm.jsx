@@ -168,7 +168,7 @@ function ManualQuestionForm({ onQuestionCreated }) {
       }
 
       // Send to API
-      const response = await fetch('http://localhost:8018/api/questions/batch-save', {
+      const response = await fetch('/api/questions/batch-save', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

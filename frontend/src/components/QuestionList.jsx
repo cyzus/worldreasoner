@@ -226,7 +226,7 @@ const QuestionList = memo(function QuestionList({
 
   const confirmDelete = async (questionId) => {
     try {
-      const response = await fetch(`http://localhost:8018/api/questions/${questionId}`, {
+      const response = await fetch(`/api/questions/${questionId}`, {
         method: 'DELETE',
       })
 

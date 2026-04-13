@@ -4,16 +4,24 @@ import argparse
 import uvicorn
 
 from src.utils.logging import logger
+from src.config import get_config
 
 
 def main():
     """Start the WorldReasoner API server."""
+    config = get_config()
+
     parser = argparse.ArgumentParser(description="WorldReasoner API Server")
     parser.add_argument(
-        "--host", default="127.0.0.1", help="Host to bind to (default: 127.0.0.1)"
+        "--host",
+        default=config.server.host,
+        help=f"Host to bind to (default: {config.server.host})",
     )
     parser.add_argument(
-        "--port", type=int, default=8018, help="Port to bind to (default: 8018)"
+        "--port",
+        type=int,
+        default=config.server.port,
+        help=f"Port to bind to (default: {config.server.port})",
     )
     parser.add_argument(
         "--reload", action="store_true", help="Enable auto-reload for development"

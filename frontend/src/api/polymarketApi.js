@@ -7,7 +7,7 @@ export async function searchPolymarket({
   events_status = 'resolved',
   sort = 'closed_time',
   presets = ['EventsTitle', 'Events'],
-  baseUrl = 'http://localhost:8018'
+  baseUrl = ''
 }) {
   const res = await fetch(`${baseUrl}/api/questions/polymarket/search`, {
     method: 'POST',

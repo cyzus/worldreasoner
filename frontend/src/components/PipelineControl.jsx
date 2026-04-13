@@ -11,7 +11,7 @@ const PipelineControl = ({ selectedQuestions, onJobComplete }) => {
     if (!activeJob) return
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//localhost:8018/api/pipelines/jobs/${activeJob}/ws`
+    const wsUrl = `${protocol}//${window.location.host}/api/pipelines/jobs/${activeJob}/ws`
 
     console.log('Connecting to WebSocket:', wsUrl)
     const ws = new WebSocket(wsUrl)
@@ -73,7 +73,7 @@ const PipelineControl = ({ selectedQuestions, onJobComplete }) => {
 
     try {
       setError(null)
-      const response = await fetch('http://localhost:8018/api/pipelines/jobs', {
+      const response = await fetch('/api/pipelines/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -97,7 +97,7 @@ const PipelineControl = ({ selectedQuestions, onJobComplete }) => {
     if (!activeJob) return
 
     try {
-      await fetch(`http://localhost:8018/api/pipelines/jobs/${activeJob}`, {
+      await fetch(`/api/pipelines/jobs/${activeJob}`, {
         method: 'DELETE',
       })
       setActiveJob(null)
@@ -116,7 +116,7 @@ const PipelineControl = ({ selectedQuestions, onJobComplete }) => {
 
     try {
       setError(null)
-      const response = await fetch('http://localhost:8018/api/pipelines/questions/clear-evidence', {
+      const response = await fetch('/api/pipelines/questions/clear-evidence', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -141,7 +141,7 @@ const PipelineControl = ({ selectedQuestions, onJobComplete }) => {
 
     try {
       setError(null)
-      const response = await fetch('http://localhost:8018/api/pipelines/questions/clear-graph', {
+      const response = await fetch('/api/pipelines/questions/clear-graph', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question_ids: selectedQuestions }),

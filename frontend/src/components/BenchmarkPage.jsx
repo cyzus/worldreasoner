@@ -132,7 +132,7 @@ const BenchmarkPage = () => {
       if (source !== 'all') config.source = source;
       if (domain !== 'all') config.domain = domain;
 
-      const response = await fetch('http://localhost:8018/api/pipelines/jobs', {
+      const response = await fetch('/api/pipelines/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

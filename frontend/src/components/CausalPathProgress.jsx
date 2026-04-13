@@ -24,7 +24,7 @@ function CausalPathProgress({ questionId }) {
     setError(null)
     setSelectedPathIndex(0) // Reset path selection when question changes
 
-    fetch(`http://localhost:8018/api/questions/${questionId}/causal_path`)
+    fetch(`/api/questions/${questionId}/causal_path`)
       .then(res => {
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`)

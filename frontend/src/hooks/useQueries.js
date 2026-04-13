@@ -49,7 +49,7 @@ export function useQuestionEvents(questionId) {
 export function useForecastJobs() {
   return useQuery({
     queryKey: ['forecastJobs'],
-    queryFn: () => fetch('http://localhost:8018/api/forecast/jobs').then(r => r.json()),
+    queryFn: () => fetch('/api/forecast/jobs').then(r => r.json()),
     refetchInterval: 5000,
     refetchIntervalInBackground: false, // Pause when tab hidden
   })
@@ -58,7 +58,7 @@ export function useForecastJobs() {
 export function usePipelineJobs() {
   return useQuery({
     queryKey: ['pipelineJobs'],
-    queryFn: () => fetch('http://localhost:8018/api/pipelines/jobs').then(r => r.json()),
+    queryFn: () => fetch('/api/pipelines/jobs').then(r => r.json()),
     refetchInterval: (data) => {
       // Smart polling: faster when jobs running, slower when idle
       const hasActiveJobs = data?.some(j => j.status === 'running')

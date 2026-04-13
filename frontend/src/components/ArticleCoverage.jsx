@@ -19,7 +19,7 @@ function ArticleCoverage({ questionId }) {
     setLoading(true)
     setError(null)
 
-    fetch(`http://localhost:8018/api/questions/${questionId}/article_coverage`)
+    fetch(`/api/questions/${questionId}/article_coverage`)
       .then(res => {
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}: ${res.statusText}`)
