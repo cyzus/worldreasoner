@@ -451,12 +451,71 @@
         let currentQIndex = 0;
         let totalEvents = 0;
         let annotatedEvents = 0;
-        const stateData = JSON.parse(JSON.stringify(annotationData || []));
+        let stateData = JSON.parse(JSON.stringify(annotationData || []));
+        const STORAGE_KEY = 'annotation_state';
+        let restoredFromStorage = false;
+
+        function saveState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(stateData));
+            } catch (e) {
+                console.error('Failed to save to localStorage:', e);
+            }
+        }
+
+        function loadState() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    const parsedSaved = JSON.parse(saved);
+                    // Only restore if it's the same dataset (same number of questions and events)
+                    if (parsedSaved.length === stateData.length && 
+                        parsedSaved.every((q, idx) => q.events.length === stateData[idx].events.length)) {
+                        stateData = parsedSaved;
+                        restoredFromStorage = true;
+                        return true;
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to load from localStorage:', e);
+            }
+            return false;
+        }
+
+        function showNotification(message) {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #10b981;
+                color: white;
+                padding: 12px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                z-index: 1000;
+                font-size: 0.95rem;
+                font-weight: 500;
+                animation: slideIn 0.3s ease;
+            `;
+            notification.innerText = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
 
         function init() {
             if (!stateData || stateData.length === 0) {
                 document.getElementById('q-context').innerHTML = "<p style='padding:20px; color:red;'>No data loaded. Please run the python export script.</p>";
                 return;
+            }
+
+            // Load saved state if available
+            if (loadState()) {
+                showNotification('✓ Progress restored from previous session');
             }
 
             totalEvents = stateData.reduce((acc, q) => acc + q.events.length, 0);
@@ -557,8 +616,7 @@
                     <div class="event-description markdown-body" style="font-size: 0.95rem;">${marked.parse(event.description || '')}</div>
                     
                     <div class="detail-box box-source">
-                        <strong>Source Snippet</strong>
-                        <div style="font-style: italic;">"${event.source_snippet || 'No direct snippet available.'}"</div>
+                        <strong>Source</strong>
                         ${event.source_url ? `<a href="${event.source_url}" target="_blank" style="color:var(--primary);font-size:0.85rem;text-decoration:none;font-weight:600;margin-top:10px;display:inline-block; border:1px solid #cbd5e1; padding:4px 8px; border-radius:4px;">&#8599; View Original Article</a>` : ''}
                     </div>
 
@@ -628,6 +686,7 @@
             
             updateProgress();
             populateDropdown(); // Update dropdown dot colors
+            saveState(); // Persist to localStorage
         };
 
         window.annotateReasoning = function(qId, eventId, reasoning_status) {
@@ -649,6 +708,7 @@
 
             updateProgress();
             populateDropdown();
+            saveState(); // Persist to localStorage
         };
 
         function updateProgress() {
@@ -682,6 +742,20 @@
                 document.querySelectorAll('.reject-menu').forEach(m => m.style.display = 'none');
             }
         }
+
+        // Add CSS animation for notifications
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(400px); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes slideOut {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(400px); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
 
         window.onload = init;
     </script>

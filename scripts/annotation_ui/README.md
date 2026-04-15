@@ -35,6 +35,10 @@ If the event is flawed, click "Reject" and select a specific reason:
 
 ## 💡 UI Features
 
+- **Reasoning Assessment** *(Optional)*: For each event's Impact Analysis, you can optionally provide feedback on the causal reasoning:
+  - 👍 **Accurate Reasoning**: Click this if the LLM's explanation of the event's causal impact is sound and well-reasoned.
+  - 👎 **Flawed Reasoning**: Click this if the causal logic is weak, forced, or logically inconsistent.
+  - These ratings are supplementary and do not block event approval—use them to flag reasoning quality concerns.
 - **Impact Editing**: If an event is valid but its Impact Analysis is slightly off, you can click the `✏️ Edit` button next to the impact text. Modify the reasoning directly and click Save. This directly improves the quality of the dataset.
 - **Progress Indicators**: Click the dropdown in the top-left navigation bar to see the completion status of all questions at a glance:
   - 🟢 **Green Dot**: All events for this question are annotated.
