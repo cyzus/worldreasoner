@@ -636,8 +636,16 @@
             
             e.reasoning_status = reasoning_status;
             
-            // Re-render only the buttons to show active state
-            renderQuestion(currentQIndex);
+            // Update button states without full re-render to avoid scrolling
+            const accurateBtn = document.querySelector(`button.btn-reasoning-accurate[onclick*="${eventId}"]`);
+            const flawedbtn = document.querySelector(`button.btn-reasoning-flawed[onclick*="${eventId}"]`);
+            
+            if (accurateBtn) {
+                accurateBtn.style.background = reasoning_status === 'accurate' ? '#dcfce7' : 'transparent';
+            }
+            if (flawedbtn) {
+                flawedbtn.style.background = reasoning_status === 'flawed' ? '#fee2e2' : 'transparent';
+            }
 
             updateProgress();
             populateDropdown();
@@ -647,7 +655,7 @@
             annotatedEvents = 0;
             stateData.forEach(q => {
                 q.events.forEach(e => {
-                    if (e.current_status && e.current_status !== 'pending' && (e.current_status !== 'approved' || e.reasoning_status)) annotatedEvents++;
+                    if (e.current_status && e.current_status !== 'pending') annotatedEvents++;
                 })
             });
             
