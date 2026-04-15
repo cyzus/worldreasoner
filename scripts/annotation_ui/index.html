@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hindsight Graph Annotation</title>
+    <!-- Include Marked.js for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --success: #10b981;
+            --success-hover: #059669;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --skip: #64748b;
+            --skip-hover: #475569;
+            --bg: #f8fafc;
+            --panel-bg: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --impact-bg: #fefce8;
+            --impact-border: #fef08a;
+            --source-bg: #f1f5f9;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg);
+            color: var(--text-main);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Dropdown custom scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Layout */
+        .sidebar {
+            width: 480px;
+            background: var(--panel-bg);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            box-shadow: 4px 0 15px rgba(0,0,0,0.03);
+            z-index: 10;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background-color: #f8fafc;
+        }
+
+        .header {
+            padding: 16px 32px;
+            background: var(--panel-bg);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+            z-index: 5;
+        }
+
+        /* Sidebar top nav */
+        .q-selector {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #ffffff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+        
+        .q-dropdown-wrapper {
+            position: relative;
+            flex-grow: 1;
+            margin: 0 12px;
+        }
+
+        .q-dropdown-btn {
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-main);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .q-dropdown-btn:hover { background: #e2e8f0; }
+
+        .q-dropdown-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            max-height: 400px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            z-index: 100;
+            margin-top: 4px;
+        }
+
+        .q-dropdown-item {
+            padding: 10px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .q-dropdown-item:hover { background: #f8fafc; }
+        .q-dropdown-item.active { background: #e0e7ff; font-weight: 600; color: var(--primary); }
+        .q-status-indicator {
+            width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+        }
+        .q-status-done { background: var(--success); }
+        .q-status-partial { background: #f59e0b; }
+        .q-status-empty { background: #cbd5e1; }
+
+        .q-context {
+            padding: 30px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .q-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            line-height: 1.3;
+            color: #0f172a;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 15px;
+        }
+
+        .badge.outcome { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+
+        .section-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #94a3b8;
+            margin: 25px 0 8px 0;
+            font-weight: 700;
+        }
+
+        .context-text {
+            font-size: 0.95rem;
+            line-height: 1.6;
+            color: #334155;
+            background: #ffffff;
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        }
+
+        .explanation-text {
+            font-size: 0.95rem;
+            line-height: 1.6;
+            color: #1e3a8a;
+            background: #eff6ff;
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid #bfdbfe;
+            margin-bottom: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+            margin-top: 15px; margin-bottom: 10px; font-size: 1.1em; color: inherit; font-weight: 700;
+        }
+        .markdown-body p { margin-top: 0; margin-bottom: 12px; }
+        .markdown-body ul, .markdown-body ol { margin-top: 0; padding-left: 20px; }
+        .markdown-body li { margin-bottom: 6px; }
+
+        /* Timeline (Main Content) */
+        .timeline-container {
+            padding: 40px 60px;
+            overflow-y: auto;
+            flex: 1;
+            scroll-behavior: smooth;
+            position: relative;
+        }
+
+        /* The vertical line for timeline */
+        .timeline-container::before {
+            content: '';
+            position: absolute;
+            left: 75px;
+            top: 40px;
+            bottom: 40px;
+            width: 2px;
+            background: #e2e8f0;
+            z-index: 0;
+        }
+
+        .event-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
+            position: relative;
+            margin-left: 40px;
+            transition: all 0.2s ease;
+            z-index: 1;
+        }
+
+        /* The timeline dot */
+        .event-card::before {
+            content: '';
+            position: absolute;
+            left: -29px;
+            top: 28px;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: white;
+            border: 3px solid #cbd5e1;
+            z-index: 2;
+            transition: all 0.2s ease;
+            box-shadow: 0 0 0 4px #f8fafc;
+        }
+
+        .event-card:hover {
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.02);
+            border-color: #cbd5e1;
+        }
+
+        .event-card.status-approved::before { border-color: var(--success); background: var(--success); }
+        .event-card.status-rejected::before { border-color: var(--danger); background: var(--danger); }
+        .event-card.status-skipped::before { border-color: var(--skip); background: var(--skip); }
+
+        .event-date {
+            font-size: 0.85rem;
+            color: var(--primary);
+            font-weight: 700;
+            margin-bottom: 10px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .event-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: #0f172a;
+            line-height: 1.4;
+        }
+
+        .event-description {
+            font-size: 1rem;
+            line-height: 1.6;
+            color: #475569;
+            margin-bottom: 20px;
+        }
+
+        .detail-box {
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            border: 1px solid transparent;
+        }
+
+        .box-source {
+            background: var(--source-bg);
+            border-color: #e2e8f0;
+            color: #475569;
+        }
+        .box-source strong { color: #1e293b; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 8px;}
+
+        .box-impact {
+            background: var(--impact-bg);
+            border-color: var(--impact-border);
+            color: #854d0e;
+        }
+        .box-impact strong { color: #713f12; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 8px;}
+
+        /* Actions */
+        .action-row {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+        }
+
+        button {
+            padding: 8px 20px;
+            border-radius: 6px;
+            border: none;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        button:hover { transform: translateY(-1px); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        button:active { transform: translateY(0); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        .btn-approve { background: var(--success); color: white; }
+        .btn-approve:hover { background: var(--success-hover); }
+        
+        .btn-reject { background: var(--danger); color: white; }
+        .btn-reject:hover { background: var(--danger-hover); }
+        
+        .btn-skip { background: var(--skip); color: white; }
+        .btn-skip:hover { background: var(--skip-hover); }
+        
+        .btn-nav { background: #f1f5f9; color: var(--text-main); border: 1px solid var(--border); }
+        .btn-nav:hover { background: #e2e8f0; }
+        
+        .btn-export { background: var(--primary); color: white; padding: 10px 24px; font-size: 1rem; border-radius: 8px;}
+        .btn-export:hover { background: var(--primary-hover); }
+
+        /* Reject Modal */
+        .reject-menu {
+            display: none;
+            position: absolute;
+            background: white;
+            border: 1px solid var(--border);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            padding: 8px;
+            z-index: 100;
+            bottom: 100%;
+            left: 0;
+            width: 240px;
+            margin-bottom: 8px;
+        }
+        
+        .reject-menu button {
+            display: block;
+            width: 100%;
+            text-align: left;
+            background: transparent;
+            color: var(--text-main);
+            margin-bottom: 2px;
+            padding: 10px 12px;
+            border-radius: 4px;
+            font-weight: 500;
+            box-shadow: none;
+        }
+        .reject-menu button:hover { background: #f1f5f9; transform: none; }
+
+        .status-badge {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 6px 12px;
+            border-radius: 20px;
+            display: none;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .event-card.status-approved .status-badge { display: block; background: #dcfce7; color: #16a34a; border: 1px solid #bbf7d0;}
+        .event-card.status-rejected .status-badge { display: block; background: #fee2e2; color: #dc2626; border: 1px solid #fecaca;}
+        .event-card.status-skipped .status-badge { display: block; background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0;}
+    </style>
+</head>
+<body>
+
+    <script src="annotation_data.js"></script>
+
+    <div class="sidebar">
+        <div class="q-selector">
+            <button class="btn-nav" id="btn-prev-q">&larr;</button>
+            
+            <div class="q-dropdown-wrapper">
+                <button class="q-dropdown-btn" id="q-dropdown-toggle">
+                    <span id="q-dropdown-label">Question 1 / 50</span>
+                    <span style="font-size: 0.8em">&#9662;</span>
+                </button>
+                <div class="q-dropdown-menu" id="q-dropdown-menu">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+
+            <button class="btn-nav" id="btn-next-q">&rarr;</button>
+        </div>
+        <div class="q-context" id="q-context">
+            <!-- Rendered via JS -->
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="header">
+            <div>
+                <h2 style="margin:0; font-size: 1.3rem; font-weight: 700; color: #0f172a;">Timeline Annotation</h2>
+                <div style="font-size: 0.9rem; color: var(--text-muted); margin-top: 4px;">Verify events chronologically. Ensure each event accurately supports the causal graph.</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <div style="text-align: right;">
+                    <div id="progress-text" style="font-weight: 700; color: var(--primary); font-size: 1.1rem;">0 / 0</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Events Annotated</div>
+                </div>
+                <button class="btn-export" id="btn-export">Export JSON</button>
+            </div>
+        </div>
+        
+        <div class="timeline-container" id="timeline">
+            <!-- Rendered via JS -->
+        </div>
+    </div>
+
+    <script>
+        let currentQIndex = 0;
+        let totalEvents = 0;
+        let annotatedEvents = 0;
+        const stateData = JSON.parse(JSON.stringify(annotationData || []));
+
+        function init() {
+            if (!stateData || stateData.length === 0) {
+                document.getElementById('q-context').innerHTML = "<p style='padding:20px; color:red;'>No data loaded. Please run the python export script.</p>";
+                return;
+            }
+
+            totalEvents = stateData.reduce((acc, q) => acc + q.events.length, 0);
+            updateProgress();
+            populateDropdown();
+            renderQuestion(0);
+
+            document.getElementById('btn-prev-q').addEventListener('click', () => {
+                if (currentQIndex > 0) renderQuestion(currentQIndex - 1);
+            });
+            document.getElementById('btn-next-q').addEventListener('click', () => {
+                if (currentQIndex < stateData.length - 1) renderQuestion(currentQIndex + 1);
+            });
+            document.getElementById('btn-export').addEventListener('click', exportJSON);
+            
+            // Dropdown logic
+            document.getElementById('q-dropdown-toggle').addEventListener('click', (e) => {
+                e.stopPropagation();
+                const menu = document.getElementById('q-dropdown-menu');
+                menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+            });
+            
+            document.addEventListener('click', () => {
+                document.getElementById('q-dropdown-menu').style.display = 'none';
+            });
+        }
+        
+        function populateDropdown() {
+            const menu = document.getElementById('q-dropdown-menu');
+            menu.innerHTML = '';
+            
+            stateData.forEach((q, idx) => {
+                // Calculate completion status for this question
+                const annotatedCount = q.events.filter(e => e.current_status !== 'pending' && (e.current_status !== 'approved' || e.reasoning_status)).length;
+                let statusClass = 'q-status-empty';
+                if (annotatedCount === q.events.length && q.events.length > 0) statusClass = 'q-status-done';
+                else if (annotatedCount > 0) statusClass = 'q-status-partial';
+                
+                const item = document.createElement('div');
+                item.className = `q-dropdown-item ${idx === currentQIndex ? 'active' : ''}`;
+                item.innerHTML = `
+                    <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 85%;">
+                        <span style="color:#94a3b8; font-size:0.8em; margin-right:8px;">Q${idx+1}</span>
+                        ${q.title}
+                    </div>
+                    <span class="q-status-indicator ${statusClass}"></span>
+                `;
+                item.onclick = () => {
+                    document.getElementById('q-dropdown-menu').style.display = 'none';
+                    renderQuestion(idx);
+                };
+                menu.appendChild(item);
+            });
+        }
+
+        function renderQuestion(index) {
+            currentQIndex = index;
+            const q = stateData[index];
+            
+            document.getElementById('q-dropdown-label').innerHTML = `Question ${index + 1} / ${stateData.length}`;
+            document.getElementById('btn-prev-q').disabled = (index === 0);
+            document.getElementById('btn-next-q').disabled = (index === stateData.length - 1);
+            
+            // Update dropdown active state
+            document.querySelectorAll('.q-dropdown-item').forEach((item, idx) => {
+                item.classList.toggle('active', idx === index);
+            });
+
+            document.getElementById('q-context').innerHTML = `
+                <div class="badge outcome">Outcome: ${q.outcome}</div>
+                <div class="q-title">${q.title}</div>
+                
+                <div class="section-title" style="color: var(--primary);">Causal Explanation (Hindsight)</div>
+                <div class="explanation-text markdown-body">${marked.parse(q.explanation || '*No explanation available.*')}</div>
+
+                <div class="section-title">Background</div>
+                <div class="context-text markdown-body">${marked.parse(q.background || '*No background available.*')}</div>
+                
+                <div class="section-title">Resolution Criteria</div>
+                <div class="context-text markdown-body" style="background:#fefce8">${marked.parse(q.resolution_criteria || '*No criteria available.*')}</div>
+            `;
+
+            const timeline = document.getElementById('timeline');
+            timeline.innerHTML = '';
+
+            q.events.forEach((event, eIndex) => {
+                const card = document.createElement('div');
+                card.className = `event-card ${event.current_status !== 'pending' ? 'status-' + event.current_status : ''}`;
+                card.id = `event-${event.id}`;
+                
+                let statusLabel = event.current_status.toUpperCase();
+                if(event.reject_reason) statusLabel += ` (${event.reject_reason.split(' ')[0]})`;
+
+                card.innerHTML = `
+                    <div class="status-badge">${statusLabel}</div>
+                    <div class="event-date">${event.date}</div>
+                    <div class="event-title">${event.title}</div>
+                    <div class="event-description markdown-body" style="font-size: 0.95rem;">${marked.parse(event.description || '')}</div>
+                    
+                    <div class="detail-box box-source">
+                        <strong>Source Snippet</strong>
+                        <div style="font-style: italic;">"${event.source_snippet || 'No direct snippet available.'}"</div>
+                        ${event.source_url ? `<a href="${event.source_url}" target="_blank" style="color:var(--primary);font-size:0.85rem;text-decoration:none;font-weight:600;margin-top:10px;display:inline-block; border:1px solid #cbd5e1; padding:4px 8px; border-radius:4px;">&#8599; View Original Article</a>` : ''}
+                    </div>
+
+                    <div class="detail-box box-impact" style="position: relative;">
+                        <strong>Impact Analysis</strong>
+                        <div style="position: absolute; top: 12px; right: 12px; display: flex; gap: 8px;">
+                            <button class="btn-reasoning-accurate" onclick="annotateReasoning('${q.id}', '${event.id}', 'accurate')" style="background: ${event.reasoning_status === 'accurate' ? '#dcfce7' : 'transparent'}; border: 1px solid #16a34a; color: #16a34a; padding: 4px 8px; font-size: 0.8rem; border-radius: 4px; cursor: pointer;" title="Accurate Reasoning">👍 Accurate Reasoning</button>
+                            <button class="btn-reasoning-flawed" onclick="annotateReasoning('${q.id}', '${event.id}', 'flawed')" style="background: ${event.reasoning_status === 'flawed' ? '#fee2e2' : 'transparent'}; border: 1px solid #dc2626; color: #dc2626; padding: 4px 8px; font-size: 0.8rem; border-radius: 4px; cursor: pointer;" title="Flawed Reasoning">👎 Flawed Reasoning</button>
+                        </div>
+                        <div class="impact-content-wrapper" style="display: flex; gap: 10px; align-items: flex-start; margin-top: 24px;">
+                            <div class="markdown-body impact-text" id="impact-text-${event.id}" style="font-size: 0.95rem; flex: 1;">${marked.parse(event.impact || '*No impact assessment provided.*')}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="action-row">
+                        <button class="btn-approve" onclick="annotate('${q.id}', '${event.id}', 'approved')">
+                            <span style="margin-right:6px;">&#10003;</span> Approve
+                        </button>
+                        <div style="position:relative">
+                            <button class="btn-reject" onclick="toggleRejectMenu('${event.id}', event)">
+                                <span style="margin-right:6px;">&#10005;</span> Reject <span style="font-size:0.7em; margin-left:6px;">&#9660;</span>
+                            </button>
+                            <div class="reject-menu" id="menu-${event.id}">
+                                <button onclick="annotate('${q.id}', '${event.id}', 'rejected', 'Hallucination')">Hallucination (Fake news/dates)</button>
+                                <button onclick="annotate('${q.id}', '${event.id}', 'rejected', 'Noise')">Noise (No causal impact)</button>
+                                <button onclick="annotate('${q.id}', '${event.id}', 'rejected', 'Duplicate')">Duplicate / Redundant</button>
+                                <button onclick="annotate('${q.id}', '${event.id}', 'rejected', 'FlawedCausalImpact')">Flawed Causal Impact</button>
+                            </div>
+                        </div>
+                        <button class="btn-skip" onclick="annotate('${q.id}', '${event.id}', 'skipped')">Skip</button>
+                    </div>
+                `;
+                timeline.appendChild(card);
+            });
+            
+            timeline.scrollTop = 0;
+        }
+
+        window.toggleRejectMenu = function(eventId, e) {
+            e.stopPropagation();
+            const menus = document.querySelectorAll('.reject-menu');
+            menus.forEach(m => { if(m.id !== `menu-${eventId}`) m.style.display = 'none'; });
+            const menu = document.getElementById(`menu-${eventId}`);
+            menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+        };
+
+        window.annotate = function(qId, eventId, status, reason = null) {
+            document.querySelectorAll('.reject-menu').forEach(m => m.style.display = 'none');
+            const q = stateData.find(q => q.id === qId);
+            const e = q.events.find(e => e.id === eventId);
+            
+            e.current_status = status;
+            e.reject_reason = reason;
+
+            const card = document.getElementById(`event-${eventId}`);
+            card.className = `event-card status-${status}`;
+            
+            let badgeText = status.toUpperCase();
+            if(reason) {
+                // Formatting for display: limit the length
+                let displayReason = reason;
+                if (reason === 'FlawedCausalImpact') displayReason = 'Flawed Impact';
+                else displayReason = reason.split(' ')[0];
+                badgeText += ` (${displayReason})`;
+            }
+            card.querySelector('.status-badge').innerText = badgeText;
+            
+            updateProgress();
+            populateDropdown(); // Update dropdown dot colors
+        };
+
+        window.annotateReasoning = function(qId, eventId, reasoning_status) {
+            const q = stateData.find(q => q.id === qId);
+            const e = q.events.find(e => e.id === eventId);
+            
+            e.reasoning_status = reasoning_status;
+            
+            // Re-render only the buttons to show active state
+            renderQuestion(currentQIndex);
+
+            updateProgress();
+            populateDropdown();
+        };
+
+        function updateProgress() {
+            annotatedEvents = 0;
+            stateData.forEach(q => {
+                q.events.forEach(e => {
+                    if (e.current_status && e.current_status !== 'pending' && (e.current_status !== 'approved' || e.reasoning_status)) annotatedEvents++;
+                })
+            });
+            
+            document.getElementById('progress-text').innerText = `${annotatedEvents} / ${totalEvents}`;
+            if (annotatedEvents === totalEvents && totalEvents > 0) {
+                const btn = document.getElementById('btn-export');
+                btn.style.boxShadow = "0 0 15px rgba(79, 70, 229, 0.6)";
+                btn.innerText = "✨ Download Final Results";
+            }
+        }
+
+        function exportJSON() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(stateData, null, 2));
+            const node = document.createElement('a');
+            node.setAttribute("href", dataStr);
+            node.setAttribute("download", "annotation_results.json");
+            document.body.appendChild(node);
+            node.click();
+            node.remove();
+        }
+
+        window.onclick = function(event) {
+            if (!event.target.closest('.btn-reject')) {
+                document.querySelectorAll('.reject-menu').forEach(m => m.style.display = 'none');
+            }
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
