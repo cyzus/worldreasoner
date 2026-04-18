@@ -561,20 +561,20 @@ class PipelineExecutor:
                     articles = self.db.get_many(
                         Article, filters={"collected_for_question_id": qid}
                     )
-                    all_hypotheses = self.db.get_many(CausalHypothesis)
-                    hypotheses = [
-                        h for h in all_hypotheses if qid in h.discovered_by_question_ids
-                    ]
+                    hypotheses_count = self.db.count(
+                        CausalHypothesis,
+                        filters={"discovered_by_question_ids__like": f'%"{qid}"%'},
+                    )
 
                     results.processed.append(
                         {
                             "id": qid,
                             "articles": len(articles),
-                            "hypotheses": len(hypotheses),
+                            "hypotheses": hypotheses_count,
                         }
                     )
                     logger.info(
-                        f"Successfully processed {qid}: {len(articles)} articles, {len(hypotheses)} hypotheses"
+                        f"Successfully processed {qid}: {len(articles)} articles, {hypotheses_count} hypotheses"
                     )
                 else:
                     error_msg = self._pipeline_error_message(pipeline_results)
@@ -650,14 +650,14 @@ class PipelineExecutor:
                 )
 
                 if pipeline_results and not has_failure:
-                    all_hypotheses = self.db.get_many(CausalHypothesis)
-                    hypotheses = [
-                        h for h in all_hypotheses if qid in h.discovered_by_question_ids
-                    ]
+                    hypotheses_count = self.db.count(
+                        CausalHypothesis,
+                        filters={"discovered_by_question_ids__like": f'%"{qid}"%'},
+                    )
                     results.processed.append(
                         {
                             "id": qid,
-                            "hypotheses": len(hypotheses),
+                            "hypotheses": hypotheses_count,
                         }
                     )
                 else:
