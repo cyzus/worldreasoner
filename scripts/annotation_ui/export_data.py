@@ -1,194 +1,410 @@
+"""
+Export annotation data from combined.db to annotation_data.js for the UI.
+Automatically fetches and caches Polymarket price history before exporting.
+
+Usage:
+    # Full export (fetches price data, then exports):
+    python scripts/annotation_ui/export_data.py --db combined.db
+
+    # Skip price fetch (use existing cache):
+    python scripts/annotation_ui/export_data.py --db combined.db --no-fetch
+
+    # Per-annotator export:
+    python scripts/annotation_ui/export_data.py --db combined.db --annotator alice --total-annotators 3
+    python scripts/annotation_ui/export_data.py --db combined.db --annotator bob   --total-annotators 3
+    python scripts/annotation_ui/export_data.py --db combined.db --annotator carol --total-annotators 3
+
+    # Custom overlap set:
+    python scripts/annotation_ui/export_data.py --db combined.db --annotator alice --total-annotators 3 --overlap-ids overlap.txt
+"""
+
+import asyncio
 import json
 import os
 import sys
-import random
+import hashlib
 import argparse
+import sqlite3
+from datetime import datetime, timezone, timedelta
+from typing import Optional
 
-# Add project root to path so we can import src
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from src.core.database import GenericDatabase
-from src.domain.models import Question, Event, EventOutcomeImpact
+from src.domain.models import Question, Event
+from scripts.annotation_ui.fetch_price_history import fetch_for_question, load_cache, save_cache
 
-def export_for_annotation(db_path="worldreasoner.db", output_file="scripts/annotation_ui/annotation_data.js", seed=42, sample_size=50):
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PRICE_CACHE_FILE = os.path.join(SCRIPT_DIR, "price_cache.json")
+MAX_EVENTS_PER_QUESTION = 10
+MARKET_OPEN_FALLBACK_DAYS = 90
+
+
+async def _refresh_price_cache(questions: list) -> dict:
+    """Fetch missing price history for polymarket questions and return updated cache."""
+    cache = load_cache()
+    polymarket_qs = [
+        q for q in questions
+        if getattr(q, "source", "") == "polymarket"
+        and (getattr(q, "metadata", None) or {}).get("clob_token_ids")
+    ]
+    missing = [q for q in polymarket_qs if q.id not in cache]
+    if not missing:
+        return cache
+    print(f"Fetching price history for {len(missing)} questions (already cached: {len(polymarket_qs) - len(missing)})...")
+    for i, q in enumerate(missing, 1):
+        print(f"  [{i}/{len(missing)}] {q.id[:55]}", end="", flush=True)
+        ok = await fetch_for_question(q, cache)
+        if ok:
+            save_cache(cache)
+            print(f" -> {len(cache[q.id]['history'])} pts")
+        else:
+            print(" -> no data")
+        await asyncio.sleep(0.3)
+    return cache
+
+
+def get_market_window(q: Question):
+    """Return (open_dt, close_dt, open_is_estimated) for a question."""
+    close_dt = getattr(q, "resolution_date", None)
+    open_dt = getattr(q, "estimated_start_time", None)
+    estimated = False
+
+    if open_dt is None and close_dt is not None:
+        if hasattr(close_dt, "timestamp"):
+            open_dt = close_dt - timedelta(days=MARKET_OPEN_FALLBACK_DAYS)
+        estimated = True
+
+    return open_dt, close_dt, estimated
+
+
+def to_iso(dt) -> Optional[str]:
+    if dt is None:
+        return None
+    if hasattr(dt, "isoformat"):
+        return dt.isoformat()
+    return str(dt)
+
+
+def in_market_window(event_date_str: str, open_dt, close_dt) -> bool:
+    if not event_date_str or event_date_str == "Unknown Date":
+        return False
+    try:
+        ed = datetime.fromisoformat(str(event_date_str).replace(" ", "T"))
+        if ed.tzinfo is None:
+            ed = ed.replace(tzinfo=timezone.utc)
+    except Exception:
+        return False
+
+    def to_aware(dt):
+        if dt is None:
+            return None
+        if hasattr(dt, "tzinfo") and dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt
+
+    lo = to_aware(open_dt)
+    hi = to_aware(close_dt)
+    if lo and ed < lo:
+        return False
+    if hi and ed > hi:
+        return False
+    return True
+
+
+def assign_partition(question_id: str, all_annotators: list) -> str:
+    """Deterministically assign a question to one annotator by hash."""
+    digest = int(hashlib.sha256(question_id.encode()).hexdigest(), 16)
+    return all_annotators[digest % len(all_annotators)]
+
+
+async def export_for_annotation(
+    db_path: str = "combined.db",
+    output_file: str = None,
+    annotator: Optional[str] = None,
+    total_annotators: int = 1,
+    annotator_names: Optional[list] = None,
+    overlap_ids: Optional[set] = None,
+    fetch_prices: bool = True,
+):
+    if output_file is None:
+        suffix = f"_{annotator}" if annotator else ""
+        output_file = os.path.join(SCRIPT_DIR, f"annotation_data{suffix}.js")
+
     db = GenericDatabase(db_path)
-    
-    questions = db.get_many(Question)
-    if not questions:
-        print(f"No questions found in database: {db_path}")
-        return
 
-    # ONLY keep questions that actually have at least one event with an impact analysis
-    # This prevents exporting boring/empty questions to the annotator.
-    import sqlite3
-    temp_conn = sqlite3.connect(db_path)
-    temp_cursor = temp_conn.cursor()
-    temp_cursor.execute('''
-        SELECT DISTINCT e.extracted_for_question_id 
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # All questions that have at least one annotatable (non-outcome, non-rejected) event
+    cursor.execute("""
+        SELECT DISTINCT e.extracted_for_question_id
         FROM events e
-        JOIN event_outcome_impacts i ON e.id = i.event_id
-        WHERE e.extracted_for_question_id IS NOT NULL
-    ''')
-    valid_q_ids = set([r[0] for r in temp_cursor.fetchall()])
-    
-    questions = [q for q in questions if q.id in valid_q_ids]
-    
-    # 【引入 Seed 机制】打乱顺序以保证每次相同 seed 导出的样本是一致且随机的
-    random.seed(seed)
-    random.shuffle(questions)
+        WHERE e.is_outcome = 0
+          AND (e.review_note IS NULL OR e.review_note != 'Auto-approved (outcome event)')
+          AND (e.review_status IS NULL OR e.review_status != 'rejected')
+          AND e.extracted_for_question_id IS NOT NULL
+    """)
+    valid_q_ids = set(r[0] for r in cursor.fetchall())
+
+    all_questions = db.get_many(Question)
+    questions = [q for q in all_questions if q.id in valid_q_ids]
+
+    # Sort deterministically by id so partitioning is stable across runs
+    questions.sort(key=lambda q: q.id)
+
+    # Build annotator list for partitioning
+    if annotator_names:
+        all_annotators = annotator_names
+    elif annotator and total_annotators > 1:
+        # Synthetic names: annotator itself + positional slots
+        all_annotators = [f"annotator_{i}" for i in range(total_annotators)]
+        # Replace slot 0 with the actual annotator name so the hash is predictable
+        # In practice, always pass --annotator-names when using named annotators
+        all_annotators[0] = annotator
+    else:
+        all_annotators = [annotator or "default"]
+
+    if overlap_ids is None:
+        overlap_ids = set()
+
+    # Fetch / load price cache
+    if fetch_prices:
+        price_cache = await _refresh_price_cache(questions)
+    else:
+        price_cache = load_cache()
 
     export_data = []
-    question_count = 0
     event_count = 0
 
     for q in questions:
-        # Update field name to 'extracted_for_question_id' based on the DB schema
+        # Partitioning: include if this is the annotator's slice OR an overlap question
+        is_overlap = q.id in overlap_ids
+        if annotator and len(all_annotators) > 1 and not is_overlap:
+            assigned = assign_partition(q.id, all_annotators)
+            if assigned != annotator:
+                continue
+
         events = db.get_many(Event, filters={"extracted_for_question_id": q.id})
-        
-        # Only export questions that actually have events generated by the Hindsight Agent
         if not events:
             continue
-            
-        # Sort events chronologically if date is available
+
+        # Chronological sort
         try:
-            events = sorted(events, key=lambda e: getattr(e, 'occurred_date', getattr(e, 'date', '')))
-        except:
+            events = sorted(events, key=lambda e: str(getattr(e, "occurred_date", "") or ""))
+        except Exception:
             pass
+
+        open_dt, close_dt, open_estimated = get_market_window(q)
+        is_polymarket = getattr(q, "source", "") == "polymarket"
+        meta = getattr(q, "metadata", None) or {}
+        market_slug = meta.get("market_slug")
+        polymarket_url = f"https://polymarket.com/event/{market_slug}" if market_slug else None
+
+        # Build valid event list with priority tags
+        valid_events = []
+        for e in events:
+            if getattr(e, "is_outcome", False):
+                continue
+            if getattr(e, "review_note", "") == "Auto-approved (outcome event)":
+                continue
+            status = getattr(e, "review_status", "pending")
+            if hasattr(status, "value"):
+                status = status.value
+            if status == "rejected":
+                continue
+
+            date_val = getattr(e, "occurred_date", None) or "Unknown Date"
+            if hasattr(date_val, "strftime"):
+                date_val = date_val.strftime("%Y-%m-%d %H:%M")
+
+            # Check impact analysis
+            impact_text = None
+            has_impact = False
+            try:
+                cursor.execute(
+                    "SELECT impact_direction, reasoning, impact_magnitude, confidence, outcome_event_id "
+                    "FROM event_outcome_impacts WHERE event_id = ?",
+                    (e.id,),
+                )
+                row = cursor.fetchone()
+                if row:
+                    has_impact = True
+                    raw_dir = str(row[0]).replace("ImpactDirection.", "").lower()
+                    dir_label = {
+                        "positive": "Towards outcome",
+                        "negative": "Against outcome",
+                        "neutral":  "Neutral",
+                        "mixed":    "Mixed",
+                    }.get(raw_dir, raw_dir.capitalize())
+                    mag_str = f" ({int(row[2] * 100)}%)" if row[2] is not None else ""
+                    conf_str = f"**Confidence:** {int(row[3] * 100)}%" if row[3] is not None else ""
+                    outcome_title = "Unknown Outcome"
+                    if row[4]:
+                        cursor.execute("SELECT title FROM events WHERE id = ?", (row[4],))
+                        r2 = cursor.fetchone()
+                        if r2 and r2[0]:
+                            outcome_title = r2[0]
+                    impact_text = (
+                        f"**Affects:** {outcome_title}  \n"
+                        f"**Direction:** {dir_label}{mag_str}\n{conf_str}\n\n"
+                        f"**Reasoning:**\n{row[1]}"
+                    )
+            except Exception:
+                pass
+
+            # Source URL
+            article_url = None
+            try:
+                article_id = None
+                if hasattr(e, "source_article_id") and e.source_article_id:
+                    article_id = e.source_article_id
+                elif hasattr(e, "article_ids") and e.article_ids:
+                    ids = json.loads(e.article_ids) if isinstance(e.article_ids, str) else e.article_ids
+                    if ids:
+                        article_id = ids[0]
+                if article_id:
+                    cursor.execute("SELECT url FROM articles WHERE id = ?", (article_id,))
+                    r = cursor.fetchone()
+                    if r:
+                        article_url = r[0]
+            except Exception:
+                pass
+
+            in_window = in_market_window(str(date_val), open_dt, close_dt) if is_polymarket else False
+
+            # Priority tier for sorting (lower = higher priority)
+            if has_impact and in_window:
+                priority = 0
+            elif has_impact:
+                priority = 1
+            elif in_window:
+                priority = 2
+            else:
+                priority = 3
+
+            valid_events.append({
+                "_priority": priority,
+                "id": e.id,
+                "date": str(date_val),
+                "title": getattr(e, "title", "Untitled Event"),
+                "description": getattr(e, "description", "") or "",
+                "impact": impact_text or "No impact assessment provided.",
+                "has_impact": has_impact,
+                "in_market_window": in_window,
+                "source_url": article_url,
+                "current_status": status if status != "pending" else "pending",
+                "reasoning_status": None,
+                "reject_reason": None,
+            })
+
+        # Sort by priority tier (stable — preserves chronological order within tier)
+        valid_events.sort(key=lambda x: x["_priority"])
+
+        # Cap at MAX_EVENTS_PER_QUESTION; within a tier use uniform stride if over-represented
+        if len(valid_events) > MAX_EVENTS_PER_QUESTION:
+            # Keep all tier-0, fill remaining slots with strides from lower tiers
+            tier0 = [e for e in valid_events if e["_priority"] == 0]
+            rest = [e for e in valid_events if e["_priority"] > 0]
+            slots = MAX_EVENTS_PER_QUESTION - min(len(tier0), MAX_EVENTS_PER_QUESTION)
+            if len(tier0) >= MAX_EVENTS_PER_QUESTION:
+                valid_events = tier0[:MAX_EVENTS_PER_QUESTION]
+            elif rest:
+                step = len(rest) / slots
+                sampled_rest = [rest[int(i * step)] for i in range(slots)]
+                valid_events = tier0 + sampled_rest
+            else:
+                valid_events = tier0
+
+        # Remove internal sort key
+        for ev in valid_events:
+            del ev["_priority"]
+
+        if not valid_events:
+            continue
+
+        raw_options = getattr(q, "options", None)
+        if isinstance(raw_options, str):
+            try:
+                raw_options = json.loads(raw_options)
+            except Exception:
+                raw_options = None
+        if not raw_options:
+            raw_options = []
+
+        _qt = getattr(q, "question_type", "binary")
+        q_type = _qt.value if hasattr(_qt, "value") else str(_qt)
+        ground_truth = str(getattr(q, "ground_truth", "Unknown"))
+
+        # Synthesize options when DB has none
+        if not raw_options:
+            if q_type == "binary":
+                raw_options = ["Yes", "No"]
+            else:
+                # For MCQ/quantity/timeframe: show ground_truth as the only known option
+                raw_options = [ground_truth] if ground_truth not in ("Unknown", "None", "") else []
 
         q_data = {
             "id": q.id,
             "title": q.question_text,
-            "background": getattr(q, 'context', 'No background available.') or 'No background available.',
-            "resolution_criteria": getattr(q, 'resolution_criteria', 'No criteria available.') or 'No criteria available.',
-            "outcome": getattr(q, 'ground_truth', 'Unknown'),
-            "explanation": getattr(q, 'causal_explanation') or getattr(q, 'resolution_reasoning', 'No causal explanation available.') or 'No causal explanation available.',
-            "events": []
+            "question_type": q_type,
+            "options": raw_options,
+            "background": getattr(q, "context", None) or "No background available.",
+            "resolution_criteria": getattr(q, "resolution_criteria", None) or "No criteria available.",
+            "outcome": str(getattr(q, "ground_truth", "Unknown")),
+            "explanation": getattr(q, "causal_explanation", None) or "No causal explanation available.",
+            "is_polymarket": is_polymarket,
+            "is_overlap": is_overlap,
+            "market_open": to_iso(open_dt),
+            "market_open_estimated": open_estimated,
+            "market_close": to_iso(close_dt),
+            "polymarket_url": polymarket_url,
+            "price_data": price_cache.get(q.id),
+            "events": valid_events,
         }
 
-        valid_events = []
-        for e in events:
-            # Skip events that are already auto-approved outcome events
-            if getattr(e, 'review_note', '') == "Auto-approved (outcome event)":
-                continue
+        export_data.append(q_data)
+        event_count += len(valid_events)
 
-            current_status = getattr(e, 'review_status', 'pending')
-            if hasattr(current_status, "value"):
-                current_status = current_status.value
-            
-            # 【核心过滤】跳过被机器 auto-review 判定为 rejected 的无用事件
-            if current_status == "rejected":
-                continue
+    conn.close()
 
-            # Format the date nicely if it's a datetime object
-            date_val = getattr(e, 'occurred_date', getattr(e, 'date', 'Unknown Date'))
-            if hasattr(date_val, 'strftime'):
-                date_val = date_val.strftime("%Y-%m-%d %H:%M")
-                
-            # Try to get impact reasoning from DB mapping table if available
-            impact_text = 'No impact assessment provided.'
-            try:
-                # Need to use plain tuple fetch since EventOutcomeImpact model might not exactly match column names or the object isn't fully loading
-                temp_cursor.execute("SELECT impact_direction, reasoning, impact_magnitude, confidence, outcome_event_id FROM event_outcome_impacts WHERE event_id = ?", (e.id,))
-                impact_row = temp_cursor.fetchone()
-                if impact_row:
-                    dir_val = str(impact_row[0]).replace('ImpactDirection.', '').capitalize()
-                    mag_val = impact_row[2]
-                    conf_val = impact_row[3]
-                    outcome_event_id = impact_row[4]
-                    
-                    outcome_title = "Unknown Outcome"
-                    if outcome_event_id:
-                        temp_cursor.execute("SELECT title FROM events WHERE id = ?", (outcome_event_id,))
-                        outcome_row = temp_cursor.fetchone()
-                        if outcome_row and outcome_row[0]:
-                            outcome_title = outcome_row[0]
-                    
-                    mag_str = f" ({int(mag_val * 100)}%)" if mag_val is not None else ""
-                    conf_str = f" | **Confidence:** {int(conf_val * 100)}%" if conf_val is not None else ""
-                    
-                    impact_text = f"**Affects:** {outcome_title}  \n**Impact:** {dir_val}{mag_str}{conf_str}\n\n**Reasoning:**\n{impact_row[1]}"
-            except Exception as ex:
-                pass
-                
-            # Try to get source snippet AND URL
-            source_text = 'No direct snippet available.'
-            article_url = None
-            try:
-                # If there are article IDs, fetch the first one
-                article_id_to_fetch = None
-                
-                # Try source_article_id directly
-                if hasattr(e, 'source_article_id') and e.source_article_id:
-                    article_id_to_fetch = e.source_article_id
-                # Or try article_ids JSON array
-                elif hasattr(e, 'article_ids') and e.article_ids:
-                    import json as inner_json
-                    a_ids = inner_json.loads(e.article_ids)
-                    if a_ids and len(a_ids) > 0:
-                        article_id_to_fetch = a_ids[0]
-                        
-                if article_id_to_fetch:
-                    # In worldreasoner.db the schema has 'url' and 'content' 
-                    temp_cursor.execute("SELECT content, url FROM articles WHERE id = ?", (article_id_to_fetch,))
-                    art_row = temp_cursor.fetchone()
-                    if art_row:
-                        # snippet using the first 200 chars of content
-                        full_content = art_row[0] if art_row[0] else ""
-                        source_text = (full_content[:250] + '...') if len(full_content) > 250 else (full_content or "Article content missing.")
-                        article_url = art_row[1]
-            except Exception as ex:
-                pass
-                
-            # Use safe defaults for marked.js parsing
-            exp_text = getattr(q, 'causal_explanation') or getattr(q, 'resolution_reasoning') or 'No causal explanation available.'
-            
-            # Make sure impact text isn't empty for markdown parsing
-            if not impact_text: impact_text = 'No impact assessment provided.'
-
-            valid_events.append({
-                "id": e.id,
-                "date": date_val,
-                "title": getattr(e, 'title', 'Untitled Event'),
-                "description": getattr(e, 'description', getattr(e, 'summary', '')),
-                "impact": impact_text,
-                "source_snippet": source_text,
-                "source_url": article_url,
-                "current_status": current_status,
-                "reasoning_status": None
-            })
-
-        # 【核心过滤】如果一个问题的有效事件依然超过12个，进行均匀时间线采样
-        if len(valid_events) > 12:
-            step = len(valid_events) / 12.0
-            valid_events = [valid_events[int(i * step)] for i in range(12)]
-
-        q_data["events"] = valid_events
-        
-        # Only add question if there are actual events to review
-        if q_data["events"]:
-            export_data.append(q_data)
-            event_count += len(valid_events)
-            question_count += 1
-            
-            # 达到样本数量即停止
-            if question_count >= sample_size:
-                break
-
-    # Write as a JS file so the HTML can just include it via <script>
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(f"const annotationData = {json.dumps(export_data, indent=2, ensure_ascii=False)};")
-        
-    print(f"✅ Exported {len(export_data)} questions and {event_count} events to {output_file} (Seed: {seed})")
-    print("💡 You can now open 'scripts/annotation_ui/index.html' in your browser.")
+
+    print(f"Exported {len(export_data)} questions, {event_count} events -> {output_file}")
+    if annotator:
+        overlap_count = sum(1 for q in export_data if q["is_overlap"])
+        print(f"   Annotator: {annotator} | Unique: {len(export_data) - overlap_count} | Overlap: {overlap_count}")
+    if not os.path.exists(PRICE_CACHE_FILE):
+        print("price_cache.json not found -- run fetch_price_history.py first for market charts.")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Export data for UI annotation.")
-    parser.add_argument("--db", default="worldreasoner.db", help="Path to SQLite DB")
-    parser.add_argument("--out", default="scripts/annotation_ui/annotation_data.js", help="Output JS file")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed for sampling")
-    parser.add_argument("--sample", type=int, default=50, help="Number of questions to sample")
-    
+    parser.add_argument("--db", default="combined.db", help="Path to SQLite DB")
+    parser.add_argument("--out", default=None, help="Output JS file (auto-named if omitted)")
+    parser.add_argument("--annotator", default=None, help="Annotator name (omit for full export)")
+    parser.add_argument("--total-annotators", type=int, default=1, help="Total number of annotators")
+    parser.add_argument("--annotator-names", nargs="+", default=None,
+                        help="Ordered list of annotator names (must match --total-annotators)")
+    parser.add_argument("--overlap-ids", default=None,
+                        help="Path to file with one question ID per line for overlap set")
+    parser.add_argument("--no-fetch", action="store_true",
+                        help="Skip price history fetch and use existing cache only")
     args = parser.parse_args()
-    
-    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
-    export_for_annotation(db_path=args.db, output_file=args.out, seed=args.seed, sample_size=args.sample)
+
+    overlap_ids = set()
+    if args.overlap_ids and os.path.exists(args.overlap_ids):
+        with open(args.overlap_ids) as f:
+            overlap_ids = set(line.strip() for line in f if line.strip())
+
+    asyncio.run(export_for_annotation(
+        db_path=args.db,
+        output_file=args.out,
+        annotator=args.annotator,
+        total_annotators=args.total_annotators,
+        annotator_names=args.annotator_names,
+        overlap_ids=overlap_ids,
+        fetch_prices=not args.no_fetch,
+    ))
