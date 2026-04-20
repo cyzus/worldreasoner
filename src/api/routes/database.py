@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from src.utils.logging import logger
 from src.core.database import GenericDatabase
+from src.config import get_config
 
 
 router = APIRouter()
@@ -27,7 +28,7 @@ class MCPServerManager:
     When the database switches, it automatically restarts the server with the new database.
     """
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 8110):
+    def __init__(self, host: str = "0.0.0.0", port: int = 8301):
         """Initialize the MCP server manager.
 
         Args:
@@ -335,11 +336,9 @@ class MCPServerManager:
         }
 
 
-# Global MCP server manager instance
-# Read configuration from environment variables
-MCP_HOST = os.getenv("MCP_SERVER_HOST", "0.0.0.0")
-MCP_PORT = int(os.getenv("MCP_SERVER_PORT", "8110"))
-mcp_manager = MCPServerManager(host=MCP_HOST, port=MCP_PORT)
+# Global MCP server manager instance — reads from YAML config
+_cfg = get_config()
+mcp_manager = MCPServerManager(host=_cfg.server.mcp_host, port=_cfg.server.mcp_port)
 
 
 class DatabaseInfo(BaseModel):

@@ -10,11 +10,11 @@ database:
 server:
   # Backend API server (FastAPI visualization backend)
   host: localhost
-  port: 8018
+  port: 8300
 
   # MCP forecasting server (used by agents for forecasting)
   mcp_host: localhost
-  mcp_port: 8110
+  mcp_port: 8301
 
   reload: true
   log_level: info

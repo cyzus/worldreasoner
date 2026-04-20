@@ -9,11 +9,11 @@ class ServerConfig(BaseModel):
 
     # Backend API server (FastAPI)
     host: str = Field(default="localhost", description="Backend API server host")
-    port: int = Field(default=8018, description="Backend API server port")
+    port: int = Field(default=8300, description="Backend API server port")
 
     # MCP forecasting server (used by agents)
     mcp_host: str = Field(default="localhost", description="MCP server host")
-    mcp_port: int = Field(default=8110, description="MCP server port")
+    mcp_port: int = Field(default=8301, description="MCP server port")
 
     reload: bool = Field(default=False, description="Auto-reload on code changes")
     log_level: str = Field(default="info", description="Logging level")
