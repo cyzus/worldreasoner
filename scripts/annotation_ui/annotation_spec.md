@@ -47,6 +47,12 @@
 - Events where `review_status == "rejected"` — already auto-rejected by LLM review
 
 ### Step 2 — Priority ordering (within remaining events)
+
+The market window distinction drives two different annotation purposes:
+
+- **In-market-window events** are the primary annotation target. These events occurred while Polymarket was actively pricing the outcome, so the market price chart provides an objective, real-time signal of whether an event was considered significant by the market. Annotators can directly verify whether the AI's claimed impact direction matches the observed price movement. This is the core signal for evaluating forecast-relevant causality.
+- **Pre-market / non-market events** provide causal context but cannot be verified against market prices. They are annotated on causal logic alone and serve as background structure in the Hindsight Graph rather than direct forecast drivers.
+
 Apply this sort before capping:
 
 1. **Has impact analysis AND `occurred_date` is within market window** — highest priority
