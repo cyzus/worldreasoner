@@ -840,22 +840,22 @@
             let optionsHtml = '';
             if (q.options && q.options.length > 0) {
                 const isBinary = q.question_type === 'binary';
-                const items = q.options.map(opt => {
+                const items = q.options.map(function(opt) {
                     const isOutcome = String(opt) === String(q.outcome);
-                    return `<span style="
-                        display:inline-block; padding:4px 10px; margin:3px 4px 3px 0;
-                        border-radius:5px; font-size:0.82rem; font-weight:600;
-                        background:${isOutcome ? '#dcfce7' : '#f1f5f9'};
-                        color:${isOutcome ? '#15803d' : '#475569'};
-                        border:1px solid ${isOutcome ? '#bbf7d0' : '#e2e8f0'};
-                    ">${isOutcome ? '&#10003; ' : ''}${opt}</span>`;
+                    const bg     = isOutcome ? '#dcfce7' : '#f1f5f9';
+                    const color  = isOutcome ? '#15803d' : '#475569';
+                    const border = isOutcome ? '#bbf7d0' : '#e2e8f0';
+                    const check  = isOutcome ? '&#10003; ' : '';
+                    return '<span style="display:inline-block;padding:4px 10px;margin:3px 4px 3px 0;'
+                         + 'border-radius:5px;font-size:0.82rem;font-weight:600;'
+                         + 'background:' + bg + ';color:' + color + ';border:1px solid ' + border + ';">'
+                         + check + opt + '</span>';
                 }).join('');
-                // For non-binary types with only outcome shown, add a label clarifying it's the answer
-                const suffix = !isBinary && q.options.length === 1
-                    ? `<span style="font-size:0.78rem;color:#94a3b8;margin-left:4px;">(actual outcome)</span>` : '';
-                optionsHtml = `
-                    <div class="section-title">Options</div>
-                    <div style="margin-bottom:12px;">${items}${suffix}</div>`;
+                const suffix = (!isBinary && q.options.length === 1)
+                    ? '<span style="font-size:0.78rem;color:#94a3b8;margin-left:4px;">(actual outcome)</span>'
+                    : '';
+                optionsHtml = '<div class="section-title">Options</div>'
+                            + '<div style="margin-bottom:12px;">' + items + suffix + '</div>';
             }
 
             document.getElementById('q-context').innerHTML = `

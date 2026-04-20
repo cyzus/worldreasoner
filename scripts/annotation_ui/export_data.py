@@ -336,12 +336,15 @@ async def export_for_annotation(
         q_type = _qt.value if hasattr(_qt, "value") else str(_qt)
         ground_truth = str(getattr(q, "ground_truth", "Unknown"))
 
-        # Synthesize options when DB has none
+        # Fallback 1: metadata.options (Polymarket MCQ markets store choices here)
+        if not raw_options:
+            raw_options = meta.get("options") or []
+
+        # Fallback 2: synthesize minimal set
         if not raw_options:
             if q_type == "binary":
                 raw_options = ["Yes", "No"]
             else:
-                # For MCQ/quantity/timeframe: show ground_truth as the only known option
                 raw_options = [ground_truth] if ground_truth not in ("Unknown", "None", "") else []
 
         q_data = {
