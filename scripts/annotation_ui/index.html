@@ -421,6 +421,7 @@
             border: 1px solid #e2e8f0;
             border-radius: 6px;
             padding: 8px 12px 4px;
+            max-width: 320px;
         }
         .price-chart-container .chart-label {
             font-size: 0.72rem;
@@ -663,78 +664,150 @@
             return estimated ? s + ' <span style="font-size:0.7em;opacity:0.7">(est.)</span>' : s;
         }
 
-        // ── Mini price chart ──────────────────────────────────────────────
+        // ── Price chart ───────────────────────────────────────────────────
+
+        function fmtDate(ts) {
+            // ts is unix seconds
+            const d = new Date(ts * 1000);
+            return (d.getMonth() + 1) + '/' + d.getDate() + '/' + String(d.getFullYear()).slice(2);
+        }
 
         function drawPriceChart(canvas, priceData, eventDate, marketOpen, marketClose) {
             if (!canvas || !priceData || !priceData.history || priceData.history.length < 2) return;
 
             const history = priceData.history;
             const dpr = window.devicePixelRatio || 1;
-            const rect = canvas.getBoundingClientRect();
-            const W = rect.width || canvas.offsetWidth || 400;
-            const H = 60;
-            canvas.width = W * dpr;
+            const W = canvas.offsetWidth || 440;
+            const H = 140;
+            canvas.width  = W * dpr;
             canvas.height = H * dpr;
+            canvas.style.height = H + 'px';
             const ctx = canvas.getContext('2d');
             ctx.scale(dpr, dpr);
 
+            // Layout margins
+            const mL = 42, mR = 10, mT = 10, mB = 28;
+            const plotW = W - mL - mR;
+            const plotH = H - mT - mB;
+
             const tMin = history[0].t;
             const tMax = history[history.length - 1].t;
-            const pMin = 0;
-            const pMax = 1;
             const tRange = tMax - tMin || 1;
 
-            const toX = t => ((t - tMin) / tRange) * W;
-            const toY = p => H - ((p - pMin) / (pMax - pMin)) * H;
+            const toX = t  => mL + ((t  - tMin) / tRange) * plotW;
+            const toY = p  => mT + (1 - p) * plotH;
 
             // Background
             ctx.fillStyle = '#fff';
             ctx.fillRect(0, 0, W, H);
 
-            // Midline at 50%
-            ctx.strokeStyle = '#e2e8f0';
-            ctx.lineWidth = 1;
-            ctx.setLineDash([3, 3]);
-            ctx.beginPath();
-            ctx.moveTo(0, toY(0.5));
-            ctx.lineTo(W, toY(0.5));
-            ctx.stroke();
-            ctx.setLineDash([]);
+            ctx.font = '10px Inter, sans-serif';
 
-            // Event date marker
+            // ── Y-axis grid + labels (0%, 25%, 50%, 75%, 100%) ──
+            [0, 0.25, 0.5, 0.75, 1].forEach(p => {
+                const y = toY(p);
+                ctx.strokeStyle = p === 0.5 ? '#cbd5e1' : '#f1f5f9';
+                ctx.lineWidth   = p === 0.5 ? 1 : 0.8;
+                ctx.setLineDash(p === 0.5 ? [3, 3] : []);
+                ctx.beginPath(); ctx.moveTo(mL, y); ctx.lineTo(mL + plotW, y); ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.fillStyle = '#94a3b8';
+                ctx.textAlign = 'right';
+                ctx.fillText((p * 100) + '%', mL - 5, y + 3.5);
+            });
+
+            // ── X-axis labels (3–4 evenly spaced dates) ──
+            const nTicks = 4;
+            ctx.fillStyle = '#94a3b8';
+            ctx.textAlign = 'center';
+            for (let i = 0; i <= nTicks; i++) {
+                const t = tMin + (tRange * i / nTicks);
+                const x = toX(t);
+                ctx.fillText(fmtDate(t), x, H - mB + 14);
+                ctx.strokeStyle = '#f1f5f9';
+                ctx.lineWidth = 0.5;
+                ctx.beginPath(); ctx.moveTo(x, mT); ctx.lineTo(x, mT + plotH); ctx.stroke();
+            }
+
+            // ── Event date marker ──
             if (eventDate) {
                 const ed = parseDate(eventDate);
                 if (ed) {
                     const ex = toX(ed.getTime() / 1000);
-                    if (ex >= 0 && ex <= W) {
+                    if (ex >= mL && ex <= mL + plotW) {
+                        ctx.save();
                         ctx.strokeStyle = '#f59e0b';
                         ctx.lineWidth = 1.5;
-                        ctx.beginPath();
-                        ctx.moveTo(ex, 0);
-                        ctx.lineTo(ex, H);
-                        ctx.stroke();
+                        ctx.setLineDash([4, 3]);
+                        ctx.beginPath(); ctx.moveTo(ex, mT); ctx.lineTo(ex, mT + plotH); ctx.stroke();
+                        ctx.setLineDash([]);
+                        // Label: "Event" above the line
+                        ctx.fillStyle = '#f59e0b';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('▲ event', ex, mT - 1);
+                        ctx.restore();
                     }
                 }
             }
 
-            // Price line + fill
+            // ── Price area fill ──
             ctx.beginPath();
             ctx.moveTo(toX(history[0].t), toY(history[0].p));
-            for (let i = 1; i < history.length; i++) {
-                ctx.lineTo(toX(history[i].t), toY(history[i].p));
-            }
-            ctx.strokeStyle = '#4f46e5';
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-
-            const grad = ctx.createLinearGradient(0, 0, 0, H);
-            grad.addColorStop(0, 'rgba(79,70,229,0.15)');
+            for (let i = 1; i < history.length; i++) ctx.lineTo(toX(history[i].t), toY(history[i].p));
+            const grad = ctx.createLinearGradient(0, mT, 0, mT + plotH);
+            grad.addColorStop(0, 'rgba(79,70,229,0.18)');
             grad.addColorStop(1, 'rgba(79,70,229,0)');
-            ctx.lineTo(toX(history[history.length - 1].t), H);
-            ctx.lineTo(toX(history[0].t), H);
+            ctx.lineTo(toX(tMax), toY(0));
+            ctx.lineTo(toX(tMin), toY(0));
             ctx.closePath();
             ctx.fillStyle = grad;
             ctx.fill();
+
+            // ── Price line ──
+            ctx.beginPath();
+            ctx.moveTo(toX(history[0].t), toY(history[0].p));
+            for (let i = 1; i < history.length; i++) ctx.lineTo(toX(history[i].t), toY(history[i].p));
+            ctx.strokeStyle = '#4f46e5';
+            ctx.lineWidth = 2;
+            ctx.lineJoin = 'round';
+            ctx.stroke();
+
+            // ── Hover tooltip ──
+            canvas._chartData = { history, tMin, tRange, plotW, plotH, mL, mT, mB, W, H, dpr };
+        }
+
+        function setupChartHover(canvas) {
+            const tip = document.createElement('div');
+            tip.style.cssText = 'position:absolute;background:#1e293b;color:#fff;padding:5px 9px;'
+                + 'border-radius:5px;font-size:0.75rem;pointer-events:none;display:none;'
+                + 'white-space:nowrap;z-index:50;line-height:1.5;';
+            canvas.parentElement.style.position = 'relative';
+            canvas.parentElement.appendChild(tip);
+
+            canvas.addEventListener('mousemove', function(e) {
+                const d = canvas._chartData;
+                if (!d) return;
+                const rect = canvas.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+                if (mx < d.mL || mx > d.mL + d.plotW || my < d.mT || my > d.mT + d.plotH) {
+                    tip.style.display = 'none'; return;
+                }
+                const tHover = d.tMin + ((mx - d.mL) / d.plotW) * d.tRange;
+                // Find nearest point
+                let best = d.history[0], bestDiff = Infinity;
+                d.history.forEach(pt => {
+                    const diff = Math.abs(pt.t - tHover);
+                    if (diff < bestDiff) { bestDiff = diff; best = pt; }
+                });
+                tip.innerHTML = '<b>' + fmtDate(best.t) + '</b><br>Yes: <b>' + (best.p * 100).toFixed(1) + '%</b>';
+                tip.style.display = 'block';
+                const tx = d.mL + ((best.t - d.tMin) / d.tRange) * d.plotW;
+                const ty = d.mT + (1 - best.p) * d.plotH;
+                tip.style.left = (tx + 8) + 'px';
+                tip.style.top  = Math.max(0, ty - 28) + 'px';
+            });
+            canvas.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
         }
 
         // ── Init ──────────────────────────────────────────────────────────
@@ -987,7 +1060,10 @@
                     if (!q.price_data || !event.in_market_window) return;
                     if (!event.has_impact) return;
                     const canvas = document.getElementById(`chart-${event.id}`);
-                    if (canvas) drawPriceChart(canvas, q.price_data, event.date, q.market_open, q.market_close);
+                    if (canvas) {
+                        drawPriceChart(canvas, q.price_data, event.date, q.market_open, q.market_close);
+                        setupChartHover(canvas);
+                    }
                 });
             });
         }
