@@ -339,10 +339,13 @@ class WebFetchTool(Tool):
             result = asyncio.run(self._fetch_async(url, timeout, timestamp))
 
         # Convert dict result to Pydantic model
+        content = result.get("markdown", "") or ""
+        if len(content) > 50_000:
+            content = content[:50_000] + "\n\n[Content truncated at 50,000 characters]"
         return WebFetchOutput(
             url=result.get("url", url),
             title=result.get("title", ""),
-            content=result.get("markdown", "") or "",
+            content=content,
             metadata=result.get("metadata", {}),
             success=result.get("success", False),
             error=result.get("error"),
@@ -363,10 +366,13 @@ class WebFetchTool(Tool):
         """
         result = await self._fetch_async(url, timeout, timestamp)
         # Convert dict result to Pydantic model
+        content = result.get("markdown", "") or ""
+        if len(content) > 50_000:
+            content = content[:50_000] + "\n\n[Content truncated at 50,000 characters]"
         return WebFetchOutput(
             url=result.get("url", url),
             title=result.get("title", ""),
-            content=result.get("markdown", "") or "",
+            content=content,
             metadata=result.get("metadata", {}),
             success=result.get("success", False),
             error=result.get("error"),
