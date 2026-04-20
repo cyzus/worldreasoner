@@ -4,7 +4,7 @@
 
 Verify the factual correctness and causal validity of events in the Hindsight Graph. The graph serves as ground truth for evaluating LLM forecasting — its quality must be rigorously validated.
 
-**Sample size:** 50 forecast questions, up to 10 events each.
+Up to 10 events per question.
 
 ---
 
@@ -62,8 +62,8 @@ The market window is the period when Polymarket was actively tracking this quest
 ### How to use it
 For events **within the market window**, the UI shows a mini price chart (pre-fetched from Polymarket). Use it to verify the AI's claimed impact direction:
 
-- A claimed **positive** impact (makes Yes more likely) should correspond to a **price increase** around that event date.
-- A claimed **negative** impact (makes Yes less likely) should correspond to a **price decrease**.
+- A claimed **Towards outcome** impact (makes Yes more likely) should correspond to a **price increase** around that event date.
+- A claimed **Against outcome** impact (makes Yes less likely) should correspond to a **price decrease**.
 - If the claimed direction contradicts the price movement, mark reasoning as 👎 **Flawed**.
 - If price barely moved, the impact may be **overstated** — mark reasoning as 👎 **Flawed** if magnitude is claimed to be high.
 

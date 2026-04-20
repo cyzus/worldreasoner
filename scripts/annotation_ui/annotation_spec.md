@@ -115,7 +115,7 @@ If no impact analysis row exists, show muted text: *"No impact assessment availa
 | Reject: Hallucination | `rejected / Hallucination` | Fabricated event or dates |
 | Reject: Noise | `rejected / Noise` | Real but causally irrelevant |
 | Reject: Duplicate | `rejected / Duplicate` | Same occurrence already approved |
-| Reject: Too Broad | `rejected / TooBoard` | Trend/period not a specific occurrence |
+| Reject: Too Broad | `rejected / TooBroad` | Trend/period not a specific occurrence |
 | Skip | `skipped` | Cannot verify from available source |
 
 ### Reasoning quality assessment (only when impact analysis is present)
@@ -131,21 +131,6 @@ If no impact analysis row exists, show muted text: *"No impact assessment availa
 
 ### Source database
 All annotation data comes from **`combined.db`** (not `worldreasoner.db`).
-
-```
-combined.db stats (current, pipeline still running):
-  346 questions total (97 polymarket, 249 news)
-  All 346 have causal_explanation
-  96 polymarket questions have clob_token_ids
-  1044 event_outcome_impacts rows
-
-  Currently annotatable: 58   ← pipeline not yet complete; remaining
-                                 questions will have causal events once
-                                 the full Hindsight Agent run finishes
-  Full dataset target:   346  (all questions)
-```
-
-**The 58-question subset is used as a demo only.** Once the pipeline completes, `export_data.py` should export the full 346 questions with no `--sample` cap, and annotator assignments should be distributed accordingly (see Section 6).
 
 ### Step 1 — Pre-fetch price history (run once)
 
@@ -169,20 +154,6 @@ The cache is saved incrementally (after each question) so it survives interrupti
 python scripts/annotation_ui/export_data.py --db combined.db
 ```
 
-**Changes needed in `export_data.py`:**
-
-1. **Use `combined.db`** as the default `--db` argument.
-2. **Fetch market window**: read `q.estimated_start_time` and `q.resolution_date`; if `estimated_start_time` is null, fallback to 90 days before `resolution_date`.
-3. **Load `price_cache.json`** at startup; attach `price_data` to each question object if available.
-4. **Tag each event**: add `"in_market_window": bool` and `"has_impact": bool` fields to each exported event object.
-5. **Priority sort before capping** (4-tier, see Section 2).
-6. **Cap at 10** (not 12).
-7. **Add to each question object**:
-   - `"market_open"` (ISO string or null)
-   - `"market_close"` (ISO string)
-   - `"polymarket_url"` = `"https://polymarket.com/event/{metadata.market_slug}"` if slug exists, else null
-   - `"is_polymarket"`: bool
-   - `"price_data"`: the cached price object (or null)
 
 ---
 
