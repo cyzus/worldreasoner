@@ -449,6 +449,7 @@
             display: flex;
             gap: 10px;
             margin-top: 20px;
+            margin-bottom: 18px;
             padding-top: 18px;
             border-top: 1px solid var(--border);
         }
@@ -977,12 +978,13 @@
                     ? `<span class="window-badge ${dateClass}">${badgeLabel}</span>` : '';
 
                 // Impact box
+                const isRejected = event.current_status === 'rejected';
                 let impactHtml;
                 if (hasImpact) {
                     const accActive = event.reasoning_status === 'accurate' ? 'active' : '';
                     const flwActive = event.reasoning_status === 'flawed' ? 'active' : '';
                     impactHtml = `
-                        <div class="detail-box box-impact">
+                        <div class="detail-box box-impact" id="impact-${event.id}"${isRejected ? ' style="display:none"' : ''}>
                             <strong>Impact Analysis</strong>
                             <div class="reasoning-btn-row">
                                 <button class="btn-reasoning accurate ${accActive}" id="btn-acc-${event.id}"
@@ -1007,7 +1009,7 @@
                         </div>`;
                 } else {
                     impactHtml = `
-                        <div class="detail-box box-impact no-impact">
+                        <div class="detail-box box-impact no-impact" id="impact-${event.id}"${isRejected ? ' style="display:none"' : ''}>
                             <strong>Impact Analysis</strong>
                             <span style="font-style:italic;">No impact assessment available for this event.</span>
                         </div>`;
@@ -1030,7 +1032,6 @@
                                        padding:3px 8px;border-radius:4px;">&#8599; View Original Article</a>`
                             : '<span style="color:#94a3b8;font-size:0.85rem;font-style:italic;">No source link available.</span>'}
                     </div>
-                    ${impactHtml}
                     <div class="action-row">
                         <button class="btn-approve" onclick="annotate('${q.id}', '${event.id}', 'approved')">
                             &#10003; Approve
@@ -1047,7 +1048,8 @@
                             </div>
                         </div>
                         <button class="btn-skip" onclick="annotate('${q.id}', '${event.id}', 'skipped')">Skip</button>
-                    </div>`;
+                    </div>
+                    ${impactHtml}`;
 
                 timeline.appendChild(card);
             });
@@ -1095,6 +1097,9 @@
                 badgeText += ` (${short})`;
             }
             card.querySelector('.status-badge').innerText = badgeText;
+
+            const impactBox = document.getElementById(`impact-${eventId}`);
+            if (impactBox) impactBox.style.display = status === 'rejected' ? 'none' : '';
 
             updateProgress();
             populateDropdown();
