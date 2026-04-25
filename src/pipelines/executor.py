@@ -520,70 +520,78 @@ class PipelineExecutor:
         )
 
         results = PipelineResult([], [], [], 0.0)
-
-        for i, qid in enumerate(question_ids):
-            try:
-                # Send progress update
-                if on_progress:
-                    on_progress(
-                        PipelineProgress(
-                            current=i + 1,
-                            total=len(question_ids),
-                            question_id=qid,
-                            stage="evidence",
-                            message=f"Processing question {qid}",
+        
+        # Simple parallel execution
+        import asyncio
+        semaphore = asyncio.Semaphore(3)
+        
+        async def process_question(i, qid):
+            async with semaphore:
+                try:
+                    # Send progress update
+                    if on_progress:
+                        on_progress(
+                            PipelineProgress(
+                                current=i + 1,
+                                total=len(question_ids),
+                                question_id=qid,
+                                stage="evidence",
+                                message=f"Processing question {qid}",
+                            )
                         )
+
+                    # Check if already has evidence (unless force reprocess)
+                    question = self.db.get(Question, qid)
+                    if not question:
+                        results.failed.append({"id": qid, "error": "Question not found"})
+                        return
+
+                    if not force_reprocess:
+                        skip_reason = self._check_sufficient_evidence(question)
+                        if skip_reason:
+                            results.skipped.append({"id": qid, "reason": skip_reason})
+                            return
+
+                    # Run pipeline on single question
+                    logger.info(f"Running evidence pipeline on question: {qid}")
+                    pipeline_results = await pipeline.run([question])
+
+                    # Check if pipeline succeeded (no FAILED stages and at least one result)
+                    has_failure = any(
+                        r.status == PipelineStageStatus.FAILED for r in pipeline_results
                     )
 
-                # Check if already has evidence (unless force reprocess)
-                question = self.db.get(Question, qid)
-                if not question:
-                    results.failed.append({"id": qid, "error": "Question not found"})
-                    continue
+                    if pipeline_results and not has_failure:
+                        # Count generated artifacts
+                        articles = self.db.get_many(
+                            Article, filters={"collected_for_question_id": qid}
+                        )
+                        hypotheses_count = self.db.count(
+                            CausalHypothesis,
+                            filters={"discovered_by_question_ids__like": f'%"{qid}"%'},
+                        )
 
-                if not force_reprocess:
-                    skip_reason = self._check_sufficient_evidence(question)
-                    if skip_reason:
-                        results.skipped.append({"id": qid, "reason": skip_reason})
-                        continue
+                        results.processed.append(
+                            {
+                                "id": qid,
+                                "articles": len(articles),
+                                "hypotheses": hypotheses_count,
+                            }
+                        )
+                        logger.info(
+                            f"Successfully processed {qid}: {len(articles)} articles, {hypotheses_count} hypotheses"
+                        )
+                    else:
+                        error_msg = self._pipeline_error_message(pipeline_results)
+                        results.failed.append({"id": qid, "error": error_msg})
+                        logger.error(f"Failed to process {qid}: {error_msg}")
 
-                # Run pipeline on single question
-                logger.info(f"Running evidence pipeline on question: {qid}")
-                pipeline_results = await pipeline.run([question])
+                except Exception as e:
+                    logger.error(f"Error processing question {qid}: {e}")
+                    results.failed.append({"id": qid, "error": str(e)})
 
-                # Check if pipeline succeeded (no FAILED stages and at least one result)
-                has_failure = any(
-                    r.status == PipelineStageStatus.FAILED for r in pipeline_results
-                )
-
-                if pipeline_results and not has_failure:
-                    # Count generated artifacts
-                    articles = self.db.get_many(
-                        Article, filters={"collected_for_question_id": qid}
-                    )
-                    hypotheses_count = self.db.count(
-                        CausalHypothesis,
-                        filters={"discovered_by_question_ids__like": f'%"{qid}"%'},
-                    )
-
-                    results.processed.append(
-                        {
-                            "id": qid,
-                            "articles": len(articles),
-                            "hypotheses": hypotheses_count,
-                        }
-                    )
-                    logger.info(
-                        f"Successfully processed {qid}: {len(articles)} articles, {hypotheses_count} hypotheses"
-                    )
-                else:
-                    error_msg = self._pipeline_error_message(pipeline_results)
-                    results.failed.append({"id": qid, "error": error_msg})
-                    logger.error(f"Failed to process {qid}: {error_msg}")
-
-            except Exception as e:
-                logger.error(f"Error processing question {qid}: {e}")
-                results.failed.append({"id": qid, "error": str(e)})
+        tasks = [process_question(i, qid) for i, qid in enumerate(question_ids)]
+        await asyncio.gather(*tasks)
 
         if not skip_indexing:
             await self._auto_index_articles()
@@ -602,6 +610,7 @@ class PipelineExecutor:
     ) -> PipelineResult:
         """Run adaptive multi-agent evidence pipeline."""
         from src.pipelines.evidence.pipeline import EvidencePipeline
+        import asyncio
 
         evidence_config = EvidencePipelineConfig()
         database_config = DatabaseConfig(db_path=self.db_path)
@@ -616,57 +625,70 @@ class PipelineExecutor:
         )
 
         results = PipelineResult([], [], [], 0.0)
+        semaphore = asyncio.Semaphore(3)
 
-        for i, qid in enumerate(question_ids):
-            try:
-                if on_progress:
-                    on_progress(
-                        PipelineProgress(
-                            current=i + 1,
-                            total=len(question_ids),
-                            question_id=qid,
-                            stage="adaptive_evidence",
-                            message=f"Deep analysis of question {qid}",
+        async def process_question(i, qid):
+            async with semaphore:
+                try:
+                    if on_progress:
+                        on_progress(
+                            PipelineProgress(
+                                current=i + 1,
+                                total=len(question_ids),
+                                question_id=qid,
+                                stage="adaptive_evidence",
+                                message=f"Processing question {qid}",
+                            )
                         )
+
+                    question = self.db.get(Question, qid)
+                    if not question:
+                        results.failed.append({"id": qid, "error": "Question not found"})
+                        return
+
+                    if not force_reprocess:
+                        skip_reason = self._check_sufficient_evidence(question)
+                        if skip_reason:
+                            results.skipped.append({"id": qid, "reason": skip_reason})
+                            return
+
+                    logger.info(f"Running adaptive evidence pipeline on question: {qid}")
+                    pipeline_results = await pipeline.run([question])
+
+                    has_failure = any(
+                        r.status == PipelineStageStatus.FAILED for r in pipeline_results
                     )
 
-                question = self.db.get(Question, qid)
-                if not question:
-                    results.failed.append({"id": qid, "error": "Question not found"})
-                    continue
+                    if pipeline_results and not has_failure:
+                        articles = self.db.get_many(
+                            Article, filters={"collected_for_question_id": qid}
+                        )
+                        hypotheses_count = self.db.count(
+                            CausalHypothesis,
+                            filters={"discovered_by_question_ids__like": f'%"{qid}"%'},
+                        )
 
-                if not force_reprocess:
-                    skip_reason = self._check_sufficient_evidence(question)
-                    if skip_reason:
-                        results.skipped.append({"id": qid, "reason": skip_reason})
-                        continue
+                        results.processed.append(
+                            {
+                                "id": qid,
+                                "articles": len(articles),
+                                "hypotheses": hypotheses_count,
+                            }
+                        )
+                        logger.info(
+                            f"Successfully processed {qid}: {len(articles)} articles, {hypotheses_count} hypotheses"
+                        )
+                    else:
+                        error_msg = self._pipeline_error_message(pipeline_results)
+                        results.failed.append({"id": qid, "error": error_msg})
+                        logger.error(f"Failed to process {qid}: {error_msg}")
 
-                logger.info(f"Running adaptive evidence pipeline on question: {qid}")
-                pipeline_results = await pipeline.run([question])
+                except Exception as e:
+                    logger.error(f"Error processing question {qid}: {e}")
+                    results.failed.append({"id": qid, "error": str(e)})
 
-                # Check if pipeline succeeded (no FAILED stages and at least one result)
-                has_failure = any(
-                    r.status == PipelineStageStatus.FAILED for r in pipeline_results
-                )
-
-                if pipeline_results and not has_failure:
-                    hypotheses_count = self.db.count(
-                        CausalHypothesis,
-                        filters={"discovered_by_question_ids__like": f'%"{qid}"%'},
-                    )
-                    results.processed.append(
-                        {
-                            "id": qid,
-                            "hypotheses": hypotheses_count,
-                        }
-                    )
-                else:
-                    error_msg = self._pipeline_error_message(pipeline_results)
-                    results.failed.append({"id": qid, "error": error_msg})
-
-            except Exception as e:
-                logger.error(f"Error processing question {qid}: {e}")
-                results.failed.append({"id": qid, "error": str(e)})
+        tasks = [process_question(i, qid) for i, qid in enumerate(question_ids)]
+        await asyncio.gather(*tasks)
 
         if not skip_indexing:
             await self._auto_index_articles()
@@ -942,6 +964,7 @@ class PipelineExecutor:
     ) -> PipelineResult:
         """Build causal graphs for questions that already have a causal explanation."""
         from src.pipelines.graph_builder.pipeline import GraphBuilderPipeline
+        import asyncio
 
         config = self.config
         pipeline = GraphBuilderPipeline(
@@ -952,41 +975,46 @@ class PipelineExecutor:
         )
 
         results = PipelineResult([], [], [], 0.0)
+        semaphore = asyncio.Semaphore(3)
 
-        for i, qid in enumerate(question_ids):
-            if on_progress:
-                on_progress(
-                    PipelineProgress(
-                        current=i + 1,
-                        total=len(question_ids),
-                        question_id=qid,
-                        stage="graph_builder",
-                        message=f"Building graph for {qid}",
+        async def process_question(i, qid):
+            async with semaphore:
+                if on_progress:
+                    on_progress(
+                        PipelineProgress(
+                            current=i + 1,
+                            total=len(question_ids),
+                            question_id=qid,
+                            stage="graph_builder",
+                            message=f"Building graph for {qid}",
+                        )
                     )
-                )
 
-            question = self.db.get(Question, qid)
-            if not question:
-                results.failed.append({"id": qid, "error": "Question not found"})
-                continue
+                question = self.db.get(Question, qid)
+                if not question:
+                    results.failed.append({"id": qid, "error": "Question not found"})
+                    return
 
-            if not question.causal_explanation:
-                results.skipped.append({"id": qid, "reason": "No causal explanation — run evidence pipeline first"})
-                continue
+                if not question.causal_explanation:
+                    results.skipped.append({"id": qid, "reason": "No causal explanation — run evidence pipeline first"})
+                    return
 
-            if not force and question.graph_built:
-                results.skipped.append({"id": qid, "reason": "Graph already built (use force to rebuild)"})
-                continue
+                if not force and question.graph_built:
+                    results.skipped.append({"id": qid, "reason": "Graph already built (use force to rebuild)"})
+                    return
 
-            try:
-                success = await asyncio.to_thread(pipeline._process_single_question, question)
-                if success:
-                    results.processed.append({"id": qid})
-                else:
-                    results.failed.append({"id": qid, "error": "Graph building failed"})
-            except Exception as e:
-                logger.error(f"Graph builder error for {qid}: {e}")
-                results.failed.append({"id": qid, "error": str(e)})
+                try:
+                    success = await asyncio.to_thread(pipeline._process_single_question, question)
+                    if success:
+                        results.processed.append({"id": qid})
+                    else:
+                        results.failed.append({"id": qid, "error": "Graph building failed"})
+                except Exception as e:
+                    logger.error(f"Graph builder error for {qid}: {e}")
+                    results.failed.append({"id": qid, "error": str(e)})
+
+        tasks = [process_question(i, qid) for i, qid in enumerate(question_ids)]
+        await asyncio.gather(*tasks)
 
         return results
 
