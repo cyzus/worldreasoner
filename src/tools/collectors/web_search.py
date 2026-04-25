@@ -376,14 +376,15 @@ class WebSearchTool(Tool):
             return "\n---\n**Auto-collected 0 article(s)** (auto-collect disabled: no resolution date)"
 
         from src.utils.date_utils import parse_flexible_datetime
+        import concurrent.futures
 
         collected = []
-        skipped = {"no_date": 0, "after_resolution": 0, "error": 0}
+        skipped = {"no_date": 0, "after_resolution": 0, "error": 0, "timeout": 0}
+        
+        eligible_items = []
 
-        for result in structured_results[
-            : self.max_auto_collect * 2
-        ]:  # Check extra results in case some are skipped
-            if len(collected) >= self.max_auto_collect:
+        for result in structured_results:
+            if len(eligible_items) >= self.max_auto_collect:
                 break
 
             url, title, published_date_str = (
@@ -427,19 +428,52 @@ class WebSearchTool(Tool):
                     else "Unknown"
                 )
 
-                self.article_collector.forward(
-                    url=url,
-                    title=title,
-                    source=source,
-                    published_date=published_date.isoformat(),
-                    domain=self.domain,
-                    author=None,
-                )
-                collected.append(title[:30] + "..." if len(title) > 30 else title)
+                eligible_items.append({
+                    "url": url,
+                    "title": title,
+                    "source": source,
+                    "published_date": published_date.isoformat(),
+                    "domain": self.domain,
+                    "author": None,
+                })
 
             except Exception as e:
-                logger.warning(f"Auto-collect skipped {url}: {type(e).__name__}: {e}")
+                logger.warning(f"Auto-collect validation skipped {url}: {type(e).__name__}: {e}")
                 skipped["error"] += 1
+
+        if eligible_items:
+            def fetch_article(item):
+                self.article_collector.forward(
+                    url=item["url"],
+                    title=item["title"],
+                    source=item["source"],
+                    published_date=item["published_date"],
+                    domain=item["domain"],
+                    author=item["author"],
+                )
+                return item["title"]
+
+            # Execute concurrently with a timeout of 15 seconds
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_items)) as executor:
+                future_to_item = {executor.submit(fetch_article, item): item for item in eligible_items}
+                
+                done, not_done = concurrent.futures.wait(
+                    future_to_item.keys(), timeout=15.0
+                )
+                
+                for future in done:
+                    item = future_to_item[future]
+                    try:
+                        title = future.result()
+                        collected.append(title[:30] + "..." if len(title) > 30 else title)
+                    except Exception as e:
+                        logger.warning(f"Auto-collect failed for {item['url']}: {type(e).__name__}: {e}")
+                        skipped["error"] += 1
+                        
+                for future in not_done:
+                    item = future_to_item[future]
+                    logger.warning(f"Auto-collect timed out for {item['url']}")
+                    skipped["timeout"] += 1
 
         # Build concise summary
         total_skipped = sum(skipped.values())
