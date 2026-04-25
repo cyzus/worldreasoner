@@ -22,7 +22,6 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 from contextlib import contextmanager
 
-from .llm import LiteLLMClient
 from src.domain.models import Article
 from src.utils.logging import logger
 from ..config.settings import get_config
@@ -59,14 +58,19 @@ class HybridSearch:
 
         self.embedding_model = embedding_model
 
-        # Initialize LiteLLM client for embeddings
-        if embedding_config is None:
-            embedding_config = {"embedding_model": embedding_model}
-
-        self.llm_client = LiteLLMClient(embedding_config)
+        # Initialize LiteLLM client lazily for embeddings
+        self._llm_client = None
+        self._embedding_config = embedding_config if embedding_config is not None else {"embedding_model": embedding_model}
 
         # Ensure FTS5 table exists
         self._ensure_fts_table()
+
+    @property
+    def llm_client(self):
+        if self._llm_client is None:
+            from .llm import LiteLLMClient
+            self._llm_client = LiteLLMClient(self._embedding_config)
+        return self._llm_client
 
     @contextmanager
     def _get_connection(self):

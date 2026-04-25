@@ -1,6 +1,5 @@
 from pydantic import BaseModel
 import asyncio
-import litellm
 from dotenv import load_dotenv
 from typing import Union
 
@@ -38,6 +37,7 @@ class LiteLLMClient:
         # the API returns HTTP 200 with an empty choices list (a transient Gemini/
         # Vertex issue). We handle that here with our own retry loop.
         for attempt in range(_EMPTY_CHOICES_MAX_RETRIES + 1):
+            import litellm
             response = await litellm.acompletion(**kwargs, messages=messages)
             if response["choices"]:
                 return response["choices"][0]["message"]["content"]
@@ -70,6 +70,7 @@ class LiteLLMClient:
         # Use provided model or default to config model
         embedding_model = model or self.llm_config.get("embedding_model")
 
+        import litellm
         # Add num_retries=3 for robustness
         response = await litellm.aembedding(
             model=embedding_model, input=inputs, num_retries=3

@@ -14,7 +14,6 @@ from src.domain.models.domain import Domain
 from src.domain.models.question import QuestionType
 from src.api.routes.database import get_current_db_path
 from src.utils.logging import logger
-from src.integrations.polymarket import get_price_history_for_market
 from src.analysis.article_analysis import analyze_article_coverage
 from src.config.collection_goal import QualityRequirements
 from src.services.question_monitor_service import QuestionMonitorService
@@ -1040,6 +1039,7 @@ async def get_question_price_history(
 
         if interval in ["all", "max"]:
             # Get full history using interval-based API
+            from src.integrations.polymarket import get_price_history_for_market
             price_history = await get_price_history_for_market(
                 clob_token_ids,
                 interval=interval,
@@ -1079,6 +1079,7 @@ async def get_question_price_history(
             )
 
             # Use timestamp-based API for custom intervals
+            from src.integrations.polymarket import get_price_history_for_market
             price_history = await get_price_history_for_market(
                 clob_token_ids,
                 interval="all",  # Not used when timestamps provided

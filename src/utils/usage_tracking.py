@@ -10,7 +10,6 @@ when using LiteLLM through smolagents. It enables:
 from typing import Dict, Optional, List
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import litellm
 from src.utils.logging import logger
 
 
@@ -148,6 +147,7 @@ def extract_usage_from_agent(agent, model_name: Optional[str] = None) -> UsageMe
         >>> logger.info(f"Used {metrics.total_tokens} tokens, cost: ${metrics.estimated_cost_usd:.4f}")
     """
     try:
+        import litellm
         # Get token counts from monitor (returns TokenUsage object)
         token_counts = agent.monitor.get_total_token_counts()
 

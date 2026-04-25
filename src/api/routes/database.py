@@ -9,7 +9,7 @@ import subprocess
 import time
 from pathlib import Path
 from typing import List, Optional
-import requests
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -276,6 +276,7 @@ class MCPServerManager:
         health_url = f"http://{health_host}:{self.port}/health"
 
         try:
+            import requests
             response = requests.get(health_url, timeout=2)
             if response.status_code == 200:
                 data = response.json()
@@ -295,7 +296,7 @@ class MCPServerManager:
                         return False
 
                 return True
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
             logger.debug(f"Health check failed: {e}")
             return False
 

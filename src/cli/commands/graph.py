@@ -4,7 +4,6 @@ from rich.console import Console
 from src.config import get_config
 from src.core.database import GenericDatabase
 from src.domain.models import Question
-from src.pipelines.graph_builder.pipeline import GraphBuilderPipeline
 from src.utils.logging import setup_logging
 
 app = typer.Typer(help="Manage graph building and auditing.")
@@ -30,6 +29,7 @@ def build_graphs(
     """Run the GraphBuilder pipeline on pending questions."""
     level = "DEBUG" if verbose else "INFO"
     setup_logging(level=level)
+    from src.pipelines.graph_builder.pipeline import GraphBuilderPipeline
 
     selected_model_id = model_id or get_config().llm.model
     pipeline = GraphBuilderPipeline(

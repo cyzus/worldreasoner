@@ -13,7 +13,6 @@ from rich import print as rprint
 import json
 
 from src.core.database import GenericDatabase
-from src.core.hybrid_search import HybridSearch
 from src.cli.core.options import (
     db_option,
     json_option,
@@ -28,7 +27,6 @@ from src.cli.ui.tables import (
 )
 from src.domain.models import Event, Article
 from src.domain.models.question import Question
-from src.core.search_indexing import auto_index_articles
 from src.config.settings import get_config
 
 app = typer.Typer(help="Database management commands")
@@ -336,6 +334,8 @@ def build_index(
         model = config.llm.embedding_model
         console.print(f"[dim]Using embedding model from config: {model}[/dim]")
 
+    from src.core.hybrid_search import HybridSearch
+    from src.core.search_indexing import auto_index_articles
     # Get current stats before indexing
     search = HybridSearch(db_path, embedding_model=model)
     before_stats = search.get_index_stats()
