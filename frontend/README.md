@@ -32,7 +32,16 @@ npm run dev
 
 The frontend will be available at http://localhost:3000
 
-**Note**: Make sure the backend API is running on port 8300:
+**Note**: Backend port is unified via root `.env` using `WORLDREASONER__SERVER__PORT`.
+
+Vite proxy resolution order:
+1. `BACKEND_PORT` (frontend-only override)
+2. `WORLDREASONER__SERVER__PORT` (shared source)
+3. `config/config.yaml` -> `server.port`
+4. `config/config.example.yaml` -> `server.port`
+5. fallback `8300`
+
+Make sure backend is running on the same resolved port:
 
 ```bash
 # In the project root
