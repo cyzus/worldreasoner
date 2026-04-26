@@ -20,7 +20,7 @@ function loadDotEnv() {
 const env = loadDotEnv()
 const FRONTEND_PORT = parseInt(env.FRONTEND_PORT ?? '5173')
 const FRONTEND_HOST = env.FRONTEND_HOST ?? '127.0.0.1'
-const BACKEND_PORT = parseInt(env.BACKEND_PORT ?? '8018')
+const BACKEND_PORT = parseInt(env.BACKEND_PORT ?? '8300')
 const BACKEND_HOST = env.BACKEND_HOST ?? '127.0.0.1'
 
 export default defineConfig({
