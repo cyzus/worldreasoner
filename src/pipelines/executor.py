@@ -21,6 +21,10 @@ from src.pipelines.types import PipelineProgress, PipelineResult, PipelineType
 from src.utils.logging import logger
 
 
+# Unified per-pipeline question concurrency limit (evidence/adaptive_evidence/graph_builder).
+PIPELINE_QUESTION_CONCURRENCY_LIMIT = 5
+
+
 class PipelineExecutor:
     """Service for executing pipelines with progress tracking."""
 
@@ -520,11 +524,10 @@ class PipelineExecutor:
         )
 
         results = PipelineResult([], [], [], 0.0)
-        
+
         # Simple parallel execution
-        import asyncio
-        semaphore = asyncio.Semaphore(3)
-        
+        semaphore = asyncio.Semaphore(PIPELINE_QUESTION_CONCURRENCY_LIMIT)
+
         async def process_question(i, qid):
             async with semaphore:
                 try:
@@ -610,7 +613,6 @@ class PipelineExecutor:
     ) -> PipelineResult:
         """Run adaptive multi-agent evidence pipeline."""
         from src.pipelines.evidence.pipeline import EvidencePipeline
-        import asyncio
 
         evidence_config = EvidencePipelineConfig()
         database_config = DatabaseConfig(db_path=self.db_path)
@@ -625,7 +627,7 @@ class PipelineExecutor:
         )
 
         results = PipelineResult([], [], [], 0.0)
-        semaphore = asyncio.Semaphore(3)
+        semaphore = asyncio.Semaphore(PIPELINE_QUESTION_CONCURRENCY_LIMIT)
 
         async def process_question(i, qid):
             async with semaphore:
@@ -964,7 +966,6 @@ class PipelineExecutor:
     ) -> PipelineResult:
         """Build causal graphs for questions that already have a causal explanation."""
         from src.pipelines.graph_builder.pipeline import GraphBuilderPipeline
-        import asyncio
 
         config = self.config
         pipeline = GraphBuilderPipeline(
@@ -975,7 +976,7 @@ class PipelineExecutor:
         )
 
         results = PipelineResult([], [], [], 0.0)
-        semaphore = asyncio.Semaphore(3)
+        semaphore = asyncio.Semaphore(PIPELINE_QUESTION_CONCURRENCY_LIMIT)
 
         async def process_question(i, qid):
             async with semaphore:
