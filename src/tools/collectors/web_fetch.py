@@ -35,7 +35,7 @@ class WebFetchTool(Tool):
         "url": {"type": "string", "description": "URL to fetch content from"},
         "timeout": {
             "type": "integer",
-            "description": "Timeout in seconds (default: 30)",
+            "description": "Timeout in seconds (default: 15)",
             "nullable": True,
         },
         "timestamp": {
@@ -140,7 +140,7 @@ class WebFetchTool(Tool):
         return None
 
     async def _fetch_async(
-        self, url: str, timeout: int = 30, timestamp: Optional[str] = None
+        self, url: str, timeout: int = 15, timestamp: Optional[str] = None
     ) -> Dict[str, Any]:
         """Async implementation of web fetching with hybrid strategy.
 
@@ -302,7 +302,7 @@ class WebFetchTool(Tool):
             }
 
     def forward(
-        self, url: str, timeout: int = 30, timestamp: Optional[str] = None
+        self, url: str, timeout: int = 15, timestamp: Optional[str] = None
     ) -> WebFetchOutput:
         """Fetch web page content.
 
@@ -352,7 +352,7 @@ class WebFetchTool(Tool):
         )
 
     async def forward_async(
-        self, url: str, timeout: int = 30, timestamp: Optional[str] = None
+        self, url: str, timeout: int = 15, timestamp: Optional[str] = None
     ) -> WebFetchOutput:
         """Async version of forward for use in async contexts.
 

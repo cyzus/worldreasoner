@@ -62,6 +62,11 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             "description": "Publication date (ISO format with time zone)",
         },
         "author": {"type": "string", "description": "Author name", "nullable": True},
+        "timeout": {
+            "type": "integer",
+            "description": "Web fetch timeout in seconds (default: 15)",
+            "nullable": True,
+        },
     }
     output_type = "object"
     output_schema = pydantic_to_output_schema(ArticleOutput)
@@ -117,6 +122,7 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         published_date: str,
         domain: str = "general",
         author: Optional[str] = None,
+        timeout: int = 15,
     ) -> ArticleOutput:
         """Fetch article content from URL and store as structured Article.
 
@@ -127,6 +133,7 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             domain: Article domain category (string, will be converted to enum)
             published_date: Publication date (ISO format with time zone)
             author: Optional author name
+            timeout: Web fetch timeout in seconds
 
         Returns:
             ArticleOutput: Pydantic model with article metadata and status
@@ -181,7 +188,7 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         # STAGE 2: Fetch content (only if URL not found)
         # This avoids passing large content through the LLM
         try:
-            web_output = self.web_visitor.forward(url)
+            web_output = self.web_visitor.forward(url, timeout=timeout)
 
             # WebFetchTool returns WebFetchOutput object now
             if not web_output.success or not web_output.content:

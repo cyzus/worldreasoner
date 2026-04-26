@@ -10,6 +10,9 @@ from src.utils.logging import logger
 
 load_dotenv()
 
+# Keep article collection timeout consistent across all ArticleCollector calls.
+ARTICLE_COLLECT_TIMEOUT_SECONDS = 15
+
 
 class WebSearchTool(Tool):
     """
@@ -450,15 +453,16 @@ class WebSearchTool(Tool):
                     published_date=item["published_date"],
                     domain=item["domain"],
                     author=item["author"],
+                    timeout=ARTICLE_COLLECT_TIMEOUT_SECONDS,
                 )
                 return item["title"]
 
-            # Execute concurrently with a timeout of 15 seconds
+            # Execute concurrently with a timeout consistent with ArticleCollector fetch timeout.
             with concurrent.futures.ThreadPoolExecutor(max_workers=len(eligible_items)) as executor:
                 future_to_item = {executor.submit(fetch_article, item): item for item in eligible_items}
                 
                 done, not_done = concurrent.futures.wait(
-                    future_to_item.keys(), timeout=15.0
+                    future_to_item.keys(), timeout=float(ARTICLE_COLLECT_TIMEOUT_SECONDS)
                 )
                 
                 for future in done:
