@@ -16,6 +16,10 @@ Usage:
 
     # Custom overlap set:
     python scripts/annotation_ui/export_data.py --db combined.db --annotator alice --total-annotators 3 --overlap-ids overlap.txt
+
+    # Prolific mode (generates per-session files for GitHub Pages deployment):
+    python scripts/annotation_ui/export_data.py --db combined.db --mode prolific --output-dir prolific_sessions --overlap-ids overlap.txt
+    python scripts/annotation_ui/export_data.py --db combined.db --mode prolific --output-dir prolific_sessions --overlap-ids overlap.txt --no-fetch
 """
 
 import asyncio
@@ -158,25 +162,20 @@ def assign_partition(question_id: str, all_annotators: list) -> str:
     return all_annotators[digest % len(all_annotators)]
 
 
-async def export_for_annotation(
-    db_path: str = "combined.db",
-    output_file: str = None,
-    annotator: Optional[str] = None,
-    total_annotators: int = 1,
-    annotator_names: Optional[list] = None,
-    overlap_ids: Optional[set] = None,
+async def _build_all_question_data(
+    db_path: str,
+    overlap_ids: set,
     fetch_prices: bool = True,
-):
-    if output_file is None:
-        suffix = f"_{annotator}" if annotator else ""
-        output_file = os.path.join(SCRIPT_DIR, f"annotation_data{suffix}.js")
+) -> list:
+    """Load all questions from DB and build export-ready dicts.
 
+    Returns a deterministically sorted list of q_data dicts (all questions).
+    Each dict includes is_overlap based on overlap_ids.
+    """
     db = GenericDatabase(db_path)
-
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-    # All questions that have at least one annotatable (non-outcome, non-rejected) event
     cursor.execute("""
         SELECT DISTINCT e.extracted_for_question_id
         FROM events e
@@ -189,47 +188,21 @@ async def export_for_annotation(
 
     all_questions = db.get_many(Question)
     questions = [q for q in all_questions if q.id in valid_q_ids]
-
-    # Sort deterministically by id so partitioning is stable across runs
     questions.sort(key=lambda q: q.id)
 
-    # Build annotator list for partitioning
-    if annotator_names:
-        all_annotators = annotator_names
-    elif annotator and total_annotators > 1:
-        # Synthetic names: annotator itself + positional slots
-        all_annotators = [f"annotator_{i}" for i in range(total_annotators)]
-        # Replace slot 0 with the actual annotator name so the hash is predictable
-        # In practice, always pass --annotator-names when using named annotators
-        all_annotators[0] = annotator
-    else:
-        all_annotators = [annotator or "default"]
-
-    if overlap_ids is None:
-        overlap_ids = set()
-
-    # Fetch / load price cache
     if fetch_prices:
         price_cache = await _refresh_price_cache(questions)
     else:
         price_cache = load_cache()
 
     export_data = []
-    event_count = 0
 
     for q in questions:
-        # Partitioning: include if this is the annotator's slice OR an overlap question
-        is_overlap = q.id in overlap_ids
-        if annotator and len(all_annotators) > 1 and not is_overlap:
-            assigned = assign_partition(q.id, all_annotators)
-            if assigned != annotator:
-                continue
-
+        is_overlap = q.id in (overlap_ids or set())
         events = db.get_many(Event, filters={"extracted_for_question_id": q.id})
         if not events:
             continue
 
-        # Chronological sort
         try:
             events = sorted(events, key=lambda e: str(getattr(e, "occurred_date", "") or ""))
         except Exception:
@@ -241,10 +214,8 @@ async def export_for_annotation(
         market_slug = meta.get("market_slug")
         polymarket_url = f"https://polymarket.com/event/{market_slug}" if market_slug else None
 
-        # Pre-compute change point timestamps for this question's price curve
         change_point_timestamps = get_change_point_timestamps(price_cache.get(q.id)) if is_polymarket else []
 
-        # Build valid event list with priority tags
         valid_events = []
         for e in events:
             if getattr(e, "is_outcome", False):
@@ -261,7 +232,6 @@ async def export_for_annotation(
             if hasattr(date_val, "strftime"):
                 date_val = date_val.strftime("%Y-%m-%d %H:%M")
 
-            # Skip events that occur after the resolution date
             if close_dt is not None and date_val != "Unknown Date":
                 try:
                     ed = datetime.fromisoformat(str(date_val).replace(" ", "T"))
@@ -273,7 +243,6 @@ async def export_for_annotation(
                 except Exception:
                     pass
 
-            # Check impact analysis
             impact_text = None
             has_impact = False
             try:
@@ -292,8 +261,6 @@ async def export_for_annotation(
                         "neutral":  "Neutral",
                         "mixed":    "Mixed",
                     }.get(raw_dir, raw_dir.capitalize())
-                    mag_str = f" ({int(row[2] * 100)}%)" if row[2] is not None else ""
-                    conf_str = f"**Confidence:** {int(row[3] * 100)}%" if row[3] is not None else ""
                     outcome_title = "Unknown Outcome"
                     if row[4]:
                         cursor.execute("SELECT title FROM events WHERE id = ?", (row[4],))
@@ -308,7 +275,6 @@ async def export_for_annotation(
             except Exception:
                 pass
 
-            # Source URL
             article_url = None
             try:
                 article_id = None
@@ -329,11 +295,6 @@ async def export_for_annotation(
             in_window = in_market_window(str(date_val), open_dt, close_dt) if is_polymarket else False
             at_change_point = is_near_change_point(str(date_val), change_point_timestamps)
 
-            # Priority tier for sorting (lower = higher priority):
-            # 0: at a price change point
-            # 1: within the market price window
-            # 2: has impact analysis (outside price window)
-            # 3: out-of-market / no signal
             if at_change_point:
                 priority = 0
             elif in_window:
@@ -358,11 +319,8 @@ async def export_for_annotation(
                 "reject_reason": None,
             })
 
-        # Sort by priority tier (stable — preserves chronological order within tier)
         valid_events.sort(key=lambda x: x["_priority"])
 
-        # Cap at MAX_EVENTS_PER_QUESTION, preserving priority order.
-        # Within each tier, use uniform stride sampling when over-represented.
         if len(valid_events) > MAX_EVENTS_PER_QUESTION:
             kept = []
             remaining = MAX_EVENTS_PER_QUESTION
@@ -381,7 +339,6 @@ async def export_for_annotation(
                     break
             valid_events = kept
 
-        # Remove internal sort key
         for ev in valid_events:
             del ev["_priority"]
 
@@ -401,18 +358,15 @@ async def export_for_annotation(
         q_type = _qt.value if hasattr(_qt, "value") else str(_qt)
         ground_truth = str(getattr(q, "ground_truth", "Unknown"))
 
-        # Fallback 1: metadata.options (Polymarket MCQ markets store choices here)
         if not raw_options:
             raw_options = meta.get("options") or []
-
-        # Fallback 2: synthesize minimal set
         if not raw_options:
             if q_type == "binary":
                 raw_options = ["Yes", "No"]
             else:
                 raw_options = [ground_truth] if ground_truth not in ("Unknown", "None", "") else []
 
-        q_data = {
+        export_data.append({
             "id": q.id,
             "title": q.question_text,
             "question_type": q_type,
@@ -429,17 +383,51 @@ async def export_for_annotation(
             "polymarket_url": polymarket_url,
             "price_data": price_cache.get(q.id),
             "events": valid_events,
-        }
-
-        export_data.append(q_data)
-        event_count += len(valid_events)
+        })
 
     conn.close()
+    return export_data
 
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+
+async def export_for_annotation(
+    db_path: str = "combined.db",
+    output_file: str = None,
+    annotator: Optional[str] = None,
+    total_annotators: int = 1,
+    annotator_names: Optional[list] = None,
+    overlap_ids: Optional[set] = None,
+    fetch_prices: bool = True,
+):
+    if output_file is None:
+        suffix = f"_{annotator}" if annotator else ""
+        output_file = os.path.join(SCRIPT_DIR, f"annotation_data{suffix}.js")
+
+    if overlap_ids is None:
+        overlap_ids = set()
+
+    if annotator_names:
+        all_annotators = annotator_names
+    elif annotator and total_annotators > 1:
+        all_annotators = [f"annotator_{i}" for i in range(total_annotators)]
+        all_annotators[0] = annotator
+    else:
+        all_annotators = [annotator or "default"]
+
+    all_data = await _build_all_question_data(db_path, overlap_ids, fetch_prices)
+
+    if annotator and len(all_annotators) > 1:
+        export_data = [
+            q for q in all_data
+            if q["is_overlap"] or assign_partition(q["id"], all_annotators) == annotator
+        ]
+    else:
+        export_data = all_data
+
+    os.makedirs(os.path.dirname(os.path.abspath(output_file)), exist_ok=True)
     with open(output_file, "w", encoding="utf-8") as f:
-        f.write(f"const annotationData = {json.dumps(export_data, indent=2, ensure_ascii=False)};")
+        f.write(f"var annotationData = {json.dumps(export_data, indent=2, ensure_ascii=False)};")
 
+    event_count = sum(len(q["events"]) for q in export_data)
     print(f"Exported {len(export_data)} questions, {event_count} events -> {output_file}")
     if annotator:
         overlap_count = sum(1 for q in export_data if q["is_overlap"])
@@ -448,18 +436,115 @@ async def export_for_annotation(
         print("price_cache.json not found -- run fetch_price_history.py first for market charts.")
 
 
+def _pair_into_sessions(questions: list, questions_per_session: int) -> list:
+    """Interleave polymarket/news questions then chunk into fixed-size sessions."""
+    poly = [q for q in questions if q["is_polymarket"]]
+    news = [q for q in questions if not q["is_polymarket"]]
+    interleaved = []
+    p, n = 0, 0
+    while p < len(poly) or n < len(news):
+        if p < len(poly):
+            interleaved.append(poly[p]); p += 1
+        if n < len(news):
+            interleaved.append(news[n]); n += 1
+    return [interleaved[i:i + questions_per_session]
+            for i in range(0, len(interleaved), questions_per_session)]
+
+
+async def export_for_prolific(
+    db_path: str,
+    output_dir: str,
+    overlap_ids: set = None,
+    questions_per_session: int = 2,
+    fetch_prices: bool = True,
+):
+    """Generate per-session JS files for Prolific deployment.
+
+    Output directory contains:
+      annotation_data_s01.js … sNN.js   — unique question sessions (1 participant each)
+      annotation_data_ov01.js … ovMM.js — overlap sessions (3 participants each)
+      manifest.json                      — lists all sessions for Prolific setup
+    """
+    if overlap_ids is None:
+        overlap_ids = set()
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    all_data = await _build_all_question_data(db_path, overlap_ids, fetch_prices)
+    overlap_qs = [q for q in all_data if q["is_overlap"]]
+    unique_qs  = [q for q in all_data if not q["is_overlap"]]
+
+    unique_sessions  = _pair_into_sessions(unique_qs,  questions_per_session)
+    overlap_sessions = _pair_into_sessions(overlap_qs, questions_per_session)
+
+    manifest = {
+        "unique_sessions": [],
+        "overlap_sessions": [],
+        "questions_per_session": questions_per_session,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    def write_session(session_id: str, questions: list) -> None:
+        out_path = os.path.join(output_dir, f"annotation_data_{session_id}.js")
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(f"var annotationData = {json.dumps(questions, indent=2, ensure_ascii=False)};")
+
+    for i, session in enumerate(unique_sessions, 1):
+        sid = f"s{i:02d}"
+        write_session(sid, session)
+        manifest["unique_sessions"].append({
+            "id": sid,
+            "questions": len(session),
+            "question_ids": [q["id"] for q in session],
+        })
+        print(f"  [{sid}] {len(session)} questions")
+
+    for i, session in enumerate(overlap_sessions, 1):
+        sid = f"ov{i:02d}"
+        write_session(sid, session)
+        manifest["overlap_sessions"].append({
+            "id": sid,
+            "questions": len(session),
+            "question_ids": [q["id"] for q in session],
+            "annotators_needed": 3,
+        })
+        print(f"  [{sid}] {len(session)} overlap questions")
+
+    manifest_path = os.path.join(output_dir, "manifest.json")
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+
+    n_unique  = len(unique_sessions)
+    n_overlap = len(overlap_sessions)
+    print(f"\nExported {len(unique_qs)} unique + {len(overlap_qs)} overlap questions")
+    print(f"→ {n_unique} unique sessions + {n_overlap} overlap sessions → {output_dir}/")
+    print(f"→ Manifest: {manifest_path}")
+    print(f"\n── Prolific setup ──────────────────────────────────────────────────")
+    print(f"  Unique batch  : {n_unique} participant slots  (s01 – s{n_unique:02d})")
+    print(f"  Overlap batch : {n_overlap} sessions × 3 participants = {n_overlap * 3} slots  (ov01 – ov{n_overlap:02d})")
+    print(f"  URL template  : https://<your-site>/?session=s01&PROLIFIC_PID={{%PROLIFIC_PID%}}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Export data for UI annotation.")
     parser.add_argument("--db", default="combined.db", help="Path to SQLite DB")
+    parser.add_argument("--mode", choices=["annotator", "prolific"], default="annotator",
+                        help="'annotator' (default) or 'prolific' (per-session files for GitHub Pages)")
+    # annotator mode
     parser.add_argument("--out", default=None, help="Output JS file (auto-named if omitted)")
     parser.add_argument("--annotator", default=None, help="Annotator name (omit for full export)")
-    parser.add_argument("--total-annotators", type=int, default=1, help="Total number of annotators")
-    parser.add_argument("--annotator-names", nargs="+", default=None,
-                        help="Ordered list of annotator names (must match --total-annotators)")
+    parser.add_argument("--total-annotators", type=int, default=1)
+    parser.add_argument("--annotator-names", nargs="+", default=None)
+    # prolific mode
+    parser.add_argument("--output-dir", default=None,
+                        help="[prolific] Directory to write session files (default: prolific_sessions/)")
+    parser.add_argument("--questions-per-session", type=int, default=2,
+                        help="[prolific] Questions per session (default: 2)")
+    # shared
     parser.add_argument("--overlap-ids", default=None,
-                        help="Path to file with one question ID per line for overlap set")
+                        help="Path to file with one question ID per line for the overlap set")
     parser.add_argument("--no-fetch", action="store_true",
-                        help="Skip price history fetch and use existing cache only")
+                        help="Skip price history fetch; use existing cache only")
     args = parser.parse_args()
 
     overlap_ids = set()
@@ -467,12 +552,22 @@ if __name__ == "__main__":
         with open(args.overlap_ids) as f:
             overlap_ids = set(line.strip() for line in f if line.strip())
 
-    asyncio.run(export_for_annotation(
-        db_path=args.db,
-        output_file=args.out,
-        annotator=args.annotator,
-        total_annotators=args.total_annotators,
-        annotator_names=args.annotator_names,
-        overlap_ids=overlap_ids,
-        fetch_prices=not args.no_fetch,
-    ))
+    if args.mode == "prolific":
+        output_dir = args.output_dir or os.path.join(SCRIPT_DIR, "prolific_sessions")
+        asyncio.run(export_for_prolific(
+            db_path=args.db,
+            output_dir=output_dir,
+            overlap_ids=overlap_ids,
+            questions_per_session=args.questions_per_session,
+            fetch_prices=not args.no_fetch,
+        ))
+    else:
+        asyncio.run(export_for_annotation(
+            db_path=args.db,
+            output_file=args.out,
+            annotator=args.annotator,
+            total_annotators=args.total_annotators,
+            annotator_names=args.annotator_names,
+            overlap_ids=overlap_ids,
+            fetch_prices=not args.no_fetch,
+        ))
