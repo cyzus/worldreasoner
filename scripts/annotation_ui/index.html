@@ -692,7 +692,8 @@
             const plotH = H - mT - mB;
 
             const tMin = history[0].t;
-            const tMax = history[history.length - 1].t;
+            let tMax = history[history.length - 1].t;
+            if (marketClose) { const rd = parseDate(marketClose); if (rd) tMax = Math.max(tMax, rd.getTime() / 1000); }
             const tRange = tMax - tMin || 1;
 
             const toX = t  => mL + ((t  - tMin) / tRange) * plotW;
@@ -730,6 +731,25 @@
                 ctx.beginPath(); ctx.moveTo(x, mT); ctx.lineTo(x, mT + plotH); ctx.stroke();
             }
 
+            // ── Resolution date marker ──
+            if (marketClose) {
+                const rd = parseDate(marketClose);
+                if (rd) {
+                    const rx = toX(rd.getTime() / 1000);
+                    if (rx >= mL && rx <= mL + plotW) {
+                        ctx.save();
+                        ctx.strokeStyle = '#ef4444';
+                        ctx.lineWidth = 1.5;
+                        ctx.setLineDash([]);
+                        ctx.beginPath(); ctx.moveTo(rx, mT); ctx.lineTo(rx, mT + plotH); ctx.stroke();
+                        ctx.fillStyle = '#ef4444';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('▼ resolve', rx, mT - 1);
+                        ctx.restore();
+                    }
+                }
+            }
+
             // ── Event date marker ──
             if (eventDate) {
                 const ed = parseDate(eventDate);
@@ -742,7 +762,6 @@
                         ctx.setLineDash([4, 3]);
                         ctx.beginPath(); ctx.moveTo(ex, mT); ctx.lineTo(ex, mT + plotH); ctx.stroke();
                         ctx.setLineDash([]);
-                        // Label: "Event" above the line
                         ctx.fillStyle = '#f59e0b';
                         ctx.textAlign = 'center';
                         ctx.fillText('▲ event', ex, mT - 1);
@@ -967,7 +986,8 @@
 
                 let statusLabel = event.current_status.toUpperCase();
                 if (event.reject_reason) {
-                    const short = event.reject_reason === 'TooBoard' ? 'Too Broad' : event.reject_reason.split(' ')[0];
+                    const reasonLabels = { TooBoard: 'Too Broad', NoLink: 'No Link', Unclear: 'Unclear' };
+                    const short = reasonLabels[event.reject_reason] || event.reject_reason.split(' ')[0];
                     statusLabel += ` (${short})`;
                 }
 
@@ -979,6 +999,17 @@
 
                 // Impact box
                 const isRejected = event.current_status === 'rejected';
+                // Price chart — shown for any in-window polymarket event
+                const chartHtml = (q.price_data && inWindow) ? `
+                    <div class="price-chart-container" style="max-width:100%;margin-bottom:14px;">
+                        <div class="chart-label">Polymarket Price (Yes) — amber line = event date</div>
+                        <canvas class="price-chart-canvas" id="chart-${event.id}"></canvas>
+                        <div class="price-chart-meta">
+                            <span>Open: ${q.price_data.price_at_open != null ? (q.price_data.price_at_open * 100).toFixed(0) + '%' : '—'}</span>
+                            <span>Final: ${q.price_data.final_price != null ? (q.price_data.final_price * 100).toFixed(0) + '%' : '—'}</span>
+                        </div>
+                    </div>` : '';
+
                 let impactHtml;
                 if (hasImpact) {
                     const accActive = event.reasoning_status === 'accurate' ? 'active' : '';
@@ -997,15 +1028,6 @@
                                 </button>
                             </div>
                             <div class="markdown-body" style="font-size:0.92rem;">${marked.parse(event.impact)}</div>
-                            ${(q.price_data && inWindow) ? `
-                            <div class="price-chart-container">
-                                <div class="chart-label">Polymarket Price (Yes) — amber line = event date</div>
-                                <canvas class="price-chart-canvas" id="chart-${event.id}"></canvas>
-                                <div class="price-chart-meta">
-                                    <span>Open: ${q.price_data.price_at_open != null ? (q.price_data.price_at_open * 100).toFixed(0) + '%' : '—'}</span>
-                                    <span>Final: ${q.price_data.final_price != null ? (q.price_data.final_price * 100).toFixed(0) + '%' : '—'}</span>
-                                </div>
-                            </div>` : ''}
                         </div>`;
                 } else {
                     impactHtml = `
@@ -1023,15 +1045,14 @@
                     </div>
                     <div class="event-title">${event.title}</div>
                     <div class="event-description markdown-body">${marked.parse(event.description || '')}</div>
-                    <div class="detail-box box-source">
-                        <strong>Source</strong>
-                        ${event.source_url
-                            ? `<a href="${event.source_url}" target="_blank"
-                                style="color:var(--primary);font-size:0.82rem;text-decoration:none;font-weight:600;
-                                       margin-top:8px;display:inline-block;border:1px solid #cbd5e1;
-                                       padding:3px 8px;border-radius:4px;">&#8599; View Original Article</a>`
-                            : '<span style="color:#94a3b8;font-size:0.85rem;font-style:italic;">No source link available.</span>'}
-                    </div>
+                    ${event.source_url
+                        ? `<div style="margin-bottom:14px;font-size:0.82rem;">
+                               <a href="${event.source_url}" target="_blank"
+                                  style="color:var(--primary);text-decoration:none;font-weight:600;">
+                                   &#8599; Source
+                               </a>
+                           </div>`
+                        : ''}
                     <div class="action-row">
                         <button class="btn-approve" onclick="annotate('${q.id}', '${event.id}', 'approved')">
                             &#10003; Approve
@@ -1047,8 +1068,17 @@
                                 <button onclick="annotate('${q.id}', '${event.id}', 'rejected', 'TooBoard')">Too Broad (trend, not an event)</button>
                             </div>
                         </div>
-                        <button class="btn-skip" onclick="annotate('${q.id}', '${event.id}', 'skipped')">Skip</button>
+                        <div style="position:relative;">
+                            <button class="btn-skip" onclick="toggleSkipMenu('${event.id}', event)">
+                                Skip <span style="font-size:0.7em;margin-left:4px;">&#9660;</span>
+                            </button>
+                            <div class="reject-menu" id="skip-menu-${event.id}">
+                                <button onclick="annotate('${q.id}', '${event.id}', 'skipped', 'NoLink')">Link not available</button>
+                                <button onclick="annotate('${q.id}', '${event.id}', 'skipped', 'Unclear')">Unclear / unsure</button>
+                            </div>
+                        </div>
                     </div>
+                    ${chartHtml}
                     ${impactHtml}`;
 
                 timeline.appendChild(card);
@@ -1060,7 +1090,6 @@
             requestAnimationFrame(() => {
                 q.events.forEach(event => {
                     if (!q.price_data || !event.in_market_window) return;
-                    if (!event.has_impact) return;
                     const canvas = document.getElementById(`chart-${event.id}`);
                     if (canvas) {
                         drawPriceChart(canvas, q.price_data, event.date, q.market_open, q.market_close);
@@ -1072,12 +1101,23 @@
 
         // ── Annotation actions ────────────────────────────────────────────
 
+        const REASON_LABELS = { TooBoard: 'Too Broad', NoLink: 'No Link', Unclear: 'Unclear' };
+
         window.toggleRejectMenu = function(eventId, e) {
             e.stopPropagation();
             document.querySelectorAll('.reject-menu').forEach(m => {
                 if (m.id !== `menu-${eventId}`) m.style.display = 'none';
             });
             const menu = document.getElementById(`menu-${eventId}`);
+            menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+        };
+
+        window.toggleSkipMenu = function(eventId, e) {
+            e.stopPropagation();
+            document.querySelectorAll('.reject-menu').forEach(m => {
+                if (m.id !== `skip-menu-${eventId}`) m.style.display = 'none';
+            });
+            const menu = document.getElementById(`skip-menu-${eventId}`);
             menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
         };
 
@@ -1093,7 +1133,7 @@
 
             let badgeText = status.toUpperCase();
             if (reason) {
-                const short = reason === 'TooBoard' ? 'Too Broad' : reason.split(' ')[0];
+                const short = REASON_LABELS[reason] || reason.split(' ')[0];
                 badgeText += ` (${short})`;
             }
             card.querySelector('.status-badge').innerText = badgeText;
@@ -1150,7 +1190,7 @@
         }
 
         window.onclick = function(event) {
-            if (!event.target.closest('.btn-reject')) {
+            if (!event.target.closest('.btn-reject') && !event.target.closest('.btn-skip')) {
                 document.querySelectorAll('.reject-menu').forEach(m => m.style.display = 'none');
             }
         };

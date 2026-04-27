@@ -33,6 +33,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from src.core.database import GenericDatabase
 from src.domain.models import Question, Event
 from scripts.annotation_ui.fetch_price_history import fetch_for_question, load_cache, save_cache
+from src.integrations.polymarket import analyze_price_curve
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PRICE_CACHE_FILE = os.path.join(SCRIPT_DIR, "price_cache.json")
@@ -110,6 +111,45 @@ def in_market_window(event_date_str: str, open_dt, close_dt) -> bool:
     if hi and ed > hi:
         return False
     return True
+
+
+CHANGE_POINT_TOLERANCE_DAYS = 5
+
+
+def get_change_point_timestamps(price_data: dict) -> list:
+    """Return unix-second timestamps of all turning points, sharp movements, and lead changes."""
+    history = (price_data or {}).get("history", [])
+    if not history:
+        return []
+    try:
+        analysis = analyze_price_curve(history)
+    except Exception:
+        return []
+    timestamps = []
+    for pt in analysis.get("turning_points", []):
+        if "timestamp" in pt:
+            timestamps.append(pt["timestamp"])
+    for mv in analysis.get("sharp_movements", []):
+        if "start_timestamp" in mv:
+            timestamps.append(mv["start_timestamp"])
+    for lc in analysis.get("lead_changes", []):
+        if "timestamp" in lc:
+            timestamps.append(lc["timestamp"])
+    return timestamps
+
+
+def is_near_change_point(event_date_str: str, change_point_timestamps: list) -> bool:
+    if not event_date_str or event_date_str == "Unknown Date" or not change_point_timestamps:
+        return False
+    try:
+        ed = datetime.fromisoformat(str(event_date_str).replace(" ", "T"))
+        if ed.tzinfo is None:
+            ed = ed.replace(tzinfo=timezone.utc)
+        event_ts = ed.timestamp()
+    except Exception:
+        return False
+    tolerance = CHANGE_POINT_TOLERANCE_DAYS * 86400
+    return any(abs(event_ts - cp_ts) <= tolerance for cp_ts in change_point_timestamps)
 
 
 def assign_partition(question_id: str, all_annotators: list) -> str:
@@ -201,6 +241,9 @@ async def export_for_annotation(
         market_slug = meta.get("market_slug")
         polymarket_url = f"https://polymarket.com/event/{market_slug}" if market_slug else None
 
+        # Pre-compute change point timestamps for this question's price curve
+        change_point_timestamps = get_change_point_timestamps(price_cache.get(q.id)) if is_polymarket else []
+
         # Build valid event list with priority tags
         valid_events = []
         for e in events:
@@ -217,6 +260,18 @@ async def export_for_annotation(
             date_val = getattr(e, "occurred_date", None) or "Unknown Date"
             if hasattr(date_val, "strftime"):
                 date_val = date_val.strftime("%Y-%m-%d %H:%M")
+
+            # Skip events that occur after the resolution date
+            if close_dt is not None and date_val != "Unknown Date":
+                try:
+                    ed = datetime.fromisoformat(str(date_val).replace(" ", "T"))
+                    if ed.tzinfo is None:
+                        ed = ed.replace(tzinfo=timezone.utc)
+                    cd = close_dt if close_dt.tzinfo else close_dt.replace(tzinfo=timezone.utc)
+                    if ed > cd:
+                        continue
+                except Exception:
+                    pass
 
             # Check impact analysis
             impact_text = None
@@ -246,8 +301,8 @@ async def export_for_annotation(
                         if r2 and r2[0]:
                             outcome_title = r2[0]
                     impact_text = (
-                        f"**Affects:** {outcome_title}  \n"
-                        f"**Direction:** {dir_label}{mag_str}\n{conf_str}\n\n"
+                        f"**Affects:** {outcome_title}  \n\n"
+                        f"**Direction:** {dir_label}    \n\n"
                         f"**Reasoning:**\n{row[1]}"
                     )
             except Exception:
@@ -272,13 +327,18 @@ async def export_for_annotation(
                 pass
 
             in_window = in_market_window(str(date_val), open_dt, close_dt) if is_polymarket else False
+            at_change_point = is_near_change_point(str(date_val), change_point_timestamps)
 
-            # Priority tier for sorting (lower = higher priority)
-            if has_impact and in_window:
+            # Priority tier for sorting (lower = higher priority):
+            # 0: at a price change point
+            # 1: within the market price window
+            # 2: has impact analysis (outside price window)
+            # 3: out-of-market / no signal
+            if at_change_point:
                 priority = 0
-            elif has_impact:
-                priority = 1
             elif in_window:
+                priority = 1
+            elif has_impact:
                 priority = 2
             else:
                 priority = 3
@@ -301,20 +361,25 @@ async def export_for_annotation(
         # Sort by priority tier (stable — preserves chronological order within tier)
         valid_events.sort(key=lambda x: x["_priority"])
 
-        # Cap at MAX_EVENTS_PER_QUESTION; within a tier use uniform stride if over-represented
+        # Cap at MAX_EVENTS_PER_QUESTION, preserving priority order.
+        # Within each tier, use uniform stride sampling when over-represented.
         if len(valid_events) > MAX_EVENTS_PER_QUESTION:
-            # Keep all tier-0, fill remaining slots with strides from lower tiers
-            tier0 = [e for e in valid_events if e["_priority"] == 0]
-            rest = [e for e in valid_events if e["_priority"] > 0]
-            slots = MAX_EVENTS_PER_QUESTION - min(len(tier0), MAX_EVENTS_PER_QUESTION)
-            if len(tier0) >= MAX_EVENTS_PER_QUESTION:
-                valid_events = tier0[:MAX_EVENTS_PER_QUESTION]
-            elif rest:
-                step = len(rest) / slots
-                sampled_rest = [rest[int(i * step)] for i in range(slots)]
-                valid_events = tier0 + sampled_rest
-            else:
-                valid_events = tier0
+            kept = []
+            remaining = MAX_EVENTS_PER_QUESTION
+            for tier in range(4):
+                tier_events = [e for e in valid_events if e["_priority"] == tier]
+                if not tier_events:
+                    continue
+                if len(tier_events) <= remaining:
+                    kept.extend(tier_events)
+                    remaining -= len(tier_events)
+                else:
+                    step = len(tier_events) / remaining
+                    kept.extend(tier_events[int(i * step)] for i in range(remaining))
+                    remaining = 0
+                if remaining == 0:
+                    break
+            valid_events = kept
 
         # Remove internal sort key
         for ev in valid_events:
