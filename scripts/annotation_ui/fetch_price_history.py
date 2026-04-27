@@ -172,7 +172,7 @@ async def main(db_path: str, force: bool = False) -> None:
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT DISTINCT extracted_for_question_id FROM event_outcome_impacts"
+        "SELECT DISTINCT question_id FROM event_outcome_impacts"
     )
     valid_q_ids = set(r[0] for r in cursor.fetchall())
     conn.close()
