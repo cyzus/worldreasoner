@@ -166,11 +166,13 @@ async def _build_all_question_data(
     db_path: str,
     overlap_ids: set,
     fetch_prices: bool = True,
+    include_ids: Optional[set] = None,
 ) -> list:
     """Load all questions from DB and build export-ready dicts.
 
     Returns a deterministically sorted list of q_data dicts (all questions).
     Each dict includes is_overlap based on overlap_ids.
+    If include_ids is provided, only those question IDs are exported.
     """
     db = GenericDatabase(db_path)
     conn = sqlite3.connect(db_path)
@@ -188,6 +190,8 @@ async def _build_all_question_data(
 
     all_questions = db.get_many(Question)
     questions = [q for q in all_questions if q.id in valid_q_ids]
+    if include_ids:
+        questions = [q for q in questions if q.id in include_ids]
     questions.sort(key=lambda q: q.id)
 
     if fetch_prices:
@@ -396,6 +400,7 @@ async def export_for_annotation(
     total_annotators: int = 1,
     annotator_names: Optional[list] = None,
     overlap_ids: Optional[set] = None,
+    include_ids: Optional[set] = None,
     fetch_prices: bool = True,
 ):
     if output_file is None:
@@ -413,7 +418,7 @@ async def export_for_annotation(
     else:
         all_annotators = [annotator or "default"]
 
-    all_data = await _build_all_question_data(db_path, overlap_ids, fetch_prices)
+    all_data = await _build_all_question_data(db_path, overlap_ids, fetch_prices, include_ids)
 
     if annotator and len(all_annotators) > 1:
         export_data = [
@@ -455,6 +460,7 @@ async def export_for_prolific(
     db_path: str,
     output_dir: str,
     overlap_ids: set = None,
+    include_ids: Optional[set] = None,
     questions_per_session: int = 2,
     fetch_prices: bool = True,
 ):
@@ -470,7 +476,7 @@ async def export_for_prolific(
 
     os.makedirs(output_dir, exist_ok=True)
 
-    all_data = await _build_all_question_data(db_path, overlap_ids, fetch_prices)
+    all_data = await _build_all_question_data(db_path, overlap_ids, fetch_prices, include_ids)
     overlap_qs = [q for q in all_data if q["is_overlap"]]
     unique_qs  = [q for q in all_data if not q["is_overlap"]]
 
@@ -543,14 +549,20 @@ if __name__ == "__main__":
     # shared
     parser.add_argument("--overlap-ids", default=None,
                         help="Path to file with one question ID per line for the overlap set")
+    parser.add_argument("--include-ids", default=None,
+                        help="Path to file with one question ID per line; only these questions are exported (all polymarket + selected news)")
     parser.add_argument("--no-fetch", action="store_true",
                         help="Skip price history fetch; use existing cache only")
     args = parser.parse_args()
 
-    overlap_ids = set()
-    if args.overlap_ids and os.path.exists(args.overlap_ids):
-        with open(args.overlap_ids) as f:
-            overlap_ids = set(line.strip() for line in f if line.strip())
+    def _read_ids(path):
+        if path and os.path.exists(path):
+            with open(path) as f:
+                return set(line.strip() for line in f if line.strip())
+        return set()
+
+    overlap_ids = _read_ids(args.overlap_ids)
+    include_ids = _read_ids(args.include_ids) or None
 
     if args.mode == "prolific":
         output_dir = args.output_dir or os.path.join(SCRIPT_DIR, "prolific_sessions")
@@ -558,6 +570,7 @@ if __name__ == "__main__":
             db_path=args.db,
             output_dir=output_dir,
             overlap_ids=overlap_ids,
+            include_ids=include_ids,
             questions_per_session=args.questions_per_session,
             fetch_prices=not args.no_fetch,
         ))
@@ -569,5 +582,6 @@ if __name__ == "__main__":
             total_annotators=args.total_annotators,
             annotator_names=args.annotator_names,
             overlap_ids=overlap_ids,
+            include_ids=include_ids,
             fetch_prices=not args.no_fetch,
         ))
