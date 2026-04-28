@@ -559,10 +559,87 @@
             from { transform: translateX(0); opacity: 1; }
             to { transform: translateX(400px); opacity: 0; }
         }
+
+        /* ── Completion banner + overlay ── */
+        #completion-banner {
+            display: none;
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            background: #0f172a;
+            color: white;
+            padding: 18px 32px;
+            z-index: 200;
+            align-items: center;
+            gap: 20px;
+            border-top: 3px solid var(--success);
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.25);
+        }
+        #completion-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15,23,42,0.92);
+            z-index: 300;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .overlay-card {
+            background: white;
+            border-radius: 16px;
+            padding: 48px;
+            max-width: 480px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.3);
+        }
+        .completion-code-box {
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 16px 24px;
+            font-size: 1.4rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            color: #1e40af;
+            margin: 20px 0;
+            border: 2px solid #bfdbfe;
+            word-break: break-all;
+        }
     </style>
 </head>
 <body>
-    <script src="annotation_data.js"></script>
+    <!-- Shown when all events are annotated -->
+    <div id="completion-banner">
+        <div style="flex:1">
+            <div style="font-weight:700;font-size:1rem;">&#10003; All events annotated!</div>
+            <div style="font-size:0.83rem;color:#94a3b8;margin-top:2px;">Please submit your results to complete the study.</div>
+        </div>
+        <button id="btn-submit" style="background:var(--success);color:white;padding:11px 28px;border-radius:8px;font-size:0.95rem;font-weight:700;">
+            Submit &#38; Get Completion Code
+        </button>
+        <button id="btn-download-fallback" style="display:none;background:#475569;color:white;padding:11px 20px;border-radius:8px;font-size:0.95rem;font-weight:700;">
+            &#8595; Download JSON (backup)
+        </button>
+    </div>
+
+    <!-- Shown after successful submission -->
+    <div id="completion-overlay">
+        <div class="overlay-card">
+            <div style="font-size:2.5rem;margin-bottom:12px;color:var(--success);">&#10003;</div>
+            <h2 style="font-size:1.4rem;font-weight:700;color:#0f172a;margin:0 0 8px;">Results Submitted!</h2>
+            <p style="color:#64748b;margin-bottom:4px;font-size:0.92rem;">Your completion code:</p>
+            <div class="completion-code-box" id="completion-code-display">&#8212;</div>
+            <a id="prolific-return-btn" href="#" target="_blank"
+               style="display:block;background:var(--success);color:white;text-decoration:none;
+                      padding:13px 32px;border-radius:8px;font-size:1rem;font-weight:700;margin-bottom:12px;">
+                Return to Prolific &#8594;
+            </a>
+            <button onclick="exportJSON()" style="background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;
+                    padding:10px 24px;border-radius:8px;font-size:0.88rem;">
+                &#8595; Also download JSON
+            </button>
+        </div>
+    </div>
 
     <div class="sidebar">
         <div class="q-selector">
@@ -598,11 +675,19 @@
     </div>
 
     <script>
+        // ── Prolific config — fill these in before deploying ─────────────
+        const SUBMIT_ENDPOINT = '';  // TODO: paste your Google Apps Script web app URL
+        const COMPLETION_CODE = '';  // TODO: paste your Prolific completion code
+
+        const _urlParams = new URLSearchParams(window.location.search);
+        const SESSION_ID   = _urlParams.get('session') || null;
+        const PROLIFIC_PID = _urlParams.get('PROLIFIC_PID') || 'preview';
+
         let currentQIndex = 0;
         let totalEvents = 0;
         let annotatedEvents = 0;
-        let stateData = JSON.parse(JSON.stringify(annotationData || []));
-        const STORAGE_KEY = 'annotation_state_v2';
+        let stateData = [];
+        const STORAGE_KEY = 'annotation_state_v2_' + (SESSION_ID || 'local');
 
         // ── Persistence ──────────────────────────────────────────────────
 
@@ -828,6 +913,51 @@
                 tip.style.top  = Math.max(0, ty - 28) + 'px';
             });
             canvas.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+        }
+
+        // ── Prolific submit ───────────────────────────────────────────────
+
+        async function submitResults() {
+            const btn = document.getElementById('btn-submit');
+            btn.disabled = true;
+            btn.innerText = 'Submitting…';
+
+            const payload = {
+                prolific_pid: PROLIFIC_PID,
+                session_id: SESSION_ID,
+                submitted_at: new Date().toISOString(),
+                data: stateData,
+            };
+
+            try {
+                if (!SUBMIT_ENDPOINT) throw new Error('No endpoint configured');
+                const resp = await fetch(SUBMIT_ENDPOINT, {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                });
+                const result = await resp.json();
+                if (!result.ok) throw new Error(result.error || 'Server error');
+                showCompletionScreen();
+            } catch (err) {
+                console.error('Submit failed:', err);
+                btn.disabled = false;
+                btn.innerText = 'Retry Submit';
+                document.getElementById('btn-download-fallback').style.display = '';
+                showNotification(
+                    'Submit failed — download the JSON backup and email it to the researcher.',
+                    '#ef4444'
+                );
+            }
+        }
+
+        function showCompletionScreen() {
+            document.getElementById('completion-code-display').innerText =
+                COMPLETION_CODE || '(see study instructions)';
+            const returnUrl = COMPLETION_CODE
+                ? `https://app.prolific.com/submissions/complete?cc=${COMPLETION_CODE}`
+                : '#';
+            document.getElementById('prolific-return-btn').href = returnUrl;
+            document.getElementById('completion-overlay').style.display = 'flex';
         }
 
         // ── Init ──────────────────────────────────────────────────────────
@@ -1173,17 +1303,25 @@
                 const btn = document.getElementById('btn-export');
                 btn.style.boxShadow = '0 0 15px rgba(79,70,229,0.6)';
                 btn.innerText = '✨ Download Final Results';
+                const banner = document.getElementById('completion-banner');
+                if (banner) banner.style.display = 'flex';
             }
         }
 
         // ── Export ────────────────────────────────────────────────────────
 
         function exportJSON() {
+            const payload = {
+                prolific_pid: PROLIFIC_PID,
+                session_id: SESSION_ID,
+                exported_at: new Date().toISOString(),
+                data: stateData,
+            };
             const dataStr = 'data:text/json;charset=utf-8,' +
-                encodeURIComponent(JSON.stringify(stateData, null, 2));
+                encodeURIComponent(JSON.stringify(payload, null, 2));
             const a = document.createElement('a');
             a.setAttribute('href', dataStr);
-            a.setAttribute('download', 'annotation_results.json');
+            a.setAttribute('download', `annotation_${PROLIFIC_PID}_${SESSION_ID || 'local'}.json`);
             document.body.appendChild(a);
             a.click();
             a.remove();
@@ -1195,7 +1333,30 @@
             }
         };
 
-        window.onload = init;
+        window.onload = function() {
+            // Dynamically load session data file, then init.
+            // Falls back to annotation_data.js for local testing (no ?session= param).
+            const src = SESSION_ID ? `annotation_data_${SESSION_ID}.js` : 'annotation_data.js';
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = function() {
+                stateData = JSON.parse(JSON.stringify(window.annotationData || annotationData || []));
+                init();
+                const btnSubmit = document.getElementById('btn-submit');
+                if (btnSubmit) btnSubmit.addEventListener('click', submitResults);
+                const btnFallback = document.getElementById('btn-download-fallback');
+                if (btnFallback) btnFallback.addEventListener('click', exportJSON);
+            };
+            script.onerror = function() {
+                const ctx = document.getElementById('q-context');
+                if (ctx) ctx.innerHTML =
+                    `<p style="padding:20px;color:#ef4444;font-size:0.95rem;">
+                        Error: could not load session <strong>${src}</strong>.<br>
+                        Check that your study URL includes <code>?session=sXX</code>.
+                     </p>`;
+            };
+            document.head.appendChild(script);
+        };
     </script>
 </body>
 </html>
