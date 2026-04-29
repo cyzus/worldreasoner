@@ -156,6 +156,21 @@ def is_near_change_point(event_date_str: str, change_point_timestamps: list) -> 
     return any(abs(event_ts - cp_ts) <= tolerance for cp_ts in change_point_timestamps)
 
 
+def is_mentioned_in_explanation(title: str, explanation: str) -> bool:
+    """Return True if the event title is referenced in the causal explanation text."""
+    if not title or not explanation:
+        return False
+    title_l = title.lower()
+    expl_l = explanation.lower()
+    if title_l in expl_l:
+        return True
+    # Word-overlap fallback: ≥60% of content words (>3 chars) must appear
+    words = [w.strip(".,;:\"'()[]") for w in title_l.split() if len(w) > 3]
+    if not words:
+        return False
+    return sum(1 for w in words if w in expl_l) / len(words) >= 0.6
+
+
 def assign_partition(question_id: str, all_annotators: list) -> str:
     """Deterministically assign a question to one annotator by hash."""
     digest = int(hashlib.sha256(question_id.encode()).hexdigest(), 16)
@@ -298,15 +313,19 @@ async def _build_all_question_data(
 
             in_window = in_market_window(str(date_val), open_dt, close_dt) if is_polymarket else False
             at_change_point = is_near_change_point(str(date_val), change_point_timestamps)
+            causal_explanation = getattr(q, "causal_explanation", "") or ""
+            in_explanation = is_mentioned_in_explanation(getattr(e, "title", ""), causal_explanation)
 
-            if at_change_point:
+            if in_explanation and in_window:
                 priority = 0
-            elif in_window:
+            elif at_change_point:
                 priority = 1
-            elif has_impact:
+            elif in_window:
                 priority = 2
-            else:
+            elif has_impact:
                 priority = 3
+            else:
+                priority = 4
 
             valid_events.append({
                 "_priority": priority,
@@ -326,21 +345,37 @@ async def _build_all_question_data(
         valid_events.sort(key=lambda x: x["_priority"])
 
         if len(valid_events) > MAX_EVENTS_PER_QUESTION:
-            kept = []
+            seen_sources: set = set()
+            kept: list = []
+            kept_ids: set = set()
             remaining = MAX_EVENTS_PER_QUESTION
-            for tier in range(4):
-                tier_events = [e for e in valid_events if e["_priority"] == tier]
-                if not tier_events:
-                    continue
-                if len(tier_events) <= remaining:
-                    kept.extend(tier_events)
-                    remaining -= len(tier_events)
-                else:
-                    step = len(tier_events) / remaining
-                    kept.extend(tier_events[int(i * step)] for i in range(remaining))
-                    remaining = 0
+
+            # Pass 1: fill slots across all tiers with novel-source events only,
+            # updating seen_sources after each pick so a source can only be used once.
+            for tier in range(5):
                 if remaining == 0:
                     break
+                for e in [e for e in valid_events if e["_priority"] == tier]:
+                    if remaining == 0:
+                        break
+                    if e.get("source_url") and e["source_url"] in seen_sources:
+                        continue
+                    kept.append(e)
+                    kept_ids.add(e["id"])
+                    if e.get("source_url"):
+                        seen_sources.add(e["source_url"])
+                    remaining -= 1
+
+            # Pass 2: fill remaining slots with repeat-source events, still respecting tier order
+            if remaining > 0:
+                for tier in range(5):
+                    if remaining == 0:
+                        break
+                    repeat = [e for e in valid_events if e["_priority"] == tier
+                               and e["id"] not in kept_ids]
+                    kept.extend(repeat[:remaining])
+                    remaining -= min(len(repeat), remaining)
+
             valid_events = kept
 
         for ev in valid_events:
