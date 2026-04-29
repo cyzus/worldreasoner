@@ -584,6 +584,43 @@
             align-items: center;
             justify-content: center;
         }
+        
+        /* ── Input Modal (for PID) ── */
+        #pid-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15,23,42,0.92);
+            z-index: 400;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .pid-input {
+            width: 100%;
+            padding: 12px;
+            margin: 16px 0;
+            border: 2px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+        .pid-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79,70,229,0.2);
+        }
+        .btn-start {
+            background: var(--primary);
+            color: white;
+            padding: 12px 32px;
+            border-radius: 8px;
+            font-size: 1.05rem;
+            font-weight: 700;
+            width: 100%;
+            margin-top: 20px;
+        }
+
         .overlay-card {
             background: white;
             border-radius: 16px;
@@ -593,6 +630,70 @@
             text-align: center;
             box-shadow: 0 25px 50px rgba(0,0,0,0.3);
         }
+
+        /* ── Guideline Modal ── */
+        #guideline-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15,23,42,0.6);
+            z-index: 500;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .guideline-card {
+            background: white;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .guideline-header {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8fafc;
+        }
+        .guideline-header h2 {
+            margin: 0;
+            font-size: 1.25rem;
+            color: #0f172a;
+        }
+        .btn-close-guideline {
+            background: transparent;
+            border: none;
+            font-size: 1.5rem;
+            color: #64748b;
+            cursor: pointer;
+            padding: 0 8px;
+        }
+        .btn-close-guideline:hover { color: #0f172a; }
+        .guideline-content {
+            padding: 24px 32px;
+            overflow-y: auto;
+            flex: 1;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+        .btn-show-guideline {
+            background: #f1f5f9;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            margin-right: 12px;
+        }
+        .btn-show-guideline:hover { background: #e2e8f0; color: #0f172a; }
+
         .completion-code-box {
             background: #f1f5f9;
             border-radius: 8px;
@@ -608,6 +709,30 @@
     </style>
 </head>
 <body>
+    <!-- PID / Name Input Overlay -->
+    <div id="pid-overlay">
+        <div class="overlay-card">
+            <h2 style="font-size:1.4rem;font-weight:700;color:#0f172a;margin:0 0 8px;">Welcome</h2>
+            <p style="color:#64748b;margin-bottom:4px;font-size:0.92rem;">Please enter your Prolific PID or Name to start:</p>
+            <input type="text" id="pid-input-field" class="pid-input" placeholder="e.g. 5f9a3b... or John Doe" autofocus>
+            <button class="btn-show-guideline" id="btn-read-guideline-start" style="width: 100%; margin: 10px 0 0 0; padding: 10px; background: #e0e7ff; color: var(--primary); border-color: #c7d2fe;">&#128214; Read Annotation Guideline First</button>
+            <button id="btn-start-study" class="btn-start">Start Study</button>
+        </div>
+    </div>
+
+    <!-- Guideline Overlay -->
+    <div id="guideline-overlay">
+        <div class="guideline-card">
+            <div class="guideline-header">
+                <h2>Annotation Guideline</h2>
+                <button class="btn-close-guideline" id="btn-close-guideline">&times;</button>
+            </div>
+            <div class="guideline-content markdown-body" id="guideline-content">
+                Loading guidelines...
+            </div>
+        </div>
+    </div>
+
     <!-- Shown when all events are annotated -->
     <div id="completion-banner">
         <div style="flex:1">
@@ -663,6 +788,7 @@
                 <div style="font-size:0.88rem; color:var(--text-muted); margin-top:3px;">Verify events chronologically. Ensure each event accurately supports the causal graph.</div>
             </div>
             <div style="display:flex; align-items:center; gap:20px;">
+                <button class="btn-show-guideline" id="btn-show-guideline-header">&#128214; View Guideline</button>
                 <div style="text-align:right;">
                     <div id="progress-text" style="font-weight:700; color:var(--primary); font-size:1.1rem;">0 / 0</div>
                     <div style="font-size:0.72rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">Events Annotated</div>
@@ -676,18 +802,33 @@
 
     <script>
         // ── Prolific config — fill these in before deploying ─────────────
-        const SUBMIT_ENDPOINT = '';  // TODO: paste your Google Apps Script web app URL
+        const SUBMIT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxED5bssZUDiUH3xSzGix8zhlNWaX88Ot0F0zJNQ5OM25EMOPltGbZCvMp2dq5EVkx4/exec';  // TODO: paste your Google Apps Script web app URL
         const COMPLETION_CODE = '';  // TODO: paste your Prolific completion code
 
         const _urlParams = new URLSearchParams(window.location.search);
         const SESSION_ID   = _urlParams.get('session') || null;
-        const PROLIFIC_PID = _urlParams.get('PROLIFIC_PID') || 'preview';
+        let PROLIFIC_PID = _urlParams.get('PROLIFIC_PID') || null;
 
         let currentQIndex = 0;
         let totalEvents = 0;
         let annotatedEvents = 0;
         let stateData = [];
         const STORAGE_KEY = 'annotation_state_v2_' + (SESSION_ID || 'local');
+        let guidelineHtml = '';
+
+        // ── Load Guideline ───────────────────────────────────────────────
+        async function loadGuideline() {
+            try {
+                const response = await fetch('annotation_guideline.md');
+                if (!response.ok) throw new Error('Network response was not ok');
+                const mdText = await response.text();
+                guidelineHtml = marked.parse(mdText);
+                document.getElementById('guideline-content').innerHTML = guidelineHtml;
+            } catch (error) {
+                console.error('Failed to load guideline:', error);
+                document.getElementById('guideline-content').innerHTML = '<p style="color:red">Failed to load annotation_guideline.md. Please make sure the file exists.</p>';
+            }
+        }
 
         // ── Persistence ──────────────────────────────────────────────────
 
@@ -1334,6 +1475,45 @@
         };
 
         window.onload = function() {
+            // Load guideline text in background
+            loadGuideline();
+            
+            // Setup guideline modal interactions
+            const guidelineOverlay = document.getElementById('guideline-overlay');
+            const showGuideline = (e) => { e.preventDefault(); guidelineOverlay.style.display = 'flex'; };
+            const hideGuideline = () => { guidelineOverlay.style.display = 'none'; };
+            
+            document.getElementById('btn-show-guideline-header').addEventListener('click', showGuideline);
+            document.getElementById('btn-read-guideline-start').addEventListener('click', showGuideline);
+            document.getElementById('btn-close-guideline').addEventListener('click', hideGuideline);
+            guidelineOverlay.addEventListener('click', (e) => {
+                if (e.target === guidelineOverlay) hideGuideline();
+            });
+
+            // Check for PID
+            if (!PROLIFIC_PID) {
+                document.getElementById('pid-overlay').style.display = 'flex';
+                
+                document.getElementById('btn-start-study').addEventListener('click', () => {
+                    const inputVal = document.getElementById('pid-input-field').value.trim();
+                    if (!inputVal) {
+                        alert('Please enter your PID or Name.');
+                        return;
+                    }
+                    PROLIFIC_PID = inputVal;
+                    document.getElementById('pid-overlay').style.display = 'none';
+                    loadDataAndInit();
+                });
+                
+                document.getElementById('pid-input-field').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') document.getElementById('btn-start-study').click();
+                });
+            } else {
+                loadDataAndInit();
+            }
+        };
+
+        function loadDataAndInit() {
             // Dynamically load session data file, then init.
             // Falls back to annotation_data.js for local testing (no ?session= param).
             const src = SESSION_ID ? `annotation_data_${SESSION_ID}.js` : 'annotation_data.js';
@@ -1356,7 +1536,7 @@
                      </p>`;
             };
             document.head.appendChild(script);
-        };
+        }
     </script>
 </body>
 </html>
