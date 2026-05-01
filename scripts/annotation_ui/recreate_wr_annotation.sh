@@ -9,7 +9,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-OUTPUT_DIR="wr-annotation"
+OUTPUT_DIR="d:/workspace/wr-annotation"
 FETCH_FLAG="--no-fetch"
 
 for arg in "$@"; do
@@ -25,6 +25,7 @@ uv run python scripts/annotation_ui/export_data.py \
     --output-dir "$OUTPUT_DIR" \
     --overlap-ids overlap.txt \
     --include-ids include_ids.txt \
+    --questions-per-session 4 \
     $FETCH_FLAG
 
 echo ""
