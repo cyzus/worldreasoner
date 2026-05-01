@@ -16,7 +16,7 @@ Each event card shows:
 - **In Market Window / Pre-Market badge** — quick visual indicator
 - **Title & Description** — the event as extracted by the Hindsight Agent
 - **Source** — link to the original article (if available)
-- **Impact Analysis** — the AI's assessment of how this event affected the forecast outcome, showing direction (positive/negative/neutral/mixed), magnitude, confidence, and reasoning. Some events have no impact analysis; the box will be muted in that case.
+- **Impact Analysis** — the AI's assessment of how this event affected the forecast outcome, showing direction (positive/negative/neutral/mixed) and reasoning. Some events have no impact analysis; the box will be muted in that case.
 - **👍 / 👎 Reasoning Assessment buttons** — only visible when impact analysis is present
 
 The sidebar also shows the **market window** (open → close date) and a link to the Polymarket market for in-context verification.
@@ -77,8 +77,9 @@ For **non-Polymarket questions** (no market window or chart shown), assess impac
 
 ### Factual Correctness
 - The source article must confirm the event actually occurred.
+- **Web Search is Encouraged**: If the source link is broken, missing, or behind a paywall, please perform a quick web search using the event title and date to verify if it happened.
 - Dates should match the article's publication date or the event date reported within it.
-- **Reject as Hallucination** if the article is about a *prediction*, *commentary*, or *hypothetical* — not a confirmed real-world occurrence.
+- **Reject as Hallucination** if the article (or your web search) reveals it is about a *prediction*, *commentary*, or *hypothetical* — not a confirmed real-world occurrence.
 
 ### Impact Validity
 - The event must have a plausible mechanism directly connecting it to the forecast question's outcome.
@@ -108,6 +109,6 @@ Events are pre-sorted by importance. Spend the most effort on:
 | Event has no impact analysis | Assess validity only; do not mark reasoning |
 | Two events describe the same news | Approve the one with more specific date/detail; Reject the other as **Duplicate** |
 | Event date is years before the question's market window | Almost always background context — Reject as **Noise** unless the question outcome explicitly depends on that specific historical event |
-| Source link is broken | Use title + description alone; Skip only if completely unverifiable |
+| Source link is broken or missing | **Perform a quick web search** using the event details. Only skip if it remains completely unverifiable after a brief search. |
 | Impact direction seems right but reasoning explanation is weak or superficial | Approve the event; mark reasoning as 👎 **Flawed** |
 | Market open date shown as "estimated" | Treat the market window boundary as approximate ±2 weeks; don't reject events solely for falling slightly outside an estimated boundary |

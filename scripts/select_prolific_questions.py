@@ -1,11 +1,12 @@
 """
 Select high-quality questions for the Prolific annotation study.
 
-Selection criteria (in priority order within each domain):
+Selection criteria:
   1. graph_built = 1
-  2. quality_score >= --min-score (default 0.8), fallback to >= 0.7 if domain undershoots
+  2. quality_score >= --min-score (default 0.8), fallback to >= 0.7 if quota undershoots
   3. unique non-outcome sources >= --min-sources (default 3)
-  4. Domain-proportional allocation with a per-domain cap
+  4. Source quota: --polymarket-n polymarket questions first, remainder filled with news
+  5. Within each source group: domain-proportional allocation with a per-domain cap
 
 Outputs (unless --dry-run):
   include_ids.txt   all selected question IDs (one per line)
@@ -13,7 +14,7 @@ Outputs (unless --dry-run):
 
 Usage:
   uv run python scripts/select_prolific_questions.py --db combined.db
-  uv run python scripts/select_prolific_questions.py --db combined.db --n 120 --overlap-sessions 3
+  uv run python scripts/select_prolific_questions.py --db combined.db --polymarket-n 96 --n 120
   uv run python scripts/select_prolific_questions.py --db combined.db --dry-run
 """
 
@@ -97,30 +98,30 @@ def compute_domain_targets(
     return targets
 
 
-def select_questions(
+def select_from_pool(
     candidates: list[dict],
-    targets: dict[str, int],
+    n: int,
+    domain_cap: float,
     min_score: float,
 ) -> list[dict]:
+    """Select n questions from candidates with domain balancing."""
+    targets = compute_domain_targets(candidates, n, domain_cap)
+
     by_domain: dict[str, list[dict]] = defaultdict(list)
     for c in candidates:
         d = c["domain"] if c["domain"] in DOMAIN_ORDER else "other"
         by_domain[d].append(c)
 
     selected: list[dict] = []
-
     for domain, target in targets.items():
         pool = by_domain.get(domain, [])
-        # Pass 1: quality >= min_score
         high = [c for c in pool if c["quality_score"] >= min_score]
         chosen = high[:target]
-        # Pass 2: fallback to lower quality if needed
         if len(chosen) < target:
             fallback_ids = {c["id"] for c in chosen}
             fallback = [c for c in pool if c["id"] not in fallback_ids]
             chosen += fallback[: target - len(chosen)]
         selected.extend(chosen)
-
     return selected
 
 
@@ -235,6 +236,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Select Prolific annotation questions")
     parser.add_argument("--db", default="combined.db")
     parser.add_argument("--n", type=int, default=120, help="Total questions to select")
+    parser.add_argument("--polymarket-n", type=int, default=100,
+                        help="Target number of polymarket questions (capped by available pool)")
     parser.add_argument("--min-score", type=float, default=0.8, help="Minimum quality score")
     parser.add_argument("--min-sources", type=int, default=3, help="Minimum unique sources")
     parser.add_argument("--domain-cap", type=float, default=0.25, help="Max fraction per domain")
@@ -251,17 +254,32 @@ def main() -> None:
     candidates = fetch_candidates(conn, args.min_sources)
     conn.close()
 
-    print(f"Candidate pool (graph_built=1, unique_sources>={args.min_sources}): {len(candidates)}")
+    polymarket_pool = [c for c in candidates if c["source"] == "polymarket"]
+    news_pool       = [c for c in candidates if c["source"] == "news"]
 
-    targets = compute_domain_targets(candidates, args.n, args.domain_cap)
-    selected = select_questions(candidates, targets, args.min_score)
+    n_polymarket = min(args.polymarket_n, len(polymarket_pool))
+    n_news       = args.n - n_polymarket
+
+    print(f"Candidate pool: {len(polymarket_pool)} polymarket, {len(news_pool)} news  (unique_sources>={args.min_sources})")
+    print(f"Target:         {n_polymarket} polymarket + {n_news} news = {args.n} total")
+
+    # Polymarket: quality scores are mostly meaningless (<0.5 for most questions).
+    # Skip domain cap and quality filter — just take top-N by unique_sources.
+    pm_sorted   = sorted(polymarket_pool, key=lambda c: -c["unique_sources"])
+    pm_selected = pm_sorted[:n_polymarket]
+
+    # News: apply domain balancing and quality filter.
+    news_selected = select_from_pool(news_pool, n_news, args.domain_cap, args.min_score)
+
+    selected = pm_selected + news_selected
 
     if len(selected) < args.n:
-        print(f"Warning: only found {len(selected)} questions (target {args.n}). Consider lowering --min-score or --min-sources.")
+        print(f"Warning: only found {len(selected)} questions (target {args.n}).")
 
     overlap = pick_overlap(selected, n_overlap)
 
-    print_statistics(selected, overlap, args.questions_per_session, args.overlap_sessions, args.min_score, args.min_sources)
+    print_statistics(selected, overlap, args.questions_per_session, args.overlap_sessions,
+                     args.min_score, args.min_sources)
 
     if args.dry_run:
         print("Dry run — files not written.")
