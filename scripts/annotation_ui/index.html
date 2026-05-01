@@ -937,25 +937,43 @@
         let SESSION_ID   = _urlParams.get('session') || null;
         let PROLIFIC_PID = _urlParams.get('PROLIFIC_PID') || null;
 
-        // If no session param, fetch one from the dispatcher before doing anything else.
-        async function maybeAssignSession() {
-            if (SESSION_ID) return; // already have a session from URL
-            if (!PROLIFIC_PID) return; // need PID first — handled by pid-overlay
-            try {
-                const res = await fetch(
-                    DISPATCHER_ENDPOINT + '?PROLIFIC_PID=' + encodeURIComponent(PROLIFIC_PID)
-                );
-                const json = await res.json();
-                if (json.ok && json.session) {
-                    SESSION_ID = json.session;
-                    // Update URL bar so refreshes don't re-assign
-                    const newUrl = new URL(window.location.href);
-                    newUrl.searchParams.set('session', SESSION_ID);
-                    window.history.replaceState({}, '', newUrl.toString());
+        // If no session param, fetch one from the dispatcher via JSONP (avoids CORS).
+        function maybeAssignSession() {
+            if (SESSION_ID) return Promise.resolve();
+            if (!PROLIFIC_PID) return Promise.resolve();
+
+            return new Promise((resolve) => {
+                const cbName = 'dispatcherCb_' + Date.now();
+                const script = document.createElement('script');
+                const timer  = setTimeout(() => {
+                    cleanup();
+                    console.warn('Session dispatcher timed out');
+                    resolve();
+                }, 10000);
+
+                function cleanup() {
+                    clearTimeout(timer);
+                    delete window[cbName];
+                    if (script.parentNode) script.parentNode.removeChild(script);
                 }
-            } catch (err) {
-                console.warn('Session dispatcher error:', err);
-            }
+
+                window[cbName] = function(data) {
+                    cleanup();
+                    if (data && data.ok && data.session) {
+                        SESSION_ID = data.session;
+                        const newUrl = new URL(window.location.href);
+                        newUrl.searchParams.set('session', SESSION_ID);
+                        window.history.replaceState({}, '', newUrl.toString());
+                    }
+                    resolve();
+                };
+
+                script.onerror = () => { cleanup(); resolve(); };
+                script.src = DISPATCHER_ENDPOINT
+                    + '?PROLIFIC_PID=' + encodeURIComponent(PROLIFIC_PID)
+                    + '&callback=' + cbName;
+                document.head.appendChild(script);
+            });
         }
 
         let currentQIndex = 0;
@@ -1838,9 +1856,14 @@
         };
 
         function loadDataAndInit() {
-            // Dynamically load session data file, then init.
-            // Falls back to annotation_data.js for local testing (no ?session= param).
-            const src = SESSION_ID ? `annotation_data_${SESSION_ID}.js` : 'annotation_data.js';
+            if (!SESSION_ID) {
+                document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;color:#dc2626">'
+                    + '<h2>Session not assigned</h2>'
+                    + '<p>Could not retrieve a session from the dispatcher. Please return this study and contact the researcher.</p>'
+                    + '</div>';
+                return;
+            }
+            const src = `annotation_data_${SESSION_ID}.js`;
             const script = document.createElement('script');
             script.src = src;
             script.onload = function() {
