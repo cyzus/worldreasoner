@@ -931,9 +931,32 @@
         const SUBMIT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzZEFPxti6-bfCKpf5aUCQf9pE70B8LdZY7-PBJTrrAMQFah1mSNH5jkOjd9jSZHK5u/exec';  // TODO: paste your Google Apps Script web app URL
         const COMPLETION_CODE = 'C1K10UIF';
 
+        const DISPATCHER_ENDPOINT = SUBMIT_ENDPOINT; // same Apps Script handles both GET and POST
+
         const _urlParams = new URLSearchParams(window.location.search);
-        const SESSION_ID   = _urlParams.get('session') || null;
+        let SESSION_ID   = _urlParams.get('session') || null;
         let PROLIFIC_PID = _urlParams.get('PROLIFIC_PID') || null;
+
+        // If no session param, fetch one from the dispatcher before doing anything else.
+        async function maybeAssignSession() {
+            if (SESSION_ID) return; // already have a session from URL
+            if (!PROLIFIC_PID) return; // need PID first — handled by pid-overlay
+            try {
+                const res = await fetch(
+                    DISPATCHER_ENDPOINT + '?PROLIFIC_PID=' + encodeURIComponent(PROLIFIC_PID)
+                );
+                const json = await res.json();
+                if (json.ok && json.session) {
+                    SESSION_ID = json.session;
+                    // Update URL bar so refreshes don't re-assign
+                    const newUrl = new URL(window.location.href);
+                    newUrl.searchParams.set('session', SESSION_ID);
+                    window.history.replaceState({}, '', newUrl.toString());
+                }
+            } catch (err) {
+                console.warn('Session dispatcher error:', err);
+            }
+        }
 
         let currentQIndex = 0;
         let totalEvents = 0;
@@ -1790,7 +1813,9 @@
                     }
                     PROLIFIC_PID = inputVal;
                     document.getElementById('pid-overlay').style.display = 'none';
-                    document.getElementById('motivation-overlay').style.display = 'flex';
+                    maybeAssignSession().then(() => {
+                        document.getElementById('motivation-overlay').style.display = 'flex';
+                    });
                 });
 
                 document.getElementById('btn-motivation-next').addEventListener('click', () => {
@@ -1808,7 +1833,7 @@
                     if (e.key === 'Enter') document.getElementById('btn-start-study').click();
                 });
             } else {
-                loadDataAndInit();
+                maybeAssignSession().then(() => loadDataAndInit());
             }
         };
 
