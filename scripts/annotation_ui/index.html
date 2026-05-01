@@ -931,49 +931,52 @@
         const SUBMIT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzZEFPxti6-bfCKpf5aUCQf9pE70B8LdZY7-PBJTrrAMQFah1mSNH5jkOjd9jSZHK5u/exec';  // TODO: paste your Google Apps Script web app URL
         const COMPLETION_CODE = 'C1K10UIF';
 
-        const DISPATCHER_ENDPOINT = SUBMIT_ENDPOINT; // same Apps Script handles both GET and POST
-
         const _urlParams = new URLSearchParams(window.location.search);
         let SESSION_ID   = _urlParams.get('session') || null;
         let PROLIFIC_PID = _urlParams.get('PROLIFIC_PID') || null;
 
-        // If no session param, fetch one from the dispatcher via JSONP (avoids CORS).
-        function maybeAssignSession() {
-            if (SESSION_ID) return Promise.resolve();
-            if (!PROLIFIC_PID) return Promise.resolve();
+        // Assign session via POST (no CORS redirect issue unlike GET).
+        // Caches result in localStorage so the same PID always gets the same session locally.
+        // Retries up to 3 times on failure.
+        async function maybeAssignSession(attempt) {
+            if (SESSION_ID) return;
+            if (!PROLIFIC_PID) return;
+            attempt = attempt || 0;
 
-            return new Promise((resolve) => {
-                const cbName = 'dispatcherCb_' + Date.now();
-                const script = document.createElement('script');
-                const timer  = setTimeout(() => {
-                    cleanup();
-                    console.warn('Session dispatcher timed out');
-                    resolve();
-                }, 10000);
+            // Check localStorage cache first
+            const cacheKey = 'session_assignment_' + PROLIFIC_PID;
+            const cached = localStorage.getItem(cacheKey);
+            if (cached) {
+                SESSION_ID = cached;
+                const newUrl = new URL(window.location.href);
+                newUrl.searchParams.set('session', SESSION_ID);
+                window.history.replaceState({}, '', newUrl.toString());
+                return;
+            }
 
-                function cleanup() {
-                    clearTimeout(timer);
-                    delete window[cbName];
-                    if (script.parentNode) script.parentNode.removeChild(script);
+            try {
+                const res  = await fetch(SUBMIT_ENDPOINT, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'assign', prolific_pid: PROLIFIC_PID }),
+                });
+                const data = await res.json();
+                if (data.ok && data.session) {
+                    SESSION_ID = data.session;
+                    localStorage.setItem(cacheKey, SESSION_ID);
+                    const newUrl = new URL(window.location.href);
+                    newUrl.searchParams.set('session', SESSION_ID);
+                    window.history.replaceState({}, '', newUrl.toString());
+                } else if (attempt < 3) {
+                    await new Promise(r => setTimeout(r, 3000));
+                    await maybeAssignSession(attempt + 1);
                 }
-
-                window[cbName] = function(data) {
-                    cleanup();
-                    if (data && data.ok && data.session) {
-                        SESSION_ID = data.session;
-                        const newUrl = new URL(window.location.href);
-                        newUrl.searchParams.set('session', SESSION_ID);
-                        window.history.replaceState({}, '', newUrl.toString());
-                    }
-                    resolve();
-                };
-
-                script.onerror = () => { cleanup(); resolve(); };
-                script.src = DISPATCHER_ENDPOINT
-                    + '?PROLIFIC_PID=' + encodeURIComponent(PROLIFIC_PID)
-                    + '&callback=' + cbName;
-                document.head.appendChild(script);
-            });
+            } catch (err) {
+                console.warn('Session assignment error:', err);
+                if (attempt < 3) {
+                    await new Promise(r => setTimeout(r, 3000));
+                    await maybeAssignSession(attempt + 1);
+                }
+            }
         }
 
         let currentQIndex = 0;
