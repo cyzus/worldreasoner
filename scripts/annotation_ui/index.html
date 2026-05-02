@@ -939,8 +939,12 @@
         // Caches result in localStorage so the same PID always gets the same session locally.
         // Retries up to 3 times on failure.
         async function maybeAssignSession(attempt) {
-            if (SESSION_ID) return;
-            if (!PROLIFIC_PID) return;
+            if (SESSION_ID) {
+                return;
+            }
+            if (!PROLIFIC_PID) {
+                return;
+            }
             attempt = attempt || 0;
 
             // Check localStorage cache first
@@ -1809,12 +1813,12 @@
         window.onload = function() {
             // Load guideline text in background
             loadGuideline();
-            
+
             // Setup guideline modal interactions
             const guidelineOverlay = document.getElementById('guideline-overlay');
-            const showGuideline = (e) => { e.preventDefault(); guidelineOverlay.style.display = 'flex'; };
+            const showGuideline = (e) => { e && e.preventDefault && e.preventDefault(); guidelineOverlay.style.display = 'flex'; };
             const hideGuideline = () => { guidelineOverlay.style.display = 'none'; };
-            
+
             document.getElementById('btn-show-guideline-header').addEventListener('click', showGuideline);
             document.getElementById('btn-read-guideline-start').addEventListener('click', showGuideline);
             document.getElementById('btn-close-guideline').addEventListener('click', hideGuideline);
@@ -1822,10 +1826,22 @@
                 if (e.target === guidelineOverlay) hideGuideline();
             });
 
+            // Always attach tutorial controls so users arriving via Prolific also see the tutorial
+            document.getElementById('btn-motivation-next').addEventListener('click', () => {
+                document.getElementById('motivation-overlay').style.display = 'none';
+                document.getElementById('quiz-overlay').style.display = 'flex';
+                initQuiz();
+            });
+
+            document.getElementById('btn-motivation-skip').addEventListener('click', () => {
+                document.getElementById('motivation-overlay').style.display = 'none';
+                loadDataAndInit();
+            });
+
             // Check for PID
             if (!PROLIFIC_PID) {
                 document.getElementById('pid-overlay').style.display = 'flex';
-                
+
                 document.getElementById('btn-start-study').addEventListener('click', () => {
                     const inputVal = document.getElementById('pid-input-field').value.trim();
                     if (!inputVal) {
@@ -1839,22 +1855,15 @@
                     });
                 });
 
-                document.getElementById('btn-motivation-next').addEventListener('click', () => {
-                    document.getElementById('motivation-overlay').style.display = 'none';
-                    document.getElementById('quiz-overlay').style.display = 'flex';
-                    initQuiz();
-                });
-
-                document.getElementById('btn-motivation-skip').addEventListener('click', () => {
-                    document.getElementById('motivation-overlay').style.display = 'none';
-                    loadDataAndInit();
-                });
-
                 document.getElementById('pid-input-field').addEventListener('keypress', (e) => {
                     if (e.key === 'Enter') document.getElementById('btn-start-study').click();
                 });
             } else {
-                maybeAssignSession().then(() => loadDataAndInit());
+                // If arriving with PROLIFIC_PID (from Prolific link), assign session then show the
+                // motivation/tutorial overlays so participants see the tutorial before starting.
+                maybeAssignSession().then(() => {
+                    document.getElementById('motivation-overlay').style.display = 'flex';
+                });
             }
         };
 
