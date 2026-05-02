@@ -528,6 +528,28 @@
         .event-card.status-rejected .status-badge { display: block; background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
         .event-card.status-skipped .status-badge { display: block; background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
 
+        .event-card.attention-check {
+            border-color: #c7d2fe;
+            background: #f8fafc;
+        }
+        .event-card.attention-check::before {
+            border-color: var(--primary);
+            background: #ffffff;
+        }
+        .attention-check-label {
+            display: inline-block;
+            margin-bottom: 10px;
+            padding: 4px 9px;
+            border-radius: 6px;
+            border: 1px solid #c7d2fe;
+            background: #e0e7ff;
+            color: #3730a3;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
         /* ── Reasoning buttons (inside impact box) ── */
         .reasoning-btn-row {
             display: flex;
@@ -819,7 +841,11 @@
     <div id="quiz-overlay">
         <div class="overlay-card" style="max-width:560px;text-align:left;padding:36px;">
             <h2 style="font-size:1.2rem;font-weight:700;color:#0f172a;margin:0 0 4px;">Practice Example</h2>
-            <p style="color:#64748b;font-size:0.85rem;margin:0 0 14px;">Annotate this mock event to check your understanding before starting.</p>
+            <p style="color:#64748b;font-size:0.85rem;margin:0 0 10px;">Annotate this mock event as practice before starting.</p>
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:0.82rem;color:#475569;line-height:1.5;">
+                This practice is for training only. Wrong or skipped practice answers are not used to reject your Prolific submission, and you can retry after feedback.
+                <button class="btn-show-guideline" id="btn-read-guideline-quiz" style="margin:8px 0 0 0;padding:6px 10px;background:#fff;color:var(--primary);border-color:#c7d2fe;font-size:0.8rem;">Read full guideline</button>
+            </div>
             <div class="quiz-progress-dots" id="quiz-progress"></div>
             <div style="background:#e0e7ff;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:0.85rem;color:#3730a3;">
                 <strong>Question:</strong> Will the Federal Reserve cut interest rates before the end of 2024?<br>
@@ -1016,13 +1042,80 @@
                 const saved = localStorage.getItem(STORAGE_KEY);
                 if (!saved) return false;
                 const parsed = JSON.parse(saved);
-                if (parsed.length === stateData.length &&
-                    parsed.every((q, i) => q.events.length === stateData[i].events.length)) {
-                    stateData = parsed;
-                    return true;
+                if (!Array.isArray(parsed) || parsed.length !== stateData.length) {
+                    return false;
                 }
+
+                let restored = false;
+                stateData.forEach((q, i) => {
+                    const savedEvents = (parsed[i] && parsed[i].events) || [];
+                    const savedById = new Map(savedEvents.map(e => [e.id, e]));
+                    q.events = q.events.map(event => {
+                        const savedEvent = savedById.get(event.id);
+                        if (!savedEvent) return event;
+                        restored = true;
+                        return Object.assign({}, event, savedEvent);
+                    });
+                });
+                return restored;
             } catch (e) { console.error('loadState failed:', e); }
             return false;
+        }
+
+        // ── Attention checks ─────────────────────────────────────────────
+
+        const ATTENTION_CHECKS = [
+            {
+                id: 'attention_check_1',
+                title: 'Attention Check: Select Reject -> Noise',
+                instruction: 'This is an attention check, not a real timeline event. To show that you are paying attention, please click Reject, then choose Noise (no causal link to outcome).',
+                expected_status: 'rejected',
+                expected_reason: 'Noise',
+            },
+            {
+                id: 'attention_check_2',
+                title: 'Attention Check: Select Skip -> Unclear / unsure',
+                instruction: 'This is an attention check, not a real timeline event. To show that you are paying attention, please click Skip, then choose Unclear / unsure.',
+                expected_status: 'skipped',
+                expected_reason: 'Unclear',
+            },
+        ];
+
+        function buildAttentionCheck(check, q, index) {
+            return {
+                id: check.id,
+                date: q.market_open || q.resolution_date || '',
+                title: check.title,
+                description: check.instruction,
+                source_url: '',
+                has_impact: false,
+                impact: '',
+                in_market_window: true,
+                current_status: 'pending',
+                reject_reason: null,
+                reasoning_status: null,
+                is_attention_check: true,
+                attention_check_index: index + 1,
+                attention_expected_status: check.expected_status,
+                attention_expected_reason: check.expected_reason,
+                attention_check_passed: null,
+            };
+        }
+
+        function injectAttentionChecks() {
+            if (!Array.isArray(stateData) || stateData.length === 0) return;
+            const targetIndexes = [0, Math.min(2, stateData.length - 1)]
+                .filter((idx, pos, arr) => arr.indexOf(idx) === pos);
+
+            targetIndexes.slice(0, ATTENTION_CHECKS.length).forEach((qIndex, checkIndex) => {
+                const q = stateData[qIndex];
+                if (!q || !Array.isArray(q.events)) return;
+                const check = ATTENTION_CHECKS[checkIndex];
+                if (q.events.some(event => event.id === check.id)) return;
+
+                const insertAt = Math.min(1, q.events.length);
+                q.events.splice(insertAt, 0, buildAttentionCheck(check, q, checkIndex));
+            });
         }
 
         // ── Notification ─────────────────────────────────────────────────
@@ -1255,6 +1348,7 @@
                 prolific_pid: PROLIFIC_PID,
                 session_id: SESSION_ID,
                 submitted_at: new Date().toISOString(),
+                attention_checks: getAttentionCheckResults(),
                 data: stateData,
             };
 
@@ -1289,6 +1383,20 @@
             document.getElementById('completion-overlay').style.display = 'flex';
         }
 
+        function getAttentionCheckResults() {
+            return stateData.flatMap(q => q.events
+                .filter(event => event.is_attention_check)
+                .map(event => ({
+                    id: event.id,
+                    question_id: q.id,
+                    expected_status: event.attention_expected_status,
+                    expected_reason: event.attention_expected_reason,
+                    selected_status: event.current_status,
+                    selected_reason: event.reject_reason,
+                    passed: event.attention_check_passed === true,
+                })));
+        }
+
         // ── Init ──────────────────────────────────────────────────────────
 
         function init() {
@@ -1297,6 +1405,8 @@
                     "<p style='padding:20px;color:red;'>No data loaded. Run the export script first.</p>";
                 return;
             }
+
+            injectAttentionChecks();
 
             if (loadState()) showNotification('✓ Progress restored from previous session');
 
@@ -1440,7 +1550,7 @@
                     event.impact !== 'No impact assessment provided.';
 
                 const card = document.createElement('div');
-                card.className = `event-card ${event.current_status !== 'pending' ? 'status-' + event.current_status : ''}`;
+                card.className = `event-card ${event.is_attention_check ? 'attention-check ' : ''}${event.current_status !== 'pending' ? 'status-' + event.current_status : ''}`;
                 card.id = `event-${event.id}`;
 
                 let statusLabel = event.current_status.toUpperCase();
@@ -1458,8 +1568,9 @@
 
                 // Impact box
                 const isRejected = event.current_status === 'rejected';
+                const isAttentionCheck = !!event.is_attention_check;
                 // Price chart — shown for any in-window polymarket event
-                const chartHtml = (q.price_data && inWindow) ? `
+                const chartHtml = (!isAttentionCheck && q.price_data && inWindow) ? `
                     <div class="price-chart-container" style="max-width:100%;margin-bottom:14px;">
                         <div class="chart-label">Polymarket Price (Yes) — amber line = event date</div>
                         <canvas class="price-chart-canvas" id="chart-${event.id}"></canvas>
@@ -1498,9 +1609,10 @@
                         <span class="event-date ${dateClass}">${event.date}</span>
                         ${windowBadgeHtml}
                     </div>
+                    ${isAttentionCheck ? '<div class="attention-check-label">Attention Check</div>' : ''}
                     <div class="event-title">${event.title}</div>
                     <div class="event-description markdown-body">${marked.parse(event.description || '')}</div>
-                    ${event.source_url
+                    ${!isAttentionCheck && event.source_url
                         ? `<div style="margin-bottom:14px;font-size:0.82rem;">
                                <a href="${event.source_url}" target="_blank"
                                   style="color:var(--primary);text-decoration:none;font-weight:600;">
@@ -1509,7 +1621,7 @@
                            </div>`
                         : ''}
                     <div class="action-row">
-                        <button class="btn-approve" onclick="showApprovalForm('${q.id}', '${event.id}')">
+                        <button class="btn-approve" onclick="${isAttentionCheck ? `annotate('${q.id}', '${event.id}', 'approved')` : `showApprovalForm('${q.id}', '${event.id}')`}">
                             &#10003; Approve
                         </button>
                         <div style="position:relative;">
@@ -1533,7 +1645,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="approval-form" id="approval-form-${event.id}" style="display:none">
+                    ${!isAttentionCheck ? `<div class="approval-form" id="approval-form-${event.id}" style="display:none">
                         <div style="margin-bottom:8px;font-size:0.9rem;font-weight:700;color:#166534;">Confirm Approval</div>
                         <div style="margin-bottom:6px;font-size:0.82rem;color:#64748b;">Why is this event relevant to the outcome? <span style="color:#ef4444;">*required</span></div>
                         <textarea id="approval-text-${event.id}" placeholder="e.g. This directly influenced market expectations by..." style="width:100%;padding:8px;border:1px solid #bbf7d0;border-radius:6px;font-size:0.88rem;resize:vertical;min-height:56px;box-sizing:border-box;font-family:inherit;"></textarea>
@@ -1545,7 +1657,7 @@
                             <button class="btn-approve" style="flex:1;" onclick="confirmApprove('${q.id}', '${event.id}')">&#10003; Confirm</button>
                             <button class="btn-nav" onclick="cancelApprove('${event.id}')">Cancel</button>
                         </div>
-                    </div>
+                    </div>` : ''}
                     ${chartHtml}
                     ${hasImpact ? `<div class="central-question-callout" id="callout-${event.id}"${isRejected ? ' style="display:none"' : ''}>
                         &#128161; <strong>Key question:</strong> Is the AI's impact analysis correct — did this event meaningfully affect the probability of the outcome?
@@ -1560,7 +1672,7 @@
             // Draw charts after DOM is ready
             requestAnimationFrame(() => {
                 q.events.forEach(event => {
-                    if (!q.price_data || !event.in_market_window) return;
+                    if (event.is_attention_check || !q.price_data || !event.in_market_window) return;
                     const canvas = document.getElementById(`chart-${event.id}`);
                     if (canvas) {
                         drawPriceChart(canvas, q.price_data, event.date, q.market_open, q.market_close);
@@ -1601,9 +1713,13 @@
             e.reasoning_text  = extraData.reasoning_text  || null;
             e.corrected_date  = extraData.corrected_date  || null;
             e.corrected_url   = extraData.corrected_url   || null;
+            if (e.is_attention_check) {
+                e.attention_check_passed = status === e.attention_expected_status &&
+                    (!e.attention_expected_reason || reason === e.attention_expected_reason);
+            }
 
             const card = document.getElementById(`event-${eventId}`);
-            card.className = `event-card status-${status}`;
+            card.className = `event-card ${e.is_attention_check ? 'attention-check ' : ''}status-${status}`;
 
             let badgeText = status.toUpperCase();
             if (reason) {
@@ -1664,6 +1780,7 @@
                 prolific_pid: PROLIFIC_PID,
                 session_id: SESSION_ID,
                 exported_at: new Date().toISOString(),
+                attention_checks: getAttentionCheckResults(),
                 data: stateData,
             };
             const dataStr = 'data:text/json;charset=utf-8,' +
@@ -1821,6 +1938,7 @@
 
             document.getElementById('btn-show-guideline-header').addEventListener('click', showGuideline);
             document.getElementById('btn-read-guideline-start').addEventListener('click', showGuideline);
+            document.getElementById('btn-read-guideline-quiz').addEventListener('click', showGuideline);
             document.getElementById('btn-close-guideline').addEventListener('click', hideGuideline);
             guidelineOverlay.addEventListener('click', (e) => {
                 if (e.target === guidelineOverlay) hideGuideline();
