@@ -71,11 +71,6 @@ def run(
         "--resume",
         help="Skip already-completed triples",
     ),
-    min_evidence: int = typer.Option(
-        3,
-        "--min-evidence",
-        help="Minimum articles+events required per question (0 to include all)",
-    ),
     output_dir: str = typer.Option(
         "benchmarks",
         "--output-dir",
@@ -120,7 +115,6 @@ def run(
     )
     questions = service.get_resolved_questions(
         question_ids=question_ids,
-        min_context_items=min_evidence,
         max_questions=max_questions,
         source=source,
         domain=domain,
@@ -192,6 +186,110 @@ def run(
         logger.error(f"Auto-benchmark failed: {e}")
         console.print(f"\n[red]Auto-benchmark failed: {e}[/red]")
         raise typer.Exit(1)
+
+
+@app.command()
+def status(
+    db_path: str = db_option(),
+    domain: Optional[str] = domain_option(),
+    source: Optional[str] = source_option(),
+):
+    """Show which questions are ready to benchmark.
+
+    Uses the same readiness definition as the frontend:
+      - Complete (Ready): evidence_satisfied=True AND graph_built=True
+      - Needs Graph:      evidence_satisfied=True AND graph_built=False
+      - Needs Evidence:   evidence_satisfied=False (articles < threshold or no causal_explanation)
+
+    Examples:
+        wr benchmark status --db combined.db
+        wr benchmark status --db combined.db --domain politics
+        wr benchmark status --db combined.db --source news
+    """
+    from collections import defaultdict
+    from rich.table import Table
+    from src.core.database import GenericDatabase
+    from src.domain.models import Article, Question
+    from src.services.question_monitor_service import QuestionMonitorService
+    from datetime import datetime, timezone
+
+    db = GenericDatabase(db_path)
+    monitor = QuestionMonitorService(db)
+    now = datetime.now(timezone.utc)
+
+    all_questions = db.get_many(Question)
+
+    if domain:
+        all_questions = [
+            q for q in all_questions
+            if (q.domain.value if hasattr(q.domain, "value") else str(q.domain)) == domain
+        ]
+    if source:
+        all_questions = [q for q in all_questions if q.source == source]
+
+    # Bulk-compute evidence_satisfied via QuestionMonitorService (same logic as frontend)
+    evidence_satisfied_ids = monitor.get_processed_question_ids(all_questions)
+
+    # Categorise — same order as get_resolved_questions():
+    # ground_truth → resolution_date → evidence_satisfied → graph_built
+    ready = []
+    no_ground_truth = []
+    not_resolved = []
+    needs_evidence = []
+    needs_graph = []
+
+    for q in all_questions:
+        if q.ground_truth is None:
+            no_ground_truth.append(q)
+            continue
+        if q.resolution_date is None or q.resolution_date > now:
+            not_resolved.append(q)
+            continue
+        if q.id not in evidence_satisfied_ids:
+            needs_evidence.append(q)
+            continue
+        if not q.graph_built:
+            needs_graph.append(q)
+            continue
+        ready.append(q)
+
+    # Summary table
+    summary = Table(title=f"Benchmark Readiness — {db_path}", show_header=True, header_style="bold cyan")
+    summary.add_column("Status")
+    summary.add_column("Count", justify="right")
+    summary.add_column("Notes")
+
+    summary.add_row("[green]Ready[/green]", str(len(ready)), "evidence_satisfied + graph_built + resolved + ground_truth")
+    summary.add_row("[yellow]Needs Graph[/yellow]", str(len(needs_graph)), "evidence_satisfied=True but graph_built=False")
+    summary.add_row("[yellow]Needs Evidence[/yellow]", str(len(needs_evidence)), "articles < min or no causal_explanation")
+    summary.add_row("[dim]Not resolved[/dim]", str(len(not_resolved)), "resolution_date in future")
+    summary.add_row("[dim]No ground truth[/dim]", str(len(no_ground_truth)), "missing ground_truth field")
+    console.print(summary)
+
+    if not ready:
+        return
+
+    # Domain breakdown of ready questions
+    by_domain: dict = defaultdict(int)
+    by_source: dict = defaultdict(int)
+    for q in ready:
+        d = q.domain.value if hasattr(q.domain, "value") else str(q.domain)
+        by_domain[d] += 1
+        by_source[q.source or "unknown"] += 1
+
+    domain_table = Table(title="Ready — by domain", show_header=True, header_style="bold")
+    domain_table.add_column("Domain")
+    domain_table.add_column("Count", justify="right")
+    for d, n in sorted(by_domain.items(), key=lambda x: -x[1]):
+        domain_table.add_row(d, str(n))
+    console.print(domain_table)
+
+    source_table = Table(title="Ready — by source", show_header=True, header_style="bold")
+    source_table.add_column("Source")
+    source_table.add_column("Count", justify="right")
+    for s, n in sorted(by_source.items(), key=lambda x: -x[1]):
+        source_table.add_row(s, str(n))
+    console.print(source_table)
 
 
 @app.command()

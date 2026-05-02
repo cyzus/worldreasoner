@@ -19,7 +19,7 @@ from src.domain.evaluation.conditions import (
     get_conditions,
 )
 from src.domain.evaluation.evaluator import ForecastEvaluator
-from src.domain.models import Article, Event, Forecast, Question
+from src.domain.models import Forecast, Question
 from src.domain.models.question_helpers import (
     ForecastSlot,
     get_forecast_date_for_slot,
@@ -91,7 +91,6 @@ class AutoBenchmarkService:
     def get_resolved_questions(
         self,
         question_ids: Optional[List[str]] = None,
-        min_context_items: int = 3,
         max_questions: Optional[int] = None,
         source: Optional[str] = None,
         domain: Optional[str] = None,
@@ -100,7 +99,6 @@ class AutoBenchmarkService:
 
         Args:
             question_ids: If provided, only these questions (must be resolved)
-            min_context_items: Minimum articles/evidence for the question
             max_questions: Limit number of questions returned
             source: Filter by question source
             domain: Filter by domain
@@ -127,6 +125,7 @@ class AutoBenchmarkService:
                 if q.ground_truth is not None
                 and q.resolution_date is not None
                 and q.resolution_date <= now
+                and q.graph_built
             ]
 
         if source:
@@ -140,38 +139,19 @@ class AutoBenchmarkService:
                 == domain
             ]
 
-        # Filter by minimum evidence (articles + events)
-        if min_context_items > 0:
-            all_articles = self.db.get_many(Article)
-            all_events = self.db.get_many(Event)
+        # Filter by evidence satisfaction — same logic as frontend (QuestionMonitorService)
+        from src.services.question_monitor_service import QuestionMonitorService
 
-            # Count articles per question
-            article_counts: Dict[str, int] = {}
-            for a in all_articles:
-                qid = a.collected_for_question_id
-                if qid:
-                    article_counts[qid] = article_counts.get(qid, 0) + 1
-
-            # Count events per question
-            event_counts: Dict[str, int] = {}
-            for e in all_events:
-                qid = e.extracted_for_question_id
-                if qid:
-                    event_counts[qid] = event_counts.get(qid, 0) + 1
-
-            before_count = len(questions)
-            questions = [
-                q
-                for q in questions
-                if article_counts.get(q.id, 0) + event_counts.get(q.id, 0)
-                >= min_context_items
-            ]
-            filtered_count = before_count - len(questions)
-            if filtered_count > 0:
-                logger.info(
-                    f"Filtered {filtered_count} questions with < {min_context_items} "
-                    f"evidence items ({len(questions)} remaining)"
-                )
+        monitor = QuestionMonitorService(self.db)
+        satisfied_ids = monitor.get_processed_question_ids(questions)
+        before_count = len(questions)
+        questions = [q for q in questions if q.id in satisfied_ids]
+        filtered_count = before_count - len(questions)
+        if filtered_count > 0:
+            logger.info(
+                f"Filtered {filtered_count} questions without satisfied evidence "
+                f"({len(questions)} remaining)"
+            )
 
         if max_questions:
             questions = questions[:max_questions]
