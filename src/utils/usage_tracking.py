@@ -174,13 +174,21 @@ def extract_usage_from_agent(agent, model_name: Optional[str] = None) -> UsageMe
                     f"Could not estimate cost for model '{model_name}': {cost_err}"
                 )
 
-        return UsageMetrics(
+        metrics = UsageMetrics(
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
             estimated_cost_usd=estimated_cost,
             model=model_name,
         )
+
+        # Recursively accumulate usage from managed sub-agents
+        for sub_agent in getattr(agent, "managed_agents", {}).values():
+            sub_model = getattr(sub_agent.model, "model_id", None) or model_name
+            sub_metrics = extract_usage_from_agent(sub_agent, model_name=sub_model)
+            metrics = metrics + sub_metrics
+
+        return metrics
 
     except Exception as e:
         logger.error(f"Failed to extract usage from agent: {e}")

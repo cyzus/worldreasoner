@@ -9,6 +9,17 @@ import uvicorn
 from src.utils.logging import logger
 
 
+def run_server_stdio(mcp) -> None:
+    """Run MCP server over stdio (no HTTP, no separate process needed).
+
+    Context is read from environment variables set by the caller:
+        WR_QUESTION_ID, WR_SIMULATED_DATE, WR_KNOWLEDGE_CUTOFF,
+        WR_SESSION_ID, WR_MODEL_NAME, WR_FORECAST_MODE, WR_DATABASE_PATH
+    """
+    import asyncio
+    mcp.run(transport="stdio")
+
+
 def run_server(mcp, args: argparse.Namespace) -> None:
     """Create HTTP app, add health route, and run uvicorn."""
 

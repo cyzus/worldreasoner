@@ -84,12 +84,13 @@ def get_context_from_mcp(
     current_context: ContextVar[Optional[ForecastContext]],
     context_service: Optional[ForecastContextService],
 ) -> ForecastContext:
-    """Extract forecasting context from MCP request metadata/headers."""
+    """Extract forecasting context from MCP request metadata/headers or env vars."""
     forecast_context = current_context.get()
     if forecast_context:
         return forecast_context
 
     if context_service is not None:
+        # Try HTTP headers first (streamable-http transport)
         try:
             if hasattr(ctx, "fastmcp_context") and ctx.fastmcp_context:
                 request = _extract_http_request(ctx.fastmcp_context)
@@ -106,7 +107,17 @@ def get_context_from_mcp(
         except Exception as e:
             logger.debug(f"Could not extract headers from context: {e}")
 
+        # Fallback: environment variables (stdio transport)
+        try:
+            forecast_context = context_service.parse_context_from_env()
+            context_service.validate_context(forecast_context)
+            current_context.set(forecast_context)
+            return forecast_context
+        except ValueError as e:
+            logger.debug(f"Could not extract context from env vars: {e}")
+
     raise ValueError(
         "Forecasting context not initialized. "
-        "Client must provide X-Question-ID and X-Simulated-Date headers when connecting."
+        "Provide X-Question-ID and X-Simulated-Date via HTTP headers (streamable-http) "
+        "or WR_QUESTION_ID and WR_SIMULATED_DATE env vars (stdio)."
     )

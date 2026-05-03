@@ -95,7 +95,7 @@ from src.api.mcp_forecasting.dependencies import (
     get_forecast_graph_tool,
     get_hybrid_search,
 )
-from src.api.mcp_forecasting.runtime import run_server
+from src.api.mcp_forecasting.runtime import run_server, run_server_stdio
 from src.tools.base.output_models import (
     ErrorResponse,
     FetchArticleResponse,
@@ -672,6 +672,12 @@ Connection Metadata (provided by MCP client):
         help="Path to WorldReasoner database (default: worldreasoner.db)",
     )
     parser.add_argument(
+        "--transport",
+        default="http",
+        choices=["http", "stdio"],
+        help="Transport: 'http' (default, streamable-http) or 'stdio' (no server needed)",
+    )
+    parser.add_argument(
         "--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)"
     )
     parser.add_argument("--port", type=int, default=8110, help="Port (default: 8110)")
@@ -696,21 +702,20 @@ Connection Metadata (provided by MCP client):
     forecast_service = ForecastSubmissionService(db)
     logger.info("Initialized forecasting services")
 
-    logger.info(f"Launching MCP server (stream mode) db={args.db}")
-    logger.info("Forecasting context will be provided by MCP client via headers:")
-    logger.info("  - X-Question-ID (required)")
-    logger.info("  - X-Knowledge-Cutoff (optional)")
-    logger.info("  - X-Simulated-Date (required)")
-
-    logger.info(
-        f"Starting MCP STREAMABLE HTTP server on http://{args.host}:{args.port}"
-    )
-    logger.info("Endpoints: /mcp/tools, /mcp/prompts, SSE streaming available")
-    logger.info(
-        "Context headers: X-Question-ID, X-Knowledge-Cutoff (optional), X-Simulated-Date (required)"
-    )
-
-    run_server(mcp=mcp, args=args)
+    if args.transport == "stdio":
+        logger.info(f"Launching MCP server (stdio mode) db={args.db}")
+        logger.info("Forecasting context read from env vars: WR_QUESTION_ID, WR_SIMULATED_DATE, ...")
+        run_server_stdio(mcp=mcp)
+    else:
+        logger.info(f"Launching MCP server (stream mode) db={args.db}")
+        logger.info("Forecasting context will be provided by MCP client via headers:")
+        logger.info("  - X-Question-ID (required)")
+        logger.info("  - X-Knowledge-Cutoff (optional)")
+        logger.info("  - X-Simulated-Date (required)")
+        logger.info(
+            f"Starting MCP STREAMABLE HTTP server on http://{args.host}:{args.port}"
+        )
+        run_server(mcp=mcp, args=args)
 
 
 if __name__ == "__main__":

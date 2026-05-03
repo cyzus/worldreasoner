@@ -1,7 +1,10 @@
 from src.agents.base import BaseAgent
 from src.config import Config
 from smolagents import MCPClient
+from mcp import StdioServerParameters
 import uuid
+import sys
+import os
 from datetime import datetime, timezone
 
 from src.domain.models.question import Question
@@ -30,7 +33,7 @@ class ForecastAgent(BaseAgent):
             config: Configuration object
             db_path: Path to test/forecast database (optional)
             mode: Forecasting mode ('knowledge_only', 'container', 'real_time')
-            enable_causal_tools: Whether to include causal reasoning tools (identify_forecast_event, create_forecast_causal_link, inspect_forecast_graph)
+            enable_causal_tools: Whether to include causal reasoning tools
             tools: Additional custom tools
             max_steps: Maximum agent steps
             is_code: Whether this is a code execution agent
@@ -43,30 +46,31 @@ class ForecastAgent(BaseAgent):
         # Generate session ID for tracking causal reasoning across requests
         session_id = f"sess_{question.id}_{int(datetime.now(timezone.utc).timestamp())}_{uuid.uuid4().hex[:8]}"
 
-        # Create headers for MCP connection
-        headers = {
-            "X-Question-ID": question.id,
-            "X-Knowledge-Cutoff": knowledge_cutoff,
-            "X-Simulated-Date": simulated_date,
-            "X-Model-Name": config.llm.model,
-            "X-Forecast-Mode": mode,
-            "X-Session-ID": session_id,
+        # Build context — same values regardless of transport
+        context_env = {
+            "WR_QUESTION_ID": question.id,
+            "WR_KNOWLEDGE_CUTOFF": knowledge_cutoff,
+            "WR_SIMULATED_DATE": simulated_date,
+            "WR_MODEL_NAME": config.llm.model,
+            "WR_FORECAST_MODE": mode,
+            "WR_SESSION_ID": session_id,
         }
-
         if db_path:
-            headers["X-Database-Path"] = db_path
+            context_env["WR_DATABASE_PATH"] = db_path
 
-        # Create MCP server parameters
+        # stdio transport: spawn server as subprocess, pass context via env vars.
+        # Must use StdioServerParameters (not a dict) so mcpadapt routes to stdio_client.
+        subprocess_env = {**os.environ, **context_env}
         mcp_server_parameters = [
-            {
-                "url": f"http://{config.server.mcp_host}:{config.server.mcp_port}/mcp",
-                "transport": "streamable-http",
-                "headers": headers,
-            }
+            StdioServerParameters(
+                command=sys.executable,
+                args=["-m", "src.api.mcp_forecasting_server", "--transport", "stdio",
+                      "--db", db_path or config.database.db_path],
+                env=subprocess_env,
+            )
         ]
 
         # Get MCP tools
-        # Explicitly set structured_output=False (legacy behavior) to avoid warning
         mcp_client = MCPClient(server_parameters=mcp_server_parameters, structured_output=False)
         forecast_tools = mcp_client.get_tools()
 

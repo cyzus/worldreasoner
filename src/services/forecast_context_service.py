@@ -118,6 +118,36 @@ class ForecastContextService(ServiceBase):
             question=None,  # Loaded on demand
         )
 
+    def parse_context_from_env(self) -> ForecastContext:
+        """Extract forecasting context from environment variables.
+
+        Used by the stdio MCP server transport, where HTTP headers are not
+        available. The ForecastAgent sets these env vars before spawning the
+        subprocess.
+
+        Expected env vars (same keys as headers, uppercase with underscores):
+            WR_QUESTION_ID, WR_SIMULATED_DATE, WR_KNOWLEDGE_CUTOFF,
+            WR_SESSION_ID, WR_MODEL_NAME, WR_FORECAST_MODE, WR_DATABASE_PATH
+        """
+        import os
+
+        headers = {}
+        env_to_header = {
+            "WR_QUESTION_ID": "x-question-id",
+            "WR_SIMULATED_DATE": "x-simulated-date",
+            "WR_KNOWLEDGE_CUTOFF": "x-knowledge-cutoff",
+            "WR_SESSION_ID": "x-session-id",
+            "WR_MODEL_NAME": "x-model-name",
+            "WR_FORECAST_MODE": "x-forecast-mode",
+            "WR_DATABASE_PATH": "x-database-path",
+        }
+        for env_key, header_key in env_to_header.items():
+            val = os.environ.get(env_key)
+            if val:
+                headers[header_key] = val
+
+        return self.parse_context_from_headers(headers)
+
     def validate_context(self, context: ForecastContext) -> None:
         """Validate forecasting context for logical consistency.
 
