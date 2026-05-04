@@ -31,10 +31,18 @@ For every event, make **two assessments** (in order):
 
 Ask: *Is this event real, specific, and causally relevant?*
 
+For factual/source rejections, add a short evidence note in the inline form.
+If you know the corrected date or a better source URL, enter it there. This
+helps distinguish a truly fabricated event from a real event with a bad link or
+wrong date.
+
 | Decision | Condition |
 |---|---|
-| **Approve** | Event happened, dates are accurate, and it has a logical causal link to the forecast outcome |
-| **Reject: Hallucination** | The agent fabricated the event, misrepresented dates, or confused a prediction/opinion article with a confirmed occurrence |
+| **Approve** | Event happened, the source/date are acceptable, and it has a logical causal link to the forecast outcome |
+| **Reject: Fabricated Event** | The event itself appears not to have happened |
+| **Reject: Wrong Date** | The event is real, but the displayed date is materially wrong |
+| **Reject: Source Mismatch** | The event may be real, but the linked source does not support this title/description |
+| **Reject: Prediction / Opinion** | The source is only predicting, speculating, or commenting — not reporting a confirmed occurrence |
 | **Reject: Noise** | Event is real but has no meaningful causal connection to the forecast outcome |
 | **Reject: Duplicate** | Same occurrence already captured by another event — keep the one with richer detail |
 | **Reject: Too Broad** | Describes a multi-month trend or category of events rather than a single, atomic occurrence |
@@ -75,11 +83,14 @@ For **non-Polymarket questions** (no market window or chart shown), assess impac
 
 ## 5. Annotation Criteria in Detail
 
-### Factual Correctness
-- The source article must confirm the event actually occurred.
-- **Web Search is Encouraged**: If the source link is broken, missing, or behind a paywall, please perform a quick web search using the event title and date to verify if it happened.
+### Factual Correctness and Source Quality
+- The source article should confirm the event actually occurred.
+- **Web Search is Encouraged**: If the source link is broken, missing, weak, or behind a paywall, please perform a quick web search using the event title and date to verify if it happened.
 - Dates should match the article's publication date or the event date reported within it.
-- **Reject as Hallucination** if the article (or your web search) reveals it is about a *prediction*, *commentary*, or *hypothetical* — not a confirmed real-world occurrence.
+- If the event is real but the date is wrong, reject as **Wrong Date** and enter the corrected date if available.
+- If the event is real but the linked URL does not support it, reject as **Source Mismatch** and enter a better URL if available.
+- If the article or your search shows only a *prediction*, *commentary*, *hypothetical*, betting preview, or analyst opinion, reject as **Prediction / Opinion**.
+- Use **Fabricated Event** only when the event itself appears false or you cannot find evidence that it happened after a reasonable check.
 
 ### Impact Validity
 - The event must have a plausible mechanism directly connecting it to the forecast question's outcome.
@@ -109,6 +120,8 @@ Events are pre-sorted by importance. Spend the most effort on:
 | Event has no impact analysis | Assess validity only; do not mark reasoning |
 | Two events describe the same news | Approve the one with more specific date/detail; Reject the other as **Duplicate** |
 | Event date is years before the question's market window | Almost always background context — Reject as **Noise** unless the question outcome explicitly depends on that specific historical event |
-| Source link is broken or missing | **Perform a quick web search** using the event details. Only skip if it remains completely unverifiable after a brief search. |
+| Source link is broken or missing | **Perform a quick web search** using the event details. If you find a better source, use **Approve** if the event is relevant or **Source Mismatch** if the original URL is misleading. Only skip if it remains completely unverifiable after a brief search. |
+| Event is true but the source only supports part of it | Reject as **Source Mismatch** if the unsupported part is central; otherwise approve and provide the better source URL. |
+| Event is true but its causal explanation is overstated | Approve the event if relevant, then mark the impact analysis as 👎 **Flawed Reasoning**. Do not reject a real relevant event solely because the reasoning is weak. |
 | Impact direction seems right but reasoning explanation is weak or superficial | Approve the event; mark reasoning as 👎 **Flawed** |
 | Market open date shown as "estimated" | Treat the market window boundary as approximate ±2 weeks; don't reject events solely for falling slightly outside an estimated boundary |

@@ -496,6 +496,17 @@
             width: 260px;
             margin-bottom: 8px;
         }
+        .reject-menu.wide {
+            width: 310px;
+        }
+        .reject-menu-label {
+            padding: 6px 10px 4px;
+            font-size: 0.68rem;
+            font-weight: 800;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
         .reject-menu button {
             display: block;
             width: 100%;
@@ -510,6 +521,68 @@
             box-shadow: none;
         }
         .reject-menu button:hover { background: #f1f5f9; transform: none; }
+
+        .inline-review-form {
+            display: none;
+            margin-top: 12px;
+            padding: 14px;
+            border-radius: 8px;
+            border: 1px solid #fecaca;
+            background: #fff7f7;
+        }
+        .inline-review-form.approval-form {
+            border-color: #bbf7d0;
+            background: #f0fdf4;
+        }
+        .inline-review-title {
+            margin-bottom: 6px;
+            font-size: 0.9rem;
+            font-weight: 800;
+            color: #991b1b;
+        }
+        .inline-review-form.approval-form .inline-review-title {
+            color: #166534;
+        }
+        .inline-review-help {
+            margin-bottom: 8px;
+            font-size: 0.82rem;
+            color: #64748b;
+            line-height: 1.45;
+        }
+        .inline-review-form textarea,
+        .inline-review-form input {
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+        .inline-review-form textarea {
+            width: 100%;
+            min-height: 58px;
+            padding: 8px;
+            border: 1px solid #fecaca;
+            border-radius: 6px;
+            font-size: 0.88rem;
+            resize: vertical;
+        }
+        .inline-review-form.approval-form textarea {
+            border-color: #bbf7d0;
+        }
+        .inline-review-fields {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+        .inline-review-fields input {
+            padding: 6px 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.82rem;
+        }
+        .inline-review-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
 
         /* ── Status badge (top-right of card) ── */
         .status-badge {
@@ -857,8 +930,13 @@
                 <button class="btn-approve" onclick="checkQuizAnswer('approved')">&#10003; Approve</button>
                 <div style="position:relative;">
                     <button class="btn-reject" onclick="toggleQuizRejectMenu()">&#10005; Reject <span style="font-size:0.7em">&#9660;</span></button>
-                    <div class="reject-menu" id="quiz-reject-menu" style="display:none;">
-                        <button onclick="checkQuizAnswer('rejected','Hallucination')">Hallucination (fake news / dates)</button>
+                    <div class="reject-menu wide" id="quiz-reject-menu" style="display:none;">
+                        <div class="reject-menu-label">Factual / source problem</div>
+                        <button onclick="checkQuizAnswer('rejected','Fabricated')">Fabricated event</button>
+                        <button onclick="checkQuizAnswer('rejected','WrongDate')">Wrong date</button>
+                        <button onclick="checkQuizAnswer('rejected','SourceMismatch')">Source does not support event</button>
+                        <button onclick="checkQuizAnswer('rejected','PredictionNotEvent')">Prediction / opinion, not an event</button>
+                        <div class="reject-menu-label">Event quality problem</div>
                         <button onclick="checkQuizAnswer('rejected','Noise')">Noise (no causal link to outcome)</button>
                         <button onclick="checkQuizAnswer('rejected','Duplicate')">Duplicate / Redundant</button>
                         <button onclick="checkQuizAnswer('rejected','TooBoard')">Too Broad (trend, not an event)</button>
@@ -1555,7 +1633,20 @@
 
                 let statusLabel = event.current_status.toUpperCase();
                 if (event.reject_reason) {
-                    const reasonLabels = { TooBoard: 'Too Broad', NoLink: 'No Link', Unclear: 'Unclear' };
+                    const reasonLabels = {
+                        Hallucination: 'Hallucination',
+                        Fabricated: 'Fabricated',
+                        WrongDate: 'Wrong Date',
+                        SourceMismatch: 'Source',
+                        PredictionNotEvent: 'Prediction',
+                        TooBoard: 'Too Broad',
+                        NoLink: 'No Link',
+                        Unclear: 'Unclear',
+                        NeedsWebSearch: 'Needs Search',
+                        Paywalled: 'Paywalled',
+                        SourceUnavailable: 'No Source',
+                        AmbiguousDate: 'Ambiguous Date',
+                    };
                     const short = reasonLabels[event.reject_reason] || event.reject_reason.split(' ')[0];
                     statusLabel += ` (${short})`;
                 }
@@ -1628,8 +1719,13 @@
                             <button class="btn-reject" onclick="toggleRejectMenu('${event.id}', event)">
                                 &#10005; Reject <span style="font-size:0.7em;margin-left:4px;">&#9660;</span>
                             </button>
-                            <div class="reject-menu" id="menu-${event.id}">
-                                <button onclick="annotate('${q.id}', '${event.id}', 'rejected', 'Hallucination')">Hallucination (fake news / dates)</button>
+                            <div class="reject-menu wide" id="menu-${event.id}">
+                                <div class="reject-menu-label">Factual / source problem</div>
+                                <button onclick="showRejectForm('${q.id}', '${event.id}', 'Fabricated')">Fabricated event</button>
+                                <button onclick="showRejectForm('${q.id}', '${event.id}', 'WrongDate')">Wrong date</button>
+                                <button onclick="showRejectForm('${q.id}', '${event.id}', 'SourceMismatch')">Source does not support event</button>
+                                <button onclick="showRejectForm('${q.id}', '${event.id}', 'PredictionNotEvent')">Prediction / opinion, not an event</button>
+                                <div class="reject-menu-label">Event quality problem</div>
                                 <button onclick="annotate('${q.id}', '${event.id}', 'rejected', 'Noise')">Noise (no causal link to outcome)</button>
                                 <button onclick="annotate('${q.id}', '${event.id}', 'rejected', 'Duplicate')">Duplicate / Redundant</button>
                                 <button onclick="annotate('${q.id}', '${event.id}', 'rejected', 'TooBoard')">Too Broad (trend, not an event)</button>
@@ -1641,21 +1737,38 @@
                             </button>
                             <div class="reject-menu" id="skip-menu-${event.id}">
                                 <button onclick="annotate('${q.id}', '${event.id}', 'skipped', 'NoLink')">Link not available</button>
+                                <button onclick="annotate('${q.id}', '${event.id}', 'skipped', 'NeedsWebSearch')">Needs web search</button>
+                                <button onclick="annotate('${q.id}', '${event.id}', 'skipped', 'Paywalled')">Paywalled</button>
+                                <button onclick="annotate('${q.id}', '${event.id}', 'skipped', 'SourceUnavailable')">Source unavailable</button>
+                                <button onclick="annotate('${q.id}', '${event.id}', 'skipped', 'AmbiguousDate')">Ambiguous date</button>
                                 <button onclick="annotate('${q.id}', '${event.id}', 'skipped', 'Unclear')">Unclear / unsure</button>
                             </div>
                         </div>
                     </div>
-                    ${!isAttentionCheck ? `<div class="approval-form" id="approval-form-${event.id}" style="display:none">
-                        <div style="margin-bottom:8px;font-size:0.9rem;font-weight:700;color:#166534;">Confirm Approval</div>
-                        <div style="margin-bottom:6px;font-size:0.82rem;color:#64748b;">Why is this event relevant to the outcome? <span style="color:#ef4444;">*required</span></div>
-                        <textarea id="approval-text-${event.id}" placeholder="e.g. This directly influenced market expectations by..." style="width:100%;padding:8px;border:1px solid #bbf7d0;border-radius:6px;font-size:0.88rem;resize:vertical;min-height:56px;box-sizing:border-box;font-family:inherit;"></textarea>
-                        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
-                            <input type="text" id="approval-date-${event.id}" value="${event.date || ''}" placeholder="YYYY-MM-DD" style="flex:1;min-width:110px;padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:0.82rem;">
-                            <input type="text" id="approval-url-${event.id}" value="${event.source_url || ''}" placeholder="Correct source URL (optional)" style="flex:3;min-width:180px;padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:0.82rem;">
+                    ${!isAttentionCheck ? `<div class="inline-review-form approval-form" id="approval-form-${event.id}">
+                        <div class="inline-review-title">Confirm Approval</div>
+                        <div class="inline-review-help">Why is this event relevant to the outcome? <span style="color:#ef4444;">*required</span></div>
+                        <textarea id="approval-text-${event.id}" placeholder="e.g. This directly influenced market expectations by..."></textarea>
+                        <div class="inline-review-fields">
+                            <input type="text" id="approval-date-${event.id}" value="${event.date || ''}" placeholder="YYYY-MM-DD" style="flex:1;min-width:110px;">
+                            <input type="text" id="approval-url-${event.id}" value="${event.source_url || ''}" placeholder="Correct source URL (optional)" style="flex:3;min-width:180px;">
                         </div>
-                        <div style="margin-top:10px;display:flex;gap:8px;">
+                        <div class="inline-review-actions">
                             <button class="btn-approve" style="flex:1;" onclick="confirmApprove('${q.id}', '${event.id}')">&#10003; Confirm</button>
                             <button class="btn-nav" onclick="cancelApprove('${event.id}')">Cancel</button>
+                        </div>
+                    </div>
+                    <div class="inline-review-form" id="reject-form-${event.id}">
+                        <div class="inline-review-title" id="reject-title-${event.id}">Confirm Rejection</div>
+                        <div class="inline-review-help" id="reject-help-${event.id}">Add a brief note so source/date problems are not confused with fabricated events.</div>
+                        <textarea id="reject-text-${event.id}" placeholder="Brief evidence note, e.g. event is real but article only predicts it, or correct date is..."></textarea>
+                        <div class="inline-review-fields">
+                            <input type="text" id="reject-date-${event.id}" value="${event.date || ''}" placeholder="Correct date if known" style="flex:1;min-width:120px;">
+                            <input type="text" id="reject-url-${event.id}" value="${event.source_url || ''}" placeholder="Better source URL if known" style="flex:3;min-width:180px;">
+                        </div>
+                        <div class="inline-review-actions">
+                            <button class="btn-reject" style="flex:1;" onclick="confirmReject('${q.id}', '${event.id}')">&#10005; Confirm Reject</button>
+                            <button class="btn-nav" onclick="cancelReject('${event.id}')">Cancel</button>
                         </div>
                     </div>` : ''}
                     ${chartHtml}
@@ -1684,7 +1797,45 @@
 
         // ── Annotation actions ────────────────────────────────────────────
 
-        const REASON_LABELS = { TooBoard: 'Too Broad', NoLink: 'No Link', Unclear: 'Unclear' };
+        const REASON_LABELS = {
+            Hallucination: 'Hallucination',
+            Fabricated: 'Fabricated',
+            WrongDate: 'Wrong Date',
+            SourceMismatch: 'Source Mismatch',
+            PredictionNotEvent: 'Prediction',
+            Noise: 'Noise',
+            Duplicate: 'Duplicate',
+            TooBoard: 'Too Broad',
+            NoLink: 'No Link',
+            NeedsWebSearch: 'Needs Search',
+            Paywalled: 'Paywalled',
+            SourceUnavailable: 'No Source',
+            AmbiguousDate: 'Ambiguous Date',
+            Unclear: 'Unclear',
+        };
+
+        const REJECT_HELP = {
+            Fabricated: {
+                title: 'Reject: Fabricated Event',
+                help: 'Use only when the event itself appears not to have happened. Add what you searched or why the claim is false.',
+                placeholder: 'e.g. I could not find evidence this law/event exists; sources discuss a different proposal.',
+            },
+            WrongDate: {
+                title: 'Reject: Wrong Date',
+                help: 'Use when the event is real but the shown date is materially wrong. Add the corrected date if you can.',
+                placeholder: 'e.g. The article reports this happened on 2025-03-18, not 2025-08-03.',
+            },
+            SourceMismatch: {
+                title: 'Reject: Source Mismatch',
+                help: 'Use when the event may be real, but this URL does not support the title/description.',
+                placeholder: 'e.g. The linked article is a betting preview and does not confirm the weigh-in occurred.',
+            },
+            PredictionNotEvent: {
+                title: 'Reject: Prediction / Opinion',
+                help: 'Use when the source is only forecasting, speculating, or commenting, not reporting a confirmed event.',
+                placeholder: 'e.g. The article predicts the fight could happen; it does not report an official announcement.',
+            },
+        };
 
         window.toggleRejectMenu = function(eventId, e) {
             e.stopPropagation();
@@ -1735,6 +1886,8 @@
             if (callout) callout.style.display = hide ? 'none' : '';
             const approvalForm = document.getElementById(`approval-form-${eventId}`);
             if (approvalForm) approvalForm.style.display = 'none';
+            const rejectForm = document.getElementById(`reject-form-${eventId}`);
+            if (rejectForm) rejectForm.style.display = 'none';
 
             updateProgress();
             populateDropdown();
@@ -1797,6 +1950,7 @@
 
         window.showApprovalForm = function(qId, eventId) {
             document.querySelectorAll('.approval-form').forEach(f => f.style.display = 'none');
+            document.querySelectorAll('[id^="reject-form-"]').forEach(f => f.style.display = 'none');
             const form = document.getElementById(`approval-form-${eventId}`);
             if (!form) return;
             form.style.display = 'block';
@@ -1806,6 +1960,35 @@
 
         window.cancelApprove = function(eventId) {
             const form = document.getElementById(`approval-form-${eventId}`);
+            if (form) form.style.display = 'none';
+        };
+
+        window.showRejectForm = function(qId, eventId, reason) {
+            document.querySelectorAll('.reject-menu').forEach(m => m.style.display = 'none');
+            document.querySelectorAll('.approval-form').forEach(f => f.style.display = 'none');
+            document.querySelectorAll('[id^="reject-form-"]').forEach(f => f.style.display = 'none');
+
+            const form = document.getElementById(`reject-form-${eventId}`);
+            if (!form) return;
+            const meta = REJECT_HELP[reason] || {
+                title: `Reject: ${REASON_LABELS[reason] || reason}`,
+                help: 'Add a brief note explaining this rejection.',
+                placeholder: 'Brief evidence note...',
+            };
+            form.dataset.reason = reason;
+            document.getElementById(`reject-title-${eventId}`).innerText = meta.title;
+            document.getElementById(`reject-help-${eventId}`).innerText = meta.help;
+            const ta = document.getElementById(`reject-text-${eventId}`);
+            form.style.display = 'block';
+            if (ta) {
+                ta.placeholder = meta.placeholder;
+                ta.style.borderColor = '#fecaca';
+                ta.focus();
+            }
+        };
+
+        window.cancelReject = function(eventId) {
+            const form = document.getElementById(`reject-form-${eventId}`);
             if (form) form.style.display = 'none';
         };
 
@@ -1825,9 +2008,44 @@
             });
         };
 
+        window.confirmReject = function(qId, eventId) {
+            const form = document.getElementById(`reject-form-${eventId}`);
+            const reason = form ? form.dataset.reason : null;
+            const ta = document.getElementById(`reject-text-${eventId}`);
+            const text = ta ? ta.value.trim() : '';
+            if (!reason) return;
+            if (!text) {
+                if (ta) { ta.style.borderColor = '#ef4444'; ta.focus(); }
+                return;
+            }
+            const dateVal = (document.getElementById(`reject-date-${eventId}`) || {}).value || '';
+            const urlVal = (document.getElementById(`reject-url-${eventId}`) || {}).value || '';
+            annotate(qId, eventId, 'rejected', reason, {
+                reasoning_text: text,
+                corrected_date: dateVal.trim() || null,
+                corrected_url: urlVal.trim() || null,
+            });
+        };
+
         // ── Quiz ──────────────────────────────────────────────────────────
 
         const QUIZ_EVENTS = [
+            {
+                date: 'September 1, 2024',
+                title: 'Federal Reserve cuts interest rates for the first time in 2024',
+                description: 'The event is real and relevant, but the article states the cut happened on September 18, 2024. The displayed date is materially wrong.',
+                correct_status: 'rejected',
+                correct_reason: 'WrongDate',
+                explanation: 'This should be <strong>rejected as Wrong Date</strong>, not Fabricated. The event happened and matters, but the date shown on the event card is incorrect.'
+            },
+            {
+                date: 'December 11, 2024',
+                title: 'Fed officials preview another rate cut next week',
+                description: 'The linked article is an analyst opinion piece predicting what the Fed might do. It does not report a completed Fed action or official announcement.',
+                correct_status: 'rejected',
+                correct_reason: 'PredictionNotEvent',
+                explanation: 'This should be <strong>rejected as Prediction / Opinion</strong>. A forecast about a possible future action is not a confirmed real-world event.'
+            },
             {
                 date: 'April 19, 2024',
                 title: "Taylor Swift's Eras Tour becomes first concert tour to gross $1 billion",

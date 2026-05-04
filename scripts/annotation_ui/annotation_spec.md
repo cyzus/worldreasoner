@@ -118,11 +118,27 @@ If no impact analysis row exists, show muted text: *"No impact assessment availa
 | Action | Code | When to use |
 |---|---|---|
 | Approve | `approved` | Factually real, causally relevant |
-| Reject: Hallucination | `rejected / Hallucination` | Fabricated event or dates |
+| Reject: Fabricated Event | `rejected / Fabricated` | Event itself appears not to have happened |
+| Reject: Wrong Date | `rejected / WrongDate` | Event is real, but the displayed date is materially wrong |
+| Reject: Source Mismatch | `rejected / SourceMismatch` | Linked source does not support this event title/description |
+| Reject: Prediction / Opinion | `rejected / PredictionNotEvent` | Source is prediction, commentary, hypothetical, or betting preview rather than a confirmed occurrence |
 | Reject: Noise | `rejected / Noise` | Real but causally irrelevant |
 | Reject: Duplicate | `rejected / Duplicate` | Same occurrence already approved |
-| Reject: Too Broad | `rejected / TooBroad` | Trend/period not a specific occurrence |
-| Skip | `skipped` | Cannot verify from available source |
+| Reject: Too Broad | `rejected / TooBoard` | Trend/period not a specific occurrence |
+| Skip: Link not available | `skipped / NoLink` | Link missing from the event card |
+| Skip: Needs web search | `skipped / NeedsWebSearch` | Cannot decide without additional search |
+| Skip: Paywalled | `skipped / Paywalled` | Source cannot be inspected due to paywall |
+| Skip: Source unavailable | `skipped / SourceUnavailable` | Source link is dead or inaccessible |
+| Skip: Ambiguous date | `skipped / AmbiguousDate` | Event may be real, but the date cannot be resolved |
+| Skip: Unclear | `skipped / Unclear` | Cannot verify from available source |
+
+For factual/source rejections (`Fabricated`, `WrongDate`, `SourceMismatch`,
+`PredictionNotEvent`), the UI asks for a short evidence note in
+`reasoning_text`. If the annotator can identify a corrected date or better
+source, those are stored in `corrected_date` and `corrected_url`.
+
+Legacy exports may still contain `rejected / Hallucination`; treat this as the
+old broad label that mixed fabricated events, wrong dates, and source mismatch.
 
 ### Reasoning quality assessment (only when impact analysis is present)
 
