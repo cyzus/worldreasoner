@@ -1,21 +1,34 @@
 KNOWLEDGE_ONLY = """
-Forecast the outcome of this question. 
-Use get_question to see the details, then submit your forecast.
+Forecast the outcome of this question and submit your forecast.
 Make reasonable forecasts based on your knowledge.
 """
 
 REAL_TIME = """
-Forecast the outcome of this question. 
-Use get_question to see the details, research if needed, and then submit your forecast.
+Forecast the outcome of this question. Research if needed, then submit your forecast.
 Make reasonable forecasts based on what you learn.
 """
 
 CONTAINER = """
-Forecast the outcome of this question. 
-Use get_question to see the details, research if needed, and then submit your forecast.
+Forecast the outcome of this question. Research if needed, then submit your forecast.
 The information you have access to might be limited due to the simulated date or evidence collection process.
 Make reasonable forecasts nonetheless.
 """
+
+
+def _format_question_block(question) -> str:
+    """Format a Question object into a prompt-ready block."""
+    lines = [
+        "QUESTION TO FORECAST:",
+        f"  ID: {question.id}",
+        f"  Text: {question.question_text}",
+        f"  Type: {question.question_type}",
+    ]
+    if question.options:
+        lines.append(f"  Options: {', '.join(question.options)}")
+    if question.quantity_unit:
+        lines.append(f"  Unit: {question.quantity_unit}")
+    lines.append("")
+    return "\n".join(lines)
 
 WITH_CAUSAL_TOOLS = """
 Use the reasoning tools and graph inspector to build and refine an event reasoning graph before submitting your forecast.
@@ -71,6 +84,7 @@ def get_forecast_instructions(
     mode: str,
     enable_causal_tools: bool,
     condition_name: str | None = None,
+    question=None,
 ) -> str:
     """
     Generate forecast instructions based on mode and causal tool settings.
@@ -79,6 +93,7 @@ def get_forecast_instructions(
         mode: Forecasting mode ("knowledge_only", "real_time", "container")
         enable_causal_tools: Whether causal reasoning tools are enabled
         condition_name: Optional condition name to prepend a condition-specific preamble
+        question: Optional Question object to embed directly in the prompt (saves one agent step)
     """
     if mode == "knowledge_only":
         instructions = KNOWLEDGE_ONLY
@@ -91,5 +106,8 @@ def get_forecast_instructions(
 
     if condition_name and condition_name in CONDITION_PREAMBLES:
         instructions = CONDITION_PREAMBLES[condition_name] + instructions
+
+    if question is not None:
+        instructions = _format_question_block(question) + "\n" + instructions
 
     return instructions

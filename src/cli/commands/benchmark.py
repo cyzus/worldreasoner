@@ -71,6 +71,12 @@ def run(
         "--resume",
         help="Skip already-completed triples",
     ),
+    max_workers: int = typer.Option(
+        4,
+        "--workers",
+        "-w",
+        help="Number of parallel workers",
+    ),
     output_dir: str = typer.Option(
         "benchmarks",
         "--output-dir",
@@ -133,6 +139,7 @@ def run(
     console.print(f"  Total runs: {total_triples}")
     console.print(f"  Slot: {slot}")
     console.print(f"  Resume: {resume}")
+    console.print(f"  Workers: {max_workers}")
     console.print(f"  Output: {output_dir}/")
 
     if not yes and not typer.confirm("\nProceed with benchmark?"):
@@ -172,6 +179,7 @@ def run(
                 slot=slot,
                 on_progress=on_progress,
                 resume=resume,
+                max_workers=max_workers,
             )
 
         # Display results

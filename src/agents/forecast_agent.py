@@ -71,7 +71,11 @@ class ForecastAgent(BaseAgent):
         ]
 
         # Get MCP tools
-        mcp_client = MCPClient(server_parameters=mcp_server_parameters, structured_output=False)
+        mcp_client = MCPClient(
+            server_parameters=mcp_server_parameters,
+            structured_output=False,
+            adapter_kwargs={"connect_timeout": 60},
+        )
         forecast_tools = mcp_client.get_tools()
 
         # Causal tool names (these create new events, valid for any mode)
