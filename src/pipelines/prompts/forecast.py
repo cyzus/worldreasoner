@@ -31,20 +31,39 @@ def _format_question_block(question) -> str:
     return "\n".join(lines)
 
 WITH_CAUSAL_TOOLS = """
-Use the reasoning tools and graph inspector to build and refine an event reasoning graph before submitting your forecast.
+CAUSAL REASONING WORKFLOW (Required — follow all steps):
 
-OUTCOME IMPACT ANALYSIS (Optional but Recommended):
-When building your reasoning graph, consider analyzing how each significant event impacts EACH possible outcome:
-- For binary questions: How does the event affect "Yes" vs "No" likelihood?
-- For MCQ questions: How does it affect each option's likelihood?
-- Use event_identifier with outcome_impacts parameter to record your assessments
-- This structured analysis helps avoid hindsight bias and consider all evidence systematically
+STEP 1 — BUILD THE CAUSAL GRAPH
+Option A (recommended — one call): Use propose_forecast_subgraph with a JSON object:
+  {
+    "events": [
+      {"alias": "E1:RootCause", "title": "...", "description": "...", "domain": "politics", "occurred_date": "2024-01-01"},
+      {"alias": "E2:Intermediate", "title": "...", "description": "...", "domain": "politics", "occurred_date": "2024-02-01"},
+      {"alias": "E3:Outcome", "title": "...", "description": "...", "domain": "politics", "occurred_date": "2024-03-01"}
+    ],
+    "edges": [
+      {"source": "E1:RootCause", "target": "E2:Intermediate", "relation": "causes", "strength": 0.8, "confidence": 0.7, "reasoning": "..."},
+      {"source": "E2:Intermediate", "target": "E3:Outcome", "relation": "enables", "strength": 0.7, "confidence": 0.6, "reasoning": "..."}
+    ]
+  }
 
-When you identify an event, you can record its impact:
-  outcome_impacts='[{"outcome_event_id": "evt_...", "direction": "positive", "magnitude": 0.7, "confidence": 0.8, "reasoning": "..."}]'
+Option B (step-by-step): Call identify_forecast_event for each node, then call
+create_forecast_causal_link for EVERY connection (root→intermediate, intermediate→outcome).
 
-An event that makes one outcome MORE likely often makes the opposite LESS likely.
-Use graph_inspector to view your outcome impact analysis.
+Include at least 3 events: root cause, intermediate event(s), and outcome.
+For each edge provide: relation_type (causes|enables|prevents|correlates_with|conditional),
+strength 0.0–1.0, confidence 0.0–1.0, and a mechanistic reasoning explanation.
+
+STEP 2 — VERIFY WITH GRAPH INSPECTOR
+Call inspect_forecast_graph and check:
+- Hypotheses count ≥ 2 — if it shows 0, you skipped edges, go back and add them now
+- max_depth ≥ 2 — if 0 or 1, add intermediate events and link them
+
+STEP 3 — SUBMIT ONLY AFTER GRAPH IS COMPLETE
+Do not submit your forecast until:
+- At least 3 events are identified
+- At least 2 causal links are created
+- inspect_forecast_graph shows max_depth ≥ 2
 """
 
 
@@ -56,9 +75,9 @@ CONDITION_PREAMBLES = {
     ),
     "structured_scenario": (
         "You have access to causal reasoning tools but no external search. "
-        "Use the causal reasoning tools to build an explicit event graph representing "
-        "possible future scenarios before making your prediction. Generate at least 3 events "
-        "and connect them causally to model how the situation might unfold.\n\n"
+        "Build a causal graph before forecasting: use propose_forecast_subgraph to batch-create "
+        "at least 3 events and 2 edges in one call, then verify with inspect_forecast_graph. "
+        "Do not submit until hypotheses ≥ 2.\n\n"
     ),
     "search_enabled": (
         "You have access to search and article retrieval tools. "
@@ -67,15 +86,15 @@ CONDITION_PREAMBLES = {
     ),
     "worldreasoner": (
         "You have access to both search tools and causal reasoning tools. "
-        "First, search for relevant evidence. Then, structure your findings using the "
-        "causal reasoning tools to build an event graph that maps out causal relationships "
-        "and possible scenarios before making your prediction.\n\n"
+        "First search for evidence, then build a causal graph using propose_forecast_subgraph "
+        "(batch events+edges in one call), then verify with inspect_forecast_graph — "
+        "must show hypotheses ≥ 2 and max_depth ≥ 2 before submitting.\n\n"
     ),
     "oracle": (
         "You have access to information very close to the question's resolution date. "
-        "Search thoroughly for the most recent evidence available. Use the causal reasoning "
-        "tools to structure your analysis. Your goal is to find definitive or near-definitive "
-        "evidence about the outcome.\n\n"
+        "Search thoroughly for the most recent evidence, then build a causal graph using "
+        "propose_forecast_subgraph (batch events+edges in one call), "
+        "then verify with inspect_forecast_graph. Your goal is near-definitive evidence.\n\n"
     ),
 }
 

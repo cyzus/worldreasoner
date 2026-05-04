@@ -23,6 +23,7 @@ class ForecastAgent(BaseAgent):
         tools: list = None,
         max_steps: int = 15,
         is_code: bool = True,
+        benchmark_condition: str = None,
     ):
         """Initialize ForecastAgent.
 
@@ -45,6 +46,7 @@ class ForecastAgent(BaseAgent):
 
         # Generate session ID for tracking causal reasoning across requests
         session_id = f"sess_{question.id}_{int(datetime.now(timezone.utc).timestamp())}_{uuid.uuid4().hex[:8]}"
+        self.session_id = session_id
 
         # Build context — same values regardless of transport
         context_env = {
@@ -55,6 +57,8 @@ class ForecastAgent(BaseAgent):
             "WR_FORECAST_MODE": mode,
             "WR_SESSION_ID": session_id,
         }
+        if benchmark_condition:
+            context_env["WR_BENCHMARK_CONDITION"] = benchmark_condition
         if db_path:
             context_env["WR_DATABASE_PATH"] = db_path
 
@@ -82,7 +86,10 @@ class ForecastAgent(BaseAgent):
         causal_tool_names = {
             "identify_forecast_event",
             "create_forecast_causal_link",
+            "propose_forecast_subgraph",
             "inspect_forecast_graph",
+            "delete_forecast_event",
+            "delete_forecast_hypothesis",
         }
 
         # Base tools always available

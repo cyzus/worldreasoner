@@ -6,6 +6,7 @@ producing comparative results for the research paper.
 
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -213,26 +214,27 @@ class AutoBenchmarkService:
         config = deepcopy(self.config)
         config.llm.model = model_name
 
-        # Get condition-specific prompt
+        # Get condition-specific prompt with question embedded (saves one agent step)
         prompt = get_forecast_instructions(
             mode=condition.mode,
             enable_causal_tools=condition.enable_causal_tools,
             condition_name=condition.name.value,
+            question=question,
         )
 
         # Create and run forecast agent
-        agent = ForecastAgent(
-            question=question,
-            simulated_date=simulated_date.isoformat(),
-            knowledge_cutoff=knowledge_cutoff,
-            config=config,
-            db_path=self.db_path,
-            mode=condition.mode,
-            enable_causal_tools=condition.enable_causal_tools,
-            max_steps=condition.max_steps,
-        )
-
         try:
+            agent = ForecastAgent(
+                question=question,
+                simulated_date=simulated_date.isoformat(),
+                knowledge_cutoff=knowledge_cutoff,
+                config=config,
+                db_path=self.db_path,
+                mode=condition.mode,
+                enable_causal_tools=condition.enable_causal_tools,
+                max_steps=condition.max_steps,
+                benchmark_condition=condition.name.value,
+            )
             agent.run(prompt)
         except Exception as e:
             logger.error(
@@ -246,8 +248,8 @@ class AutoBenchmarkService:
                 "model": model_name,
             }
 
-        # Retrieve the forecast from DB
-        forecasts = self.db.get_many(Forecast, filters={"question_id": question.id})
+        # Retrieve the forecast from DB by session_id (safe under parallel execution)
+        forecasts = self.db.get_many(Forecast, filters={"session_id": agent.session_id})
         if not forecasts:
             return {
                 "status": "error",
@@ -257,14 +259,7 @@ class AutoBenchmarkService:
                 "model": model_name,
             }
 
-        latest_forecast = sorted(forecasts, key=lambda f: f.timestamp, reverse=True)[0]
-
-        # Tag the forecast with benchmark metadata
-        metadata = latest_forecast.evaluation_metadata or {}
-        metadata["benchmark_condition"] = condition.name.value
-        metadata["benchmark_model"] = model_name
-        latest_forecast.evaluation_metadata = metadata
-        self.db.save(Forecast, latest_forecast)
+        latest_forecast = forecasts[0]
 
         # Evaluate the forecast
         evaluator = ForecastEvaluator(db_path=self.db_path)
@@ -392,6 +387,7 @@ class AutoBenchmarkService:
         slot: str = "mid",
         on_progress: Optional[Callable[[AutoBenchmarkProgress], None]] = None,
         resume: bool = False,
+        max_workers: int = 4,
     ) -> AutoBenchmarkResult:
         """Run the full auto-benchmark across all conditions, models, and questions.
 
@@ -402,6 +398,7 @@ class AutoBenchmarkService:
             slot: Window position for simulated date — 'early' (20%), 'mid' (50%), 'late' (80%)
             on_progress: Progress callback
             resume: Skip already-completed triples
+            max_workers: Number of parallel workers (default 4)
 
         Returns:
             AutoBenchmarkResult with all results and comparative summary
@@ -412,74 +409,105 @@ class AutoBenchmarkService:
         start_time = time.time()
         run_id = f"autobench_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
 
-        # Calculate total work
-        total_triples = len(conditions) * len(models) * len(questions)
-        current_triple = 0
+        # Build all (condition, model, question) triples
+        triples = [
+            (ci, condition, mi, model_name, qi, question)
+            for ci, condition in enumerate(conditions)
+            for mi, model_name in enumerate(models)
+            for qi, question in enumerate(questions)
+        ]
+        total_triples = len(triples)
 
         # Accumulate results: condition_name -> model_name -> list of results
         raw_results: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
+        for condition in conditions:
+            raw_results[condition.name.value] = {m: [] for m in models}
 
-        for ci, condition in enumerate(conditions):
+        # Pre-fetch all completed triples in one DB query to avoid N*2400 queries
+        completed_set: set = set()
+        if resume:
+            all_forecasts = self.db.get_many(Forecast, filters={})
+            for f in all_forecasts:
+                meta = f.evaluation_metadata or {}
+                bc = meta.get("benchmark_condition")
+                bm = meta.get("benchmark_model")
+                if bc and bm:
+                    completed_set.add((f.question_id, bc, bm))
+            logger.info(f"Resume: found {len(completed_set)} already-completed triples")
+
+        completed_count = 0
+
+        def _run_triple(args):
+            ci, condition, mi, model_name, qi, question = args
             cond_name = condition.name.value
-            if cond_name not in raw_results:
-                raw_results[cond_name] = {}
+            knowledge_cutoff = get_knowledge_cutoff_date(model_name)
 
-            for mi, model_name in enumerate(models):
-                if model_name not in raw_results[cond_name]:
-                    raw_results[cond_name][model_name] = []
+            # Resume: skip completed triples (use pre-fetched set, no DB query per triple)
+            if resume and (question.id, cond_name, model_name) in completed_set:
+                logger.info(f"Skipping completed: {cond_name}/{model_name}/{question.id}")
+                return (ci, condition, mi, model_name, qi, question, cond_name, model_name, {
+                    "status": "success",
+                    "question_id": question.id,
+                    "condition": cond_name,
+                    "model": model_name,
+                    "is_correct": None,
+                    "skipped_resume": True,
+                })
 
-                knowledge_cutoff = get_knowledge_cutoff_date(model_name)
+            result = self._run_single(
+                condition=condition,
+                question=question,
+                model_name=model_name,
+                knowledge_cutoff=knowledge_cutoff,
+                slot=slot,
+            )
+            return (ci, condition, mi, model_name, qi, question, cond_name, model_name, result)
 
-                for qi, question in enumerate(questions):
-                    current_triple += 1
-
-                    # Resume: skip completed triples
-                    if resume and self._check_already_completed(
-                        condition, question, model_name
-                    ):
-                        logger.info(
-                            f"Skipping completed: {cond_name}/{model_name}/{question.id}"
-                        )
-                        # Still need to include in results for accurate counts
-                        raw_results[cond_name][model_name].append(
-                            {
-                                "status": "success",
-                                "question_id": question.id,
-                                "condition": cond_name,
-                                "model": model_name,
-                                "is_correct": None,  # Will be filled from DB
-                                "skipped_resume": True,
-                            }
-                        )
-                        continue
-
-                    # Report progress
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(_run_triple, t): t for t in triples}
+            for future in as_completed(futures):
+                completed_count += 1
+                try:
+                    ci, condition, mi, model_name, qi, question, cond_name, mn, result = future.result()
+                    raw_results[cond_name][mn].append(result)
                     if on_progress:
-                        on_progress(
-                            AutoBenchmarkProgress(
-                                condition_index=ci + 1,
-                                condition_total=len(conditions),
-                                condition_name=condition.display_name,
-                                model_index=mi + 1,
-                                model_total=len(models),
-                                model_name=model_name,
-                                question_index=qi + 1,
-                                question_total=len(questions),
-                                question_id=question.id,
-                                overall_current=current_triple,
-                                overall_total=total_triples,
-                            )
-                        )
-
-                    # Run the single benchmark
-                    result = self._run_single(
-                        condition=condition,
-                        question=question,
-                        model_name=model_name,
-                        knowledge_cutoff=knowledge_cutoff,
-                        slot=slot,
-                    )
-                    raw_results[cond_name][model_name].append(result)
+                        on_progress(AutoBenchmarkProgress(
+                            condition_index=ci + 1,
+                            condition_total=len(conditions),
+                            condition_name=condition.display_name,
+                            model_index=mi + 1,
+                            model_total=len(models),
+                            model_name=mn,
+                            question_index=qi + 1,
+                            question_total=len(questions),
+                            question_id=question.id,
+                            overall_current=completed_count,
+                            overall_total=total_triples,
+                        ))
+                except Exception as e:
+                    ci, condition, mi, model_name, qi, question = futures[future]
+                    logger.error(f"Triple failed: {condition.name.value}/{model_name}/{question.id}: {e}")
+                    raw_results[condition.name.value][model_name].append({
+                        "status": "error",
+                        "error": str(e),
+                        "question_id": question.id,
+                        "condition": condition.name.value,
+                        "model": model_name,
+                    })
+                    if on_progress:
+                        on_progress(AutoBenchmarkProgress(
+                            condition_index=ci + 1,
+                            condition_total=len(conditions),
+                            condition_name=condition.display_name,
+                            model_index=mi + 1,
+                            model_total=len(models),
+                            model_name=model_name,
+                            question_index=qi + 1,
+                            question_total=len(questions),
+                            question_id=question.id,
+                            overall_current=completed_count,
+                            overall_total=total_triples,
+                        ))
 
         # Aggregate results
         condition_results: Dict[str, Dict[str, ConditionResult]] = {}

@@ -95,6 +95,7 @@ from src.api.mcp_forecasting.dependencies import (
     get_forecast_graph_tool,
     get_hybrid_search,
 )
+from src.core.alias_registry import AliasRegistry
 from src.api.mcp_forecasting.runtime import run_server, run_server_stdio
 from src.tools.base.output_models import (
     ErrorResponse,
@@ -126,6 +127,9 @@ forecast_service: ForecastSubmissionService = None
 _current_context: ContextVar[Optional[ForecastContext]] = ContextVar(
     "forecast_context", default=None
 )
+
+# Per-session alias registries for propose_forecast_subgraph (keyed by session_id)
+_alias_registries: dict[str, AliasRegistry] = {}
 
 
 # ============================================================================
@@ -531,6 +535,107 @@ def inspect_forecast_graph(ctx: Context) -> str:
 
 
 @mcp.tool()
+def delete_forecast_event(ctx: Context, event_id: str) -> str:
+    """Delete a forecast event and all its causal links.
+
+    Use this to correct mistakes such as duplicated events, wrong date, or
+    misidentified events. All causal links referencing this event are also removed.
+
+    Args:
+        ctx: MCP context
+        event_id: ID of the forecast event to delete
+
+    Returns:
+        JSON confirmation with deleted event and hypothesis counts
+    """
+    try:
+        from src.tools.reasoning.forecast_delete_event import ForecastDeleteEventTool
+        forecast_context = _get_context_from_mcp(ctx)
+        tool = ForecastDeleteEventTool(
+            forecast_db_path=forecast_context.db_path or db.db_path,
+            session_id=forecast_context.session_id,
+        )
+        return tool.forward(event_id)
+    except Exception as e:
+        logger.error(f"Error deleting forecast event: {e}")
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def delete_forecast_hypothesis(ctx: Context, source_event_id: str, target_event_id: str) -> str:
+    """Delete a causal link between two forecast events.
+
+    Use this to correct mistakes such as wrong direction, incorrect relation type,
+    or accidental duplicate links.
+
+    Args:
+        ctx: MCP context
+        source_event_id: ID of the causing event
+        target_event_id: ID of the caused event
+
+    Returns:
+        JSON confirmation with deleted hypothesis ID
+    """
+    try:
+        from src.tools.reasoning.forecast_delete_hypothesis import ForecastDeleteHypothesisTool
+        forecast_context = _get_context_from_mcp(ctx)
+        tool = ForecastDeleteHypothesisTool(
+            forecast_db_path=forecast_context.db_path or db.db_path,
+            session_id=forecast_context.session_id,
+        )
+        return tool.forward(source_event_id, target_event_id)
+    except Exception as e:
+        logger.error(f"Error deleting forecast hypothesis: {e}")
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def propose_forecast_subgraph(ctx: Context, subgraph_json: str) -> str:
+    """Batch-create forecast events and causal links in a single call.
+
+    More efficient than calling identify_forecast_event and
+    create_forecast_causal_link separately for each node/edge.
+
+    Provide a JSON object with two keys:
+      - "events": list of event defs (alias, title, description, domain, occurred_date)
+      - "edges": list of causal links (source, target, relation, strength, confidence, reasoning)
+
+    Event aliases (e.g. "E1:IranStrikes") are resolved to UUIDs automatically;
+    use the same alias in 'source'/'target' of edges to reference a just-created event.
+
+    Returns:
+        JSON with events_created, edges_created, failed_items, and alias_map
+    """
+    try:
+        from src.tools.reasoning.propose_subgraph import ProposeSubgraphTool
+        forecast_context = _get_context_from_mcp(ctx)
+        db_instance = _get_db(forecast_context.db_path)
+
+        session_id = forecast_context.session_id
+        if session_id not in _alias_registries:
+            _alias_registries[session_id] = AliasRegistry()
+        alias_registry = _alias_registries[session_id]
+
+        event_tool = _get_forecast_event_tool(db_instance, forecast_context)
+        causal_tool = _get_forecast_causal_tool(db_instance, forecast_context)
+
+        tool = ProposeSubgraphTool(
+            event_identifier_tool=event_tool,
+            causal_reasoner_tool=causal_tool,
+            alias_registry=alias_registry,
+            db_path=forecast_context.db_path or db_instance.db_path,
+        )
+        result = tool.forward(subgraph_json)
+        import json as _json
+        if hasattr(result, "model_dump"):
+            return _json.dumps(result.model_dump())
+        return str(result)
+    except Exception as e:
+        logger.error(f"Error in propose_forecast_subgraph: {e}")
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
 def submit_forecast(
     ctx: Context,
     prediction: Union[str, float, int],
@@ -592,6 +697,15 @@ def submit_forecast(
             mode=forecast_context.forecast_mode,
             db_path=forecast_context.db_path,
         )
+
+        # Tag forecast with benchmark metadata if running inside auto-benchmark
+        benchmark_condition = os.environ.get("WR_BENCHMARK_CONDITION")
+        if benchmark_condition:
+            meta = forecast.evaluation_metadata or {}
+            meta["benchmark_condition"] = benchmark_condition
+            meta["benchmark_model"] = forecast_context.model_name
+            forecast.evaluation_metadata = meta
+            _get_db(forecast_context.db_path).save(Forecast, forecast)
 
         # Link graph elements
         graph_counts = forecast_service.link_forecast_graph(
