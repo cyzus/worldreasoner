@@ -683,7 +683,16 @@ def submit_forecast(
         if not valid:
             return ErrorResponse(error=error)
 
-        # Create forecast
+        # Build evaluation metadata (benchmark tagging) before saving
+        eval_meta = None
+        benchmark_condition = os.environ.get("WR_BENCHMARK_CONDITION")
+        if benchmark_condition:
+            eval_meta = {
+                "benchmark_condition": benchmark_condition,
+                "benchmark_model": forecast_context.model_name,
+            }
+
+        # Create and save forecast (with metadata in a single write)
         forecast = forecast_service.create_forecast(
             question_id=forecast_context.question_id,
             session_id=forecast_context.session_id,
@@ -696,16 +705,8 @@ def submit_forecast(
             model_name=forecast_context.model_name,
             mode=forecast_context.forecast_mode,
             db_path=forecast_context.db_path,
+            evaluation_metadata=eval_meta,
         )
-
-        # Tag forecast with benchmark metadata if running inside auto-benchmark
-        benchmark_condition = os.environ.get("WR_BENCHMARK_CONDITION")
-        if benchmark_condition:
-            meta = forecast.evaluation_metadata or {}
-            meta["benchmark_condition"] = benchmark_condition
-            meta["benchmark_model"] = forecast_context.model_name
-            forecast.evaluation_metadata = meta
-            _get_db(forecast_context.db_path).save(Forecast, forecast)
 
         # Link graph elements
         graph_counts = forecast_service.link_forecast_graph(

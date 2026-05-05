@@ -98,6 +98,7 @@ class ForecastSubmissionService(ServiceBase):
         model_name: str = "unknown",
         mode: str = "container",
         db_path: Optional[str] = None,
+        evaluation_metadata: Optional[dict] = None,
     ) -> Forecast:
         """Create and save a forecast.
 
@@ -138,6 +139,7 @@ class ForecastSubmissionService(ServiceBase):
             model_name=model_name,
             mode=ForecastMode(mode),
             db=db_path,
+            evaluation_metadata=evaluation_metadata,
         )
 
         # Save forecast to appropriate database
