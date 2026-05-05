@@ -214,6 +214,8 @@ config/config.yaml
 
 # Benchmark results
 benchmarks/
+experiments/
+screening/
 
 # Temporal analysis results
 temporal_analysis/
