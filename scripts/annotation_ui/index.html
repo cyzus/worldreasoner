@@ -578,6 +578,20 @@
             border-radius: 6px;
             font-size: 0.82rem;
         }
+        .date-field-group {
+            display: flex;
+            gap: 6px;
+            flex: 1;
+            min-width: 210px;
+        }
+        .date-field-group input[type="date"] {
+            flex: 1.4;
+            min-width: 125px;
+        }
+        .date-field-group input[type="time"] {
+            flex: 1;
+            min-width: 90px;
+        }
         .inline-review-actions {
             display: flex;
             gap: 8px;
@@ -1651,6 +1665,8 @@
                     statusLabel += ` (${short})`;
                 }
 
+                const dateParts = splitDateTime(event.date);
+
                 // Date row
                 const dateClass = inWindow ? 'in-window' : 'pre-market';
                 const badgeLabel = inWindow ? 'In Market Window' : 'Pre-Market';
@@ -1726,9 +1742,9 @@
                                 <button onclick="showRejectForm('${q.id}', '${event.id}', 'SourceMismatch')">Source does not support event</button>
                                 <button onclick="showRejectForm('${q.id}', '${event.id}', 'PredictionNotEvent')">Prediction / opinion, not an event</button>
                                 <div class="reject-menu-label">Event quality problem</div>
-                                <button onclick="annotate('${q.id}', '${event.id}', 'rejected', 'Noise')">Noise (no causal link to outcome)</button>
-                                <button onclick="annotate('${q.id}', '${event.id}', 'rejected', 'Duplicate')">Duplicate / Redundant</button>
-                                <button onclick="annotate('${q.id}', '${event.id}', 'rejected', 'TooBoard')">Too Broad (trend, not an event)</button>
+                                <button onclick="${isAttentionCheck ? `annotate('${q.id}', '${event.id}', 'rejected', 'Noise')` : `showRejectForm('${q.id}', '${event.id}', 'Noise')`}">Noise (no causal link to outcome)</button>
+                                <button onclick="${isAttentionCheck ? `annotate('${q.id}', '${event.id}', 'rejected', 'Duplicate')` : `showRejectForm('${q.id}', '${event.id}', 'Duplicate')`}">Duplicate / Redundant</button>
+                                <button onclick="${isAttentionCheck ? `annotate('${q.id}', '${event.id}', 'rejected', 'TooBoard')` : `showRejectForm('${q.id}', '${event.id}', 'TooBoard')`}">Too Broad (trend, not an event)</button>
                             </div>
                         </div>
                         <div style="position:relative;">
@@ -1736,12 +1752,7 @@
                                 Skip <span style="font-size:0.7em;margin-left:4px;">&#9660;</span>
                             </button>
                             <div class="reject-menu" id="skip-menu-${event.id}">
-                                <button onclick="annotate('${q.id}', '${event.id}', 'skipped', 'NoLink')">Link not available</button>
-                                <button onclick="annotate('${q.id}', '${event.id}', 'skipped', 'NeedsWebSearch')">Needs web search</button>
-                                <button onclick="annotate('${q.id}', '${event.id}', 'skipped', 'Paywalled')">Paywalled</button>
-                                <button onclick="annotate('${q.id}', '${event.id}', 'skipped', 'SourceUnavailable')">Source unavailable</button>
-                                <button onclick="annotate('${q.id}', '${event.id}', 'skipped', 'AmbiguousDate')">Ambiguous date</button>
-                                <button onclick="annotate('${q.id}', '${event.id}', 'skipped', 'Unclear')">Unclear / unsure</button>
+                                <button onclick="${isAttentionCheck ? `annotate('${q.id}', '${event.id}', 'skipped', 'Unclear')` : `showSkipForm('${q.id}', '${event.id}')`}">Cannot verify after checking</button>
                             </div>
                         </div>
                     </div>
@@ -1750,7 +1761,10 @@
                         <div class="inline-review-help">Why is this event relevant to the outcome? <span style="color:#ef4444;">*required</span></div>
                         <textarea id="approval-text-${event.id}" placeholder="e.g. This directly influenced market expectations by..."></textarea>
                         <div class="inline-review-fields">
-                            <input type="text" id="approval-date-${event.id}" value="${event.date || ''}" placeholder="YYYY-MM-DD" style="flex:1;min-width:110px;">
+                            <div class="date-field-group" title="Corrected event date and optional time">
+                                <input type="date" id="approval-date-${event.id}" value="${dateParts.date}" aria-label="Corrected event date">
+                                <input type="time" id="approval-time-${event.id}" value="${dateParts.time}" aria-label="Corrected event time">
+                            </div>
                             <input type="text" id="approval-url-${event.id}" value="${event.source_url || ''}" placeholder="Correct source URL (optional)" style="flex:3;min-width:180px;">
                         </div>
                         <div class="inline-review-actions">
@@ -1763,12 +1777,24 @@
                         <div class="inline-review-help" id="reject-help-${event.id}">Add a brief note so source/date problems are not confused with fabricated events.</div>
                         <textarea id="reject-text-${event.id}" placeholder="Brief evidence note, e.g. event is real but article only predicts it, or correct date is..."></textarea>
                         <div class="inline-review-fields">
-                            <input type="text" id="reject-date-${event.id}" value="${event.date || ''}" placeholder="Correct date if known" style="flex:1;min-width:120px;">
+                            <div class="date-field-group" title="Corrected event date and optional time">
+                                <input type="date" id="reject-date-${event.id}" value="${dateParts.date}" aria-label="Corrected event date">
+                                <input type="time" id="reject-time-${event.id}" value="${dateParts.time}" aria-label="Corrected event time">
+                            </div>
                             <input type="text" id="reject-url-${event.id}" value="${event.source_url || ''}" placeholder="Better source URL if known" style="flex:3;min-width:180px;">
                         </div>
                         <div class="inline-review-actions">
                             <button class="btn-reject" style="flex:1;" onclick="confirmReject('${q.id}', '${event.id}')">&#10005; Confirm Reject</button>
                             <button class="btn-nav" onclick="cancelReject('${event.id}')">Cancel</button>
+                        </div>
+                    </div>
+                    <div class="inline-review-form skip-form" id="skip-form-${event.id}">
+                        <div class="inline-review-title" style="color:#475569;">Skip: Cannot Verify</div>
+                        <div class="inline-review-help">Use skip only as a last resort after checking the source or doing a brief search. If the event is false, irrelevant, duplicated, too broad, or source-mismatched, reject it instead.</div>
+                        <textarea id="skip-text-${event.id}" placeholder="What did you check, and why is this still unverifiable?"></textarea>
+                        <div class="inline-review-actions">
+                            <button class="btn-skip" style="flex:1;" onclick="confirmSkip('${q.id}', '${event.id}')">Confirm Skip</button>
+                            <button class="btn-nav" onclick="cancelSkip('${event.id}')">Cancel</button>
                         </div>
                     </div>` : ''}
                     ${chartHtml}
@@ -1835,7 +1861,38 @@
                 help: 'Use when the source is only forecasting, speculating, or commenting, not reporting a confirmed event.',
                 placeholder: 'e.g. The article predicts the fight could happen; it does not report an official announcement.',
             },
+            Noise: {
+                title: 'Reject: Noise',
+                help: 'Use when the event is real, but it does not have a meaningful causal link to the forecast outcome.',
+                placeholder: 'e.g. Real event, but it does not affect whether the market/question resolves Yes or No.',
+            },
+            Duplicate: {
+                title: 'Reject: Duplicate',
+                help: 'Use when this occurrence is already captured by another event. Mention the duplicate event if obvious.',
+                placeholder: 'e.g. Same occurrence as the earlier announcement/filing event; this card adds no new causal information.',
+            },
+            TooBoard: {
+                title: 'Reject: Too Broad',
+                help: 'Use when the card describes a broad trend, period, or category rather than a dated atomic event.',
+                placeholder: 'e.g. This summarizes a multi-month trend rather than one specific dated event.',
+            },
         };
+
+        function splitDateTime(value) {
+            const raw = (value || '').trim();
+            const match = raw.match(/^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?/);
+            return {
+                date: match ? match[1] : '',
+                time: match && match[2] ? match[2] : '',
+            };
+        }
+
+        function combineDateTime(dateValue, timeValue) {
+            const date = (dateValue || '').trim();
+            const time = (timeValue || '').trim();
+            if (!date) return null;
+            return time ? `${date} ${time}` : date;
+        }
 
         window.toggleRejectMenu = function(eventId, e) {
             e.stopPropagation();
@@ -1888,6 +1945,8 @@
             if (approvalForm) approvalForm.style.display = 'none';
             const rejectForm = document.getElementById(`reject-form-${eventId}`);
             if (rejectForm) rejectForm.style.display = 'none';
+            const skipForm = document.getElementById(`skip-form-${eventId}`);
+            if (skipForm) skipForm.style.display = 'none';
 
             updateProgress();
             populateDropdown();
@@ -1951,6 +2010,7 @@
         window.showApprovalForm = function(qId, eventId) {
             document.querySelectorAll('.approval-form').forEach(f => f.style.display = 'none');
             document.querySelectorAll('[id^="reject-form-"]').forEach(f => f.style.display = 'none');
+            document.querySelectorAll('[id^="skip-form-"]').forEach(f => f.style.display = 'none');
             const form = document.getElementById(`approval-form-${eventId}`);
             if (!form) return;
             form.style.display = 'block';
@@ -1967,6 +2027,7 @@
             document.querySelectorAll('.reject-menu').forEach(m => m.style.display = 'none');
             document.querySelectorAll('.approval-form').forEach(f => f.style.display = 'none');
             document.querySelectorAll('[id^="reject-form-"]').forEach(f => f.style.display = 'none');
+            document.querySelectorAll('[id^="skip-form-"]').forEach(f => f.style.display = 'none');
 
             const form = document.getElementById(`reject-form-${eventId}`);
             if (!form) return;
@@ -1992,6 +2053,23 @@
             if (form) form.style.display = 'none';
         };
 
+        window.showSkipForm = function(qId, eventId) {
+            document.querySelectorAll('.reject-menu').forEach(m => m.style.display = 'none');
+            document.querySelectorAll('.approval-form').forEach(f => f.style.display = 'none');
+            document.querySelectorAll('[id^="reject-form-"]').forEach(f => f.style.display = 'none');
+            document.querySelectorAll('[id^="skip-form-"]').forEach(f => f.style.display = 'none');
+            const form = document.getElementById(`skip-form-${eventId}`);
+            if (!form) return;
+            form.style.display = 'block';
+            const ta = document.getElementById(`skip-text-${eventId}`);
+            if (ta) { ta.style.borderColor = '#cbd5e1'; ta.focus(); }
+        };
+
+        window.cancelSkip = function(eventId) {
+            const form = document.getElementById(`skip-form-${eventId}`);
+            if (form) form.style.display = 'none';
+        };
+
         window.confirmApprove = function(qId, eventId) {
             const ta = document.getElementById(`approval-text-${eventId}`);
             const text = ta ? ta.value.trim() : '';
@@ -2000,10 +2078,11 @@
                 return;
             }
             const dateVal = (document.getElementById(`approval-date-${eventId}`) || {}).value || '';
+            const timeVal = (document.getElementById(`approval-time-${eventId}`) || {}).value || '';
             const urlVal  = (document.getElementById(`approval-url-${eventId}`)  || {}).value || '';
             annotate(qId, eventId, 'approved', null, {
                 reasoning_text: text,
-                corrected_date: dateVal.trim() || null,
+                corrected_date: combineDateTime(dateVal, timeVal),
                 corrected_url:  urlVal.trim()  || null,
             });
         };
@@ -2019,11 +2098,24 @@
                 return;
             }
             const dateVal = (document.getElementById(`reject-date-${eventId}`) || {}).value || '';
+            const timeVal = (document.getElementById(`reject-time-${eventId}`) || {}).value || '';
             const urlVal = (document.getElementById(`reject-url-${eventId}`) || {}).value || '';
             annotate(qId, eventId, 'rejected', reason, {
                 reasoning_text: text,
-                corrected_date: dateVal.trim() || null,
+                corrected_date: combineDateTime(dateVal, timeVal),
                 corrected_url: urlVal.trim() || null,
+            });
+        };
+
+        window.confirmSkip = function(qId, eventId) {
+            const ta = document.getElementById(`skip-text-${eventId}`);
+            const text = ta ? ta.value.trim() : '';
+            if (!text) {
+                if (ta) { ta.style.borderColor = '#ef4444'; ta.focus(); }
+                return;
+            }
+            annotate(qId, eventId, 'skipped', 'Unverifiable', {
+                reasoning_text: text,
             });
         };
 

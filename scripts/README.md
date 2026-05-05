@@ -13,7 +13,7 @@ scripts/
 ├── rerun_evidence.py
 ├── select_prolific_questions.py
 ├── benchmark/
-│   ├── evaluate_vanilla_llm.py
+│   ├── evaluate_benchmark.py
 │   └── cleanup_experiment_db.py
 ├── screening/
 │   ├── apply_decisions.py
@@ -88,13 +88,15 @@ uv run python scripts/rerun_evidence.py --db combined.db --ids q_id1 q_id2
 
 ## Benchmark
 
-### `benchmark/evaluate_vanilla_llm.py`
-Evaluate all `vanilla_llm` condition forecasts from `combined.db`. Outputs a JSON report
-and a Markdown table to `experiments/evaluation/`.
+### `benchmark/evaluate_benchmark.py`
+Evaluate benchmark forecasts from `combined.db` for any condition. Auto-detects all conditions
+with data, or specify conditions explicitly. Outputs JSON + Markdown to `experiments/evaluation/`.
 ```bash
-uv run python scripts/benchmark/evaluate_vanilla_llm.py
+uv run python scripts/benchmark/evaluate_benchmark.py                             # all conditions with data
+uv run python scripts/benchmark/evaluate_benchmark.py --condition vanilla_llm structured_scenario
+uv run python scripts/benchmark/evaluate_benchmark.py --db other.db
 ```
-Output: `experiments/evaluation/vanilla_llm_eval_<timestamp>.json` and `.md`
+Output: `experiments/evaluation/<condition>_eval_<timestamp>.json` and `.md`
 
 ### `benchmark/cleanup_experiment_db.py`
 Reclassify "general"-domain questions, remove low-quality micro-duration Bitcoin markets,
@@ -176,5 +178,5 @@ bash scripts/annotation_ui/recreate_wr_annotation.sh
 uv run wr benchmark run --db combined.db -m <model> --resume -n 100 -w 8 -y
 
 # 7. Evaluate results  (outputs to experiments/evaluation/)
-uv run python scripts/benchmark/evaluate_vanilla_llm.py
+uv run python scripts/benchmark/evaluate_benchmark.py
 ```

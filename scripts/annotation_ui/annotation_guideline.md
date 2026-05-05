@@ -31,10 +31,12 @@ For every event, make **two assessments** (in order):
 
 Ask: *Is this event real, specific, and causally relevant?*
 
-For factual/source rejections, add a short evidence note in the inline form.
-If you know the corrected date or a better source URL, enter it there. This
-helps distinguish a truly fabricated event from a real event with a bad link or
-wrong date.
+For every rejection, add a short evidence note in the inline form. One concise
+sentence is enough. For factual/source problems, also enter the corrected date
+or a better source URL if you know one. This keeps approval and rejection effort
+balanced and helps distinguish a truly fabricated event from a real event with
+a bad link, wrong date, weak causal connection, duplicate coverage, or overly
+broad framing.
 
 | Decision | Condition |
 |---|---|
@@ -46,7 +48,7 @@ wrong date.
 | **Reject: Noise** | Event is real but has no meaningful causal connection to the forecast outcome |
 | **Reject: Duplicate** | Same occurrence already captured by another event — keep the one with richer detail |
 | **Reject: Too Broad** | Describes a multi-month trend or category of events rather than a single, atomic occurrence |
-| **Skip** | Cannot verify with available source material |
+| **Skip: Unverifiable** | Last resort only: cannot verify after checking the source and doing a brief search |
 
 ### Step 2 — Reasoning Quality (only when Impact Analysis is shown)
 
@@ -91,6 +93,7 @@ For **non-Polymarket questions** (no market window or chart shown), assess impac
 - If the event is real but the linked URL does not support it, reject as **Source Mismatch** and enter a better URL if available.
 - If the article or your search shows only a *prediction*, *commentary*, *hypothetical*, betting preview, or analyst opinion, reject as **Prediction / Opinion**.
 - Use **Fabricated Event** only when the event itself appears false or you cannot find evidence that it happened after a reasonable check.
+- Use **Skip** sparingly. A broken link, paywall, weak source, or ambiguous date is usually not enough by itself to skip. If you can determine the event is false, source-mismatched, date-mismatched, irrelevant, duplicated, or too broad, use the corresponding reject label instead.
 
 ### Impact Validity
 - The event must have a plausible mechanism directly connecting it to the forecast question's outcome.
@@ -121,6 +124,7 @@ Events are pre-sorted by importance. Spend the most effort on:
 | Two events describe the same news | Approve the one with more specific date/detail; Reject the other as **Duplicate** |
 | Event date is years before the question's market window | Almost always background context — Reject as **Noise** unless the question outcome explicitly depends on that specific historical event |
 | Source link is broken or missing | **Perform a quick web search** using the event details. If you find a better source, use **Approve** if the event is relevant or **Source Mismatch** if the original URL is misleading. Only skip if it remains completely unverifiable after a brief search. |
+| Source is paywalled | Search for another source or article title first. Use **Source Mismatch** if the visible article metadata does not support the event; use **Skip** only if no verification is possible. |
 | Event is true but the source only supports part of it | Reject as **Source Mismatch** if the unsupported part is central; otherwise approve and provide the better source URL. |
 | Event is true but its causal explanation is overstated | Approve the event if relevant, then mark the impact analysis as 👎 **Flawed Reasoning**. Do not reject a real relevant event solely because the reasoning is weak. |
 | Impact direction seems right but reasoning explanation is weak or superficial | Approve the event; mark reasoning as 👎 **Flawed** |

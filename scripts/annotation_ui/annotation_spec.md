@@ -125,17 +125,17 @@ If no impact analysis row exists, show muted text: *"No impact assessment availa
 | Reject: Noise | `rejected / Noise` | Real but causally irrelevant |
 | Reject: Duplicate | `rejected / Duplicate` | Same occurrence already approved |
 | Reject: Too Broad | `rejected / TooBoard` | Trend/period not a specific occurrence |
-| Skip: Link not available | `skipped / NoLink` | Link missing from the event card |
-| Skip: Needs web search | `skipped / NeedsWebSearch` | Cannot decide without additional search |
-| Skip: Paywalled | `skipped / Paywalled` | Source cannot be inspected due to paywall |
-| Skip: Source unavailable | `skipped / SourceUnavailable` | Source link is dead or inaccessible |
-| Skip: Ambiguous date | `skipped / AmbiguousDate` | Event may be real, but the date cannot be resolved |
-| Skip: Unclear | `skipped / Unclear` | Cannot verify from available source |
+| Skip: Cannot verify | `skipped / Unverifiable` | Last resort after checking the source and doing a brief search |
 
-For factual/source rejections (`Fabricated`, `WrongDate`, `SourceMismatch`,
-`PredictionNotEvent`), the UI asks for a short evidence note in
-`reasoning_text`. If the annotator can identify a corrected date or better
-source, those are stored in `corrected_date` and `corrected_url`.
+For all non-attention-check rejections, the UI asks for a short evidence note in
+`reasoning_text`. This keeps the interaction cost of approving and rejecting
+more balanced. If the annotator can identify a corrected date or better source,
+those are stored in `corrected_date` and `corrected_url`.
+
+For all non-attention-check skips, the UI also asks for a short note in
+`reasoning_text`. Skip is intentionally limited to `Unverifiable` to discourage
+using it for cases that can be classified as source mismatch, wrong date, noise,
+duplicate, too broad, or fabricated.
 
 Legacy exports may still contain `rejected / Hallucination`; treat this as the
 old broad label that mixed fabricated events, wrong dates, and source mismatch.

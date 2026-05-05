@@ -5,7 +5,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2018-10-01",
       "cutoff_date_raw": "2018.10",
-      "source": "[Source](https://computercity.com/artificial-intelligence/knowledge-cutoff-dates-llms)",
+      "source": "[Source](https://web.archive.org/web/20251216180712/https://computercity.com/artificial-intelligence/knowledge-cutoff-dates-llms)",
       "company": "OpenAI"
     },
     "gpt-2": {
@@ -13,7 +13,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2019-11-01",
       "cutoff_date_raw": "2019.11",
-      "source": "[Source](https://computercity.com/artificial-intelligence/knowledge-cutoff-dates-llms)",
+      "source": "[Source](https://web.archive.org/web/20251216180712/https://computercity.com/artificial-intelligence/knowledge-cutoff-dates-llms)",
       "company": "OpenAI"
     },
     "gpt-3": {
@@ -21,7 +21,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2020-10-01",
       "cutoff_date_raw": "2020.10",
-      "source": "[Source](https://computercity.com/artificial-intelligence/knowledge-cutoff-dates-llms)",
+      "source": "[Source](https://web.archive.org/web/20251216180712/https://computercity.com/artificial-intelligence/knowledge-cutoff-dates-llms)",
       "company": "OpenAI"
     },
     "gpt-3.5": {
@@ -29,7 +29,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2021-09-01",
       "cutoff_date_raw": "2021.09",
-      "source": "[Source](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
+      "source": "[Source](https://web.archive.org/web/20250604215405/https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
       "company": "OpenAI"
     },
     "gpt-4": {
@@ -37,7 +37,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2021-09-01",
       "cutoff_date_raw": "2021.09",
-      "source": "[Source](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
+      "source": "[Source](https://web.archive.org/web/20250604215405/https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
       "company": "OpenAI"
     },
     "gpt-4-1106-preview": {
@@ -45,7 +45,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2023-04-01",
       "cutoff_date_raw": "2023.04",
-      "source": "[Source](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
+      "source": "[Source](https://web.archive.org/web/20250604215405/https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
       "company": "OpenAI"
     },
     "gpt-4-vision-preview": {
@@ -53,7 +53,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2023-04-01",
       "cutoff_date_raw": "2023.04",
-      "source": "[Source](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
+      "source": "[Source](https://web.archive.org/web/20250604215405/https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
       "company": "OpenAI"
     },
     "gpt-4-0125-preview": {
@@ -61,7 +61,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2023-12-01",
       "cutoff_date_raw": "2023.12",
-      "source": "[Source](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
+      "source": "[Source](https://web.archive.org/web/20250604215405/https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
       "company": "OpenAI"
     },
     "gpt-4-turbo-2024-04-09": {
@@ -69,7 +69,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2023-12-01",
       "cutoff_date_raw": "2023.12",
-      "source": "[Source](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
+      "source": "[Source](https://web.archive.org/web/20250604215405/https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
       "company": "OpenAI"
     },
     "gpt-4o-2024-05-13": {
@@ -77,7 +77,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2023-10-01",
       "cutoff_date_raw": "2023.10",
-      "source": "[Source](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
+      "source": "[Source](https://web.archive.org/web/20250604215405/https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
       "company": "OpenAI"
     },
     "gpt-4o-2024-08-06": {
@@ -85,7 +85,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2023-10-01",
       "cutoff_date_raw": "2023.10",
-      "source": "[Source](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
+      "source": "[Source](https://web.archive.org/web/20250604215405/https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
       "company": "OpenAI"
     },
     "gpt-4o-mini-2024-07-18": {
@@ -93,7 +93,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2023-10-01",
       "cutoff_date_raw": "2023.10",
-      "source": "[Source](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
+      "source": "[Source](https://web.archive.org/web/20250604215405/https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
       "company": "OpenAI"
     },
     "gpt-4o-realtime-preview-2024-10-01-preview": {
@@ -101,7 +101,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2023-10-01",
       "cutoff_date_raw": "2023.10",
-      "source": "[Source](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
+      "source": "[Source](https://web.archive.org/web/20250604215405/https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
       "company": "OpenAI"
     },
     "gpt-4o-realtime-gpt-4o-realtime-preview-2024-12-17": {
@@ -109,7 +109,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2023-09-30",
       "cutoff_date_raw": "2023.09.30",
-      "source": "[Source](https://platform.openai.com/docs/models/gpt-4o-realtime-preview)",
+      "source": "[Source](https://web.archive.org/web/20250909171928/https://platform.openai.com/docs/models/gpt-4o-realtime-preview)",
       "company": "OpenAI"
     },
     "gpt-4.1": {
@@ -117,7 +117,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2024-06-01",
       "cutoff_date_raw": "2024.06.01",
-      "source": "[Source](https://platform.openai.com/docs/models/gpt-4.1)",
+      "source": "[Source](https://web.archive.org/web/20251202192018/https://platform.openai.com/docs/models/gpt-4.1)",
       "company": "OpenAI"
     },
     "gpt-4.1-mini": {
@@ -125,7 +125,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2024-06-01",
       "cutoff_date_raw": "2024.06.01",
-      "source": "[Source](https://platform.openai.com/docs/models/gpt-4.1-mini)",
+      "source": "[Source](https://web.archive.org/web/20260205080821/https://platform.openai.com/docs/models/gpt-4.1-mini)",
       "company": "OpenAI"
     },
     "openai-o1-preview-2024-09-12": {
@@ -133,7 +133,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2023-10-01",
       "cutoff_date_raw": "2023.10",
-      "source": "[Source](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
+      "source": "[Source](https://web.archive.org/web/20250604215405/https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
       "company": "OpenAI"
     },
     "openai-o1-mini-2024-09-12": {
@@ -141,7 +141,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2023-10-01",
       "cutoff_date_raw": "2023.10",
-      "source": "[Source](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
+      "source": "[Source](https://web.archive.org/web/20250604215405/https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
       "company": "OpenAI"
     },
     "o1": {
@@ -149,7 +149,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2023-10-01",
       "cutoff_date_raw": "2023.10.01",
-      "source": "[Source](https://platform.openai.com/docs/models/o1)",
+      "source": "[Source](https://web.archive.org/web/20260101093145/https://platform.openai.com/docs/models/o1)",
       "company": "OpenAI"
     },
     "o1-pro": {
@@ -157,7 +157,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2023-10-01",
       "cutoff_date_raw": "2023.10.01",
-      "source": "[Source](https://platform.openai.com/docs/models/o1-pro)",
+      "source": "[Source](https://web.archive.org/web/20260112202225/https://platform.openai.com/docs/models/o1-pro)",
       "company": "OpenAI"
     },
     "o3": {
@@ -165,7 +165,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2024-06-01",
       "cutoff_date_raw": "2024.06.01",
-      "source": "[Source](https://platform.openai.com/docs/models/o3)",
+      "source": "[Source](https://web.archive.org/web/20260206085605/https://platform.openai.com/docs/models/o3)",
       "company": "OpenAI"
     },
     "o3-mini": {
@@ -173,7 +173,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2023-10-01",
       "cutoff_date_raw": "2023.10.01",
-      "source": "[Source](https://platform.openai.com/docs/models/o3-mini)",
+      "source": "[Source](https://web.archive.org/web/20251128062023/https://platform.openai.com/docs/models/o3-mini)",
       "company": "OpenAI"
     },
     "o3-pro": {
@@ -181,7 +181,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2024-06-01",
       "cutoff_date_raw": "2024.06.01",
-      "source": "[Source](https://platform.openai.com/docs/models/o3-pro)",
+      "source": "[Source](https://web.archive.org/web/20260309053904/https://platform.openai.com/docs/models/o3-pro)",
       "company": "OpenAI"
     },
     "o4-mini": {
@@ -189,7 +189,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2024-06-01",
       "cutoff_date_raw": "2024.06.01",
-      "source": "[Source](https://platform.openai.com/docs/models/o4-mini)",
+      "source": "[Source](https://web.archive.org/web/20260130212506/https://platform.openai.com/docs/models/o4-mini)",
       "company": "OpenAI"
     },
     "gpt-oss": {
@@ -203,9 +203,9 @@
     "gpt-5": {
       "model_name": "GPT-5",
       "provider": "OpenAI",
-      "cutoff_date": "2024-10-01",
-      "cutoff_date_raw": "2024.10.01",
-      "source": "[Source](https://platform.openai.com/docs/models/gpt-5)",
+      "cutoff_date": "2024-09-30",
+      "cutoff_date_raw": "2024.09.30",
+      "source": "[Source](https://web.archive.org/web/20260206121853/https://platform.openai.com/docs/models/gpt-5)",
       "company": "OpenAI"
     },
     "gpt-5-chat": {
@@ -213,7 +213,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2024-09-30",
       "cutoff_date_raw": "2024.09.30",
-      "source": "[Source](https://platform.openai.com/docs/models/gpt-5-chat-latest)",
+      "source": "[Source](https://web.archive.org/web/20260131032227/https://platform.openai.com/docs/models/gpt-5-chat-latest)",
       "company": "OpenAI"
     },
     "gpt-5-mini": {
@@ -221,7 +221,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2024-05-31",
       "cutoff_date_raw": "2024.05.31",
-      "source": "[Source](https://platform.openai.com/docs/models/gpt-5-mini)",
+      "source": "[Source](https://web.archive.org/web/20260312193412/https://platform.openai.com/docs/models/gpt-5-mini)",
       "company": "OpenAI"
     },
     "gpt-5-nano": {
@@ -229,7 +229,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2024-05-31",
       "cutoff_date_raw": "2024.05.31",
-      "source": "[Source](https://platform.openai.com/docs/models/gpt-5-nano)",
+      "source": "[Source](https://web.archive.org/web/20260131125420/https://platform.openai.com/docs/models/gpt-5-nano)",
       "company": "OpenAI"
     },
     "gpt-5.1": {
@@ -237,7 +237,7 @@
       "provider": "OpenAI",
       "cutoff_date": "2024-09-30",
       "cutoff_date_raw": "2024.09.30",
-      "source": "[Source](https://platform.openai.com/docs/models/gpt-5.1)",
+      "source": "[Source](https://web.archive.org/web/20260131021842/https://platform.openai.com/docs/models/gpt-5.1)",
       "company": "OpenAI"
     },
     "gpt-5.2-instant-thinking-pro": {
@@ -245,7 +245,31 @@
       "provider": "OpenAI",
       "cutoff_date": "2025-08-01",
       "cutoff_date_raw": "2025.08",
-      "source": "[Source](https://platform.openai.com/docs/guides/latest-model)",
+      "source": "[Source](https://web.archive.org/web/20260209181732/https://platform.openai.com/docs/guides/latest-model)",
+      "company": "OpenAI"
+    },
+    "gpt-5.3-chat-codex": {
+      "model_name": "GPT-5.3 Chat, Codex",
+      "provider": "OpenAI",
+      "cutoff_date": "2025-08-01",
+      "cutoff_date_raw": "2025.08",
+      "source": "[Source](https://web.archive.org/web/20260317134442/https://developers.openai.com/api/docs/models/gpt-5.3-codex)",
+      "company": "OpenAI"
+    },
+    "gpt-5.4-pro-nano-mini": {
+      "model_name": "GPT-5.4 Pro, Nano, Mini",
+      "provider": "OpenAI",
+      "cutoff_date": "2025-08-01",
+      "cutoff_date_raw": "2025.08",
+      "source": "[Source](https://web.archive.org/web/20260318054837/https://developers.openai.com/api/docs/models/gpt-5.4)",
+      "company": "OpenAI"
+    },
+    "gpt-5.5-pro": {
+      "model_name": "GPT-5.5 Pro",
+      "provider": "OpenAI",
+      "cutoff_date": "2025-12-01",
+      "cutoff_date_raw": "2025.12",
+      "source": "[Source](https://web.archive.org/web/20260429100524/https://developers.openai.com/api/docs/models/gpt-5.5)",
       "company": "OpenAI"
     },
     "gemini-1.0-pro": {
@@ -253,7 +277,7 @@
       "provider": "Google",
       "cutoff_date": "2023-02-01",
       "cutoff_date_raw": "2023.02",
-      "source": "[Source](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models)",
+      "source": "[Source](https://web.archive.org/web/20250406142927/https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models)",
       "company": "Google"
     },
     "gemini-1.5-pro": {
@@ -261,7 +285,7 @@
       "provider": "Google",
       "cutoff_date": "2024-05-01",
       "cutoff_date_raw": "2024.05",
-      "source": "[Source](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models)",
+      "source": "[Source](https://web.archive.org/web/20250406142927/https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models)",
       "company": "Google"
     },
     "gemini-1.5-flash": {
@@ -269,7 +293,7 @@
       "provider": "Google",
       "cutoff_date": "2024-05-01",
       "cutoff_date_raw": "2024.05",
-      "source": "[Source](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models)",
+      "source": "[Source](https://web.archive.org/web/20250406142927/https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models)",
       "company": "Google"
     },
     "gemini-2.0-flash": {
@@ -277,7 +301,7 @@
       "provider": "Google",
       "cutoff_date": "2024-08-01",
       "cutoff_date_raw": "2024.08",
-      "source": "[Source](https://ai.google.dev/gemini-api/docs/models#gemini-2.0-flash)",
+      "source": "[Source](https://web.archive.org/web/20260312134526/https://ai.google.dev/gemini-api/docs/models#gemini-2.0-flash)",
       "company": "Google"
     },
     "gemini-2.0-flash-thinking": {
@@ -285,7 +309,7 @@
       "provider": "Google",
       "cutoff_date": "2024-05-01",
       "cutoff_date_raw": "2024.05",
-      "source": "[Source](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models)",
+      "source": "[Source](https://web.archive.org/web/20250406142927/https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models)",
       "company": "Google"
     },
     "gemini-2.0-flash-lite": {
@@ -293,7 +317,7 @@
       "provider": "Google",
       "cutoff_date": "2024-08-01",
       "cutoff_date_raw": "2024.08",
-      "source": "[Source](https://ai.google.dev/gemini-api/docs/models#gemini-2.0-flash-lite)",
+      "source": "[Source](https://web.archive.org/web/20260312134526/https://ai.google.dev/gemini-api/docs/models#gemini-2.0-flash-lite)",
       "company": "Google"
     },
     "gemini-2.0-pro-experimental": {
@@ -301,7 +325,7 @@
       "provider": "Google",
       "cutoff_date": "2025-01-01",
       "cutoff_date_raw": "2025.01",
-      "source": "[Source](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models)",
+      "source": "[Source](https://web.archive.org/web/20250406142927/https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models)",
       "company": "Google"
     },
     "gemini-2.5-flash-lite": {
@@ -309,7 +333,7 @@
       "provider": "Google",
       "cutoff_date": "2025-01-01",
       "cutoff_date_raw": "2025.01",
-      "source": "[Source](https://ai.google.dev/gemini-api/docs/models?hl=zh-cn#gemini-2.5-flash-lite)",
+      "source": "[Source](https://web.archive.org/web/20260310112923/https://ai.google.dev/gemini-api/docs/models?hl=zh-cn#gemini-2.5-flash-lite)",
       "company": "Google"
     },
     "gemini-2.5-flash": {
@@ -317,7 +341,7 @@
       "provider": "Google",
       "cutoff_date": "2025-01-01",
       "cutoff_date_raw": "2025.01",
-      "source": "[Source](https://deepmind.google/models/gemini/flash/)",
+      "source": "[Source](https://web.archive.org/web/20260302145238/https://deepmind.google/models/gemini/flash/)",
       "company": "Google"
     },
     "gemini-2.5-pro": {
@@ -325,7 +349,7 @@
       "provider": "Google",
       "cutoff_date": "2025-01-01",
       "cutoff_date_raw": "2025.01",
-      "source": "[Source](https://deepmind.google/models/gemini/pro/)",
+      "source": "[Source](https://web.archive.org/web/20260312173101/https://deepmind.google/models/gemini/pro/)",
       "company": "Google"
     },
     "gemini-3-pro": {
@@ -333,7 +357,7 @@
       "provider": "Google",
       "cutoff_date": "2025-01-01",
       "cutoff_date_raw": "2025.01",
-      "source": "[Source](https://deepmind.google/models/gemini/pro/)",
+      "source": "[Source](https://web.archive.org/web/20260312173101/https://deepmind.google/models/gemini/pro/)",
       "company": "Google"
     },
     "gemini-3-flash": {
@@ -341,7 +365,23 @@
       "provider": "Google",
       "cutoff_date": "2025-01-01",
       "cutoff_date_raw": "2025.01",
-      "source": "[Source](https://deepmind.google/models/gemini/flash/)",
+      "source": "[Source](https://web.archive.org/web/20260302145238/https://deepmind.google/models/gemini/flash/)",
+      "company": "Google"
+    },
+    "gemini-3.1-pro": {
+      "model_name": "Gemini 3.1 Pro",
+      "provider": "Google",
+      "cutoff_date": "2025-01-01",
+      "cutoff_date_raw": "2025.01",
+      "source": "[Source](https://web.archive.org/web/20260426112143/https://deepmind.google/models/gemini/pro/)",
+      "company": "Google"
+    },
+    "gemma-4": {
+      "model_name": "Gemma 4",
+      "provider": "Google",
+      "cutoff_date": "2025-01-01",
+      "cutoff_date_raw": "2025.01",
+      "source": "",
       "company": "Google"
     },
     "claude-instant-1.2": {
@@ -349,7 +389,7 @@
       "provider": "Anthropic",
       "cutoff_date": null,
       "cutoff_date_raw": "-",
-      "source": "[Source](https://docsbot.ai/models/claude-instant-1-2)",
+      "source": "[Source](https://web.archive.org/web/20251217010408/https://docsbot.ai/models/claude-instant-1-2)",
       "company": "Anthropic"
     },
     "claude-2": {
@@ -357,7 +397,7 @@
       "provider": "Anthropic",
       "cutoff_date": null,
       "cutoff_date_raw": "-",
-      "source": "[Source](https://docsbot.ai/models/claude-2)",
+      "source": "[Source](https://web.archive.org/web/20250524053925/https://docsbot.ai/models/claude-2)",
       "company": "Anthropic"
     },
     "claude-2.1": {
@@ -365,7 +405,7 @@
       "provider": "Anthropic",
       "cutoff_date": null,
       "cutoff_date_raw": "-",
-      "source": "[Source](https://docsbot.ai/models/claude-2-1)",
+      "source": "[Source](https://web.archive.org/web/20250720054454/https://docsbot.ai/models/claude-2-1)",
       "company": "Anthropic"
     },
     "claude-3-opus": {
@@ -373,7 +413,7 @@
       "provider": "Anthropic",
       "cutoff_date": null,
       "cutoff_date_raw": "-",
-      "source": "[Source](https://docs.anthropic.com/en/docs/about-claude/models)",
+      "source": "[Source](https://web.archive.org/web/20250221134207/https://docs.anthropic.com/en/docs/about-claude/models)",
       "company": "Anthropic"
     },
     "claude-3-sonnet": {
@@ -381,7 +421,7 @@
       "provider": "Anthropic",
       "cutoff_date": null,
       "cutoff_date_raw": "-",
-      "source": "[Source](https://docs.anthropic.com/en/docs/about-claude/models)",
+      "source": "[Source](https://web.archive.org/web/20250221134207/https://docs.anthropic.com/en/docs/about-claude/models)",
       "company": "Anthropic"
     },
     "claude-3-haiku": {
@@ -397,7 +437,7 @@
       "provider": "Anthropic",
       "cutoff_date": null,
       "cutoff_date_raw": "-",
-      "source": "[Source](https://docs.anthropic.com/en/docs/about-claude/models)",
+      "source": "[Source](https://web.archive.org/web/20250221134207/https://docs.anthropic.com/en/docs/about-claude/models)",
       "company": "Anthropic"
     },
     "claude-3.5-haiku": {
@@ -464,6 +504,14 @@
       "source": "[Source](https://web.archive.org/web/20251217180521/https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison)",
       "company": "Anthropic"
     },
+    "claude-4.6-sonnet": {
+      "model_name": "Claude 4.6 Sonnet",
+      "provider": "Anthropic",
+      "cutoff_date": "2025-08-01",
+      "cutoff_date_raw": "2025.08",
+      "source": "[Source](https://web.archive.org/web/20260428113457/https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison)",
+      "company": "Anthropic"
+    },
     "claude-4.6-opus": {
       "model_name": "Claude 4.6 Opus",
       "provider": "Anthropic",
@@ -472,12 +520,20 @@
       "source": "[Source](https://web.archive.org/web/20260212023515/https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison)",
       "company": "Anthropic"
     },
-    "llama-2-7b13b70b": {
-      "model_name": "LLama-2-7B,13B,70B",
+    "claude-4.7-opus": {
+      "model_name": "Claude 4.7 Opus",
+      "provider": "Anthropic",
+      "cutoff_date": "2026-01-01",
+      "cutoff_date_raw": "2026.01",
+      "source": "[Source](https://web.archive.org/web/20260428113457/https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison)",
+      "company": "Anthropic"
+    },
+    "llama-2-7b-13b-70b": {
+      "model_name": "LLama-2-7B, 13B, 70B",
       "provider": "Meta",
       "cutoff_date": "2022-09-01",
-      "cutoff_date_raw": "Pretraining 2022.09, Finetuning  2023.07",
-      "source": "[Source](https://llama-2.ai/llama-2-model-details/)",
+      "cutoff_date_raw": "Pretraining 2022.09, Finetuning 2023.07",
+      "source": "[Source](https://web.archive.org/web/20250723161046/https://llama-2.ai/llama-2-model-details/)",
       "company": "Meta"
     },
     "llama-3-7b": {
@@ -557,7 +613,7 @@
       "provider": "Qwen",
       "cutoff_date": "2023-01-01",
       "cutoff_date_raw": "2023",
-      "source": "[Source](https://docs.rubra.ai/models/Qwen/)",
+      "source": "[Source](https://web.archive.org/web/20250504044836/https://docs.rubra.ai/models/Qwen/)",
       "company": "Qwen"
     },
     "qwen2.5": {
@@ -573,7 +629,7 @@
       "provider": "Qwen",
       "cutoff_date": "2024-11-28",
       "cutoff_date_raw": "2024.11.28",
-      "source": "[Source](https://llm-stats.com/models/compare/qwen3-30b-a3b-vs-qwq-32b)",
+      "source": "[Source](https://web.archive.org/web/20260210032208/https://llm-stats.com/models/compare/qwen3-30b-a3b-vs-qwq-32b)",
       "company": "Qwen"
     },
     "qwen3": {
@@ -608,12 +664,36 @@
       "source": "[Source](https://github.com/deepseek-ai/DeepSeek-Coder-V2/issues/1)",
       "company": "DeepSeek"
     },
+    "deepseek-v3": {
+      "model_name": "DeepSeek-V3",
+      "provider": "DeepSeek",
+      "cutoff_date": "2024-07-01",
+      "cutoff_date_raw": "2024.07",
+      "source": "[Source](https://web.archive.org/web/20260303042437/https://explodingtopics.com/blog/list-of-llms)",
+      "company": "DeepSeek"
+    },
+    "deepseek-r1": {
+      "model_name": "DeepSeek-R1",
+      "provider": "DeepSeek",
+      "cutoff_date": "2024-07-01",
+      "cutoff_date_raw": "2024.07",
+      "source": "[Source](https://web.archive.org/web/20260303042437/https://explodingtopics.com/blog/list-of-llms)",
+      "company": "DeepSeek"
+    },
+    "deepseek-v4": {
+      "model_name": "DeepSeek-V4",
+      "provider": "DeepSeek",
+      "cutoff_date": "2025-01-01",
+      "cutoff_date_raw": "2025.01",
+      "source": "",
+      "company": "DeepSeek"
+    },
     "phi-3": {
       "model_name": "Phi-3-*",
       "provider": "Microsoft",
       "cutoff_date": "2023-10-01",
       "cutoff_date_raw": "2023.10",
-      "source": "[Source](https://console.cloud.google.com/vertex-ai/publishers/microsoft/model-garden/phi3?pli=1)",
+      "source": "[Source](https://web.archive.org/web/20260220042132/https://console.cloud.google.com/vertex-ai/publishers/microsoft/model-garden/phi3?pli=1)",
       "company": "Microsoft"
     },
     "grok-2": {
@@ -621,7 +701,7 @@
       "provider": "xAI",
       "cutoff_date": "2023-09-01",
       "cutoff_date_raw": "2023.09",
-      "source": "[Source](https://aimlapi.com/models/grok-2-beta-api)",
+      "source": "[Source](https://web.archive.org/web/20251217123039/https://aimlapi.com/models/grok-2-beta-api)",
       "company": "xAI"
     },
     "grok-3": {
@@ -629,7 +709,7 @@
       "provider": "xAI",
       "cutoff_date": "2024-11-01",
       "cutoff_date_raw": "2024.11",
-      "source": "[Source](https://docs.x.ai/docs/models)",
+      "source": "[Source](https://web.archive.org/web/20260204041847/https://docs.x.ai/docs/models)",
       "company": "xAI"
     },
     "grok-4": {
@@ -637,7 +717,7 @@
       "provider": "xAI",
       "cutoff_date": "2024-11-01",
       "cutoff_date_raw": "2024.11",
-      "source": "[Source](https://docs.x.ai/docs/models)",
+      "source": "[Source](https://web.archive.org/web/20260204041847/https://docs.x.ai/docs/models)",
       "company": "xAI"
     },
     "mimo-v2-flash": {
@@ -648,18 +728,58 @@
       "source": "[Source](https://github.com/XiaomiMiMo/MiMo-V2-Flash)",
       "company": "XiaomiMiMo"
     },
-    "mistral-series": {
-      "model_name": "Mistral series",
+    "ministral-3-3b-8b-14b": {
+      "model_name": "Ministral 3 (3B, 8B, 14B)",
       "provider": "Mistral AI",
-      "cutoff_date": null,
-      "cutoff_date_raw": "unknown",
-      "source": "",
-      "company": "Unknown"
+      "cutoff_date": "2023-10-01",
+      "cutoff_date_raw": "2023.10",
+      "source": "[Source](https://web.archive.org/web/20260414210158/https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512/blob/main/SYSTEM_PROMPT.txt)",
+      "company": "Mistral AI"
+    },
+    "mistral-large-3": {
+      "model_name": "Mistral Large 3",
+      "provider": "Mistral AI",
+      "cutoff_date": "2023-10-01",
+      "cutoff_date_raw": "2023.10",
+      "source": "[Source](https://web.archive.org/web/20260414210017/https://huggingface.co/mistralai/Mistral-Large-3-675B-Instruct-2512-NVFP4/blob/main/SYSTEM_PROMPT.txt)",
+      "company": "Mistral AI"
+    },
+    "devstral-2-123b": {
+      "model_name": "Devstral 2 123B",
+      "provider": "Mistral AI",
+      "cutoff_date": "2023-10-01",
+      "cutoff_date_raw": "2023.10",
+      "source": "[Source](https://web.archive.org/web/20260414210305/https://huggingface.co/mistralai/Devstral-2-123B-Instruct-2512/blob/main/CHAT_SYSTEM_PROMPT.txt)",
+      "company": "Mistral AI"
+    },
+    "mistral-small-3.1-24b": {
+      "model_name": "Mistral Small 3.1 24B",
+      "provider": "Mistral AI",
+      "cutoff_date": "2023-10-01",
+      "cutoff_date_raw": "2023.10",
+      "source": "[Source](https://web.archive.org/web/20260414225953/https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/blob/main/SYSTEM_PROMPT.txt)",
+      "company": "Mistral AI"
+    },
+    "mistral-small-3.2-24b": {
+      "model_name": "Mistral Small 3.2 24B",
+      "provider": "Mistral AI",
+      "cutoff_date": "2023-10-01",
+      "cutoff_date_raw": "2023.10",
+      "source": "[Source](https://web.archive.org/web/20260414225744/https://huggingface.co/mistralai/Mistral-Small-3.2-24B-Instruct-2506/blob/main/SYSTEM_PROMPT.txt)",
+      "company": "Mistral AI"
+    },
+    "mistral-small-4": {
+      "model_name": "Mistral Small 4",
+      "provider": "Mistral AI",
+      "cutoff_date": "2024-11-01",
+      "cutoff_date_raw": "2024.11",
+      "source": "[Source](https://web.archive.org/web/20260414210436/https://huggingface.co/mistralai/Mistral-Small-4-119B-2603/blob/main/SYSTEM_PROMPT.txt)",
+      "company": "Mistral AI"
     }
   },
   "metadata": {
     "source_url": "https://github.com/HaoooWang/llm-knowledge-cutoff-dates",
-    "parsed_at": "2026-03-14T23:25:40.770964Z",
-    "total_models": 82
+    "parsed_at": "2026-05-04T23:06:14.094879Z",
+    "total_models": 95
   }
 }
