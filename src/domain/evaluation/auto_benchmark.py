@@ -5,6 +5,7 @@ producing comparative results for the research paper.
 """
 
 import json
+import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
@@ -423,16 +424,26 @@ class AutoBenchmarkService:
         for condition in conditions:
             raw_results[condition.name.value] = {m: [] for m in models}
 
-        # Pre-fetch all completed triples in one DB query to avoid N*2400 queries
+        # Pre-fetch completed triples — only read the two columns we need.
         completed_set: set = set()
         if resume:
-            all_forecasts = self.db.get_many(Forecast, filters={})
-            for f in all_forecasts:
-                meta = f.evaluation_metadata or {}
+            conn = sqlite3.connect(str(self.db.db_path))
+            try:
+                rows = conn.execute(
+                    "SELECT question_id, evaluation_metadata FROM forecasts "
+                    "WHERE evaluation_metadata IS NOT NULL"
+                ).fetchall()
+            finally:
+                conn.close()
+            for question_id, meta_raw in rows:
+                try:
+                    meta = json.loads(meta_raw) if isinstance(meta_raw, str) else (meta_raw or {})
+                except (ValueError, TypeError):
+                    continue
                 bc = meta.get("benchmark_condition")
                 bm = meta.get("benchmark_model")
                 if bc and bm:
-                    completed_set.add((f.question_id, bc, bm))
+                    completed_set.add((question_id, bc, bm))
             logger.info(f"Resume: found {len(completed_set)} already-completed triples")
 
         completed_count = 0

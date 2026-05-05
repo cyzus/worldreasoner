@@ -74,7 +74,10 @@ class ForecastAgent(BaseAgent):
             )
         ]
 
-        # Get MCP tools
+        # Get MCP tools. MCPAdapt runs its event loop on a daemon thread, so the
+        # subprocess is cleaned up automatically when the process exits.  Calling
+        # disconnect() here closes that event loop while other threads may still
+        # reference it, which causes "Event loop is closed" errors in the workers.
         mcp_client = MCPClient(
             server_parameters=mcp_server_parameters,
             structured_output=False,
