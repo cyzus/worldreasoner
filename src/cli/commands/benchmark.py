@@ -78,7 +78,7 @@ def run(
         help="Number of parallel workers",
     ),
     output_dir: str = typer.Option(
-        "benchmarks",
+        "experiments/benchmarks",
         "--output-dir",
         help="Output directory for results",
     ),

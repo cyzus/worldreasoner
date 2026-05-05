@@ -11,7 +11,7 @@ from src.utils.logging import logger
 
 router = APIRouter()
 
-BENCHMARKS_DIR = Path("benchmarks")
+BENCHMARKS_DIR = Path("experiments/benchmarks")
 
 
 @router.get("/results")
