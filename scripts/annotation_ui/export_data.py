@@ -566,10 +566,93 @@ async def export_for_prolific(
     print(f"  URL template  : https://<your-site>/?session=s01&PROLIFIC_PID={{%PROLIFIC_PID%}}")
 
 
+async def export_overlap_only_for_prolific(
+    db_path: str,
+    output_dir: str,
+    overlap_ids: set,
+    questions_per_session: int = 2,
+    fetch_prices: bool = True,
+    annotators_needed: int = 3,
+):
+    """Regenerate only annotation_data_ov*.js and manifest overlap entries.
+
+    This preserves existing annotation_data_s*.js files and the manifest's
+    unique_sessions list, which is important after main-session assignments
+    have already been issued.
+    """
+    if not overlap_ids:
+        raise ValueError("overlap-only export requires --overlap-ids")
+
+    os.makedirs(output_dir, exist_ok=True)
+    manifest_path = os.path.join(output_dir, "manifest.json")
+    if not os.path.exists(manifest_path):
+        raise FileNotFoundError(
+            f"{manifest_path} not found; run full prolific export once first"
+        )
+
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+
+    all_data = await _build_all_question_data(
+        db_path,
+        overlap_ids,
+        fetch_prices,
+        include_ids=overlap_ids,
+    )
+    overlap_qs = [q for q in all_data if q["id"] in overlap_ids]
+    found_ids = {q["id"] for q in overlap_qs}
+    missing_ids = sorted(overlap_ids - found_ids)
+    if missing_ids:
+        raise ValueError(
+            "overlap IDs not found in database: " + ", ".join(missing_ids[:10])
+        )
+
+    overlap_sessions = _pair_into_sessions(overlap_qs, questions_per_session)
+
+    old_overlap = manifest.get("overlap_sessions", [])
+    old_overlap_ids = {s.get("id") for s in old_overlap}
+    new_overlap_ids = {f"ov{i:02d}" for i in range(1, len(overlap_sessions) + 1)}
+
+    for sid in old_overlap_ids - new_overlap_ids:
+        old_path = os.path.join(output_dir, f"annotation_data_{sid}.js")
+        if os.path.exists(old_path):
+            os.remove(old_path)
+            print(f"  removed stale {sid}")
+
+    manifest["overlap_sessions"] = []
+    manifest["questions_per_session"] = questions_per_session
+    manifest["overlap_regenerated_at"] = datetime.now(timezone.utc).isoformat()
+
+    for i, session in enumerate(overlap_sessions, 1):
+        sid = f"ov{i:02d}"
+        out_path = os.path.join(output_dir, f"annotation_data_{sid}.js")
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(
+                "var annotationData = "
+                f"{json.dumps(session, indent=2, ensure_ascii=False)};"
+            )
+        manifest["overlap_sessions"].append({
+            "id": sid,
+            "questions": len(session),
+            "question_ids": [q["id"] for q in session],
+            "annotators_needed": annotators_needed,
+        })
+        print(f"  [{sid}] {len(session)} overlap questions")
+
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+
+    print(
+        f"\nRegenerated overlap only: {len(overlap_qs)} questions "
+        f"→ {len(overlap_sessions)} ov sessions"
+    )
+    print("Preserved existing unique_sessions and annotation_data_s*.js files.")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Export data for UI annotation.")
     parser.add_argument("--db", default="combined.db", help="Path to SQLite DB")
-    parser.add_argument("--mode", choices=["annotator", "prolific"], default="annotator",
+    parser.add_argument("--mode", choices=["annotator", "prolific", "prolific-overlap-only"], default="annotator",
                         help="'annotator' (default) or 'prolific' (per-session files for GitHub Pages)")
     # annotator mode
     parser.add_argument("--out", default=None, help="Output JS file (auto-named if omitted)")
@@ -606,6 +689,15 @@ if __name__ == "__main__":
             output_dir=output_dir,
             overlap_ids=overlap_ids,
             include_ids=include_ids,
+            questions_per_session=args.questions_per_session,
+            fetch_prices=not args.no_fetch,
+        ))
+    elif args.mode == "prolific-overlap-only":
+        output_dir = args.output_dir or os.path.join(SCRIPT_DIR, "prolific_sessions")
+        asyncio.run(export_overlap_only_for_prolific(
+            db_path=args.db,
+            output_dir=output_dir,
+            overlap_ids=overlap_ids,
             questions_per_session=args.questions_per_session,
             fetch_prices=not args.no_fetch,
         ))
