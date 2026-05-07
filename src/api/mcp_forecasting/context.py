@@ -110,7 +110,10 @@ def get_context_from_mcp(
         # Fallback: environment variables (stdio transport)
         try:
             forecast_context = context_service.parse_context_from_env()
-            context_service.validate_context(forecast_context)
+            try:
+                context_service.validate_context(forecast_context)
+            except ValueError as e:
+                logger.warning(f"Context validation warning (proceeding anyway): {e}")
             current_context.set(forecast_context)
             return forecast_context
         except ValueError as e:
