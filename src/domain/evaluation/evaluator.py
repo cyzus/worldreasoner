@@ -221,7 +221,8 @@ class ForecastEvaluator:
         forecast.is_correct = evaluation.is_correct
         forecast.brier_score = evaluation.brier_score
         forecast.log_score = evaluation.log_score
-        forecast.evaluation_metadata = evaluation.evaluation_metadata
+        existing = forecast.evaluation_metadata or {}
+        forecast.evaluation_metadata = {**existing, **evaluation.evaluation_metadata}
 
         # Save to database
         self.db.save(Forecast, forecast)

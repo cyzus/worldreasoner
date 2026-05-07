@@ -41,6 +41,12 @@ def run(
         "-q",
         help="Specific question ID(s) (repeatable)",
     ),
+    question_file: Optional[str] = typer.Option(
+        None,
+        "--question-file",
+        "-Q",
+        help="File with one question ID per line",
+    ),
     models: Optional[List[str]] = typer.Option(
         None,
         "--model",
@@ -104,6 +110,12 @@ def run(
         wr benchmark run --resume -y
     """
     config = get_config()
+
+    # Merge question IDs from file
+    if question_file:
+        from pathlib import Path
+        file_ids = [l.strip() for l in Path(question_file).read_text().splitlines() if l.strip()]
+        question_ids = list(question_ids or []) + file_ids
 
     # Resolve models
     model_list = models or [config.llm.model]

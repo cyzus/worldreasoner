@@ -155,6 +155,8 @@ class AutoBenchmarkService:
                 f"({len(questions)} remaining)"
             )
 
+        questions = sorted(questions, key=lambda q: q.id)
+
         if max_questions:
             questions = questions[:max_questions]
 
@@ -237,6 +239,12 @@ class AutoBenchmarkService:
                 benchmark_condition=condition.name.value,
             )
             agent.run(prompt)
+            _adapter = agent.mcp_client._adapter
+            if _adapter.task and not _adapter.task.done():
+                _adapter.loop.call_soon_threadsafe(_adapter.task.cancel)
+            _adapter.thread.join(timeout=15)
+            if not _adapter.loop.is_closed():
+                _adapter.loop.close()
         except Exception as e:
             logger.error(
                 f"Agent failed for {condition.name.value}/{model_name}/{question.id}: {e}"
