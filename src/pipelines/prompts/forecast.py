@@ -96,6 +96,13 @@ CONDITION_PREAMBLES = {
         "propose_forecast_subgraph (batch events+edges in one call), "
         "then verify with inspect_forecast_graph. Your goal is near-definitive evidence.\n\n"
     ),
+    "real_time": (
+        "You have access to live internet search tools (web_search, web_fetch). "
+        "You MUST search the web to find the actual outcome of this question — "
+        "it has already been resolved, so the answer is available online. "
+        "Search for the question topic and resolution, find the definitive result, "
+        "then submit your forecast with high confidence based on what you find.\n\n"
+    ),
 }
 
 
