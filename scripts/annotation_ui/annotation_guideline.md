@@ -16,16 +16,22 @@ Each event card shows:
 - **In Market Window / Pre-Market badge** — quick visual indicator
 - **Title & Description** — the event as extracted by the Hindsight Agent
 - **Source** — link to the original article (if available)
-- **Impact Analysis** — the AI's assessment of how this event affected the forecast outcome, showing direction (positive/negative/neutral/mixed) and reasoning. Some events have no impact analysis; the box will be muted in that case.
-- **👍 / 👎 Reasoning Assessment buttons** — only visible when impact analysis is present
+- **Final outcome** — the actual resolved answer for the question. This is shown in the sidebar and again in the expected-impact section.
+- **Your Expected Impact** — after approving an event, judge whether it should move probability towards the final resolved outcome, away from the final resolved outcome, or not meaningfully at all. The AI's impact analysis is hidden behind an expandable section and should not be treated as the answer.
 
 The sidebar also shows the **market window** (open → close date) and a link to the Polymarket market for in-context verification.
+
+Before annotating events for a question, review the hindsight explanation popup for at least 20 seconds. Events are then shown one at a time. For each event, first open the source or acknowledge that no source URL is available. Only then will Approve / Reject / Skip appear. If you approve an event, the expected-impact section appears under the event.
 
 ---
 
 ## 3. Decision Framework
 
-For every event, make **two assessments** (in order):
+For every event, follow this order:
+
+1. Open the source, or acknowledge that no source URL is available.
+2. Choose Approve, Reject, or Skip.
+3. If you approved the event, choose the expected impact direction. Optional reasoning can be added, but it is not required.
 
 ### Step 1 — Event Validity (required for all events)
 
@@ -50,14 +56,17 @@ broad framing.
 | **Reject: Too Broad** | Describes a multi-month trend or category of events rather than a single, atomic occurrence |
 | **Skip: Unverifiable** | Last resort only: cannot verify after checking the source and doing a brief search |
 
-### Step 2 — Reasoning Quality (only when Impact Analysis is shown)
+### Step 2 — Expected Impact Direction (required after approving any event)
 
-Ask: *Is the AI's impact analysis correct?*
+Ask: *Based on the event and source, how should this event affect the probability of the final resolved outcome?*
 
 | Assessment | Condition |
 |---|---|
-| 👍 **Accurate Reasoning** | The direction and causal chain correctly explain this event's role in the outcome |
-| 👎 **Flawed Reasoning** | The AI's impact logic is wrong, reversed, or overstated — even if the event itself is real |
+| **Towards final outcome** | The event should move probability toward the final resolved outcome. |
+| **Away from final outcome** | The event should move probability away from the final resolved outcome. |
+| **No meaningful impact** | The event is valid but should not meaningfully move the outcome probability. |
+
+Approval notes and expected-impact reasoning are optional. Rejection and skip notes remain required so factual, source, date, and unverifiable cases can be audited later.
 
 ---
 
@@ -70,12 +79,13 @@ The market window is the period when Polymarket was actively tracking this quest
 - **Market close date**: always available (`resolution_date`).
 
 ### How to use it
-For events **within the market window**, the UI shows a mini price chart (pre-fetched from Polymarket). Use it to verify the AI's claimed impact direction:
+For events **within the market window**, the UI provides a collapsed mini price chart under **Market movement**. Use it only as supporting context when judging your expected impact direction:
 
-- A claimed **Towards outcome** impact (makes Yes more likely) should correspond to a **price increase** around that event date.
-- A claimed **Against outcome** impact (makes Yes less likely) should correspond to a **price decrease**.
-- If the claimed direction contradicts the price movement, mark reasoning as 👎 **Flawed**.
-- If price barely moved, the impact may be **overstated** — mark reasoning as 👎 **Flawed** if magnitude is claimed to be high.
+- If the event coincides with movement toward the final outcome, **Towards final outcome** may be appropriate.
+- If the event coincides with movement away from the final outcome, **Away from final outcome** may be appropriate.
+- If price barely moved or the event is only background context, **No meaningful impact** may be appropriate.
+
+Do not treat the price chart as the answer. Market movement may reflect several simultaneous signals, liquidity, or trader expectations unrelated to the specific event being annotated. The event source and final outcome should remain the primary evidence.
 
 For events **before the market opened**, the chart will not cover that date. Judge the causal logic on its own merits.
 
@@ -110,9 +120,9 @@ For **non-Polymarket questions** (no market window or chart shown), assess impac
 
 Events are pre-sorted by importance. Spend the most effort on:
 
-1. **Events with impact analysis that are inside the market window** — these are the most verifiable and the most consequential for evaluation quality
-2. **Events with impact analysis outside the window** — impact can still be judged on causal logic
-3. **Events without impact analysis** — assess validity only; skip the reasoning step entirely
+1. **Approved events inside the market window** — these are the most verifiable and the most consequential for evaluation quality
+2. **Approved events outside the window** — impact can still be judged on causal logic
+3. **Rejected or skipped events** — do not mark expected impact
 
 ---
 
@@ -120,12 +130,11 @@ Events are pre-sorted by importance. Spend the most effort on:
 
 | Situation | Guidance |
 |---|---|
-| Event has no impact analysis | Assess validity only; do not mark reasoning |
+| Approved event has no AI impact analysis | Still choose your own expected impact direction; use the event, source, final outcome, and market movement if available |
 | Two events describe the same news | Approve the one with more specific date/detail; Reject the other as **Duplicate** |
 | Event date is years before the question's market window | Almost always background context — Reject as **Noise** unless the question outcome explicitly depends on that specific historical event |
 | Source link is broken or missing | **Perform a quick web search** using the event details. If you find a better source, use **Approve** if the event is relevant or **Source Mismatch** if the original URL is misleading. Only skip if it remains completely unverifiable after a brief search. |
 | Source is paywalled | Search for another source or article title first. Use **Source Mismatch** if the visible article metadata does not support the event; use **Skip** only if no verification is possible. |
 | Event is true but the source only supports part of it | Reject as **Source Mismatch** if the unsupported part is central; otherwise approve and provide the better source URL. |
-| Event is true but its causal explanation is overstated | Approve the event if relevant, then mark the impact analysis as 👎 **Flawed Reasoning**. Do not reject a real relevant event solely because the reasoning is weak. |
-| Impact direction seems right but reasoning explanation is weak or superficial | Approve the event; mark reasoning as 👎 **Flawed** |
+| Event is true but the AI's causal explanation is overstated | Approve the event if relevant, then choose your own expected impact direction. Do not reject a real relevant event solely because the AI's reasoning is weak. |
 | Market open date shown as "estimated" | Treat the market window boundary as approximate ±2 weeks; don't reject events solely for falling slightly outside an estimated boundary |

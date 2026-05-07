@@ -289,6 +289,157 @@
             background: #e2e8f0;
             z-index: 0;
         }
+        .timeline-container.single-event::before {
+            display: none;
+        }
+
+        .question-gate-title {
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: #312e81;
+            margin-bottom: 8px;
+        }
+        .question-gate-help {
+            font-size: 0.9rem;
+            color: #475569;
+            line-height: 1.55;
+            margin-bottom: 14px;
+        }
+        .question-gate-timer {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 11px;
+            border-radius: 8px;
+            background: #eef2ff;
+            color: #3730a3;
+            font-size: 0.86rem;
+            font-weight: 800;
+            margin-bottom: 14px;
+        }
+        #explanation-gate-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15,23,42,0.72);
+            z-index: 350;
+            align-items: center;
+            justify-content: center;
+            padding: 28px;
+        }
+        .question-gate-card {
+            width: min(900px, 94vw);
+            max-height: 88vh;
+            overflow: hidden;
+            background: #ffffff;
+            border: 1px solid #c7d2fe;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 18px 50px rgba(15,23,42,0.28);
+            display: flex;
+            flex-direction: column;
+        }
+        .final-outcome-callout {
+            border: 1px solid #bbf7d0;
+            background: #f0fdf4;
+            color: #14532d;
+            border-radius: 8px;
+            padding: 11px 13px;
+            margin: 12px 0;
+            font-size: 0.92rem;
+            line-height: 1.5;
+        }
+        .final-outcome-callout strong {
+            color: #166534;
+        }
+        .impact-event-summary {
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 12px 14px;
+            margin-bottom: 14px;
+        }
+        .impact-event-summary .event-date {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .impact-confirm-hint {
+            color: #dc2626;
+            font-size: 0.84rem;
+            font-weight: 700;
+            display: none;
+            align-self: center;
+        }
+        .event-review-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin: 0 0 16px 40px;
+            max-width: 920px;
+        }
+        .event-review-bar .event-review-count {
+            color: #475569;
+            font-size: 0.88rem;
+            font-weight: 700;
+        }
+        .source-gate {
+            margin-bottom: 14px;
+            padding: 10px 12px;
+            border: 1px solid #dbeafe;
+            background: #eff6ff;
+            border-radius: 8px;
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .source-gate.read {
+            border-color: #bbf7d0;
+            background: #f0fdf4;
+        }
+        .source-gate-text {
+            color: #334155;
+            font-size: 0.84rem;
+            line-height: 1.45;
+            flex: 1;
+            min-width: 240px;
+            order: 2;
+        }
+        .source-link-btn {
+            background: #ffffff;
+            color: var(--primary);
+            border: 1px solid #c7d2fe;
+            text-decoration: none;
+            padding: 7px 11px;
+            border-radius: 6px;
+            font-size: 0.84rem;
+            font-weight: 800;
+            display: inline-flex;
+            align-items: center;
+            order: 1;
+        }
+        .source-link-btn:hover {
+            background: #eef2ff;
+        }
+        .action-hint {
+            color: #dc2626;
+            font-size: 0.82rem;
+            font-weight: 700;
+            margin-top: -8px;
+            margin-bottom: 10px;
+            display: none;
+        }
+        .decision-edit-row {
+            display: flex;
+            justify-content: flex-start;
+            margin: 8px 0 12px;
+        }
+        .decision-edit-row .btn-nav {
+            padding: 7px 11px;
+            font-size: 0.84rem;
+        }
 
         .event-card {
             background: var(--panel-bg);
@@ -534,6 +685,11 @@
             border-color: #bbf7d0;
             background: #f0fdf4;
         }
+        .inline-review-form.impact-form {
+            display: block;
+            border-color: #fde68a;
+            background: #fffbeb;
+        }
         .inline-review-title {
             margin-bottom: 6px;
             font-size: 0.9rem;
@@ -542,6 +698,9 @@
         }
         .inline-review-form.approval-form .inline-review-title {
             color: #166534;
+        }
+        .inline-review-form.impact-form .inline-review-title {
+            color: #92400e;
         }
         .inline-review-help {
             margin-bottom: 8px;
@@ -565,6 +724,9 @@
         }
         .inline-review-form.approval-form textarea {
             border-color: #bbf7d0;
+        }
+        .inline-review-form.impact-form textarea {
+            border-color: #fde68a;
         }
         .inline-review-fields {
             display: flex;
@@ -642,12 +804,13 @@
             display: flex;
             gap: 8px;
             margin-bottom: 10px;
+            flex-wrap: wrap;
         }
         .btn-reasoning {
-            font-size: 0.78rem;
-            font-weight: 600;
-            padding: 4px 10px;
-            border-radius: 4px;
+            font-size: 0.84rem;
+            font-weight: 700;
+            padding: 7px 11px;
+            border-radius: 6px;
             cursor: pointer;
             border: 1px solid;
             background: transparent;
@@ -659,6 +822,12 @@
         .btn-reasoning.accurate.active { background: #dcfce7; }
         .btn-reasoning.flawed { border-color: #dc2626; color: #dc2626; }
         .btn-reasoning.flawed.active { background: #fee2e2; }
+        .btn-reasoning.up { border-color: #16a34a; color: #16a34a; }
+        .btn-reasoning.up.active { background: #dcfce7; }
+        .btn-reasoning.down { border-color: #dc2626; color: #dc2626; }
+        .btn-reasoning.down.active { background: #fee2e2; }
+        .btn-reasoning.none { border-color: #64748b; color: #64748b; }
+        .btn-reasoning.none.active { background: #f1f5f9; }
 
         @keyframes slideIn {
             from { transform: translateX(400px); opacity: 0; }
@@ -914,7 +1083,7 @@
                 You are helping build a dataset of <strong>causal event timelines</strong> for forecasting questions. Each question asked whether a real-world event happened — and an AI has generated a timeline of events that supposedly explains why the outcome occurred.
             </p>
             <p style="color:#475569;font-size:0.92rem;line-height:1.6;margin-bottom:10px;">
-                Your job is to verify whether each event in the timeline <strong>actually happened</strong>, is <strong>causally relevant</strong> to the outcome, and whether the AI's impact analysis is <strong>correct</strong>.
+                Your job is to verify whether each event in the timeline <strong>actually happened</strong>, is <strong>causally relevant</strong> to the final resolved outcome, and how it should affect that outcome's probability.
             </p>
             <p style="color:#475569;font-size:0.92rem;line-height:1.6;margin-bottom:20px;">
                 High-quality annotations directly improve the accuracy of AI forecasting models — your careful judgement here matters!
@@ -974,6 +1143,20 @@
             <div class="guideline-content markdown-body" id="guideline-content">
                 Loading guidelines...
             </div>
+        </div>
+    </div>
+
+    <!-- Explanation Gate Overlay -->
+    <div id="explanation-gate-overlay">
+        <div class="question-gate-card">
+            <div class="question-gate-title">Review the Hindsight Explanation First</div>
+            <div class="question-gate-help">
+                Please skim the causal explanation for at least 20 seconds before annotating events.
+                This gives context for judging whether each event is causally relevant.
+            </div>
+            <div class="question-gate-timer" id="gate-timer">20 seconds remaining</div>
+            <div class="explanation-text markdown-body" id="gate-explanation" style="max-height:50vh;overflow-y:auto;"></div>
+            <button class="btn-approve" id="gate-continue" disabled>Continue to Events</button>
         </div>
     </div>
 
@@ -1102,11 +1285,15 @@
         }
 
         let currentQIndex = 0;
+        let currentEventIndex = 0;
         let totalEvents = 0;
         let annotatedEvents = 0;
         let stateData = [];
+        const explanationGateSeen = {};
+        const explanationGateTimers = {};
         const STORAGE_KEY = 'annotation_state_v2_' + (SESSION_ID || 'local');
         let guidelineHtml = '';
+        const pendingImpactChoices = {};
 
         // ── Load Guideline ───────────────────────────────────────────────
         async function loadGuideline() {
@@ -1140,6 +1327,9 @@
 
                 let restored = false;
                 stateData.forEach((q, i) => {
+                    if (parsed[i] && parsed[i].explanation_reviewed) {
+                        q.explanation_reviewed = true;
+                    }
                     const savedEvents = (parsed[i] && parsed[i].events) || [];
                     const savedById = new Map(savedEvents.map(e => [e.id, e]));
                     q.events = q.events.map(event => {
@@ -1531,8 +1721,7 @@
             const menu = document.getElementById('q-dropdown-menu');
             menu.innerHTML = '';
             stateData.forEach((q, idx) => {
-                const done = q.events.filter(e => e.current_status !== 'pending' &&
-                    (e.current_status !== 'approved' || e.reasoning_status || !e.has_impact)).length;
+                const done = q.events.filter(isEventComplete).length;
                 let cls = 'q-status-empty';
                 if (done === q.events.length && q.events.length > 0) cls = 'q-status-done';
                 else if (done > 0) cls = 'q-status-partial';
@@ -1554,10 +1743,72 @@
             });
         }
 
+        function isImpactAssessmentRequired(event) {
+            return !event.is_attention_check && event.current_status === 'approved';
+        }
+
+        function isEventComplete(event) {
+            if (!event.current_status || event.current_status === 'pending') return false;
+            if (isImpactAssessmentRequired(event) && !event.impact_expectation) return false;
+            return true;
+        }
+
+        function getFirstIncompleteEventIndex(q) {
+            const idx = q.events.findIndex(e => !isEventComplete(e));
+            return idx >= 0 ? idx : 0;
+        }
+
+        function markSourceRead(eventId) {
+            const q = stateData[currentQIndex];
+            const e = q.events.find(ev => ev.id === eventId);
+            if (!e) return;
+            e.source_read = true;
+            saveState();
+            const gate = document.getElementById(`source-gate-${eventId}`);
+            if (gate) gate.classList.add('read');
+            const gateText = document.getElementById(`source-gate-text-${eventId}`);
+            if (gateText) gateText.innerText = 'Source step complete. Now choose Approve, Reject, or Skip.';
+            const hint = document.getElementById(`action-hint-${eventId}`);
+            if (hint) hint.style.display = 'none';
+            const actionRow = document.getElementById(`action-row-${eventId}`);
+            if (actionRow && e.current_status === 'pending') actionRow.style.display = 'flex';
+        }
+
+        function requireSourceBeforeAction(eventId) {
+            const q = stateData[currentQIndex];
+            const e = q.events.find(ev => ev.id === eventId);
+            if (!e || e.is_attention_check || e.source_read || e.current_status !== 'pending') return true;
+            const hint = document.getElementById(`action-hint-${eventId}`);
+            if (hint) hint.style.display = 'block';
+            return false;
+        }
+
+        window.handleApproveClick = function(qId, eventId) {
+            if (!requireSourceBeforeAction(eventId)) return;
+            showApprovalForm(qId, eventId);
+        };
+
+        window.handleRejectMenuClick = function(eventId, ev) {
+            if (!requireSourceBeforeAction(eventId)) {
+                ev.stopPropagation();
+                return;
+            }
+            toggleRejectMenu(eventId, ev);
+        };
+
+        window.handleSkipMenuClick = function(eventId, ev) {
+            if (!requireSourceBeforeAction(eventId)) {
+                ev.stopPropagation();
+                return;
+            }
+            toggleSkipMenu(eventId, ev);
+        };
+
         // ── Render question (sidebar) ─────────────────────────────────────
 
         function renderQuestion(index) {
             currentQIndex = index;
+            currentEventIndex = getFirstIncompleteEventIndex(stateData[index]);
             const q = stateData[index];
 
             document.getElementById('q-dropdown-label').innerHTML =
@@ -1614,7 +1865,7 @@
 
             document.getElementById('q-context').innerHTML = `
                 <div>
-                    <span class="badge outcome">Outcome: ${q.outcome}</span>${overlapBadge}${polyBadge}
+                    <span class="badge outcome">Final outcome: ${q.outcome}</span>${overlapBadge}${polyBadge}
                 </div>
                 <div class="q-title">${q.title}</div>
                 ${optionsHtml}
@@ -1635,190 +1886,364 @@
         function renderTimeline(q) {
             const timeline = document.getElementById('timeline');
             timeline.innerHTML = '';
+            timeline.classList.add('single-event');
 
-            q.events.forEach(event => {
-                const inWindow = event.in_market_window;
-                const hasImpact = event.has_impact && event.impact &&
-                    event.impact !== 'No impact assessment provided.';
+            if (!q.explanation_reviewed) {
+                showExplanationGate(q);
+                return;
+            }
 
-                const card = document.createElement('div');
-                card.className = `event-card ${event.is_attention_check ? 'attention-check ' : ''}${event.current_status !== 'pending' ? 'status-' + event.current_status : ''}`;
-                card.id = `event-${event.id}`;
+            if (currentEventIndex < 0 || currentEventIndex >= q.events.length) {
+                currentEventIndex = getFirstIncompleteEventIndex(q);
+            }
 
-                let statusLabel = event.current_status.toUpperCase();
-                if (event.reject_reason) {
-                    const reasonLabels = {
-                        Hallucination: 'Hallucination',
-                        Fabricated: 'Fabricated',
-                        WrongDate: 'Wrong Date',
-                        SourceMismatch: 'Source',
-                        PredictionNotEvent: 'Prediction',
-                        TooBoard: 'Too Broad',
-                        NoLink: 'No Link',
-                        Unclear: 'Unclear',
-                        NeedsWebSearch: 'Needs Search',
-                        Paywalled: 'Paywalled',
-                        SourceUnavailable: 'No Source',
-                        AmbiguousDate: 'Ambiguous Date',
-                    };
-                    const short = reasonLabels[event.reject_reason] || event.reject_reason.split(' ')[0];
-                    statusLabel += ` (${short})`;
+            const event = q.events[currentEventIndex];
+            const nextDisabled = currentEventIndex === q.events.length - 1 || !isEventComplete(event);
+            timeline.innerHTML = `
+                <div class="event-review-bar">
+                    <button class="btn-nav" onclick="goToEvent(${currentEventIndex - 1})" ${currentEventIndex === 0 ? 'disabled' : ''}>&larr; Previous Event</button>
+                    <div class="event-review-count">Event ${currentEventIndex + 1} / ${q.events.length}</div>
+                    <button class="btn-nav" onclick="goToEvent(${currentEventIndex + 1})" ${nextDisabled ? 'disabled' : ''}>Next Event &rarr;</button>
+                </div>`;
+            timeline.appendChild(renderEventCard(q, event));
+            timeline.scrollTop = 0;
+
+            requestAnimationFrame(() => {
+                drawCurrentEventChartIfOpen(q, event);
+            });
+        }
+
+        function showExplanationGate(q) {
+            const timeline = document.getElementById('timeline');
+            timeline.innerHTML = '';
+            const overlay = document.getElementById('explanation-gate-overlay');
+            const explanation = document.getElementById('gate-explanation');
+            const timer = document.getElementById('gate-timer');
+            const btn = document.getElementById('gate-continue');
+            explanation.innerHTML = marked.parse(q.explanation || '*No explanation available.*');
+            timer.innerText = '20 seconds remaining';
+            btn.disabled = true;
+            btn.onclick = () => completeExplanationGate(q.id);
+            overlay.style.display = 'flex';
+            if (explanationGateTimers[q.id]) clearInterval(explanationGateTimers[q.id]);
+            let remaining = 20;
+            explanationGateTimers[q.id] = setInterval(() => {
+                remaining -= 1;
+                if (currentQIndex < 0 || !stateData[currentQIndex] || stateData[currentQIndex].id !== q.id) {
+                    clearInterval(explanationGateTimers[q.id]);
+                    return;
                 }
+                if (remaining <= 0) {
+                    clearInterval(explanationGateTimers[q.id]);
+                    timer.innerText = 'Ready to continue';
+                    btn.disabled = false;
+                } else {
+                    timer.innerText = `${remaining} seconds remaining`;
+                }
+            }, 1000);
+        }
 
-                const dateParts = splitDateTime(event.date);
+        window.completeExplanationGate = function(qId) {
+            const q = stateData.find(item => item.id === qId);
+            if (!q) return;
+            q.explanation_reviewed = true;
+            document.getElementById('explanation-gate-overlay').style.display = 'none';
+            currentEventIndex = getFirstIncompleteEventIndex(q);
+            saveState();
+            renderTimeline(q);
+        };
 
-                // Date row
-                const dateClass = inWindow ? 'in-window' : 'pre-market';
-                const badgeLabel = inWindow ? 'In Market Window' : 'Pre-Market';
-                const windowBadgeHtml = q.is_polymarket
-                    ? `<span class="window-badge ${dateClass}">${badgeLabel}</span>` : '';
+        window.goToEvent = function(index) {
+            const q = stateData[currentQIndex];
+            if (!q || index < 0 || index >= q.events.length) return;
+            currentEventIndex = index;
+            renderTimeline(q);
+        };
 
-                // Impact box
-                const isRejected = event.current_status === 'rejected';
-                const isAttentionCheck = !!event.is_attention_check;
-                // Price chart — shown for any in-window polymarket event
-                const chartHtml = (!isAttentionCheck && q.price_data && inWindow) ? `
-                    <div class="price-chart-container" style="max-width:100%;margin-bottom:14px;">
+        function advanceOrRefresh(q, fromIndex) {
+            if (!q) return;
+            setTimeout(() => {
+                const next = q.events.findIndex(ev => !isEventComplete(ev));
+                if (next >= 0 && next !== fromIndex) {
+                    currentEventIndex = next;
+                }
+                renderTimeline(q);
+            }, 250);
+        }
+
+        function drawCurrentEventChartIfOpen(q, event) {
+            if (event.is_attention_check || !q.price_data || !event.in_market_window) return;
+            const details = document.getElementById(`market-evidence-${event.id}`);
+            if (details && !details.open) return;
+            const canvas = document.getElementById(`chart-${event.id}`);
+            if (!canvas) return;
+            drawPriceChart(canvas, q.price_data, event.date, q.market_open, q.market_close);
+            setupChartHover(canvas);
+        }
+
+        window.handleMarketEvidenceToggle = function(qId, eventId) {
+            const q = stateData.find(item => item.id === qId);
+            const event = q && q.events.find(item => item.id === eventId);
+            if (!q || !event) return;
+            const details = document.getElementById(`market-evidence-${eventId}`);
+            if (!details || !details.open) return;
+            setTimeout(() => drawCurrentEventChartIfOpen(q, event), 50);
+        };
+
+        function finalOutcomeLabel(q) {
+            return q && q.outcome ? String(q.outcome) : 'the resolved outcome shown in the sidebar';
+        }
+
+        function renderPendingImpactChoice(eventId) {
+            const q = stateData[currentQIndex];
+            const e = q && q.events.find(ev => ev.id === eventId);
+            const choice = pendingImpactChoices[eventId] || (e && e.impact_expectation) || null;
+            [
+                [`impact-choice-up-${eventId}`, 'up'],
+                [`impact-choice-down-${eventId}`, 'down'],
+                [`impact-choice-none-${eventId}`, 'none'],
+            ].forEach(([id, value]) => {
+                const btn = document.getElementById(id);
+                if (btn) btn.classList.toggle('active', choice === value);
+            });
+            const confirmBtn = document.getElementById(`impact-confirm-${eventId}`);
+            if (confirmBtn) confirmBtn.disabled = !choice;
+        }
+
+        window.selectImpactChoice = function(eventId, value) {
+            pendingImpactChoices[eventId] = value;
+            const hint = document.getElementById(`impact-confirm-hint-${eventId}`);
+            if (hint) hint.style.display = 'none';
+            renderPendingImpactChoice(eventId);
+        };
+
+        window.confirmImpactChoice = function(qId, eventId) {
+            const q = stateData.find(item => item.id === qId);
+            const e = q && q.events.find(item => item.id === eventId);
+            let choice = pendingImpactChoices[eventId] || (e && e.impact_expectation) || null;
+            if (!choice) {
+                const active = ['up', 'down', 'none'].find(value => {
+                    const btn = document.getElementById(`impact-choice-${value}-${eventId}`);
+                    return btn && btn.classList.contains('active');
+                });
+                choice = active || null;
+            }
+            if (!choice) {
+                const hint = document.getElementById(`impact-confirm-hint-${eventId}`);
+                if (hint) hint.style.display = 'inline';
+                return;
+            }
+            const reasoning = (document.getElementById(`impact-reasoning-text-${eventId}`) || {}).value || '';
+            annotateImpactExpectation(qId, eventId, choice, reasoning.trim());
+        };
+
+        function setImpactSectionVisible(eventId, visible) {
+            const impact = document.getElementById(`impact-status-${eventId}`);
+            if (impact) impact.style.display = visible ? 'block' : 'none';
+        }
+
+        function clearInlineImpact(eventId) {
+            delete pendingImpactChoices[eventId];
+            const impact = document.getElementById(`impact-status-${eventId}`);
+            if (impact) impact.remove();
+        }
+
+        window.showDecisionActions = function(eventId) {
+            document.querySelectorAll('.approval-form').forEach(f => f.style.display = 'none');
+            document.querySelectorAll('[id^="reject-form-"]').forEach(f => f.style.display = 'none');
+            document.querySelectorAll('[id^="skip-form-"]').forEach(f => f.style.display = 'none');
+            const edit = document.getElementById(`decision-edit-${eventId}`);
+            if (edit) edit.style.display = 'none';
+            const row = document.getElementById(`action-row-${eventId}`);
+            if (row) row.style.display = 'flex';
+            setImpactSectionVisible(eventId, false);
+        };
+
+        function collapseDecisionActions(eventId) {
+            const row = document.getElementById(`action-row-${eventId}`);
+            if (row) row.style.display = 'none';
+            const edit = document.getElementById(`decision-edit-${eventId}`);
+            if (edit) edit.style.display = 'flex';
+        }
+
+        function renderEventCard(q, event) {
+            const inWindow = event.in_market_window;
+            const isRejected = event.current_status === 'rejected';
+            const isAttentionCheck = !!event.is_attention_check;
+            const dateParts = splitDateTime(event.date);
+
+            const card = document.createElement('div');
+            card.className = `event-card ${isAttentionCheck ? 'attention-check ' : ''}${event.current_status !== 'pending' ? 'status-' + event.current_status : ''}`;
+            card.id = `event-${event.id}`;
+
+            let statusLabel = event.current_status.toUpperCase();
+            if (event.reject_reason) {
+                const short = REASON_LABELS[event.reject_reason] || event.reject_reason.split(' ')[0];
+                statusLabel += ` (${short})`;
+            }
+
+            const dateClass = inWindow ? 'in-window' : 'pre-market';
+            const badgeLabel = inWindow ? 'In Market Window' : 'Pre-Market';
+            const windowBadgeHtml = q.is_polymarket
+                ? `<span class="window-badge ${dateClass}">${badgeLabel}</span>` : '';
+            const sourceStepDone = isAttentionCheck || event.source_read || event.current_status !== 'pending';
+            const isDecided = !isAttentionCheck && event.current_status !== 'pending';
+            const actionRowStyle = sourceStepDone && !isDecided ? '' : ' style="display:none"';
+            const sourceDoneText = event.current_status === 'approved'
+                ? 'Event approved. Complete Step 2 below, or change the Step 1 decision.'
+                : event.current_status === 'rejected'
+                    ? 'Event rejected. You can change the Step 1 decision if needed.'
+                    : event.current_status === 'skipped'
+                        ? 'Event skipped. You can change the Step 1 decision if needed.'
+                        : 'Source step complete. Now choose Approve, Reject, or Skip.';
+
+            const sourceGateHtml = !isAttentionCheck ? `
+                <div class="source-gate ${sourceStepDone ? 'read' : ''}" id="source-gate-${event.id}">
+                    <div class="source-gate-text" id="source-gate-text-${event.id}">
+                        ${event.source_url
+                            ? (sourceStepDone ? sourceDoneText : 'Open and read the source before making a decision.')
+                            : (sourceStepDone ? sourceDoneText : 'No source URL is available. Click the button, then use Skip only if the event remains unverifiable after a brief search.')}
+                    </div>
+                    ${event.source_url
+                        ? `<a class="source-link-btn" href="${event.source_url}" target="_blank" onclick="markSourceRead('${event.id}')">&#8599; Open Source</a>`
+                        : `<button class="btn-nav" onclick="markSourceRead('${event.id}')">No source available</button>`}
+                </div>
+                <div class="action-hint" id="action-hint-${event.id}">${event.source_url ? 'Please open the source before annotating this event.' : 'Please acknowledge that no source URL is available before annotating this event.'}</div>` : '';
+            const decisionEditHtml = isDecided ? `
+                <div class="decision-edit-row" id="decision-edit-${event.id}">
+                    <button class="btn-nav" onclick="showDecisionActions('${event.id}')">Change decision</button>
+                </div>` : '';
+
+            const chartHtml = (!isAttentionCheck && q.price_data && inWindow) ? `
+                <details id="market-evidence-${event.id}" style="margin-top:14px;margin-bottom:14px;" ontoggle="handleMarketEvidenceToggle('${q.id}', '${event.id}')">
+                    <summary style="cursor:pointer;font-weight:700;color:#475569;">Market movement</summary>
+                    <div class="inline-review-help" style="margin-top:8px;">Use this as supporting context only. Market prices may reflect multiple simultaneous signals, not just this event.</div>
+                    <div class="price-chart-container" style="max-width:100%;margin-bottom:0;">
                         <div class="chart-label">Polymarket Price (Yes) — amber line = event date</div>
                         <canvas class="price-chart-canvas" id="chart-${event.id}"></canvas>
                         <div class="price-chart-meta">
                             <span>Open: ${q.price_data.price_at_open != null ? (q.price_data.price_at_open * 100).toFixed(0) + '%' : '—'}</span>
                             <span>Final: ${q.price_data.final_price != null ? (q.price_data.final_price * 100).toFixed(0) + '%' : '—'}</span>
                         </div>
-                    </div>` : '';
-
-                let impactHtml;
-                if (hasImpact) {
-                    const accActive = event.reasoning_status === 'accurate' ? 'active' : '';
-                    const flwActive = event.reasoning_status === 'flawed' ? 'active' : '';
-                    impactHtml = `
-                        <div class="detail-box box-impact" id="impact-${event.id}"${isRejected ? ' style="display:none"' : ''}>
-                            <strong>Impact Analysis</strong>
-                            <div class="reasoning-btn-row">
-                                <button class="btn-reasoning accurate ${accActive}" id="btn-acc-${event.id}"
-                                    onclick="annotateReasoning('${q.id}', '${event.id}', 'accurate')">
-                                    👍 Accurate Impact
-                                </button>
-                                <button class="btn-reasoning flawed ${flwActive}" id="btn-flw-${event.id}"
-                                    onclick="annotateReasoning('${q.id}', '${event.id}', 'flawed')">
-                                    👎 Flawed Impact
-                                </button>
-                            </div>
-                            <div class="markdown-body" style="font-size:0.92rem;">${marked.parse(event.impact)}</div>
-                        </div>`;
-                } else {
-                    impactHtml = '';
-                }
-
-                card.innerHTML = `
-                    <div class="status-badge">${statusLabel}</div>
-                    <div class="event-date-row">
-                        <span class="event-date ${dateClass}">${event.date}</span>
-                        ${windowBadgeHtml}
                     </div>
-                    ${isAttentionCheck ? '<div class="attention-check-label">Attention Check</div>' : ''}
-                    <div class="event-title">${event.title}</div>
-                    <div class="event-description markdown-body">${marked.parse(event.description || '')}</div>
-                    ${!isAttentionCheck && event.source_url
-                        ? `<div style="margin-bottom:14px;font-size:0.82rem;">
-                               <a href="${event.source_url}" target="_blank"
-                                  style="color:var(--primary);text-decoration:none;font-weight:600;">
-                                   &#8599; Source
-                               </a>
-                           </div>`
-                        : ''}
-                    <div class="action-row">
-                        <button class="btn-approve" onclick="${isAttentionCheck ? `annotate('${q.id}', '${event.id}', 'approved')` : `showApprovalForm('${q.id}', '${event.id}')`}">
-                            &#10003; Approve
-                        </button>
-                        <div style="position:relative;">
-                            <button class="btn-reject" onclick="toggleRejectMenu('${event.id}', event)">
-                                &#10005; Reject <span style="font-size:0.7em;margin-left:4px;">&#9660;</span>
-                            </button>
-                            <div class="reject-menu wide" id="menu-${event.id}">
-                                <div class="reject-menu-label">Factual / source problem</div>
-                                <button onclick="showRejectForm('${q.id}', '${event.id}', 'Fabricated')">Fabricated event</button>
-                                <button onclick="showRejectForm('${q.id}', '${event.id}', 'WrongDate')">Wrong date</button>
-                                <button onclick="showRejectForm('${q.id}', '${event.id}', 'SourceMismatch')">Source does not support event</button>
-                                <button onclick="showRejectForm('${q.id}', '${event.id}', 'PredictionNotEvent')">Prediction / opinion, not an event</button>
-                                <div class="reject-menu-label">Event quality problem</div>
-                                <button onclick="${isAttentionCheck ? `annotate('${q.id}', '${event.id}', 'rejected', 'Noise')` : `showRejectForm('${q.id}', '${event.id}', 'Noise')`}">Noise (no causal link to outcome)</button>
-                                <button onclick="${isAttentionCheck ? `annotate('${q.id}', '${event.id}', 'rejected', 'Duplicate')` : `showRejectForm('${q.id}', '${event.id}', 'Duplicate')`}">Duplicate / Redundant</button>
-                                <button onclick="${isAttentionCheck ? `annotate('${q.id}', '${event.id}', 'rejected', 'TooBoard')` : `showRejectForm('${q.id}', '${event.id}', 'TooBoard')`}">Too Broad (trend, not an event)</button>
-                            </div>
-                        </div>
-                        <div style="position:relative;">
-                            <button class="btn-skip" onclick="toggleSkipMenu('${event.id}', event)">
-                                Skip <span style="font-size:0.7em;margin-left:4px;">&#9660;</span>
-                            </button>
-                            <div class="reject-menu" id="skip-menu-${event.id}">
-                                <button onclick="${isAttentionCheck ? `annotate('${q.id}', '${event.id}', 'skipped', 'Unclear')` : `showSkipForm('${q.id}', '${event.id}')`}">Cannot verify after checking</button>
-                            </div>
+                </details>` : '';
+
+            const impactChoice = pendingImpactChoices[event.id] || event.impact_expectation || '';
+            if (impactChoice && !pendingImpactChoices[event.id]) {
+                pendingImpactChoices[event.id] = impactChoice;
+            }
+            const impactLabel = event.impact_expectation === 'up'
+                ? 'Towards final outcome'
+                : event.impact_expectation === 'down'
+                    ? 'Away from final outcome'
+                    : event.impact_expectation === 'none'
+                        ? 'No meaningful impact'
+                        : null;
+            const impactStatusHtml = isImpactAssessmentRequired(event) ? `
+                <div class="inline-review-form impact-form" id="impact-status-${event.id}">
+                    <div class="inline-review-title">Step 2: Expected Impact</div>
+                    <div class="final-outcome-callout">
+                        Final resolved outcome: <strong>${finalOutcomeLabel(q)}</strong>
+                        <div style="font-size:0.84rem;color:#166534;margin-top:4px;">${q.title || ''}</div>
+                    </div>
+                    <div class="inline-review-help">
+                        ${impactLabel ? `Current saved choice: ${impactLabel}. You can change it below and confirm again.` : 'Choose how this approved event should affect the probability of the final resolved outcome.'}
+                    </div>
+                    <div class="reasoning-btn-row">
+                        <button class="btn-reasoning up ${impactChoice === 'up' ? 'active' : ''}" id="impact-choice-up-${event.id}" onclick="selectImpactChoice('${event.id}', 'up')">Towards final outcome</button>
+                        <button class="btn-reasoning down ${impactChoice === 'down' ? 'active' : ''}" id="impact-choice-down-${event.id}" onclick="selectImpactChoice('${event.id}', 'down')">Away from final outcome</button>
+                        <button class="btn-reasoning none ${impactChoice === 'none' ? 'active' : ''}" id="impact-choice-none-${event.id}" onclick="selectImpactChoice('${event.id}', 'none')">No meaningful impact</button>
+                    </div>
+                    <div class="inline-review-help" style="margin-top:14px;">Optional reasoning</div>
+                    <textarea id="impact-reasoning-text-${event.id}" placeholder="Optional: briefly explain your impact choice.">${event.impact_reasoning_text || ''}</textarea>
+                    <div class="inline-review-actions">
+                        <button class="btn-approve" id="impact-confirm-${event.id}" onclick="confirmImpactChoice('${q.id}', '${event.id}')" ${impactChoice ? '' : 'disabled'}>Confirm Impact Choice</button>
+                        <span class="impact-confirm-hint" id="impact-confirm-hint-${event.id}">Please choose an impact direction first.</span>
+                    </div>
+                    <details style="margin-top:14px;">
+                        <summary style="cursor:pointer;font-weight:700;color:#713f12;">Show LLM impact analysis</summary>
+                        <div class="markdown-body" style="font-size:0.92rem;margin-top:8px;">${marked.parse(event.impact || '*No impact analysis available.*')}</div>
+                    </details>
+                </div>` : '';
+
+            card.innerHTML = `
+                <div class="status-badge">${statusLabel}</div>
+                <div class="event-date-row">
+                    <span class="event-date ${dateClass}">${event.date}</span>
+                    ${windowBadgeHtml}
+                </div>
+                ${isAttentionCheck ? '<div class="attention-check-label">Attention Check</div>' : ''}
+                <div class="event-title">${event.title}</div>
+                <div class="event-description markdown-body">${marked.parse(event.description || '')}</div>
+                ${sourceGateHtml}
+                ${decisionEditHtml}
+                <div class="action-row" id="action-row-${event.id}"${actionRowStyle}>
+                    <button class="btn-approve" data-event-action="${event.id}" onclick="${isAttentionCheck ? `annotate('${q.id}', '${event.id}', 'approved')` : `handleApproveClick('${q.id}', '${event.id}')`}">&#10003; Approve</button>
+                    <div style="position:relative;">
+                        <button class="btn-reject" data-event-action="${event.id}" onclick="handleRejectMenuClick('${event.id}', event)">&#10005; Reject <span style="font-size:0.7em;margin-left:4px;">&#9660;</span></button>
+                        <div class="reject-menu wide" id="menu-${event.id}">
+                            <div class="reject-menu-label">Factual / source problem</div>
+                            <button onclick="showRejectForm('${q.id}', '${event.id}', 'Fabricated')">Fabricated event</button>
+                            <button onclick="showRejectForm('${q.id}', '${event.id}', 'WrongDate')">Wrong date</button>
+                            <button onclick="showRejectForm('${q.id}', '${event.id}', 'SourceMismatch')">Source does not support event</button>
+                            <button onclick="showRejectForm('${q.id}', '${event.id}', 'PredictionNotEvent')">Prediction / opinion, not an event</button>
+                            <div class="reject-menu-label">Event quality problem</div>
+                            <button onclick="${isAttentionCheck ? `annotate('${q.id}', '${event.id}', 'rejected', 'Noise')` : `showRejectForm('${q.id}', '${event.id}', 'Noise')`}">Noise (no causal link to outcome)</button>
+                            <button onclick="${isAttentionCheck ? `annotate('${q.id}', '${event.id}', 'rejected', 'Duplicate')` : `showRejectForm('${q.id}', '${event.id}', 'Duplicate')`}">Duplicate / Redundant</button>
+                            <button onclick="${isAttentionCheck ? `annotate('${q.id}', '${event.id}', 'rejected', 'TooBoard')` : `showRejectForm('${q.id}', '${event.id}', 'TooBoard')`}">Too Broad (trend, not an event)</button>
                         </div>
                     </div>
-                    ${!isAttentionCheck ? `<div class="inline-review-form approval-form" id="approval-form-${event.id}">
-                        <div class="inline-review-title">Confirm Approval</div>
-                        <div class="inline-review-help">Why is this event relevant to the outcome? <span style="color:#ef4444;">*required</span></div>
-                        <textarea id="approval-text-${event.id}" placeholder="e.g. This directly influenced market expectations by..."></textarea>
-                        <div class="inline-review-fields">
-                            <div class="date-field-group" title="Corrected event date and optional time">
-                                <input type="date" id="approval-date-${event.id}" value="${dateParts.date}" aria-label="Corrected event date">
-                                <input type="time" id="approval-time-${event.id}" value="${dateParts.time}" aria-label="Corrected event time">
-                            </div>
-                            <input type="text" id="approval-url-${event.id}" value="${event.source_url || ''}" placeholder="Correct source URL (optional)" style="flex:3;min-width:180px;">
-                        </div>
-                        <div class="inline-review-actions">
-                            <button class="btn-approve" style="flex:1;" onclick="confirmApprove('${q.id}', '${event.id}')">&#10003; Confirm</button>
-                            <button class="btn-nav" onclick="cancelApprove('${event.id}')">Cancel</button>
+                    <div style="position:relative;">
+                        <button class="btn-skip" data-event-action="${event.id}" onclick="handleSkipMenuClick('${event.id}', event)">Skip <span style="font-size:0.7em;margin-left:4px;">&#9660;</span></button>
+                        <div class="reject-menu" id="skip-menu-${event.id}">
+                            <button onclick="${isAttentionCheck ? `annotate('${q.id}', '${event.id}', 'skipped', 'Unclear')` : `showSkipForm('${q.id}', '${event.id}')`}">Cannot verify after checking</button>
                         </div>
                     </div>
-                    <div class="inline-review-form" id="reject-form-${event.id}">
-                        <div class="inline-review-title" id="reject-title-${event.id}">Confirm Rejection</div>
-                        <div class="inline-review-help" id="reject-help-${event.id}">Add a brief note so source/date problems are not confused with fabricated events.</div>
-                        <textarea id="reject-text-${event.id}" placeholder="Brief evidence note, e.g. event is real but article only predicts it, or correct date is..."></textarea>
-                        <div class="inline-review-fields">
-                            <div class="date-field-group" title="Corrected event date and optional time">
-                                <input type="date" id="reject-date-${event.id}" value="${dateParts.date}" aria-label="Corrected event date">
-                                <input type="time" id="reject-time-${event.id}" value="${dateParts.time}" aria-label="Corrected event time">
-                            </div>
-                            <input type="text" id="reject-url-${event.id}" value="${event.source_url || ''}" placeholder="Better source URL if known" style="flex:3;min-width:180px;">
+                </div>
+                ${!isAttentionCheck ? `<div class="inline-review-form approval-form" id="approval-form-${event.id}">
+                    <div class="inline-review-title">Confirm Approval</div>
+                    <div class="inline-review-help">Optional: why is this event relevant to the outcome?</div>
+                    <textarea id="approval-text-${event.id}" placeholder="Optional: e.g. This directly influenced market expectations by..."></textarea>
+                    <div class="inline-review-fields">
+                        <div class="date-field-group" title="Corrected event date and optional time">
+                            <input type="date" id="approval-date-${event.id}" value="${dateParts.date}" aria-label="Corrected event date">
+                            <input type="time" id="approval-time-${event.id}" value="${dateParts.time}" aria-label="Corrected event time">
                         </div>
-                        <div class="inline-review-actions">
-                            <button class="btn-reject" style="flex:1;" onclick="confirmReject('${q.id}', '${event.id}')">&#10005; Confirm Reject</button>
-                            <button class="btn-nav" onclick="cancelReject('${event.id}')">Cancel</button>
-                        </div>
+                        <input type="text" id="approval-url-${event.id}" value="${event.source_url || ''}" placeholder="Correct source URL (optional)" style="flex:3;min-width:180px;">
                     </div>
-                    <div class="inline-review-form skip-form" id="skip-form-${event.id}">
-                        <div class="inline-review-title" style="color:#475569;">Skip: Cannot Verify</div>
-                        <div class="inline-review-help">Use skip only as a last resort after checking the source or doing a brief search. If the event is false, irrelevant, duplicated, too broad, or source-mismatched, reject it instead.</div>
-                        <textarea id="skip-text-${event.id}" placeholder="What did you check, and why is this still unverifiable?"></textarea>
-                        <div class="inline-review-actions">
-                            <button class="btn-skip" style="flex:1;" onclick="confirmSkip('${q.id}', '${event.id}')">Confirm Skip</button>
-                            <button class="btn-nav" onclick="cancelSkip('${event.id}')">Cancel</button>
+                    <div class="inline-review-actions">
+                        <button class="btn-approve" style="flex:1;" onclick="confirmApprove('${q.id}', '${event.id}')">&#10003; Confirm</button>
+                        <button class="btn-nav" onclick="cancelApprove('${event.id}')">Cancel</button>
+                    </div>
+                </div>
+                <div class="inline-review-form" id="reject-form-${event.id}">
+                    <div class="inline-review-title" id="reject-title-${event.id}">Confirm Rejection</div>
+                    <div class="inline-review-help" id="reject-help-${event.id}">Add a brief note so source/date problems are not confused with fabricated events.</div>
+                    <textarea id="reject-text-${event.id}" placeholder="Brief evidence note, e.g. event is real but article only predicts it, or correct date is..."></textarea>
+                    <div class="inline-review-fields">
+                        <div class="date-field-group" title="Corrected event date and optional time">
+                            <input type="date" id="reject-date-${event.id}" value="${dateParts.date}" aria-label="Corrected event date">
+                            <input type="time" id="reject-time-${event.id}" value="${dateParts.time}" aria-label="Corrected event time">
                         </div>
-                    </div>` : ''}
-                    ${chartHtml}
-                    ${hasImpact ? `<div class="central-question-callout" id="callout-${event.id}"${isRejected ? ' style="display:none"' : ''}>
-                        &#128161; <strong>Key question:</strong> Is the AI's impact analysis correct — did this event meaningfully affect the probability of the outcome?
-                    </div>` : ''}
-                    ${impactHtml}`;
-
-                timeline.appendChild(card);
-            });
-
-            timeline.scrollTop = 0;
-
-            // Draw charts after DOM is ready
-            requestAnimationFrame(() => {
-                q.events.forEach(event => {
-                    if (event.is_attention_check || !q.price_data || !event.in_market_window) return;
-                    const canvas = document.getElementById(`chart-${event.id}`);
-                    if (canvas) {
-                        drawPriceChart(canvas, q.price_data, event.date, q.market_open, q.market_close);
-                        setupChartHover(canvas);
-                    }
-                });
-            });
+                        <input type="text" id="reject-url-${event.id}" value="${event.source_url || ''}" placeholder="Better source URL if known" style="flex:3;min-width:180px;">
+                    </div>
+                    <div class="inline-review-actions">
+                        <button class="btn-reject" style="flex:1;" onclick="confirmReject('${q.id}', '${event.id}')">&#10005; Confirm Reject</button>
+                        <button class="btn-nav" onclick="cancelReject('${event.id}')">Cancel</button>
+                    </div>
+                </div>
+                <div class="inline-review-form skip-form" id="skip-form-${event.id}">
+                    <div class="inline-review-title" style="color:#475569;">Skip: Cannot Verify</div>
+                    <div class="inline-review-help">Use skip only as a last resort after checking the source or doing a brief search. If the event is false, irrelevant, duplicated, too broad, or source-mismatched, reject it instead.</div>
+                    <textarea id="skip-text-${event.id}" placeholder="What did you check, and why is this still unverifiable?"></textarea>
+                    <div class="inline-review-actions">
+                        <button class="btn-skip" style="flex:1;" onclick="confirmSkip('${q.id}', '${event.id}')">Confirm Skip</button>
+                        <button class="btn-nav" onclick="cancelSkip('${event.id}')">Cancel</button>
+                    </div>
+                </div>` : ''}
+                ${chartHtml}
+                ${impactStatusHtml}`;
+            return card;
         }
 
         // ── Annotation actions ────────────────────────────────────────────
@@ -1921,6 +2346,12 @@
             e.reasoning_text  = extraData.reasoning_text  || null;
             e.corrected_date  = extraData.corrected_date  || null;
             e.corrected_url   = extraData.corrected_url   || null;
+            if (status !== 'approved') {
+                e.impact_expectation = null;
+                e.impact_reasoning_text = null;
+                e.reasoning_status = null;
+                clearInlineImpact(eventId);
+            }
             if (e.is_attention_check) {
                 e.attention_check_passed = status === e.attention_expected_status &&
                     (!e.attention_expected_reason || reason === e.attention_expected_reason);
@@ -1936,11 +2367,6 @@
             }
             card.querySelector('.status-badge').innerText = badgeText;
 
-            const hide = status === 'rejected';
-            const impactBox = document.getElementById(`impact-${eventId}`);
-            if (impactBox) impactBox.style.display = hide ? 'none' : '';
-            const callout = document.getElementById(`callout-${eventId}`);
-            if (callout) callout.style.display = hide ? 'none' : '';
             const approvalForm = document.getElementById(`approval-form-${eventId}`);
             if (approvalForm) approvalForm.style.display = 'none';
             const rejectForm = document.getElementById(`reject-form-${eventId}`);
@@ -1951,6 +2377,17 @@
             updateProgress();
             populateDropdown();
             saveState();
+            if (status === 'approved' && isImpactAssessmentRequired(e) && !e.impact_expectation) {
+                pendingImpactChoices[eventId] = e.impact_expectation || null;
+                if (q && q.id === stateData[currentQIndex]?.id) {
+                    renderTimeline(q);
+                }
+                return;
+            }
+            const qCurrent = stateData[currentQIndex];
+            if (qCurrent && qCurrent.id === qId) {
+                advanceOrRefresh(qCurrent, currentEventIndex);
+            }
         };
 
         window.annotateReasoning = function(qId, eventId, reasoning_status) {
@@ -1968,12 +2405,33 @@
             saveState();
         };
 
+        window.annotateImpactExpectation = function(qId, eventId, impact_expectation, impact_reasoning_text = '') {
+            const q = stateData.find(q => q.id === qId);
+            const e = q.events.find(e => e.id === eventId);
+            e.impact_expectation = impact_expectation;
+            e.impact_reasoning_text = impact_reasoning_text || null;
+            e.reasoning_status = impact_expectation; // Legacy-compatible field for older exports.
+            delete pendingImpactChoices[eventId];
+
+            ['up', 'down', 'none'].forEach(value => {
+                const btn = document.getElementById(`impact-choice-${value}-${eventId}`);
+                if (btn) btn.classList.toggle('active', impact_expectation === value);
+            });
+
+            updateProgress();
+            populateDropdown();
+            saveState();
+            if (q && q.id === stateData[currentQIndex]?.id) {
+                advanceOrRefresh(q, currentEventIndex);
+            }
+        };
+
         // ── Progress ──────────────────────────────────────────────────────
 
         function updateProgress() {
             annotatedEvents = 0;
             stateData.forEach(q => q.events.forEach(e => {
-                if (e.current_status && e.current_status !== 'pending') annotatedEvents++;
+                if (isEventComplete(e)) annotatedEvents++;
             }));
             document.getElementById('progress-text').innerText = `${annotatedEvents} / ${totalEvents}`;
             if (annotatedEvents === totalEvents && totalEvents > 0) {
@@ -2011,6 +2469,9 @@
             document.querySelectorAll('.approval-form').forEach(f => f.style.display = 'none');
             document.querySelectorAll('[id^="reject-form-"]').forEach(f => f.style.display = 'none');
             document.querySelectorAll('[id^="skip-form-"]').forEach(f => f.style.display = 'none');
+            setImpactSectionVisible(eventId, false);
+            const edit = document.getElementById(`decision-edit-${eventId}`);
+            if (edit) edit.style.display = 'none';
             const form = document.getElementById(`approval-form-${eventId}`);
             if (!form) return;
             form.style.display = 'block';
@@ -2021,6 +2482,12 @@
         window.cancelApprove = function(eventId) {
             const form = document.getElementById(`approval-form-${eventId}`);
             if (form) form.style.display = 'none';
+            const q = stateData[currentQIndex];
+            const e = q && q.events.find(ev => ev.id === eventId);
+            if (e && e.current_status === 'approved') {
+                collapseDecisionActions(eventId);
+                setImpactSectionVisible(eventId, true);
+            }
         };
 
         window.showRejectForm = function(qId, eventId, reason) {
@@ -2028,6 +2495,9 @@
             document.querySelectorAll('.approval-form').forEach(f => f.style.display = 'none');
             document.querySelectorAll('[id^="reject-form-"]').forEach(f => f.style.display = 'none');
             document.querySelectorAll('[id^="skip-form-"]').forEach(f => f.style.display = 'none');
+            setImpactSectionVisible(eventId, false);
+            const edit = document.getElementById(`decision-edit-${eventId}`);
+            if (edit) edit.style.display = 'none';
 
             const form = document.getElementById(`reject-form-${eventId}`);
             if (!form) return;
@@ -2051,6 +2521,12 @@
         window.cancelReject = function(eventId) {
             const form = document.getElementById(`reject-form-${eventId}`);
             if (form) form.style.display = 'none';
+            const q = stateData[currentQIndex];
+            const e = q && q.events.find(ev => ev.id === eventId);
+            if (e && e.current_status === 'approved') {
+                collapseDecisionActions(eventId);
+                setImpactSectionVisible(eventId, true);
+            }
         };
 
         window.showSkipForm = function(qId, eventId) {
@@ -2058,6 +2534,9 @@
             document.querySelectorAll('.approval-form').forEach(f => f.style.display = 'none');
             document.querySelectorAll('[id^="reject-form-"]').forEach(f => f.style.display = 'none');
             document.querySelectorAll('[id^="skip-form-"]').forEach(f => f.style.display = 'none');
+            setImpactSectionVisible(eventId, false);
+            const edit = document.getElementById(`decision-edit-${eventId}`);
+            if (edit) edit.style.display = 'none';
             const form = document.getElementById(`skip-form-${eventId}`);
             if (!form) return;
             form.style.display = 'block';
@@ -2068,20 +2547,22 @@
         window.cancelSkip = function(eventId) {
             const form = document.getElementById(`skip-form-${eventId}`);
             if (form) form.style.display = 'none';
+            const q = stateData[currentQIndex];
+            const e = q && q.events.find(ev => ev.id === eventId);
+            if (e && e.current_status === 'approved') {
+                collapseDecisionActions(eventId);
+                setImpactSectionVisible(eventId, true);
+            }
         };
 
         window.confirmApprove = function(qId, eventId) {
             const ta = document.getElementById(`approval-text-${eventId}`);
             const text = ta ? ta.value.trim() : '';
-            if (!text) {
-                if (ta) { ta.style.borderColor = '#ef4444'; ta.focus(); }
-                return;
-            }
             const dateVal = (document.getElementById(`approval-date-${eventId}`) || {}).value || '';
             const timeVal = (document.getElementById(`approval-time-${eventId}`) || {}).value || '';
             const urlVal  = (document.getElementById(`approval-url-${eventId}`)  || {}).value || '';
             annotate(qId, eventId, 'approved', null, {
-                reasoning_text: text,
+                reasoning_text: text || null,
                 corrected_date: combineDateTime(dateVal, timeVal),
                 corrected_url:  urlVal.trim()  || null,
             });
