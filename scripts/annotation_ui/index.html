@@ -385,14 +385,14 @@
         }
         .source-gate {
             margin-bottom: 14px;
-            padding: 10px 12px;
-            border: 1px solid #dbeafe;
-            background: #eff6ff;
+            padding: 14px;
+            border: 2px solid #c7d2fe;
+            background: #eef2ff;
             border-radius: 8px;
             display: flex;
             justify-content: flex-start;
             align-items: center;
-            gap: 10px;
+            gap: 14px;
             flex-wrap: wrap;
         }
         .source-gate.read {
@@ -407,21 +407,42 @@
             min-width: 240px;
             order: 2;
         }
+        .source-step-label {
+            display: block;
+            color: #3730a3;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 3px;
+        }
+        .source-gate.read .source-step-label {
+            color: #166534;
+        }
         .source-link-btn {
-            background: #ffffff;
-            color: var(--primary);
-            border: 1px solid #c7d2fe;
+            background: var(--primary);
+            color: white;
+            border: 1px solid var(--primary);
             text-decoration: none;
-            padding: 7px 11px;
+            padding: 12px 18px;
             border-radius: 6px;
-            font-size: 0.84rem;
+            font-size: 1rem;
             font-weight: 800;
             display: inline-flex;
             align-items: center;
+            gap: 8px;
             order: 1;
+            box-shadow: 0 8px 18px rgba(79,70,229,0.18);
         }
         .source-link-btn:hover {
-            background: #eef2ff;
+            background: var(--primary-hover);
+            box-shadow: 0 10px 22px rgba(79,70,229,0.24);
+        }
+        .source-gate.read .source-link-btn {
+            background: #ffffff;
+            color: #166534;
+            border-color: #bbf7d0;
+            box-shadow: none;
         }
         .action-hint {
             color: #dc2626;
@@ -603,6 +624,9 @@
             margin-bottom: 18px;
             padding-top: 18px;
             border-top: 1px solid var(--border);
+            position: relative;
+            z-index: 20;
+            flex-wrap: wrap;
         }
 
         button {
@@ -641,11 +665,12 @@
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
             border-radius: 8px;
             padding: 6px;
-            z-index: 100;
-            bottom: 100%;
+            z-index: 300;
+            top: calc(100% + 8px);
             left: 0;
             width: 260px;
-            margin-bottom: 8px;
+            max-height: min(420px, 55vh);
+            overflow-y: auto;
         }
         .reject-menu.wide {
             width: 310px;
@@ -1767,7 +1792,7 @@
             const gate = document.getElementById(`source-gate-${eventId}`);
             if (gate) gate.classList.add('read');
             const gateText = document.getElementById(`source-gate-text-${eventId}`);
-            if (gateText) gateText.innerText = 'Source step complete. Now choose Approve, Reject, or Skip.';
+            if (gateText) gateText.innerHTML = '<span class="source-step-label">Source checked</span>Source step complete. Now choose Approve, Reject, or Skip.';
             const hint = document.getElementById(`action-hint-${eventId}`);
             if (hint) hint.style.display = 'none';
             const actionRow = document.getElementById(`action-row-${eventId}`);
@@ -2100,6 +2125,7 @@
             const sourceGateHtml = !isAttentionCheck ? `
                 <div class="source-gate ${sourceStepDone ? 'read' : ''}" id="source-gate-${event.id}">
                     <div class="source-gate-text" id="source-gate-text-${event.id}">
+                        <span class="source-step-label">${sourceStepDone ? 'Source checked' : 'Step 1: Open source'}</span>
                         ${event.source_url
                             ? (sourceStepDone ? sourceDoneText : 'Open and read the source before making a decision.')
                             : (sourceStepDone ? sourceDoneText : 'No source URL is available. Click the button, then use Skip only if the event remains unverifiable after a brief search.')}
