@@ -544,6 +544,30 @@
             padding-right: 110px; /* space for status badge */
         }
 
+        .event-role-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            background: #eef2ff;
+            border: 1px solid #c7d2fe;
+            color: #3730a3;
+            font-size: 0.73rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .event-task-hint {
+            color: #64748b;
+            font-size: 0.86rem;
+            line-height: 1.45;
+            margin-top: -2px;
+            margin-bottom: 12px;
+        }
+
         .event-description {
             font-size: 0.95rem;
             line-height: 1.6;
@@ -593,7 +617,8 @@
             border: 1px solid #e2e8f0;
             border-radius: 6px;
             padding: 8px 12px 4px;
-            max-width: 320px;
+            max-width: 460px;
+            width: min(100%, 460px);
         }
         .price-chart-container .chart-label {
             font-size: 0.72rem;
@@ -1135,14 +1160,14 @@
             <div id="quiz-event-container"></div>
             <div class="quiz-feedback" id="quiz-feedback"></div>
             <div id="quiz-action-row" style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
-                <button class="btn-approve" onclick="checkQuizAnswer('approved')">&#10003; Approve</button>
+                <button class="btn-approve" onclick="checkQuizAnswer('approved')">&#10003; Event is valid</button>
                 <div style="position:relative;">
-                    <button class="btn-reject" onclick="toggleQuizRejectMenu()">&#10005; Reject <span style="font-size:0.7em">&#9660;</span></button>
+                    <button class="btn-reject" onclick="toggleQuizRejectMenu()">&#10005; Event is invalid <span style="font-size:0.7em">&#9660;</span></button>
                     <div class="reject-menu wide" id="quiz-reject-menu" style="display:none;">
                         <div class="reject-menu-label">Factual / source problem</div>
                         <button onclick="checkQuizAnswer('rejected','Fabricated')">Fabricated event</button>
                         <button onclick="checkQuizAnswer('rejected','WrongDate')">Wrong date</button>
-                        <button onclick="checkQuizAnswer('rejected','SourceMismatch')">Source does not support event</button>
+                        <button onclick="checkQuizAnswer('rejected','SourceMismatch')">Source mismatch</button>
                         <button onclick="checkQuizAnswer('rejected','PredictionNotEvent')">Prediction / opinion, not an event</button>
                         <div class="reject-menu-label">Event quality problem</div>
                         <button onclick="checkQuizAnswer('rejected','Noise')">Noise (no causal link to outcome)</button>
@@ -1150,7 +1175,7 @@
                         <button onclick="checkQuizAnswer('rejected','TooBoard')">Too Broad (trend, not an event)</button>
                     </div>
                 </div>
-                <button class="btn-skip" onclick="checkQuizAnswer('skipped')">Skip</button>
+                <button class="btn-skip" onclick="checkQuizAnswer('skipped')">Cannot verify</button>
             </div>
             <button id="quiz-next-btn"  style="display:none;width:100%;margin-top:12px;" class="btn-start" onclick="advanceQuiz()">Next &#8594;</button>
             <button id="quiz-start-btn" style="display:none;width:100%;margin-top:12px;background:var(--success);" class="btn-start" onclick="startStudyFromQuiz()">&#10003; Start Study</button>
@@ -1374,15 +1399,15 @@
         const ATTENTION_CHECKS = [
             {
                 id: 'attention_check_1',
-                title: 'Attention Check: Select Reject -> Noise',
-                instruction: 'This is an attention check, not a real timeline event. To show that you are paying attention, please click Reject, then choose Noise (no causal link to outcome).',
+                title: 'Attention Check: Select Event is invalid, then Noise',
+                instruction: 'This is an attention check, not a real event card. To show that you are paying attention, choose Event is invalid, then choose Noise (no causal link to outcome).',
                 expected_status: 'rejected',
                 expected_reason: 'Noise',
             },
             {
                 id: 'attention_check_2',
-                title: 'Attention Check: Select Skip -> Unclear / unsure',
-                instruction: 'This is an attention check, not a real timeline event. To show that you are paying attention, please click Skip, then choose Unclear / unsure.',
+                title: 'Attention Check: Select Cannot verify',
+                instruction: 'This is an attention check, not a real event card. To show that you are paying attention, choose Cannot verify, then choose Cannot verify after checking.',
                 expected_status: 'skipped',
                 expected_reason: 'Unclear',
             },
@@ -1792,7 +1817,7 @@
             const gate = document.getElementById(`source-gate-${eventId}`);
             if (gate) gate.classList.add('read');
             const gateText = document.getElementById(`source-gate-text-${eventId}`);
-            if (gateText) gateText.innerHTML = '<span class="source-step-label">Source checked</span>Source step complete. Now choose Approve, Reject, or Skip.';
+            if (gateText) gateText.innerHTML = '<span class="source-step-label">Source checked</span>Using the source, decide whether this event is valid.';
             const hint = document.getElementById(`action-hint-${eventId}`);
             if (hint) hint.style.display = 'none';
             const actionRow = document.getElementById(`action-row-${eventId}`);
@@ -1897,8 +1922,6 @@
                 ${marketWindowHtml}
                 <div class="section-title" style="color:var(--primary);">Causal Explanation (Hindsight)</div>
                 <div class="explanation-text markdown-body">${marked.parse(q.explanation || '*No explanation available.*')}</div>
-                <div class="section-title">Background</div>
-                <div class="context-text markdown-body">${marked.parse(q.background || '*No background available.*')}</div>
                 <div class="section-title">Resolution Criteria</div>
                 <div class="context-text markdown-body" style="background:#fefce8">${marked.parse(q.resolution_criteria || '*No criteria available.*')}</div>
             `;
@@ -2101,7 +2124,11 @@
             card.className = `event-card ${isAttentionCheck ? 'attention-check ' : ''}${event.current_status !== 'pending' ? 'status-' + event.current_status : ''}`;
             card.id = `event-${event.id}`;
 
-            let statusLabel = event.current_status.toUpperCase();
+            let statusLabel = event.current_status === 'approved'
+                ? 'VALID'
+                : event.current_status === 'rejected'
+                    ? 'INVALID'
+                    : event.current_status.toUpperCase();
             if (event.reject_reason) {
                 const short = REASON_LABELS[event.reject_reason] || event.reject_reason.split(' ')[0];
                 statusLabel += ` (${short})`;
@@ -2115,12 +2142,12 @@
             const isDecided = !isAttentionCheck && event.current_status !== 'pending';
             const actionRowStyle = sourceStepDone && !isDecided ? '' : ' style="display:none"';
             const sourceDoneText = event.current_status === 'approved'
-                ? 'Event approved. Complete Step 2 below, or change the Step 1 decision.'
+                ? 'Event is valid. Complete Step 2 below, or change the Step 1 decision.'
                 : event.current_status === 'rejected'
-                    ? 'Event rejected. You can change the Step 1 decision if needed.'
-                    : event.current_status === 'skipped'
-                        ? 'Event skipped. You can change the Step 1 decision if needed.'
-                        : 'Source step complete. Now choose Approve, Reject, or Skip.';
+                    ? 'Event is invalid. You can change the Step 1 decision if needed.'
+                : event.current_status === 'skipped'
+                        ? 'Event validity could not be verified. You can change the Step 1 decision if needed.'
+                        : 'Using the source, decide whether this event is valid.';
 
             const sourceGateHtml = !isAttentionCheck ? `
                 <div class="source-gate ${sourceStepDone ? 'read' : ''}" id="source-gate-${event.id}">
@@ -2128,7 +2155,7 @@
                         <span class="source-step-label">${sourceStepDone ? 'Source checked' : 'Step 1: Open source'}</span>
                         ${event.source_url
                             ? (sourceStepDone ? sourceDoneText : 'Open and read the source before making a decision.')
-                            : (sourceStepDone ? sourceDoneText : 'No source URL is available. Click the button, then use Skip only if the event remains unverifiable after a brief search.')}
+                            : (sourceStepDone ? sourceDoneText : 'No source URL is available. Click the button, then use Cannot verify only if the event remains unverifiable after a brief search.')}
                     </div>
                     ${event.source_url
                         ? `<a class="source-link-btn" href="${event.source_url}" target="_blank" onclick="markSourceRead('${event.id}')">&#8599; Open Source</a>`
@@ -2144,7 +2171,7 @@
                 <details id="market-evidence-${event.id}" style="margin-top:14px;margin-bottom:14px;" ontoggle="handleMarketEvidenceToggle('${q.id}', '${event.id}')">
                     <summary style="cursor:pointer;font-weight:700;color:#475569;">Market movement</summary>
                     <div class="inline-review-help" style="margin-top:8px;">Use this as supporting context only. Market prices may reflect multiple simultaneous signals, not just this event.</div>
-                    <div class="price-chart-container" style="max-width:100%;margin-bottom:0;">
+                    <div class="price-chart-container" style="margin-bottom:0;">
                         <div class="chart-label">Polymarket Price (Yes) — amber line = event date</div>
                         <canvas class="price-chart-canvas" id="chart-${event.id}"></canvas>
                         <div class="price-chart-meta">
@@ -2173,7 +2200,7 @@
                         <div style="font-size:0.84rem;color:#166534;margin-top:4px;">${q.title || ''}</div>
                     </div>
                     <div class="inline-review-help">
-                        ${impactLabel ? `Current saved choice: ${impactLabel}. You can change it below and confirm again.` : 'Choose how this approved event should affect the probability of the final resolved outcome.'}
+                        ${impactLabel ? `Current saved choice: ${impactLabel}. You can change it below and confirm again.` : 'Choose how this valid event should affect the probability of the final resolved outcome.'}
                     </div>
                     <div class="reasoning-btn-row">
                         <button class="btn-reasoning up ${impactChoice === 'up' ? 'active' : ''}" id="impact-choice-up-${event.id}" onclick="selectImpactChoice('${event.id}', 'up')">Towards final outcome</button>
@@ -2199,19 +2226,21 @@
                     ${windowBadgeHtml}
                 </div>
                 ${isAttentionCheck ? '<div class="attention-check-label">Attention Check</div>' : ''}
+                <div class="event-role-label">Event to validate</div>
                 <div class="event-title">${event.title}</div>
+                <div class="event-task-hint">This card is the event. Your Step 1 task is to decide whether this event is valid using the source, not whether the forecast question is true.</div>
                 <div class="event-description markdown-body">${marked.parse(event.description || '')}</div>
                 ${sourceGateHtml}
                 ${decisionEditHtml}
                 <div class="action-row" id="action-row-${event.id}"${actionRowStyle}>
-                    <button class="btn-approve" data-event-action="${event.id}" onclick="${isAttentionCheck ? `annotate('${q.id}', '${event.id}', 'approved')` : `handleApproveClick('${q.id}', '${event.id}')`}">&#10003; Approve</button>
+                    <button class="btn-approve" data-event-action="${event.id}" onclick="${isAttentionCheck ? `annotate('${q.id}', '${event.id}', 'approved')` : `handleApproveClick('${q.id}', '${event.id}')`}">&#10003; Event is valid</button>
                     <div style="position:relative;">
-                        <button class="btn-reject" data-event-action="${event.id}" onclick="handleRejectMenuClick('${event.id}', event)">&#10005; Reject <span style="font-size:0.7em;margin-left:4px;">&#9660;</span></button>
+                        <button class="btn-reject" data-event-action="${event.id}" onclick="handleRejectMenuClick('${event.id}', event)">&#10005; Event is invalid <span style="font-size:0.7em;margin-left:4px;">&#9660;</span></button>
                         <div class="reject-menu wide" id="menu-${event.id}">
-                            <div class="reject-menu-label">Factual / source problem</div>
+                            <div class="reject-menu-label">Source / factual problem</div>
                             <button onclick="showRejectForm('${q.id}', '${event.id}', 'Fabricated')">Fabricated event</button>
                             <button onclick="showRejectForm('${q.id}', '${event.id}', 'WrongDate')">Wrong date</button>
-                            <button onclick="showRejectForm('${q.id}', '${event.id}', 'SourceMismatch')">Source does not support event</button>
+                            <button onclick="showRejectForm('${q.id}', '${event.id}', 'SourceMismatch')">Source mismatch</button>
                             <button onclick="showRejectForm('${q.id}', '${event.id}', 'PredictionNotEvent')">Prediction / opinion, not an event</button>
                             <div class="reject-menu-label">Event quality problem</div>
                             <button onclick="${isAttentionCheck ? `annotate('${q.id}', '${event.id}', 'rejected', 'Noise')` : `showRejectForm('${q.id}', '${event.id}', 'Noise')`}">Noise (no causal link to outcome)</button>
@@ -2220,16 +2249,16 @@
                         </div>
                     </div>
                     <div style="position:relative;">
-                        <button class="btn-skip" data-event-action="${event.id}" onclick="handleSkipMenuClick('${event.id}', event)">Skip <span style="font-size:0.7em;margin-left:4px;">&#9660;</span></button>
+                        <button class="btn-skip" data-event-action="${event.id}" onclick="handleSkipMenuClick('${event.id}', event)">Cannot verify <span style="font-size:0.7em;margin-left:4px;">&#9660;</span></button>
                         <div class="reject-menu" id="skip-menu-${event.id}">
                             <button onclick="${isAttentionCheck ? `annotate('${q.id}', '${event.id}', 'skipped', 'Unclear')` : `showSkipForm('${q.id}', '${event.id}')`}">Cannot verify after checking</button>
                         </div>
                     </div>
                 </div>
                 ${!isAttentionCheck ? `<div class="inline-review-form approval-form" id="approval-form-${event.id}">
-                    <div class="inline-review-title">Confirm Approval</div>
-                    <div class="inline-review-help">Optional: why is this event relevant to the outcome?</div>
-                    <textarea id="approval-text-${event.id}" placeholder="Optional: e.g. This directly influenced market expectations by..."></textarea>
+                    <div class="inline-review-title">Confirm Valid Event</div>
+                    <div class="inline-review-help">Optional: briefly note why this event is valid.</div>
+                    <textarea id="approval-text-${event.id}" placeholder="Optional: e.g. The source reports this event directly and the date matches."></textarea>
                     <div class="inline-review-fields">
                         <div class="date-field-group" title="Corrected event date and optional time">
                             <input type="date" id="approval-date-${event.id}" value="${dateParts.date}" aria-label="Corrected event date">
@@ -2238,12 +2267,12 @@
                         <input type="text" id="approval-url-${event.id}" value="${event.source_url || ''}" placeholder="Correct source URL (optional)" style="flex:3;min-width:180px;">
                     </div>
                     <div class="inline-review-actions">
-                        <button class="btn-approve" style="flex:1;" onclick="confirmApprove('${q.id}', '${event.id}')">&#10003; Confirm</button>
+                        <button class="btn-approve" style="flex:1;" onclick="confirmApprove('${q.id}', '${event.id}')">&#10003; Confirm valid event</button>
                         <button class="btn-nav" onclick="cancelApprove('${event.id}')">Cancel</button>
                     </div>
                 </div>
                 <div class="inline-review-form" id="reject-form-${event.id}">
-                    <div class="inline-review-title" id="reject-title-${event.id}">Confirm Rejection</div>
+                    <div class="inline-review-title" id="reject-title-${event.id}">Confirm Invalid Event</div>
                     <div class="inline-review-help" id="reject-help-${event.id}">Add a brief note so source/date problems are not confused with fabricated events.</div>
                     <textarea id="reject-text-${event.id}" placeholder="Brief evidence note, e.g. event is real but article only predicts it, or correct date is..."></textarea>
                     <div class="inline-review-fields">
@@ -2254,16 +2283,16 @@
                         <input type="text" id="reject-url-${event.id}" value="${event.source_url || ''}" placeholder="Better source URL if known" style="flex:3;min-width:180px;">
                     </div>
                     <div class="inline-review-actions">
-                        <button class="btn-reject" style="flex:1;" onclick="confirmReject('${q.id}', '${event.id}')">&#10005; Confirm Reject</button>
+                            <button class="btn-reject" style="flex:1;" onclick="confirmReject('${q.id}', '${event.id}')">&#10005; Confirm invalid event</button>
                         <button class="btn-nav" onclick="cancelReject('${event.id}')">Cancel</button>
                     </div>
                 </div>
                 <div class="inline-review-form skip-form" id="skip-form-${event.id}">
-                    <div class="inline-review-title" style="color:#475569;">Skip: Cannot Verify</div>
+                    <div class="inline-review-title" style="color:#475569;">Cannot Verify Event Validity</div>
                     <div class="inline-review-help">Use skip only as a last resort after checking the source or doing a brief search. If the event is false, irrelevant, duplicated, too broad, or source-mismatched, reject it instead.</div>
                     <textarea id="skip-text-${event.id}" placeholder="What did you check, and why is this still unverifiable?"></textarea>
                     <div class="inline-review-actions">
-                        <button class="btn-skip" style="flex:1;" onclick="confirmSkip('${q.id}', '${event.id}')">Confirm Skip</button>
+                        <button class="btn-skip" style="flex:1;" onclick="confirmSkip('${q.id}', '${event.id}')">Confirm cannot verify</button>
                         <button class="btn-nav" onclick="cancelSkip('${event.id}')">Cancel</button>
                     </div>
                 </div>` : ''}
@@ -2293,37 +2322,37 @@
 
         const REJECT_HELP = {
             Fabricated: {
-                title: 'Reject: Fabricated Event',
+                title: 'Invalid Event: Fabricated Event',
                 help: 'Use only when the event itself appears not to have happened. Add what you searched or why the claim is false.',
                 placeholder: 'e.g. I could not find evidence this law/event exists; sources discuss a different proposal.',
             },
             WrongDate: {
-                title: 'Reject: Wrong Date',
+                title: 'Invalid Event: Wrong Date',
                 help: 'Use when the event is real but the shown date is materially wrong. Add the corrected date if you can.',
                 placeholder: 'e.g. The article reports this happened on 2025-03-18, not 2025-08-03.',
             },
             SourceMismatch: {
-                title: 'Reject: Source Mismatch',
+                title: 'Invalid Event: Source Mismatch',
                 help: 'Use when the event may be real, but this URL does not support the title/description.',
                 placeholder: 'e.g. The linked article is a betting preview and does not confirm the weigh-in occurred.',
             },
             PredictionNotEvent: {
-                title: 'Reject: Prediction / Opinion',
+                title: 'Invalid Event: Prediction / Opinion',
                 help: 'Use when the source is only forecasting, speculating, or commenting, not reporting a confirmed event.',
                 placeholder: 'e.g. The article predicts the fight could happen; it does not report an official announcement.',
             },
             Noise: {
-                title: 'Reject: Noise',
+                title: 'Invalid Event: Noise',
                 help: 'Use when the event is real, but it does not have a meaningful causal link to the forecast outcome.',
                 placeholder: 'e.g. Real event, but it does not affect whether the market/question resolves Yes or No.',
             },
             Duplicate: {
-                title: 'Reject: Duplicate',
+                title: 'Invalid Event: Duplicate',
                 help: 'Use when this occurrence is already captured by another event. Mention the duplicate event if obvious.',
                 placeholder: 'e.g. Same occurrence as the earlier announcement/filing event; this card adds no new causal information.',
             },
             TooBoard: {
-                title: 'Reject: Too Broad',
+                title: 'Invalid Event: Too Broad',
                 help: 'Use when the card describes a broad trend, period, or category rather than a dated atomic event.',
                 placeholder: 'e.g. This summarizes a multi-month trend rather than one specific dated event.',
             },
@@ -2386,7 +2415,11 @@
             const card = document.getElementById(`event-${eventId}`);
             card.className = `event-card ${e.is_attention_check ? 'attention-check ' : ''}status-${status}`;
 
-            let badgeText = status.toUpperCase();
+            let badgeText = status === 'approved'
+                ? 'VALID'
+                : status === 'rejected'
+                    ? 'INVALID'
+                    : status.toUpperCase();
             if (reason) {
                 const short = REASON_LABELS[reason] || reason.split(' ')[0];
                 badgeText += ` (${short})`;
@@ -2528,7 +2561,7 @@
             const form = document.getElementById(`reject-form-${eventId}`);
             if (!form) return;
             const meta = REJECT_HELP[reason] || {
-                title: `Reject: ${REASON_LABELS[reason] || reason}`,
+                title: `Invalid Event: ${REASON_LABELS[reason] || reason}`,
                 help: 'Add a brief note explaining this rejection.',
                 placeholder: 'Brief evidence note...',
             };
@@ -2635,7 +2668,7 @@
                 description: 'The event is real and relevant, but the article states the cut happened on September 18, 2024. The displayed date is materially wrong.',
                 correct_status: 'rejected',
                 correct_reason: 'WrongDate',
-                explanation: 'This should be <strong>rejected as Wrong Date</strong>, not Fabricated. The event happened and matters, but the date shown on the event card is incorrect.'
+                explanation: 'This should be marked <strong>Invalid Event: Wrong Date</strong>, not Fabricated. The event happened and matters, but the date shown on the event card is incorrect.'
             },
             {
                 date: 'December 11, 2024',
@@ -2643,7 +2676,7 @@
                 description: 'The linked article is an analyst opinion piece predicting what the Fed might do. It does not report a completed Fed action or official announcement.',
                 correct_status: 'rejected',
                 correct_reason: 'PredictionNotEvent',
-                explanation: 'This should be <strong>rejected as Prediction / Opinion</strong>. A forecast about a possible future action is not a confirmed real-world event.'
+                explanation: 'This should be marked <strong>Invalid Event: Prediction / Opinion</strong>. A forecast about a possible future action is not a confirmed real-world event.'
             },
             {
                 date: 'April 19, 2024',
@@ -2651,7 +2684,7 @@
                 description: "Billboard reported that Taylor Swift's Eras Tour surpassed $1 billion in gross revenue, making it the highest-grossing concert tour in history. Demand for tickets broke multiple records.",
                 correct_status: 'rejected',
                 correct_reason: 'Noise',
-                explanation: 'This should be <strong>rejected as Noise</strong>. While a major cultural moment, it has no causal link to the Federal Reserve\'s interest rate decisions. Noise events lack a direct causal relationship to the forecasted outcome.'
+                explanation: 'This should be marked <strong>Invalid Event: Noise</strong>. While a major cultural moment, it has no causal link to the Federal Reserve\'s interest rate decisions. Noise events lack a direct causal relationship to the forecasted outcome.'
             },
             {
                 date: 'August 14, 2024',
@@ -2659,7 +2692,7 @@
                 description: "The Bureau of Labor Statistics reported that the Consumer Price Index rose just 2.9% year-over-year in July 2024, falling below 3% for the first time in over three years. This significantly boosted market expectations for a September rate cut.",
                 correct_status: 'approved',
                 correct_reason: null,
-                explanation: 'This should be <strong>approved</strong>. Falling inflation directly influenced the Fed\'s decision to cut rates — it is a genuine causal event with a clear link to the outcome and occurred within the relevant window.'
+                explanation: 'This should be marked <strong>Event is valid</strong>. Falling inflation directly influenced the Fed\'s decision to cut rates — it is a genuine causal event with a clear link to the outcome and occurred within the relevant window.'
             }
         ];
 
@@ -2712,7 +2745,7 @@
             document.getElementById('quiz-action-row').style.display = 'none';
             fb.className = 'quiz-feedback ' + (correct ? 'correct' : 'wrong');
             if (correct) {
-                fb.innerHTML = '&#10003; Correct! ' + ev.explanation;
+                fb.innerHTML = '&#10003; Correct. ' + ev.explanation;
                 const isLast = quizIndex === QUIZ_EVENTS.length - 1;
                 document.getElementById(isLast ? 'quiz-start-btn' : 'quiz-next-btn').style.display = 'block';
             } else {

@@ -21,7 +21,7 @@ Each event card shows:
 
 The sidebar also shows the **market window** (open → close date) and a link to the Polymarket market for in-context verification.
 
-Before annotating events for a question, review the hindsight explanation popup for at least 20 seconds. Events are then shown one at a time. For each event, first open the source or acknowledge that no source URL is available. Only then will Approve / Reject / Skip appear. If you approve an event, the expected-impact section appears under the event.
+Before annotating events for a question, review the hindsight explanation popup for at least 20 seconds. Events are then shown one at a time. For each event, first open the source or acknowledge that no source URL is available. Only then will the event-validity decision appear. If the event is valid, the expected-impact section appears under the event.
 
 ---
 
@@ -30,12 +30,14 @@ Before annotating events for a question, review the hindsight explanation popup 
 For every event, follow this order:
 
 1. Open the source, or acknowledge that no source URL is available.
-2. Choose Approve, Reject, or Skip.
-3. If you approved the event, choose the expected impact direction. Optional reasoning can be added, but it is not required.
+2. Decide whether the event is valid using the source. Use **Event is valid**, **Event is invalid**, or **Cannot verify**.
+3. If the event is valid, choose the expected impact direction. Optional reasoning can be added, but it is not required.
 
 ### Step 1 — Event Validity (required for all events)
 
-Ask: *Is this event real, specific, and causally relevant?*
+Ask: *Is this specific event card valid, based on the source and event details?*
+
+This step is **not** asking whether the forecast question resolved correctly. It is asking whether the displayed event is real, specific, dated correctly, supported by the source, and relevant enough to evaluate. Only after an event is valid do you judge its impact on the final outcome.
 
 For every rejection, add a short evidence note in the inline form. One concise
 sentence is enough. For factual/source problems, also enter the corrected date
@@ -46,15 +48,15 @@ broad framing.
 
 | Decision | Condition |
 |---|---|
-| **Approve** | Event happened, the source/date are acceptable, and it has a logical causal link to the forecast outcome |
-| **Reject: Fabricated Event** | The event itself appears not to have happened |
-| **Reject: Wrong Date** | The event is real, but the displayed date is materially wrong |
-| **Reject: Source Mismatch** | The event may be real, but the linked source does not support this title/description |
-| **Reject: Prediction / Opinion** | The source is only predicting, speculating, or commenting — not reporting a confirmed occurrence |
-| **Reject: Noise** | Event is real but has no meaningful causal connection to the forecast outcome |
-| **Reject: Duplicate** | Same occurrence already captured by another event — keep the one with richer detail |
-| **Reject: Too Broad** | Describes a multi-month trend or category of events rather than a single, atomic occurrence |
-| **Skip: Unverifiable** | Last resort only: cannot verify after checking the source and doing a brief search |
+| **Event is valid** | The event happened, the source/date are acceptable, and the event is specific enough to evaluate |
+| **Invalid event: Fabricated Event** | The event itself appears not to have happened |
+| **Invalid event: Wrong Date** | The event is real, but the displayed date is materially wrong |
+| **Invalid event: Source Mismatch** | The event may be real, but the linked source does not support this title/description |
+| **Invalid event: Prediction / Opinion** | The source is only predicting, speculating, or commenting — not reporting a confirmed occurrence |
+| **Invalid event: Noise** | Event is real but has no meaningful causal connection to the forecast outcome |
+| **Invalid event: Duplicate** | Same occurrence already captured by another event — keep the one with richer detail |
+| **Invalid event: Too Broad** | Describes a multi-month trend or category of events rather than a single, atomic occurrence |
+| **Cannot verify** | Last resort only: cannot verify after checking the source and doing a brief search |
 
 ### Step 2 — Expected Impact Direction (required after approving any event)
 
@@ -66,7 +68,7 @@ Ask: *Based on the event and source, how should this event affect the probabilit
 | **Away from final outcome** | The event should move probability away from the final resolved outcome. |
 | **No meaningful impact** | The event is valid but should not meaningfully move the outcome probability. |
 
-Approval notes and expected-impact reasoning are optional. Rejection and skip notes remain required so factual, source, date, and unverifiable cases can be audited later.
+Validity notes and expected-impact reasoning are optional. Invalid-event and cannot-verify notes remain required so factual, source, date, and unverifiable cases can be audited later.
 
 ---
 
@@ -103,7 +105,7 @@ For **non-Polymarket questions** (no market window or chart shown), assess impac
 - If the event is real but the linked URL does not support it, reject as **Source Mismatch** and enter a better URL if available.
 - If the article or your search shows only a *prediction*, *commentary*, *hypothetical*, betting preview, or analyst opinion, reject as **Prediction / Opinion**.
 - Use **Fabricated Event** only when the event itself appears false or you cannot find evidence that it happened after a reasonable check.
-- Use **Skip** sparingly. A broken link, paywall, weak source, or ambiguous date is usually not enough by itself to skip. If you can determine the event is false, source-mismatched, date-mismatched, irrelevant, duplicated, or too broad, use the corresponding reject label instead.
+- Use **Cannot verify** sparingly. A broken link, paywall, weak source, or ambiguous date is usually not enough by itself to mark cannot-verify. If you can determine the event is false, source-mismatched, date-mismatched, irrelevant, duplicated, or too broad, use the corresponding invalid-event label instead.
 
 ### Impact Validity
 - The event must have a plausible mechanism directly connecting it to the forecast question's outcome.
@@ -112,7 +114,7 @@ For **non-Polymarket questions** (no market window or chart shown), assess impac
 
 ### Granularity
 - The event must describe a **single, specific occurrence** with an identifiable date.
-- **Reject as Too Broad** if it summarizes an ongoing process (e.g., "AI developed rapidly throughout 2023") rather than a discrete action (e.g., "OpenAI released GPT-4 on March 14, 2023").
+- Mark **Invalid event: Too Broad** if it summarizes an ongoing process (e.g., "AI developed rapidly throughout 2023") rather than a discrete action (e.g., "OpenAI released GPT-4 on March 14, 2023").
 
 ---
 
@@ -120,9 +122,9 @@ For **non-Polymarket questions** (no market window or chart shown), assess impac
 
 Events are pre-sorted by importance. Spend the most effort on:
 
-1. **Approved events inside the market window** — these are the most verifiable and the most consequential for evaluation quality
-2. **Approved events outside the window** — impact can still be judged on causal logic
-3. **Rejected or skipped events** — do not mark expected impact
+1. **Valid events inside the market window** — these are the most verifiable and the most consequential for evaluation quality
+2. **Valid events outside the window** — impact can still be judged on causal logic
+3. **Events marked invalid or cannot-verify** — do not mark expected impact
 
 ---
 
@@ -130,11 +132,11 @@ Events are pre-sorted by importance. Spend the most effort on:
 
 | Situation | Guidance |
 |---|---|
-| Approved event has no AI impact analysis | Still choose your own expected impact direction; use the event, source, final outcome, and market movement if available |
-| Two events describe the same news | Approve the one with more specific date/detail; Reject the other as **Duplicate** |
-| Event date is years before the question's market window | Almost always background context — Reject as **Noise** unless the question outcome explicitly depends on that specific historical event |
-| Source link is broken or missing | **Perform a quick web search** using the event details. If you find a better source, use **Approve** if the event is relevant or **Source Mismatch** if the original URL is misleading. Only skip if it remains completely unverifiable after a brief search. |
-| Source is paywalled | Search for another source or article title first. Use **Source Mismatch** if the visible article metadata does not support the event; use **Skip** only if no verification is possible. |
-| Event is true but the source only supports part of it | Reject as **Source Mismatch** if the unsupported part is central; otherwise approve and provide the better source URL. |
-| Event is true but the AI's causal explanation is overstated | Approve the event if relevant, then choose your own expected impact direction. Do not reject a real relevant event solely because the AI's reasoning is weak. |
+| Valid event has no AI impact analysis | Still choose your own expected impact direction; use the event, source, final outcome, and market movement if available |
+| Two events describe the same news | Mark the one with more specific date/detail as **Event is valid**; mark the other as **Invalid event: Duplicate** |
+| Event date is years before the question's market window | Almost always background context — mark **Invalid event: Noise** unless the question outcome explicitly depends on that specific historical event |
+| Source link is broken or missing | **Perform a quick web search** using the event details. If you find a better source, use **Event is valid** if the event is relevant or **Invalid event: Source Mismatch** if the original URL is misleading. Only use cannot-verify if it remains completely unverifiable after a brief search. |
+| Source is paywalled | Search for another source or article title first. Use **Invalid event: Source Mismatch** if the visible article metadata does not support the event; use **Cannot verify** only if no verification is possible. |
+| Event is true but the source only supports part of it | Mark **Invalid event: Source Mismatch** if the unsupported part is central; otherwise use **Event is valid** and provide the better source URL. |
+| Event is true but the AI's causal explanation is overstated | Mark the event as valid if relevant, then choose your own expected impact direction. Do not mark a real relevant event as invalid solely because the AI's reasoning is weak. |
 | Market open date shown as "estimated" | Treat the market window boundary as approximate ±2 weeks; don't reject events solely for falling slightly outside an estimated boundary |
