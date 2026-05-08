@@ -4,6 +4,7 @@ Orchestrates running all experimental conditions x models x questions,
 producing comparative results for the research paper.
 """
 
+import asyncio
 import json
 import sqlite3
 import time
@@ -196,6 +197,27 @@ class AutoBenchmarkService:
             )
             return question.resolution_date - timedelta(days=1)
 
+    @staticmethod
+    def _close_mcp_client(agent: Any) -> None:
+        """Close a ForecastAgent MCP client and drain Windows pipe transports."""
+        mcp_client = getattr(agent, "mcp_client", None)
+        adapter = getattr(mcp_client, "_adapter", None)
+        if adapter is None:
+            return
+
+        try:
+            if adapter.task and not adapter.task.done():
+                adapter.loop.call_soon_threadsafe(adapter.task.cancel)
+            adapter.thread.join(timeout=15)
+            if not adapter.loop.is_closed():
+                adapter.loop.run_until_complete(adapter.loop.shutdown_asyncgens())
+                # Windows Proactor subprocess transports finalize callbacks after
+                # context exit; one loop tick prevents noisy closed-pipe __del__.
+                adapter.loop.run_until_complete(asyncio.sleep(0.1))
+                adapter.loop.close()
+        except Exception as e:
+            logger.warning(f"Failed to close MCP client cleanly: {e}")
+
     def _run_single(
         self,
         condition: ExperimentCondition,
@@ -226,6 +248,7 @@ class AutoBenchmarkService:
         )
 
         # Create and run forecast agent
+        agent = None
         try:
             agent = ForecastAgent(
                 question=question,
@@ -239,12 +262,6 @@ class AutoBenchmarkService:
                 benchmark_condition=condition.name.value,
             )
             agent.run(prompt)
-            _adapter = agent.mcp_client._adapter
-            if _adapter.task and not _adapter.task.done():
-                _adapter.loop.call_soon_threadsafe(_adapter.task.cancel)
-            _adapter.thread.join(timeout=15)
-            if not _adapter.loop.is_closed():
-                _adapter.loop.close()
         except Exception as e:
             logger.error(
                 f"Agent failed for {condition.name.value}/{model_name}/{question.id}: {e}"
@@ -256,6 +273,9 @@ class AutoBenchmarkService:
                 "condition": condition.name.value,
                 "model": model_name,
             }
+        finally:
+            if agent is not None:
+                self._close_mcp_client(agent)
 
         # Retrieve the forecast from DB by session_id (safe under parallel execution)
         forecasts = self.db.get_many(Forecast, filters={"session_id": agent.session_id})
