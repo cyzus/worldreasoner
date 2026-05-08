@@ -12,7 +12,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from src.config import Config, get_config
 from src.core.database import GenericDatabase
@@ -321,6 +321,72 @@ class AutoBenchmarkService:
         return False
 
     @staticmethod
+    def _load_json_cell(value: Any) -> Any:
+        """Decode JSON cells from direct sqlite reads, falling back to raw value."""
+        if not isinstance(value, str):
+            return value
+        try:
+            return json.loads(value)
+        except (ValueError, TypeError):
+            return value
+
+    @staticmethod
+    def _resume_result_from_row(row: sqlite3.Row) -> Optional[Dict[str, Any]]:
+        """Convert an evaluated forecast DB row into a benchmark result."""
+        meta = AutoBenchmarkService._load_json_cell(row["evaluation_metadata"]) or {}
+        condition = meta.get("benchmark_condition")
+        model = meta.get("benchmark_model")
+        if not condition or not model or row["is_correct"] is None:
+            return None
+
+        return {
+            "status": "success",
+            "question_id": row["question_id"],
+            "forecast_id": row["id"],
+            "condition": condition,
+            "model": model,
+            "prediction": AutoBenchmarkService._load_json_cell(row["prediction"]),
+            "confidence": row["confidence"],
+            "is_correct": bool(row["is_correct"]),
+            "accuracy": 1.0 if bool(row["is_correct"]) else 0.0,
+            "brier_score": row["brier_score"],
+            "log_score": row["log_score"],
+            "simulated_date": row["simulated_date"],
+            "skipped_resume": True,
+        }
+
+    def _load_completed_resume_results(
+        self,
+    ) -> Dict[Tuple[str, str, str], Dict[str, Any]]:
+        """Load latest evaluated benchmark forecasts for resume aggregation."""
+        completed: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+        latest_timestamps: Dict[Tuple[str, str, str], str] = {}
+
+        conn = sqlite3.connect(str(self.db.db_path))
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                "SELECT id, question_id, prediction, confidence, is_correct, "
+                "brier_score, log_score, simulated_date, timestamp, "
+                "evaluation_metadata FROM forecasts "
+                "WHERE evaluation_metadata IS NOT NULL"
+            ).fetchall()
+        finally:
+            conn.close()
+
+        for row in rows:
+            result = self._resume_result_from_row(row)
+            if result is None:
+                continue
+            key = (result["question_id"], result["condition"], result["model"])
+            timestamp = row["timestamp"] or ""
+            if key not in completed or timestamp > latest_timestamps[key]:
+                completed[key] = result
+                latest_timestamps[key] = timestamp
+
+        return completed
+
+    @staticmethod
     def _aggregate_condition_metrics(
         results: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
@@ -432,27 +498,15 @@ class AutoBenchmarkService:
         for condition in conditions:
             raw_results[condition.name.value] = {m: [] for m in models}
 
-        # Pre-fetch completed triples — only read the two columns we need.
-        completed_set: set = set()
+        # Pre-fetch completed triples and their stored metrics so resumed runs
+        # preserve prior scores in the aggregate instead of counting skipped
+        # triples as successes with unknown correctness.
+        completed_results: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
         if resume:
-            conn = sqlite3.connect(str(self.db.db_path))
-            try:
-                rows = conn.execute(
-                    "SELECT question_id, evaluation_metadata FROM forecasts "
-                    "WHERE evaluation_metadata IS NOT NULL"
-                ).fetchall()
-            finally:
-                conn.close()
-            for question_id, meta_raw in rows:
-                try:
-                    meta = json.loads(meta_raw) if isinstance(meta_raw, str) else (meta_raw or {})
-                except (ValueError, TypeError):
-                    continue
-                bc = meta.get("benchmark_condition")
-                bm = meta.get("benchmark_model")
-                if bc and bm:
-                    completed_set.add((question_id, bc, bm))
-            logger.info(f"Resume: found {len(completed_set)} already-completed triples")
+            completed_results = self._load_completed_resume_results()
+            logger.info(
+                f"Resume: found {len(completed_results)} already-evaluated triples"
+            )
 
         completed_count = 0
 
@@ -461,17 +515,23 @@ class AutoBenchmarkService:
             cond_name = condition.name.value
             knowledge_cutoff = get_knowledge_cutoff_date(model_name)
 
-            # Resume: skip completed triples (use pre-fetched set, no DB query per triple)
-            if resume and (question.id, cond_name, model_name) in completed_set:
-                logger.info(f"Skipping completed: {cond_name}/{model_name}/{question.id}")
-                return (ci, condition, mi, model_name, qi, question, cond_name, model_name, {
-                    "status": "success",
-                    "question_id": question.id,
-                    "condition": cond_name,
-                    "model": model_name,
-                    "is_correct": None,
-                    "skipped_resume": True,
-                })
+            # Resume from pre-fetched results without a DB query per triple.
+            resume_key = (question.id, cond_name, model_name)
+            if resume and resume_key in completed_results:
+                logger.info(
+                    f"Skipping completed: {cond_name}/{model_name}/{question.id}"
+                )
+                return (
+                    ci,
+                    condition,
+                    mi,
+                    model_name,
+                    qi,
+                    question,
+                    cond_name,
+                    model_name,
+                    completed_results[resume_key],
+                )
 
             result = self._run_single(
                 condition=condition,
@@ -480,14 +540,34 @@ class AutoBenchmarkService:
                 knowledge_cutoff=knowledge_cutoff,
                 slot=slot,
             )
-            return (ci, condition, mi, model_name, qi, question, cond_name, model_name, result)
+            return (
+                ci,
+                condition,
+                mi,
+                model_name,
+                qi,
+                question,
+                cond_name,
+                model_name,
+                result,
+            )
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(_run_triple, t): t for t in triples}
             for future in as_completed(futures):
                 completed_count += 1
                 try:
-                    ci, condition, mi, model_name, qi, question, cond_name, mn, result = future.result()
+                    (
+                        ci,
+                        condition,
+                        mi,
+                        model_name,
+                        qi,
+                        question,
+                        cond_name,
+                        mn,
+                        result,
+                    ) = future.result()
                     raw_results[cond_name][mn].append(result)
                     if on_progress:
                         on_progress(AutoBenchmarkProgress(

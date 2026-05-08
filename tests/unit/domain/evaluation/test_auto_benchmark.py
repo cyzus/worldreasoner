@@ -1,8 +1,11 @@
 """Tests for AutoBenchmarkService."""
 
-import pytest
+import json
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from src.domain.evaluation.auto_benchmark import (
     AutoBenchmarkService,
@@ -296,3 +299,94 @@ class TestCheckAlreadyCompleted:
         condition = EXPERIMENT_CONDITIONS[ConditionName.VANILLA_LLM]
 
         assert service._check_already_completed(condition, question, "model_a") is False
+
+
+class TestResumeResultLoading:
+    """Tests for loading stored metrics during resumed benchmark runs."""
+
+    def test_loads_latest_evaluated_result_for_resume(self, tmp_path):
+        db_path = tmp_path / "resume.db"
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            """
+            CREATE TABLE forecasts (
+                id TEXT,
+                question_id TEXT,
+                prediction TEXT,
+                confidence REAL,
+                is_correct INTEGER,
+                brier_score REAL,
+                log_score REAL,
+                simulated_date TEXT,
+                timestamp TEXT,
+                evaluation_metadata TEXT
+            )
+            """
+        )
+
+        meta = json.dumps(
+            {
+                "benchmark_condition": "worldreasoner",
+                "benchmark_model": "model_a",
+            }
+        )
+        rows = [
+            (
+                "old_forecast",
+                "q1",
+                "false",
+                0.6,
+                0,
+                0.36,
+                -0.9,
+                "2025-01-01T00:00:00+00:00",
+                "2025-01-02T00:00:00+00:00",
+                meta,
+            ),
+            (
+                "new_forecast",
+                "q1",
+                "true",
+                0.8,
+                1,
+                0.04,
+                -0.2,
+                "2025-01-01T00:00:00+00:00",
+                "2025-01-03T00:00:00+00:00",
+                meta,
+            ),
+            (
+                "unevaluated_forecast",
+                "q2",
+                "true",
+                0.8,
+                None,
+                None,
+                None,
+                "2025-01-01T00:00:00+00:00",
+                "2025-01-03T00:00:00+00:00",
+                meta,
+            ),
+        ]
+        conn.executemany(
+            "INSERT INTO forecasts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            rows,
+        )
+        conn.commit()
+        conn.close()
+
+        service = AutoBenchmarkService.__new__(AutoBenchmarkService)
+        service.db = MagicMock()
+        service.db.db_path = db_path
+
+        results = service._load_completed_resume_results()
+
+        assert set(results) == {("q1", "worldreasoner", "model_a")}
+        loaded = results[("q1", "worldreasoner", "model_a")]
+        assert loaded["forecast_id"] == "new_forecast"
+        assert loaded["is_correct"] is True
+        assert loaded["accuracy"] == 1.0
+        assert loaded["brier_score"] == pytest.approx(0.04)
+        assert loaded["log_score"] == pytest.approx(-0.2)
+        assert loaded["prediction"] is True
+        assert loaded["skipped_resume"] is True
