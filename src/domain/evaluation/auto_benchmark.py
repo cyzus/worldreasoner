@@ -5,6 +5,7 @@ producing comparative results for the research paper.
 """
 
 import asyncio
+import gc
 import json
 import sqlite3
 import time
@@ -211,9 +212,10 @@ class AutoBenchmarkService:
             adapter.thread.join(timeout=15)
             if not adapter.loop.is_closed():
                 adapter.loop.run_until_complete(adapter.loop.shutdown_asyncgens())
-                # Windows Proactor subprocess transports finalize callbacks after
-                # context exit; one loop tick prevents noisy closed-pipe __del__.
-                adapter.loop.run_until_complete(asyncio.sleep(0.1))
+                # Force GC so Proactor pipe transport __del__ runs while the loop
+                # is still open; the sleep then drains any resulting callbacks.
+                gc.collect()
+                adapter.loop.run_until_complete(asyncio.sleep(0))
                 adapter.loop.close()
         except Exception as e:
             logger.warning(f"Failed to close MCP client cleanly: {e}")

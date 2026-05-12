@@ -296,20 +296,28 @@ async def _build_all_question_data(
 
             article_url = None
             try:
-                article_id = None
+                article_ids = []
                 if hasattr(e, "source_article_id") and e.source_article_id:
-                    article_id = e.source_article_id
-                elif hasattr(e, "article_ids") and e.article_ids:
+                    article_ids.append(e.source_article_id)
+                if hasattr(e, "article_ids") and e.article_ids:
                     ids = json.loads(e.article_ids) if isinstance(e.article_ids, str) else e.article_ids
                     if ids:
-                        article_id = ids[0]
-                if article_id:
+                        article_ids.extend(ids)
+                seen_article_ids = set()
+                for article_id in article_ids:
+                    if not article_id or article_id in seen_article_ids:
+                        continue
+                    seen_article_ids.add(article_id)
                     cursor.execute("SELECT url FROM articles WHERE id = ?", (article_id,))
                     r = cursor.fetchone()
-                    if r:
+                    if r and r[0]:
                         article_url = r[0]
+                        break
             except Exception:
                 pass
+
+            if not article_url:
+                continue
 
             in_window = in_market_window(str(date_val), open_dt, close_dt) if is_polymarket else False
             at_change_point = is_near_change_point(str(date_val), change_point_timestamps)

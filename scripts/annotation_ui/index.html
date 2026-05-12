@@ -1127,19 +1127,25 @@
 
     <!-- Motivation Overlay -->
     <div id="motivation-overlay">
-        <div class="overlay-card" style="max-width:520px;text-align:left;">
+        <div class="overlay-card" style="max-width:620px;text-align:left;">
             <h2 style="font-size:1.3rem;font-weight:700;color:#0f172a;margin:0 0 12px;">Why this annotation matters</h2>
             <p style="color:#475569;font-size:0.92rem;line-height:1.6;margin-bottom:10px;">
-                You are helping build a dataset of <strong>causal event timelines</strong> for forecasting questions. Each question asked whether a real-world event happened — and an AI has generated a timeline of events that supposedly explains why the outcome occurred.
+                You are helping build a dataset of <strong>causal event timelines</strong> for real forecasting questions. Each question has already been resolved, and a hindsight system has generated events that may explain why the resolved answer occurred.
             </p>
             <p style="color:#475569;font-size:0.92rem;line-height:1.6;margin-bottom:10px;">
-                Your job is to verify whether each event in the timeline <strong>actually happened</strong>, is <strong>causally relevant</strong> to the final resolved outcome, and how it should affect that outcome's probability.
+                Your job is <strong>not</strong> to predict the answer. Your job is to verify whether each event card <strong>actually happened</strong>, is <strong>supported by the source</strong>, is <strong>dated correctly</strong>, and is <strong>causally relevant</strong> to the resolved question.
             </p>
-            <p style="color:#475569;font-size:0.92rem;line-height:1.6;margin-bottom:20px;">
-                High-quality annotations directly improve the accuracy of AI forecasting models — your careful judgement here matters!
+            <p style="color:#475569;font-size:0.92rem;line-height:1.6;margin-bottom:12px;">
+                High-quality annotations directly improve how forecasting systems are evaluated, so careful judgement here matters.
             </p>
+            <ol style="color:#475569;font-size:0.92rem;line-height:1.6;margin:0 0 16px 20px;padding:0;">
+                <li>Read the question executive summary.</li>
+                <li>Open the event source, or acknowledge that no source is available.</li>
+                <li>Decide whether the event is valid, invalid, or cannot be verified.</li>
+                <li>If the event is valid, choose whether it moves probability toward the resolved option, away from it, or has no meaningful impact.</li>
+            </ol>
             <button id="btn-motivation-next" class="btn-start" style="background:var(--primary);">Continue → Practice Example</button>
-            <button id="btn-motivation-skip" style="margin-top:10px;width:100%;background:transparent;color:#94a3b8;border:none;font-size:0.85rem;cursor:pointer;padding:6px;">Skip tutorial and start</button>
+            <button id="btn-motivation-skip" style="display:none;margin-top:10px;width:100%;background:transparent;color:#94a3b8;border:none;font-size:0.85rem;cursor:pointer;padding:6px;">Developer skip and start</button>
         </div>
     </div>
 
@@ -1153,10 +1159,6 @@
                 <button class="btn-show-guideline" id="btn-read-guideline-quiz" style="margin:8px 0 0 0;padding:6px 10px;background:#fff;color:var(--primary);border-color:#c7d2fe;font-size:0.8rem;">Read full guideline</button>
             </div>
             <div class="quiz-progress-dots" id="quiz-progress"></div>
-            <div style="background:#e0e7ff;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:0.85rem;color:#3730a3;">
-                <strong>Question:</strong> Will the Federal Reserve cut interest rates before the end of 2024?<br>
-                <span style="color:#4338ca;">Outcome: <strong>Yes</strong> — Fed cut rates in September 2024</span>
-            </div>
             <div id="quiz-event-container"></div>
             <div class="quiz-feedback" id="quiz-feedback"></div>
             <div id="quiz-action-row" style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
@@ -1199,14 +1201,15 @@
     <!-- Explanation Gate Overlay -->
     <div id="explanation-gate-overlay">
         <div class="question-gate-card">
-            <div class="question-gate-title">Review the Hindsight Explanation First</div>
+            <div class="question-gate-title">Review the Causal Analysis</div>
             <div class="question-gate-help">
-                Please skim the causal explanation for at least 20 seconds before annotating events.
-                This gives context for judging whether each event is causally relevant.
+                This question has already resolved. Spend one minute reviewing the causal analysis before validating the event cards.
             </div>
-            <div class="question-gate-timer" id="gate-timer">20 seconds remaining</div>
+            <div class="final-outcome-callout" id="gate-summary"></div>
+            <div class="question-gate-timer" id="gate-timer">60 seconds remaining</div>
             <div class="explanation-text markdown-body" id="gate-explanation" style="max-height:50vh;overflow-y:auto;"></div>
             <button class="btn-approve" id="gate-continue" disabled>Continue to Events</button>
+            <button class="btn-nav" id="gate-dev-skip" style="display:none;margin-top:10px;">Developer skip</button>
         </div>
     </div>
 
@@ -1285,6 +1288,8 @@
         const _urlParams = new URLSearchParams(window.location.search);
         let SESSION_ID   = _urlParams.get('session') || null;
         let PROLIFIC_PID = _urlParams.get('PROLIFIC_PID') || null;
+        const DEV_MODE = _urlParams.get('dev') === '1';
+        const QUESTION_SUMMARY_WAIT_SECONDS = DEV_MODE ? 3 : 60;
 
         // Assign session via POST (no CORS redirect issue unlike GET).
         // Caches result in localStorage so the same PID always gets the same session locally.
@@ -1915,7 +1920,7 @@
 
             document.getElementById('q-context').innerHTML = `
                 <div>
-                    <span class="badge outcome">Final outcome: ${q.outcome}</span>${overlapBadge}${polyBadge}
+                    <span class="badge outcome">Resolved option: ${q.outcome}</span>${overlapBadge}${polyBadge}
                 </div>
                 <div class="q-title">${q.title}</div>
                 ${optionsHtml}
@@ -1966,15 +1971,27 @@
             timeline.innerHTML = '';
             const overlay = document.getElementById('explanation-gate-overlay');
             const explanation = document.getElementById('gate-explanation');
+            const summary = document.getElementById('gate-summary');
             const timer = document.getElementById('gate-timer');
             const btn = document.getElementById('gate-continue');
+            const devSkip = document.getElementById('gate-dev-skip');
+            if (summary) {
+                summary.innerHTML = `
+                    Resolved option: <strong>${finalOutcomeLabel(q)}</strong>
+                    <div style="font-size:0.84rem;color:#166534;margin-top:4px;">Question: ${q.title || ''}</div>
+                `;
+            }
             explanation.innerHTML = marked.parse(q.explanation || '*No explanation available.*');
-            timer.innerText = '20 seconds remaining';
+            timer.innerText = `${QUESTION_SUMMARY_WAIT_SECONDS} seconds remaining`;
             btn.disabled = true;
             btn.onclick = () => completeExplanationGate(q.id);
+            if (devSkip) {
+                devSkip.style.display = DEV_MODE ? 'block' : 'none';
+                devSkip.onclick = () => completeExplanationGate(q.id);
+            }
             overlay.style.display = 'flex';
             if (explanationGateTimers[q.id]) clearInterval(explanationGateTimers[q.id]);
-            let remaining = 20;
+            let remaining = QUESTION_SUMMARY_WAIT_SECONDS;
             explanationGateTimers[q.id] = setInterval(() => {
                 remaining -= 1;
                 if (currentQIndex < 0 || !stateData[currentQIndex] || stateData[currentQIndex].id !== q.id) {
@@ -2000,6 +2017,15 @@
             saveState();
             renderTimeline(q);
         };
+
+        function showMotivationOverlay() {
+            const overlay = document.getElementById('motivation-overlay');
+            const nextBtn = document.getElementById('btn-motivation-next');
+            const skipBtn = document.getElementById('btn-motivation-skip');
+            if (nextBtn) nextBtn.disabled = false;
+            if (skipBtn) skipBtn.style.display = DEV_MODE ? 'block' : 'none';
+            if (overlay) overlay.style.display = 'flex';
+        }
 
         window.goToEvent = function(index) {
             const q = stateData[currentQIndex];
@@ -2040,6 +2066,14 @@
 
         function finalOutcomeLabel(q) {
             return q && q.outcome ? String(q.outcome) : 'the resolved outcome shown in the sidebar';
+        }
+
+        function impactChoiceLabel(q, choice) {
+            const option = finalOutcomeLabel(q);
+            if (choice === 'up') return `Towards option: ${option}`;
+            if (choice === 'down') return `Away from option: ${option}`;
+            if (choice === 'none') return `No meaningful impact`;
+            return null;
         }
 
         function renderPendingImpactChoice(eventId) {
@@ -2167,45 +2201,30 @@
                     <button class="btn-nav" onclick="showDecisionActions('${event.id}')">Change decision</button>
                 </div>` : '';
 
-            const chartHtml = (!isAttentionCheck && q.price_data && inWindow) ? `
-                <details id="market-evidence-${event.id}" style="margin-top:14px;margin-bottom:14px;" ontoggle="handleMarketEvidenceToggle('${q.id}', '${event.id}')">
-                    <summary style="cursor:pointer;font-weight:700;color:#475569;">Market movement</summary>
-                    <div class="inline-review-help" style="margin-top:8px;">Use this as supporting context only. Market prices may reflect multiple simultaneous signals, not just this event.</div>
-                    <div class="price-chart-container" style="margin-bottom:0;">
-                        <div class="chart-label">Polymarket Price (Yes) — amber line = event date</div>
-                        <canvas class="price-chart-canvas" id="chart-${event.id}"></canvas>
-                        <div class="price-chart-meta">
-                            <span>Open: ${q.price_data.price_at_open != null ? (q.price_data.price_at_open * 100).toFixed(0) + '%' : '—'}</span>
-                            <span>Final: ${q.price_data.final_price != null ? (q.price_data.final_price * 100).toFixed(0) + '%' : '—'}</span>
-                        </div>
-                    </div>
-                </details>` : '';
+            const chartHtml = '';
 
             const impactChoice = pendingImpactChoices[event.id] || event.impact_expectation || '';
             if (impactChoice && !pendingImpactChoices[event.id]) {
                 pendingImpactChoices[event.id] = impactChoice;
             }
-            const impactLabel = event.impact_expectation === 'up'
-                ? 'Towards final outcome'
-                : event.impact_expectation === 'down'
-                    ? 'Away from final outcome'
-                    : event.impact_expectation === 'none'
-                        ? 'No meaningful impact'
-                        : null;
+            const impactLabel = impactChoiceLabel(q, event.impact_expectation);
+            const upChoiceLabel = impactChoiceLabel(q, 'up');
+            const downChoiceLabel = impactChoiceLabel(q, 'down');
+            const noneChoiceLabel = impactChoiceLabel(q, 'none');
             const impactStatusHtml = isImpactAssessmentRequired(event) ? `
                 <div class="inline-review-form impact-form" id="impact-status-${event.id}">
                     <div class="inline-review-title">Step 2: Expected Impact</div>
                     <div class="final-outcome-callout">
-                        Final resolved outcome: <strong>${finalOutcomeLabel(q)}</strong>
-                        <div style="font-size:0.84rem;color:#166534;margin-top:4px;">${q.title || ''}</div>
+                        Resolved option: <strong>${finalOutcomeLabel(q)}</strong>
+                        <div style="font-size:0.84rem;color:#166534;margin-top:4px;">Question: ${q.title || ''}</div>
                     </div>
                     <div class="inline-review-help">
-                        ${impactLabel ? `Current saved choice: ${impactLabel}. You can change it below and confirm again.` : 'Choose how this valid event should affect the probability of the final resolved outcome.'}
+                        ${impactLabel ? `Current saved choice: ${impactLabel}. You can change it below and confirm again.` : 'Choose how this valid event should affect the probability of the resolved option.'}
                     </div>
                     <div class="reasoning-btn-row">
-                        <button class="btn-reasoning up ${impactChoice === 'up' ? 'active' : ''}" id="impact-choice-up-${event.id}" onclick="selectImpactChoice('${event.id}', 'up')">Towards final outcome</button>
-                        <button class="btn-reasoning down ${impactChoice === 'down' ? 'active' : ''}" id="impact-choice-down-${event.id}" onclick="selectImpactChoice('${event.id}', 'down')">Away from final outcome</button>
-                        <button class="btn-reasoning none ${impactChoice === 'none' ? 'active' : ''}" id="impact-choice-none-${event.id}" onclick="selectImpactChoice('${event.id}', 'none')">No meaningful impact</button>
+                        <button class="btn-reasoning up ${impactChoice === 'up' ? 'active' : ''}" id="impact-choice-up-${event.id}" onclick="selectImpactChoice('${event.id}', 'up')">${upChoiceLabel}</button>
+                        <button class="btn-reasoning down ${impactChoice === 'down' ? 'active' : ''}" id="impact-choice-down-${event.id}" onclick="selectImpactChoice('${event.id}', 'down')">${downChoiceLabel}</button>
+                        <button class="btn-reasoning none ${impactChoice === 'none' ? 'active' : ''}" id="impact-choice-none-${event.id}" onclick="selectImpactChoice('${event.id}', 'none')">${noneChoiceLabel}</button>
                     </div>
                     <div class="inline-review-help" style="margin-top:14px;">Optional reasoning</div>
                     <textarea id="impact-reasoning-text-${event.id}" placeholder="Optional: briefly explain your impact choice.">${event.impact_reasoning_text || ''}</textarea>
@@ -2213,10 +2232,6 @@
                         <button class="btn-approve" id="impact-confirm-${event.id}" onclick="confirmImpactChoice('${q.id}', '${event.id}')" ${impactChoice ? '' : 'disabled'}>Confirm Impact Choice</button>
                         <span class="impact-confirm-hint" id="impact-confirm-hint-${event.id}">Please choose an impact direction first.</span>
                     </div>
-                    <details style="margin-top:14px;">
-                        <summary style="cursor:pointer;font-weight:700;color:#713f12;">Show LLM impact analysis</summary>
-                        <div class="markdown-body" style="font-size:0.92rem;margin-top:8px;">${marked.parse(event.impact || '*No impact analysis available.*')}</div>
-                    </details>
                 </div>` : '';
 
             card.innerHTML = `
@@ -2663,36 +2678,48 @@
 
         const QUIZ_EVENTS = [
             {
-                date: 'September 1, 2024',
-                title: 'Federal Reserve cuts interest rates for the first time in 2024',
-                description: 'The event is real and relevant, but the article states the cut happened on September 18, 2024. The displayed date is materially wrong.',
+                question: 'Will the Northbridge rail extension begin public service before July 1, 2025?',
+                outcome: 'Yes',
+                causal_summary: 'The rail extension passed safety checks, opened ticket sales, and began public service before the deadline.',
+                date: 'June 16, 2025',
+                title: 'Northbridge rail extension receives final safety certification',
+                description: 'The event is real and directly relevant, but the source says certification was granted on June 14, 2025. The displayed date is materially wrong.',
                 correct_status: 'rejected',
                 correct_reason: 'WrongDate',
-                explanation: 'This should be marked <strong>Invalid Event: Wrong Date</strong>, not Fabricated. The event happened and matters, but the date shown on the event card is incorrect.'
+                explanation: 'This should be marked <strong>Invalid Event: Wrong Date</strong>, not Fabricated. The certification happened and matters for the rail-opening question, but the date shown on the event card is incorrect.'
             },
             {
-                date: 'December 11, 2024',
-                title: 'Fed officials preview another rate cut next week',
-                description: 'The linked article is an analyst opinion piece predicting what the Fed might do. It does not report a completed Fed action or official announcement.',
+                question: 'Will Harbor City declare a Level 3 water restriction before September 1, 2025?',
+                outcome: 'Yes',
+                causal_summary: 'Reservoir levels fell through August, emergency meetings were held, and the city issued a Level 3 restriction before the deadline.',
+                date: 'August 18, 2025',
+                title: 'Local columnist predicts Harbor City will impose water restrictions soon',
+                description: 'The source is an opinion column forecasting possible restrictions. It does not report an official declaration, completed vote, or issued emergency order.',
                 correct_status: 'rejected',
                 correct_reason: 'PredictionNotEvent',
-                explanation: 'This should be marked <strong>Invalid Event: Prediction / Opinion</strong>. A forecast about a possible future action is not a confirmed real-world event.'
+                explanation: 'This should be marked <strong>Invalid Event: Prediction / Opinion</strong>. A forecast about a possible restriction is not a confirmed real-world event.'
             },
             {
-                date: 'April 19, 2024',
-                title: "Taylor Swift's Eras Tour becomes first concert tour to gross $1 billion",
-                description: "Billboard reported that Taylor Swift's Eras Tour surpassed $1 billion in gross revenue, making it the highest-grossing concert tour in history. Demand for tickets broke multiple records.",
+                question: 'Will the Meridian Falcons win the 2025 regional basketball championship?',
+                outcome: 'No',
+                causal_summary: 'The Falcons lost their starting point guard in the semifinal and were eliminated before the championship game.',
+                date: 'March 3, 2025',
+                title: 'Meridian school board approves a new gym floor',
+                description: 'The event may be real, but it does not establish whether the Falcons won the regional championship. It is background school facilities news, not a direct causal event for the resolution.',
                 correct_status: 'rejected',
                 correct_reason: 'Noise',
-                explanation: 'This should be marked <strong>Invalid Event: Noise</strong>. While a major cultural moment, it has no causal link to the Federal Reserve\'s interest rate decisions. Noise events lack a direct causal relationship to the forecasted outcome.'
+                explanation: 'This should be marked <strong>Invalid Event: Noise</strong>. It is related to the school, but it has no meaningful direct causal link to whether the team won the championship.'
             },
             {
-                date: 'August 14, 2024',
-                title: "US CPI inflation falls to 2.9%, lowest reading since March 2021",
-                description: "The Bureau of Labor Statistics reported that the Consumer Price Index rose just 2.9% year-over-year in July 2024, falling below 3% for the first time in over three years. This significantly boosted market expectations for a September rate cut.",
+                question: 'Will the Green Valley battery plant ship its first commercial units before October 1, 2025?',
+                outcome: 'Yes',
+                causal_summary: 'The plant passed final inspection, secured customer pickup slots, and shipped its first commercial battery units before October 1.',
+                date: 'September 24, 2025',
+                title: 'Green Valley battery plant passes final production inspection',
+                description: 'The regulator completed final production inspection, clearing the plant to ship commercial battery units before the October 1 deadline.',
                 correct_status: 'approved',
                 correct_reason: null,
-                explanation: 'This should be marked <strong>Event is valid</strong>. Falling inflation directly influenced the Fed\'s decision to cut rates — it is a genuine causal event with a clear link to the outcome and occurred within the relevant window.'
+                explanation: 'This should be marked <strong>Event is valid</strong>. It is a specific, dated event with a clear connection to whether the plant could ship commercial units before the deadline.'
             }
         ];
 
@@ -2717,6 +2744,11 @@
         function renderQuizEvent() {
             const ev = QUIZ_EVENTS[quizIndex];
             document.getElementById('quiz-event-container').innerHTML = `
+                <div style="background:#e0e7ff;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:0.85rem;color:#3730a3;">
+                    <strong>Question:</strong> ${ev.question}<br>
+                    <strong>Resolved option:</strong> ${ev.outcome}<br>
+                    <strong>Causal analysis:</strong> ${ev.causal_summary}
+                </div>
                 <div class="quiz-event-mini">
                     <div class="quiz-event-date">${ev.date}</div>
                     <div class="quiz-event-title">${ev.title}</div>
@@ -2819,7 +2851,7 @@
                     PROLIFIC_PID = inputVal;
                     document.getElementById('pid-overlay').style.display = 'none';
                     maybeAssignSession().then(() => {
-                        document.getElementById('motivation-overlay').style.display = 'flex';
+                        showMotivationOverlay();
                     });
                 });
 
@@ -2830,7 +2862,7 @@
                 // If arriving with PROLIFIC_PID (from Prolific link), assign session then show the
                 // motivation/tutorial overlays so participants see the tutorial before starting.
                 maybeAssignSession().then(() => {
-                    document.getElementById('motivation-overlay').style.display = 'flex';
+                    showMotivationOverlay();
                 });
             }
         };
