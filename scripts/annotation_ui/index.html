@@ -1144,7 +1144,21 @@
                 <li>Decide whether the event is valid, invalid, or cannot be verified.</li>
                 <li>If the event is valid, choose whether it moves probability toward the resolved option, away from it, or has no meaningful impact.</li>
             </ol>
-            <button id="btn-motivation-next" class="btn-start" style="background:var(--primary);">Continue → Practice Example</button>
+            
+            <div style="text-align:left;border:1px solid #e2e8f0;background:#f8fafc;padding:12px;border-radius:8px;margin-bottom:16px;">
+                <strong style="display:block;margin-bottom:6px;color:#0f172a;">Informed Consent</strong>
+                <p style="margin:0 0 8px 0;color:#475569;font-size:0.9rem;line-height:1.5;">
+                    By checking the box below, you confirm that you have read and understood the study information. Participation is completely voluntary and you may withdraw at any time. Compensation is only provided for completed work. Your responses will be used for research purposes only and handled confidentially.
+                </p>
+                <p style="margin:0 0 8px 0;color:#475569;font-size:0.9rem;line-height:1.5;">
+                    <strong style="color:#0f172a;">Important:</strong> This study requires your authentic, original reasoning. <strong>AI-assisted annotation is not permitted.</strong>
+                </p>
+                <label style="font-size:0.92rem;color:#334155;display:flex;gap:10px;align-items:center;cursor:pointer;">
+                    <input type="checkbox" id="motivation-consent-checkbox"> I consent to participate in this study
+                </label>
+            </div>
+
+            <button id="btn-motivation-next" class="btn-start" style="background:var(--primary);" disabled>Continue → Practice Example</button>
             <button id="btn-motivation-skip" style="display:none;margin-top:10px;width:100%;background:transparent;color:#94a3b8;border:none;font-size:0.85rem;cursor:pointer;padding:6px;">Developer skip and start</button>
         </div>
     </div>
@@ -1925,7 +1939,7 @@
                 <div class="q-title">${q.title}</div>
                 ${optionsHtml}
                 ${marketWindowHtml}
-                <div class="section-title" style="color:var(--primary);">Causal Explanation (Hindsight)</div>
+                <div class="section-title" style="color:var(--primary);">Causal Analysis (Hindsight)</div>
                 <div class="explanation-text markdown-body">${marked.parse(q.explanation || '*No explanation available.*')}</div>
                 <div class="section-title">Resolution Criteria</div>
                 <div class="context-text markdown-body" style="background:#fefce8">${marked.parse(q.resolution_criteria || '*No criteria available.*')}</div>
@@ -1959,6 +1973,11 @@
                     <button class="btn-nav" onclick="goToEvent(${currentEventIndex + 1})" ${nextDisabled ? 'disabled' : ''}>Next Event &rarr;</button>
                 </div>`;
             timeline.appendChild(renderEventCard(q, event));
+            // Disable paste on all reasoning textareas in the rendered card
+            disablePasteOnReasoningTextarea(`approval-text-${event.id}`);
+            disablePasteOnReasoningTextarea(`reject-text-${event.id}`);
+            disablePasteOnReasoningTextarea(`skip-text-${event.id}`);
+            disablePasteOnReasoningTextarea(`impact-reasoning-text-${event.id}`);
             timeline.scrollTop = 0;
 
             requestAnimationFrame(() => {
@@ -2097,6 +2116,7 @@
             const hint = document.getElementById(`impact-confirm-hint-${eventId}`);
             if (hint) hint.style.display = 'none';
             renderPendingImpactChoice(eventId);
+            disablePasteOnReasoningTextarea(`impact-reasoning-text-${eventId}`);
         };
 
         window.confirmImpactChoice = function(qId, eventId) {
@@ -2537,6 +2557,15 @@
             a.remove();
         }
 
+        // ── Disable paste on reasoning textareas ──────────────────────────
+        function disablePasteOnReasoningTextarea(textareaId) {
+            const ta = document.getElementById(textareaId);
+            if (ta) {
+                ta.onpaste = (e) => { e.preventDefault(); return false; };
+                ta.setAttribute('onpaste', 'return false;');
+            }
+        }
+
         // ── Approval form ─────────────────────────────────────────────────
 
         window.showApprovalForm = function(qId, eventId) {
@@ -2551,6 +2580,7 @@
             form.style.display = 'block';
             const ta = document.getElementById(`approval-text-${eventId}`);
             if (ta) { ta.style.borderColor = '#bbf7d0'; ta.focus(); }
+            disablePasteOnReasoningTextarea(`approval-text-${eventId}`);
         };
 
         window.cancelApprove = function(eventId) {
@@ -2590,6 +2620,7 @@
                 ta.style.borderColor = '#fecaca';
                 ta.focus();
             }
+            disablePasteOnReasoningTextarea(`reject-text-${eventId}`);
         };
 
         window.cancelReject = function(eventId) {
@@ -2616,6 +2647,7 @@
             form.style.display = 'block';
             const ta = document.getElementById(`skip-text-${eventId}`);
             if (ta) { ta.style.borderColor = '#cbd5e1'; ta.focus(); }
+            disablePasteOnReasoningTextarea(`skip-text-${eventId}`);
         };
 
         window.cancelSkip = function(eventId) {
@@ -2854,6 +2886,13 @@
                         showMotivationOverlay();
                     });
                 });
+
+                const motivationConsentCheckbox = document.getElementById('motivation-consent-checkbox');
+                const motivationNextBtn = document.getElementById('btn-motivation-next');
+                if (motivationConsentCheckbox && motivationNextBtn) {
+                    motivationNextBtn.disabled = !motivationConsentCheckbox.checked;
+                    motivationConsentCheckbox.addEventListener('change', () => { motivationNextBtn.disabled = !motivationConsentCheckbox.checked; });
+                }
 
                 document.getElementById('pid-input-field').addEventListener('keypress', (e) => {
                     if (e.key === 'Enter') document.getElementById('btn-start-study').click();
