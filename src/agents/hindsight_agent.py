@@ -1,9 +1,9 @@
 from typing import Optional
 from datetime import datetime
 
-from src.agents.base import BaseAgent
+from src.agents.base import BaseAgent, create_llm_model
 from src.config import Config, get_config
-from smolagents import CodeAgent, LiteLLMModel
+from smolagents import CodeAgent
 from src.tools import (
     # Evidence
     ArticleCollectorTool,
@@ -54,19 +54,13 @@ class HindsightAgent(BaseAgent):
             question_id: Question ID for provenance tracking (passed to all tools)
             target_event_id: Target event ID for causal graph building
         """
-        # Initialize config and model first (needed for managed agents)
         if config is None:
             config = get_config()
 
         self.question_id = question_id
         self.target_event_id = target_event_id
 
-        llm_model = LiteLLMModel(
-            model_id=config.llm.model,
-            **config.llm.model_dump(
-                exclude={"model", "embedding_model"}, exclude_none=True
-            ),
-        )
+        llm_model = create_llm_model(config)
 
         date_instructions = (
             f"Today's date is {datetime.now().strftime('%Y-%m-%d')}. "

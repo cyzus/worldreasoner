@@ -9,6 +9,20 @@ from src.utils.usage_tracking import UsageMetrics, extract_usage_from_agent
 from src.utils.logging import logger
 
 
+def create_llm_model(
+    config: Config,
+    model_id: str = None,
+    temperature: float = None,
+) -> LiteLLMModel:
+    """Create a LiteLLMModel from config. Single source of truth for model construction."""
+    extra = config.llm.model_dump(
+        exclude={"model", "embedding_model", "temperature"}, exclude_none=True
+    )
+    if temperature is not None:
+        extra["temperature"] = temperature
+    return LiteLLMModel(model_id=model_id or config.llm.model, num_retries=3, **extra)
+
+
 class BaseAgent:
     """Base class for all agents in the SmolAgents framework.
 
@@ -42,15 +56,7 @@ class BaseAgent:
         self.runs_dir = Path(runs_dir) if runs_dir else Path("logs/agent_runs")
         self._last_usage: Optional[UsageMetrics] = None
 
-        # Initialize LLM model.
-        # num_retries is forwarded natively by LiteLLMModel to every litellm call.
-        self.llm_model = LiteLLMModel(
-            model_id=self.config.llm.model,
-            num_retries=3,
-            **self.config.llm.model_dump(
-                exclude={"model", "embedding_model"}, exclude_none=True
-            ),
-        )
+        self.llm_model = create_llm_model(self.config)
 
         # Create appropriate agent type
         agent_class = CodeAgent if is_code else ToolCallingAgent

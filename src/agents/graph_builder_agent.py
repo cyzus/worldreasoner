@@ -107,6 +107,7 @@ class GraphBuilderAgentFactory(AgentFactory):
             tools=tools,
             max_steps=kwargs.get("max_steps", 30),
             additional_authorized_imports=["json", "datetime", "typing"],
+            use_structured_outputs_internally=True,
         )
 
         return agent

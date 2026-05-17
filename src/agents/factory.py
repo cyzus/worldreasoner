@@ -6,7 +6,7 @@ Centralizes agent creation to reduce boilerplate and ensure consistent configura
 from typing import List, Optional
 from smolagents import Tool
 
-from src.agents.base import BaseAgent
+from src.agents.base import BaseAgent, create_llm_model
 from src.agents.web_agent import WebAgent
 from src.config import Config, get_config
 from src.domain.models.question import Question
@@ -30,13 +30,8 @@ class AgentFactory:
     @classmethod
     def _create_model(cls, model_id: str, temperature: float = 0.2):
         """Create a LiteLLMModel using global config settings."""
-        from smolagents import LiteLLMModel
-
         config = get_config()
-        extra = config.llm.model_dump(
-            exclude={"model", "embedding_model", "temperature"}, exclude_none=True
-        )
-        return LiteLLMModel(model_id=model_id, temperature=temperature, **extra)
+        return create_llm_model(config, model_id=model_id, temperature=temperature)
 
     @staticmethod
     def create_web_agent(
