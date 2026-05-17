@@ -152,6 +152,7 @@ class ForecastEvaluator:
             question.ground_truth,
             forecast.confidence,
             question.question_type,
+            options=question.options,
         )
 
         log_score = calculate_log_score(
@@ -159,6 +160,7 @@ class ForecastEvaluator:
             question.ground_truth,
             forecast.confidence,
             question.question_type,
+            options=question.options,
         )
 
         # Build evaluation metadata

@@ -8,7 +8,6 @@ Usage:
 
 import argparse
 import json
-import math
 import statistics
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -17,6 +16,11 @@ from pathlib import Path
 from src.core.database import GenericDatabase
 from src.core.llm import get_knowledge_cutoff_date
 from src.domain.evaluation.conditions import ConditionName, get_conditions
+from src.domain.evaluation.metrics import (
+    calculate_accuracy,
+    calculate_brier_score,
+    calculate_log_score,
+)
 from src.domain.models import Forecast, Question
 from src.domain.models.question import QuestionType
 
@@ -28,43 +32,35 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 ALL_CONDITIONS = [c.value for c in ConditionName]
 
 
-def normalize_binary(val):
-    if isinstance(val, bool):
-        return val
-    if isinstance(val, str):
-        v = val.strip().lower()
-        if v in ("true", "yes", "1"):
-            return True
-        if v in ("false", "no", "0"):
-            return False
-    return val
-
-
 def score_forecast(f: Forecast, q: Question):
     """Return (is_correct, brier_score, log_score) for a forecast."""
     pred = f.prediction
     gt = q.ground_truth
     qtype = q.question_type
 
-    if qtype == QuestionType.BINARY:
-        pred_n = normalize_binary(pred)
-        gt_n = normalize_binary(gt)
-        if pred_n is None or gt_n is None:
-            return None, None, None
-        is_correct = pred_n == gt_n
-        forecast_prob = f.confidence if pred_n else (1.0 - f.confidence)
-        outcome = 1.0 if gt_n else 0.0
-        brier = (forecast_prob - outcome) ** 2
-        prob_actual = forecast_prob if gt_n else (1.0 - forecast_prob)
-        log_score = math.log(max(prob_actual, 1e-10))
-        return is_correct, brier, log_score
-
-    elif qtype == QuestionType.MCQ:
-        is_correct = pred == gt
-        brier = (1.0 - f.confidence) ** 2 if is_correct else f.confidence ** 2
-        prob_correct = f.confidence if is_correct else (1.0 - f.confidence)
-        log_score = math.log(max(prob_correct, 1e-10))
-        return is_correct, brier, log_score
+    if qtype in (QuestionType.BINARY, QuestionType.MCQ):
+        accuracy = calculate_accuracy(
+            pred,
+            gt,
+            qtype,
+            question_text="",
+            options=q.options,
+        )
+        brier = calculate_brier_score(
+            pred,
+            gt,
+            f.confidence,
+            qtype,
+            options=q.options,
+        )
+        log_score = calculate_log_score(
+            pred,
+            gt,
+            f.confidence,
+            qtype,
+            options=q.options,
+        )
+        return accuracy == 1.0, brier, log_score
 
     elif qtype == QuestionType.QUANTITY:
         try:

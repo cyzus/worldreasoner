@@ -45,14 +45,34 @@ class ForecastSubmissionService(ServiceBase):
                 valid_true = ["true", "yes", "1"]
                 valid_false = ["false", "no", "0"]
                 prediction_lower = prediction.lower().strip()
-                if prediction_lower not in valid_true + valid_false:
+
+                if self._has_named_binary_options(question):
+                    option_by_lower = {
+                        str(option).strip().lower(): option
+                        for option in question.options or []
+                    }
+                    if prediction_lower in option_by_lower:
+                        parsed_prediction = option_by_lower[prediction_lower]
+                    elif prediction_lower in valid_true:
+                        parsed_prediction = question.options[0]
+                    elif prediction_lower in valid_false:
+                        parsed_prediction = question.options[1]
+                    else:
+                        return (
+                            False,
+                            None,
+                            f"Invalid binary prediction '{prediction}'. "
+                            f"Expected one of: {question.options}",
+                        )
+                elif prediction_lower not in valid_true + valid_false:
                     return (
                         False,
                         None,
                         f"Invalid binary prediction '{prediction}'. "
                         f"Expected one of: {valid_true + valid_false}",
                     )
-                parsed_prediction = prediction_lower in valid_true
+                else:
+                    parsed_prediction = prediction_lower in valid_true
             elif question.question_type == QuestionType.MCQ:
                 parsed_prediction = prediction
             elif question.question_type == QuestionType.QUANTITY:
@@ -84,6 +104,19 @@ class ForecastSubmissionService(ServiceBase):
             )
 
         return True, parsed_prediction, None
+
+    @staticmethod
+    def _has_named_binary_options(question: Question) -> bool:
+        """Return True for two-outcome questions whose labels are not Yes/No."""
+        if not question.options or len(question.options) != 2:
+            return False
+
+        normalized_options = {str(option).strip().lower() for option in question.options}
+        return normalized_options not in (
+            {"yes", "no"},
+            {"true", "false"},
+            {"1", "0"},
+        )
 
     def create_forecast(
         self,

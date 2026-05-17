@@ -202,6 +202,16 @@ class Question(BaseModel):
             True if valid, False otherwise
         """
         if self.question_type == QuestionType.BINARY:
+            if self.options and len(self.options) == 2:
+                normalized_options = {
+                    str(option).strip().lower() for option in self.options
+                }
+                if normalized_options not in (
+                    {"yes", "no"},
+                    {"true", "false"},
+                    {"1", "0"},
+                ):
+                    return prediction in self.options
             return isinstance(prediction, bool)
         elif self.question_type == QuestionType.MCQ:
             if self.options:
