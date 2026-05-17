@@ -86,7 +86,8 @@ class HindsightAgent(BaseAgent):
             ],
             max_steps=15,
             stream_outputs=False,
-            additional_authorized_imports=["json"],  # Allow json imports in code agent
+            additional_authorized_imports=["json", "datetime", "typing"],
+            use_structured_outputs_internally=True,
             name="evidence_collector",
             description=EVIDENCE_AGENT_DESCRIPTION,
             instructions=date_instructions,
