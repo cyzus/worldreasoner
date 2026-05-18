@@ -9,6 +9,11 @@ from src.utils.usage_tracking import UsageMetrics, extract_usage_from_agent
 from src.utils.logging import logger
 
 
+def _uses_structured_outputs(model_id: str) -> bool:
+    lowered = model_id.lower()
+    return "gemini" in lowered
+
+
 def create_llm_model(
     config: Config,
     model_id: str = None,
@@ -75,7 +80,8 @@ class BaseAgent:
         # Add code-specific parameters
         if is_code:
             agent_kwargs["additional_authorized_imports"] = ["json", "datetime", "typing"]
-            agent_kwargs["use_structured_outputs_internally"] = True
+            if _uses_structured_outputs(self.llm_model.model_id):
+                agent_kwargs["use_structured_outputs_internally"] = True
 
         self.agent = agent_class(**agent_kwargs)
 

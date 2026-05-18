@@ -1,7 +1,7 @@
 from typing import Optional
 from datetime import datetime
 
-from src.agents.base import BaseAgent, create_llm_model
+from src.agents.base import BaseAgent, create_llm_model, _uses_structured_outputs
 from src.config import Config, get_config
 from smolagents import CodeAgent
 from src.tools import (
@@ -70,7 +70,7 @@ class HindsightAgent(BaseAgent):
 
         # Evidence gathering specialist (web search, article collection)
         # Tools get question_id for provenance tracking
-        evidence_agent = CodeAgent(
+        evidence_agent_kwargs = dict(
             model=llm_model,
             tools=[
                 ArticleCollectorTool(
@@ -87,11 +87,13 @@ class HindsightAgent(BaseAgent):
             max_steps=15,
             stream_outputs=False,
             additional_authorized_imports=["json", "datetime", "typing"],
-            use_structured_outputs_internally=True,
             name="evidence_collector",
             description=EVIDENCE_AGENT_DESCRIPTION,
             instructions=date_instructions,
         )
+        if _uses_structured_outputs(llm_model.model_id):
+            evidence_agent_kwargs["use_structured_outputs_internally"] = True
+        evidence_agent = CodeAgent(**evidence_agent_kwargs)
 
         tools = tools + [
                 ArticleCollectorTool(

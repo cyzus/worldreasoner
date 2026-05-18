@@ -19,6 +19,7 @@ from src.tools.generators.question_articles import QuestionArticlesTool
 from src.tools.reasoning.propose_subgraph import ProposeSubgraphTool
 
 from .factory import AgentFactory
+from .base import _uses_structured_outputs
 
 
 class MarkGraphBuiltTool(Tool):
@@ -102,12 +103,14 @@ class GraphBuilderAgentFactory(AgentFactory):
             MarkGraphBuiltTool(db_path=db_path, question_id=question_id),
         ]
 
-        agent = CodeAgent(
+        agent_kwargs = dict(
             model=llm_model,
             tools=tools,
             max_steps=kwargs.get("max_steps", 30),
             additional_authorized_imports=["json", "datetime", "typing"],
-            use_structured_outputs_internally=True,
         )
+        if _uses_structured_outputs(llm_model.model_id):
+            agent_kwargs["use_structured_outputs_internally"] = True
+        agent = CodeAgent(**agent_kwargs)
 
         return agent
