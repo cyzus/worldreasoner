@@ -74,7 +74,7 @@ class BaseAgent:
 
         # Add code-specific parameters
         if is_code:
-            agent_kwargs["additional_authorized_imports"] = ["json", "datetime", "typing"],
+            agent_kwargs["additional_authorized_imports"] = ["json", "datetime", "typing"]
             agent_kwargs["use_structured_outputs_internally"] = True
 
         self.agent = agent_class(**agent_kwargs)
