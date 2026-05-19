@@ -158,7 +158,7 @@ def get_knowledge_cutoff_date(model_id: str) -> str:
     model_id_lower = model_id.lower()
     # Exact match first
     if model_id_lower in models:
-        return models[model_id_lower].get("cutoff_date", "Unknown")
+        return models[model_id_lower].get("cutoff_date") or "Unknown"
     # Prefix match: find the longest key that is a prefix of the model_id
     # e.g. "gemini-3-flash" matches "gemini-3-flash-preview"
     best_key = None
@@ -167,5 +167,5 @@ def get_knowledge_cutoff_date(model_id: str) -> str:
             if best_key is None or len(key) > len(best_key):
                 best_key = key
     if best_key:
-        return models[best_key].get("cutoff_date", "Unknown")
+        return models[best_key].get("cutoff_date") or "Unknown"
     return "Unknown"

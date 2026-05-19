@@ -21,7 +21,8 @@ def create_llm_model(
 ) -> LiteLLMModel:
     """Create a LiteLLMModel from config. Single source of truth for model construction."""
     extra = config.llm.model_dump(
-        exclude={"model", "embedding_model", "temperature"}, exclude_none=True
+        exclude={"model", "embedding_model", "review_model", "temperature"},
+        exclude_none=True,
     )
     if temperature is not None:
         extra["temperature"] = temperature
