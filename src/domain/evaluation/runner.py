@@ -86,6 +86,10 @@ class BenchmarkRunner:
 
             forecast = max(forecasts, key=lambda f: f.timestamp)
 
+            # Tag the forecast with the slot label before evaluation is persisted
+            existing_meta = forecast.evaluation_metadata or {}
+            forecast.evaluation_metadata = {**existing_meta, "slot": slot}
+
             # Evaluate
             evaluation = self.evaluator.evaluate_forecast(forecast, question)
             self.evaluator.update_forecast_with_evaluation(forecast, evaluation)

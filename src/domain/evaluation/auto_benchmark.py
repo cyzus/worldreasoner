@@ -292,6 +292,10 @@ class AutoBenchmarkService:
 
         latest_forecast = forecasts[0]
 
+        # Tag the forecast with the slot label before evaluation is persisted
+        existing_meta = latest_forecast.evaluation_metadata or {}
+        latest_forecast.evaluation_metadata = {**existing_meta, "slot": slot}
+
         # Evaluate the forecast
         evaluator = ForecastEvaluator(db_path=self.db_path)
         try:
@@ -367,6 +371,7 @@ class AutoBenchmarkService:
             "forecast_id": row["id"],
             "condition": condition,
             "model": model,
+            "slot": meta.get("slot", "mid"),
             "prediction": AutoBenchmarkService._load_json_cell(row["prediction"]),
             "confidence": row["confidence"],
             "is_correct": bool(row["is_correct"]),
@@ -400,7 +405,7 @@ class AutoBenchmarkService:
             result = self._resume_result_from_row(row)
             if result is None:
                 continue
-            key = (result["question_id"], result["condition"], result["model"])
+            key = (result["question_id"], result["condition"], result["model"], result["slot"])
             timestamp = row["timestamp"] or ""
             if key not in completed or timestamp > latest_timestamps[key]:
                 completed[key] = result
@@ -538,7 +543,7 @@ class AutoBenchmarkService:
             knowledge_cutoff = get_knowledge_cutoff_date(model_name)
 
             # Resume from pre-fetched results without a DB query per triple.
-            resume_key = (question.id, cond_name, model_name)
+            resume_key = (question.id, cond_name, model_name, slot)
             if resume and resume_key in completed_results:
                 logger.info(
                     f"Skipping completed: {cond_name}/{model_name}/{question.id}"
