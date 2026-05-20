@@ -256,12 +256,20 @@
       "source": "[Source](https://web.archive.org/web/20260317134442/https://developers.openai.com/api/docs/models/gpt-5.3-codex)",
       "company": "OpenAI"
     },
+    "gpt-5.4": {
+      "model_name": "GPT-5.4",
+      "provider": "OpenAI",
+      "cutoff_date": "2025-08-31",
+      "cutoff_date_raw": "Aug 31, 2025",
+      "source": "[Source](https://developers.openai.com/api/docs/models/gpt-5.4/)",
+      "company": "OpenAI"
+    },
     "gpt-5.4-pro-nano-mini": {
       "model_name": "GPT-5.4 Pro, Nano, Mini",
       "provider": "OpenAI",
-      "cutoff_date": "2025-08-01",
-      "cutoff_date_raw": "2025.08",
-      "source": "[Source](https://web.archive.org/web/20260318054837/https://developers.openai.com/api/docs/models/gpt-5.4)",
+      "cutoff_date": "2025-08-31",
+      "cutoff_date_raw": "Aug 31, 2025",
+      "source": "[Source](https://developers.openai.com/api/docs/models/gpt-5.4/)",
       "company": "OpenAI"
     },
     "gpt-5.5-pro": {
@@ -632,12 +640,20 @@
       "source": "[Source](https://web.archive.org/web/20260210032208/https://llm-stats.com/models/compare/qwen3-30b-a3b-vs-qwq-32b)",
       "company": "Qwen"
     },
+    "qwen3-235b-a22b-instruct-2507": {
+      "model_name": "Qwen3-235B-A22B-Instruct-2507",
+      "provider": "Qwen",
+      "cutoff_date": "2025-07-01",
+      "cutoff_date_raw": "Conservative release proxy: 2025.07; official training cutoff not disclosed",
+      "source": "[Model card](https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507); [AWS Bedrock model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-qwen-qwen3-235b-a22b-2507.html)",
+      "company": "Qwen"
+    },
     "qwen3": {
       "model_name": "Qwen3",
       "provider": "Qwen",
       "cutoff_date": null,
-      "cutoff_date_raw": "Unknown",
-      "source": "TBD",
+      "cutoff_date_raw": "Unknown; model-family cutoff not disclosed",
+      "source": "[Qwen3-235B-A22B-Instruct-2507 model card](https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507)",
       "company": "Qwen"
     },
     "deepseek-llm-7b67b-chat": {

@@ -258,6 +258,345 @@ def write_markdown(output: dict, path: Path) -> None:
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def _metric_delta(filtered_value, all_value):
+    if filtered_value is None or all_value is None:
+        return None
+    return filtered_value - all_value
+
+
+def _short_condition(condition: str) -> str:
+    labels = {
+        "vanilla_llm": "Vanilla LLM",
+        "structured_scenario": "Causal Simulation",
+        "search_enabled": "Search-Enabled",
+        "worldreasoner": "WorldReasoner",
+        "oracle": "Near-Resolution",
+        "real_time": "Real-Time",
+    }
+    return labels.get(condition, condition)
+
+
+def _comparison_rows(outputs: list[dict]) -> list[dict]:
+    """Build side-by-side all-vs-filtered rows for condition/model tables."""
+    rows = []
+    for output in outputs:
+        condition = output["condition"]
+        clean = output.get("clean", {})
+
+        def add_row(model: str, all_stats: dict, clean_stats: dict):
+            all_n = all_stats.get("total", 0)
+            clean_n = clean_stats.get("total", 0)
+            rows.append({
+                "condition": condition,
+                "condition_label": _short_condition(condition),
+                "model": model,
+                "all_n": all_n,
+                "all_accuracy": all_stats.get("accuracy"),
+                "all_brier": all_stats.get("avg_brier_score"),
+                "all_log_score": all_stats.get("avg_log_score"),
+                "filtered_n": clean_n,
+                "filtered_accuracy": clean_stats.get("accuracy"),
+                "filtered_brier": clean_stats.get("avg_brier_score"),
+                "filtered_log_score": clean_stats.get("avg_log_score"),
+                "excluded_n": max(all_n - clean_n, 0),
+                "accuracy_delta": _metric_delta(
+                    clean_stats.get("accuracy"), all_stats.get("accuracy")
+                ),
+                "brier_delta": _metric_delta(
+                    clean_stats.get("avg_brier_score"),
+                    all_stats.get("avg_brier_score"),
+                ),
+                "log_score_delta": _metric_delta(
+                    clean_stats.get("avg_log_score"),
+                    all_stats.get("avg_log_score"),
+                ),
+            })
+
+        add_row("__overall__", output.get("overall", {}), clean.get("overall", {}))
+
+        all_models = output.get("by_model", {})
+        clean_models = clean.get("by_model", {})
+        for model in sorted(all_models):
+            add_row(model, all_models[model], clean_models.get(model, {}))
+
+    return rows
+
+
+def write_comparison_tsv(rows: list[dict], path: Path) -> None:
+    columns = [
+        "condition",
+        "model",
+        "all_n",
+        "all_accuracy",
+        "all_brier",
+        "all_log_score",
+        "filtered_n",
+        "filtered_accuracy",
+        "filtered_brier",
+        "filtered_log_score",
+        "excluded_n",
+        "accuracy_delta",
+        "brier_delta",
+        "log_score_delta",
+    ]
+    lines = ["\t".join(columns)]
+    for row in rows:
+        vals = []
+        for col in columns:
+            val = row.get(col)
+            vals.append("" if val is None else str(val))
+        lines.append("\t".join(vals))
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def write_comparison_markdown(rows: list[dict], path: Path) -> None:
+    overall = [r for r in rows if r["model"] == "__overall__"]
+    by_model = [r for r in rows if r["model"] != "__overall__"]
+
+    lines = [
+        "# Contamination Filter Comparison",
+        "",
+        "The filtered setting excludes model-question pairs where "
+        "`question.estimated_start_time < model knowledge cutoff`. "
+        "This is a conservative diagnostic for possible training-data leakage; "
+        "the Temporal Gateway still enforces evidence access by simulated date during the run.",
+        "",
+        "## By Condition",
+        "",
+        "| Condition | All n | All Acc | All Brier | Filtered n | Filtered Acc | Filtered Brier | Excluded | Acc Delta |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in overall:
+        lines.append(
+            f"| {row['condition_label']} | {row['all_n']} | {_pct(row['all_accuracy'])} "
+            f"| {_f(row['all_brier'])} | {row['filtered_n']} | "
+            f"{_pct(row['filtered_accuracy'])} | {_f(row['filtered_brier'])} "
+            f"| {row['excluded_n']} | {_pct(row['accuracy_delta'])} |"
+        )
+
+    lines += [
+        "",
+        "## By Condition and Model",
+        "",
+        "| Condition | Model | All n | All Acc | All Brier | Filtered n | Filtered Acc | Filtered Brier | Excluded | Acc Delta |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in sorted(by_model, key=lambda r: (r["condition"], r["model"])):
+        model = row["model"].split("/")[-1]
+        lines.append(
+            f"| {row['condition_label']} | {model} | {row['all_n']} | "
+            f"{_pct(row['all_accuracy'])} | {_f(row['all_brier'])} | "
+            f"{row['filtered_n']} | {_pct(row['filtered_accuracy'])} | "
+            f"{_f(row['filtered_brier'])} | {row['excluded_n']} | "
+            f"{_pct(row['accuracy_delta'])} |"
+        )
+
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _combine_weighted(rows: list[dict], group_key: str) -> list[dict]:
+    grouped = defaultdict(lambda: {
+        "all_correct": 0.0,
+        "all_total": 0,
+        "filtered_correct": 0.0,
+        "filtered_total": 0,
+        "all_brier_sum": 0.0,
+        "all_brier_n": 0,
+        "filtered_brier_sum": 0.0,
+        "filtered_brier_n": 0,
+        "excluded_n": 0,
+        "conditions": set(),
+    })
+    for row in rows:
+        if row["model"] == "__overall__":
+            continue
+        group = grouped[row[group_key]]
+        group["conditions"].add(row["condition"])
+        group["all_total"] += row["all_n"]
+        group["filtered_total"] += row["filtered_n"]
+        group["excluded_n"] += row["excluded_n"]
+        if row["all_accuracy"] is not None:
+            group["all_correct"] += row["all_accuracy"] * row["all_n"]
+        if row["filtered_accuracy"] is not None:
+            group["filtered_correct"] += row["filtered_accuracy"] * row["filtered_n"]
+        if row["all_brier"] is not None:
+            group["all_brier_sum"] += row["all_brier"] * row["all_n"]
+            group["all_brier_n"] += row["all_n"]
+        if row["filtered_brier"] is not None:
+            group["filtered_brier_sum"] += row["filtered_brier"] * row["filtered_n"]
+            group["filtered_brier_n"] += row["filtered_n"]
+
+    combined = []
+    for key, stats in grouped.items():
+        all_n = stats["all_total"]
+        filtered_n = stats["filtered_total"]
+        all_acc = stats["all_correct"] / all_n if all_n else None
+        filtered_acc = (
+            stats["filtered_correct"] / filtered_n if filtered_n else None
+        )
+        all_brier = (
+            stats["all_brier_sum"] / stats["all_brier_n"]
+            if stats["all_brier_n"]
+            else None
+        )
+        filtered_brier = (
+            stats["filtered_brier_sum"] / stats["filtered_brier_n"]
+            if stats["filtered_brier_n"]
+            else None
+        )
+        combined.append({
+            group_key: key,
+            "all_n": all_n,
+            "all_accuracy": all_acc,
+            "all_brier": all_brier,
+            "filtered_n": filtered_n,
+            "filtered_accuracy": filtered_acc,
+            "filtered_brier": filtered_brier,
+            "excluded_n": stats["excluded_n"],
+            "excluded_share": stats["excluded_n"] / all_n if all_n else None,
+            "accuracy_delta": _metric_delta(filtered_acc, all_acc),
+            "brier_delta": _metric_delta(filtered_brier, all_brier),
+            "condition_count": len(stats["conditions"]),
+        })
+    return combined
+
+
+def write_model_leakage_markdown(rows: list[dict], path: Path) -> None:
+    model_rows = _combine_weighted(rows, "model")
+    model_rows.sort(
+        key=lambda r: (
+            -(r["excluded_share"] or 0),
+            r["accuracy_delta"] or 0,
+            r["model"],
+        )
+    )
+
+    lines = [
+        "# Model-Level Contamination Filter Comparison",
+        "",
+        "This table aggregates each model across all evaluated conditions. "
+        "A high excluded share means more model-question pairs started before the model's knowledge cutoff. "
+        "A negative accuracy delta means the model performs worse after those pairs are removed.",
+        "",
+        "| Model | Conditions | All n | Filtered n | Excluded | Excluded Share | All Acc | Filtered Acc | Acc Delta | All Brier | Filtered Brier |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in model_rows:
+        model = row["model"]
+        lines.append(
+            f"| {model} | {row['condition_count']} | {row['all_n']} | "
+            f"{row['filtered_n']} | {row['excluded_n']} | "
+            f"{_pct(row['excluded_share'])} | {_pct(row['all_accuracy'])} | "
+            f"{_pct(row['filtered_accuracy'])} | {_pct(row['accuracy_delta'])} | "
+            f"{_f(row['all_brier'])} | {_f(row['filtered_brier'])} |"
+        )
+    lines += [
+        "",
+        "## Reading Guide",
+        "",
+        "- `Excluded Share` is the fraction of model-question pairs removed by the knowledge-cutoff filter.",
+        "- `Acc Delta` is `Filtered Acc - All Acc`; negative values indicate that the unfiltered score was higher.",
+        "- For models with proxy or unknown cutoffs, interpret the filtered result as diagnostic rather than definitive.",
+    ]
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def write_model_leakage_svg(rows: list[dict], path: Path) -> None:
+    model_rows = _combine_weighted(rows, "model")
+    if not model_rows:
+        return
+    model_rows.sort(key=lambda r: r["all_accuracy"] or 0, reverse=True)
+
+    width = 1060
+    row_h = 52
+    top = 64
+    left = 260
+    chart_w = 570
+    height = top + row_h * len(model_rows) + 70
+
+    def x_for(v):
+        return left + max(0.0, min(1.0, v or 0.0)) * chart_w
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        '<rect width="100%" height="100%" fill="#ffffff"/>',
+        '<text x="24" y="32" font-family="Arial, sans-serif" font-size="20" font-weight="700">Model-level all vs. contamination-filtered accuracy</text>',
+        '<text x="24" y="52" font-family="Arial, sans-serif" font-size="12" fill="#555">Dot size reflects the share of model-question pairs excluded by the knowledge-cutoff filter.</text>',
+    ]
+
+    for tick in [0, 0.25, 0.5, 0.75, 1.0]:
+        x = x_for(tick)
+        parts.append(f'<line x1="{x:.1f}" y1="{top-10}" x2="{x:.1f}" y2="{height-52}" stroke="#dddddd" stroke-width="1"/>')
+        parts.append(f'<text x="{x:.1f}" y="{height-30}" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="#666">{int(tick*100)}%</text>')
+
+    for i, row in enumerate(model_rows):
+        y = top + i * row_h
+        all_x = x_for(row["all_accuracy"])
+        filt_x = x_for(row["filtered_accuracy"])
+        radius = 4 + 13 * (row["excluded_share"] or 0)
+        model = row["model"]
+        parts.append(f'<text x="24" y="{y+25}" font-family="Arial, sans-serif" font-size="13" font-weight="600">{model}</text>')
+        parts.append(f'<line x1="{all_x:.1f}" y1="{y+18}" x2="{filt_x:.1f}" y2="{y+18}" stroke="#777" stroke-width="1.5"/>')
+        parts.append(f'<circle cx="{all_x:.1f}" cy="{y+18}" r="5" fill="#b7d7ea" stroke="#6f9db5"/>')
+        parts.append(f'<circle cx="{filt_x:.1f}" cy="{y+18}" r="{radius:.1f}" fill="#d9efd2" fill-opacity="0.85" stroke="#7aa66f"/>')
+        parts.append(f'<text x="{max(all_x, filt_x)+18:.1f}" y="{y+22}" font-family="Arial, sans-serif" font-size="11" fill="#333">{_pct(row["all_accuracy"])} -> {_pct(row["filtered_accuracy"])} ({_pct(row["accuracy_delta"])})</text>')
+        parts.append(f'<text x="{width-130}" y="{y+22}" font-family="Arial, sans-serif" font-size="11" fill="#666">excluded {_pct(row["excluded_share"])}</text>')
+
+    legend_y = height - 12
+    parts.append(f'<circle cx="{left}" cy="{legend_y-4}" r="5" fill="#b7d7ea" stroke="#6f9db5"/>')
+    parts.append(f'<text x="{left+14}" y="{legend_y}" font-family="Arial, sans-serif" font-size="12" fill="#444">All</text>')
+    parts.append(f'<circle cx="{left+70}" cy="{legend_y-4}" r="8" fill="#d9efd2" stroke="#7aa66f"/>')
+    parts.append(f'<text x="{left+84}" y="{legend_y}" font-family="Arial, sans-serif" font-size="12" fill="#444">Filtered; larger circle = more excluded pairs</text>')
+    parts.append("</svg>")
+    path.write_text("\n".join(parts), encoding="utf-8")
+
+
+def write_comparison_svg(rows: list[dict], path: Path) -> None:
+    """Write a dependency-free paired bar chart for overall condition accuracy."""
+    overall = [r for r in rows if r["model"] == "__overall__"]
+    if not overall:
+        return
+
+    width = 920
+    row_h = 54
+    top = 60
+    left = 190
+    chart_w = 620
+    height = top + row_h * len(overall) + 55
+
+    def x_for(v):
+        return left + max(0.0, min(1.0, v or 0.0)) * chart_w
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        '<rect width="100%" height="100%" fill="#ffffff"/>',
+        '<text x="24" y="32" font-family="Arial, sans-serif" font-size="20" font-weight="700">All vs. contamination-filtered accuracy</text>',
+        '<text x="24" y="52" font-family="Arial, sans-serif" font-size="12" fill="#555">Filtered excludes question/model pairs whose start date predates the model knowledge cutoff.</text>',
+    ]
+
+    for tick in [0, 0.25, 0.5, 0.75, 1.0]:
+        x = x_for(tick)
+        parts.append(f'<line x1="{x:.1f}" y1="{top-10}" x2="{x:.1f}" y2="{height-45}" stroke="#dddddd" stroke-width="1"/>')
+        parts.append(f'<text x="{x:.1f}" y="{height-25}" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="#666">{int(tick*100)}%</text>')
+
+    for i, row in enumerate(overall):
+        y = top + i * row_h
+        all_x = x_for(row["all_accuracy"])
+        filt_x = x_for(row["filtered_accuracy"])
+        parts.append(f'<text x="24" y="{y+24}" font-family="Arial, sans-serif" font-size="13" font-weight="600">{row["condition_label"]}</text>')
+        parts.append(f'<rect x="{left}" y="{y+8}" width="{max(all_x-left, 0):.1f}" height="14" fill="#b7d7ea" stroke="#6f9db5"/>')
+        parts.append(f'<rect x="{left}" y="{y+28}" width="{max(filt_x-left, 0):.1f}" height="14" fill="#d9efd2" stroke="#8ab37e"/>')
+        parts.append(f'<text x="{all_x+6:.1f}" y="{y+20}" font-family="Arial, sans-serif" font-size="11" fill="#333">{_pct(row["all_accuracy"])}</text>')
+        parts.append(f'<text x="{filt_x+6:.1f}" y="{y+40}" font-family="Arial, sans-serif" font-size="11" fill="#333">{_pct(row["filtered_accuracy"])}</text>')
+    legend_y = height - 10
+    parts.append(f'<rect x="{left}" y="{legend_y-10}" width="14" height="10" fill="#b7d7ea" stroke="#6f9db5"/>')
+    parts.append(f'<text x="{left+20}" y="{legend_y}" font-family="Arial, sans-serif" font-size="12" fill="#444">All</text>')
+    parts.append(f'<rect x="{left+70}" y="{legend_y-10}" width="14" height="10" fill="#d9efd2" stroke="#8ab37e"/>')
+    parts.append(f'<text x="{left+90}" y="{legend_y}" font-family="Arial, sans-serif" font-size="12" fill="#444">Filtered</text>')
+    parts.append("</svg>")
+    path.write_text("\n".join(parts), encoding="utf-8")
+
+
 def print_summary(label: str, out_dict: dict):
     ov = out_dict["overall"]
     print(f"\n{'='*60}")
@@ -370,8 +709,10 @@ def main():
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
+    outputs = []
     for condition in conditions:
         output = evaluate_condition(condition, all_forecasts, q_map, args.db)
+        outputs.append(output)
 
         json_path = OUTPUT_DIR / f"{condition}_eval_{ts}.json"
         with open(json_path, "w", encoding="utf-8") as fh:
@@ -385,6 +726,23 @@ def main():
         print_summary(f"{condition.upper()} (all) — {args.db}", output)
         if output["clean"]["overall"].get("total"):
             print_summary(f"{condition.upper()} (contamination-filtered) — {args.db}", output["clean"])
+
+    rows = _comparison_rows(outputs)
+    comparison_md = OUTPUT_DIR / f"contamination_comparison_{ts}.md"
+    comparison_tsv = OUTPUT_DIR / f"contamination_comparison_{ts}.tsv"
+    comparison_svg = OUTPUT_DIR / f"contamination_comparison_{ts}.svg"
+    model_md = OUTPUT_DIR / f"contamination_by_model_{ts}.md"
+    model_svg = OUTPUT_DIR / f"contamination_by_model_{ts}.svg"
+    write_comparison_markdown(rows, comparison_md)
+    write_comparison_tsv(rows, comparison_tsv)
+    write_comparison_svg(rows, comparison_svg)
+    write_model_leakage_markdown(rows, model_md)
+    write_model_leakage_svg(rows, model_svg)
+    print(f"\nSaved contamination comparison to {comparison_md}")
+    print(f"Saved contamination comparison data to {comparison_tsv}")
+    print(f"Saved contamination comparison chart to {comparison_svg}")
+    print(f"Saved model-level contamination comparison to {model_md}")
+    print(f"Saved model-level contamination chart to {model_svg}")
 
 
 if __name__ == "__main__":
