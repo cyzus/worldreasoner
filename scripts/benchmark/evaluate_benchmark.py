@@ -32,6 +32,13 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 ALL_CONDITIONS = [c.value for c in ConditionName]
 
 
+def read_include_ids(path: str | None) -> set[str] | None:
+    if not path:
+        return None
+    p = Path(path)
+    return {line.strip() for line in p.read_text(encoding="utf-8").splitlines() if line.strip()}
+
+
 def score_forecast(f: Forecast, q: Question):
     """Return (is_correct, brier_score, log_score) for a forecast."""
     pred = f.prediction
@@ -887,16 +894,29 @@ def main():
     parser = argparse.ArgumentParser(description="Evaluate benchmark forecasts")
     parser.add_argument("--db", default=DB_PATH, help="Database path")
     parser.add_argument(
+        "--include-ids",
+        default=None,
+        help="Optional file with one question ID per line; only these questions are evaluated.",
+    )
+    parser.add_argument(
         "--condition", nargs="*", default=None,
         metavar="CONDITION",
         help=f"Condition(s) to evaluate (default: all with data). Choices: {ALL_CONDITIONS}",
     )
     args = parser.parse_args()
+    include_ids = read_include_ids(args.include_ids)
 
     db = GenericDatabase(args.db)
     all_forecasts = db.get_many(Forecast, filters={})
+    if include_ids is not None:
+        before = len(all_forecasts)
+        all_forecasts = [f for f in all_forecasts if f.question_id in include_ids]
+        print(f"Filtered forecasts by include IDs: {before} -> {len(all_forecasts)}")
     all_questions = db.get_many(Question, filters={})
-    q_map = {q.id: q for q in all_questions}
+    q_map = {
+        q.id: q for q in all_questions
+        if include_ids is None or q.id in include_ids
+    }
 
     # Determine which conditions to evaluate
     if args.condition:

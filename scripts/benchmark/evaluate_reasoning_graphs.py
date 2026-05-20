@@ -17,6 +17,7 @@ import datetime as dt
 import json
 import math
 import re
+import shutil
 import sqlite3
 import sys
 from collections import Counter, defaultdict
@@ -29,6 +30,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from src.core.llm import get_knowledge_cutoff_date
 from src.domain.evaluation.metrics import (
     calculate_accuracy,
     calculate_brier_score,
@@ -38,6 +40,7 @@ from src.domain.evaluation.metrics import (
 
 DEFAULT_DB = "combined.db"
 DEFAULT_OUTPUT_DIR = Path("experiments/evaluation")
+DEFAULT_PRICE_CACHE = Path("scripts/annotation_ui/price_cache.json")
 
 POSITIVE_RELATIONS = {"causes", "enables", "triggers", "amplifies", "positive"}
 NEGATIVE_RELATIONS = {"prevents", "inhibits", "negative"}
@@ -70,12 +73,28 @@ class ForecastRecord:
     condition: str
     model: str
     timestamp: str
+    simulated_date: dt.datetime | None
     prediction: Any
     confidence: float
     is_correct: bool | None
     brier_score: float | None
     log_score: float | None
     articles_accessed: tuple[str, ...]
+    estimated_start_time: dt.datetime | None
+
+
+@dataclass(frozen=True)
+class QuestionInfo:
+    id: str
+    source: str
+    question_type: str
+    options: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ImpactScores:
+    key_scores: dict[str, float]
+    primary_signed_scores: dict[str, float]
 
 
 def load_json(value: Any, default: Any = None) -> Any:
@@ -173,6 +192,19 @@ def event_text(e: EventNode) -> str:
     return f"{e.title}. {e.description}"
 
 
+def events_available_by(
+    events: list[EventNode],
+    simulated_date: dt.datetime | None,
+) -> list[EventNode]:
+    """Return reference events that could have occurred by the simulated date."""
+    if simulated_date is None:
+        return []
+    return [
+        event for event in events
+        if event.occurred_date is not None and event.occurred_date <= simulated_date
+    ]
+
+
 def relation_polarity(relation: str | None) -> str | None:
     if relation is None:
         return None
@@ -182,6 +214,17 @@ def relation_polarity(relation: str | None) -> str | None:
     if relation in NEGATIVE_RELATIONS:
         return "negative"
     return None
+
+
+def impact_sign(direction: str | None) -> int:
+    if direction is None:
+        return 0
+    direction = direction.lower().replace("impactdirection.", "")
+    if direction == "positive":
+        return 1
+    if direction == "negative":
+        return -1
+    return 0
 
 
 def date_error_days(a: dt.datetime | None, b: dt.datetime | None) -> float | None:
@@ -199,13 +242,22 @@ def read_ids(path: str | None) -> set[str] | None:
     return {line.strip() for line in p.read_text(encoding="utf-8").splitlines() if line.strip()}
 
 
+def load_price_cache(path: str | None) -> dict[str, Any]:
+    if not path:
+        return {}
+    p = Path(path)
+    if not p.exists():
+        return {}
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
 def latest_forecasts(conn: sqlite3.Connection, include_ids: set[str] | None) -> list[ForecastRecord]:
     rows = conn.execute(
         """
         select f.id, f.question_id, f.model_name, f.timestamp, f.prediction,
                f.confidence, f.is_correct, f.brier_score, f.log_score,
-               f.articles_accessed, f.evaluation_metadata,
-               q.ground_truth, q.question_type, q.options
+               f.articles_accessed, f.evaluation_metadata, f.simulated_date,
+               q.ground_truth, q.question_type, q.options, q.estimated_start_time
         from forecasts f
         join questions q on q.id=f.question_id
         where f.evaluation_metadata is not null
@@ -254,15 +306,45 @@ def latest_forecasts(conn: sqlite3.Connection, include_ids: set[str] | None) -> 
             condition=condition,
             model=model,
             timestamp=ts,
+            simulated_date=parse_date(row["simulated_date"]),
             prediction=load_json(row["prediction"], row["prediction"]),
             confidence=row["confidence"],
             is_correct=accuracy == 1.0,
             brier_score=brier_score,
             log_score=log_score,
             articles_accessed=tuple(load_json(row["articles_accessed"], []) or []),
+            estimated_start_time=parse_date(row["estimated_start_time"]),
         )
         latest_ts[key] = ts
     return list(latest.values())
+
+
+def is_knowledge_leakage_pair(forecast: ForecastRecord) -> bool:
+    cutoff_str = get_knowledge_cutoff_date(forecast.model)
+    if not cutoff_str or cutoff_str == "Unknown" or forecast.estimated_start_time is None:
+        return False
+    cutoff_dt = parse_date(cutoff_str)
+    if cutoff_dt is None:
+        return False
+    return forecast.estimated_start_time < cutoff_dt
+
+
+def load_question_info(conn: sqlite3.Connection, include_ids: set[str] | None) -> dict[str, QuestionInfo]:
+    rows = conn.execute(
+        "select id, source, question_type, options from questions"
+    ).fetchall()
+    info: dict[str, QuestionInfo] = {}
+    for row in rows:
+        qid = row["id"]
+        if include_ids is not None and qid not in include_ids:
+            continue
+        info[qid] = QuestionInfo(
+            id=qid,
+            source=row["source"] or "",
+            question_type=row["question_type"] or "",
+            options=tuple(load_json(row["options"], []) or []),
+        )
+    return info
 
 
 def load_hindsight_events(conn: sqlite3.Connection, include_ids: set[str] | None) -> dict[str, list[EventNode]]:
@@ -291,6 +373,76 @@ def load_hindsight_events(conn: sqlite3.Connection, include_ids: set[str] | None
             )
         )
     return by_qid
+
+
+def load_primary_outcome_ids(
+    conn: sqlite3.Connection,
+    question_info: dict[str, QuestionInfo],
+) -> dict[str, str]:
+    rows = conn.execute(
+        """
+        select id, extracted_for_question_id, outcome_scenario, outcome_option_index
+        from events
+        where is_outcome=1 and extracted_for_question_id is not null
+        """
+    ).fetchall()
+    by_qid: dict[str, str] = {}
+    fallback: dict[str, str] = {}
+    for row in rows:
+        qid = row["extracted_for_question_id"]
+        if qid not in question_info:
+            continue
+        fallback.setdefault(qid, row["id"])
+        if row["outcome_option_index"] == 0:
+            by_qid[qid] = row["id"]
+            continue
+        scenario = (row["outcome_scenario"] or "").strip().lower()
+        options = [opt.strip().lower() for opt in question_info[qid].options]
+        if options and scenario == options[0]:
+            by_qid.setdefault(qid, row["id"])
+        elif scenario in {"yes", "true"}:
+            by_qid.setdefault(qid, row["id"])
+    return fallback | by_qid
+
+
+def load_impact_scores(
+    conn: sqlite3.Connection,
+    primary_outcome_ids: dict[str, str],
+    include_ids: set[str] | None,
+) -> dict[str, ImpactScores]:
+    rows = conn.execute(
+        """
+        select event_id, outcome_event_id, question_id, impact_direction,
+               impact_magnitude, confidence
+        from event_outcome_impacts
+        """
+    ).fetchall()
+    key_scores: dict[str, dict[str, float]] = defaultdict(dict)
+    primary_scores: dict[str, dict[str, float]] = defaultdict(dict)
+    for row in rows:
+        qid = row["question_id"]
+        if include_ids is not None and qid not in include_ids:
+            continue
+        sign = impact_sign(row["impact_direction"])
+        magnitude = float(row["impact_magnitude"] or 0.0)
+        confidence = float(row["confidence"] or 0.0)
+        score = magnitude * confidence
+        event_id = row["event_id"]
+        key_scores[qid][event_id] = max(key_scores[qid].get(event_id, 0.0), score)
+        if sign and row["outcome_event_id"] == primary_outcome_ids.get(qid):
+            signed_score = sign * score
+            prev = primary_scores[qid].get(event_id)
+            if prev is None or abs(signed_score) > abs(prev):
+                primary_scores[qid][event_id] = signed_score
+
+    qids = set(key_scores) | set(primary_scores)
+    return {
+        qid: ImpactScores(
+            key_scores=key_scores.get(qid, {}),
+            primary_signed_scores=primary_scores.get(qid, {}),
+        )
+        for qid in qids
+    }
 
 
 def load_forecast_events(conn: sqlite3.Connection) -> dict[str, list[EventNode]]:
@@ -435,6 +587,139 @@ def question_source_metrics(
     }
 
 
+def price_delta_around_event(
+    price_data: dict[str, Any],
+    event_date: dt.datetime | None,
+    window_days: float,
+) -> float | None:
+    if event_date is None:
+        return None
+    history = price_data.get("history") if price_data else None
+    if not history:
+        return None
+    event_ts = event_date.timestamp()
+    window_seconds = window_days * 86400.0
+    before = [
+        point for point in history
+        if 0 <= event_ts - float(point.get("t", 0)) <= window_seconds
+    ]
+    after = [
+        point for point in history
+        if 0 <= float(point.get("t", 0)) - event_ts <= window_seconds
+    ]
+    if not before or not after:
+        return None
+    before_point = max(before, key=lambda point: float(point.get("t", 0)))
+    after_point = min(after, key=lambda point: float(point.get("t", 0)))
+    return float(after_point.get("p", 0.0)) - float(before_point.get("p", 0.0))
+
+
+def market_event_metrics(
+    hindsight_events: list[EventNode],
+    forecast_events: list[EventNode],
+    matched_h: set[int],
+    impact_scores: ImpactScores | None,
+    price_data: dict[str, Any],
+    question_info: QuestionInfo | None,
+    window_days: float,
+    min_price_delta: float,
+) -> dict[str, Any]:
+    if question_info is None or question_info.source != "polymarket":
+        return {
+            "market_signal_events": None,
+            "market_signal_matched_events": None,
+            "market_signal_recall": None,
+            "hindsight_market_direction_alignment": None,
+            "market_direction_checks": 0,
+        }
+    if not forecast_events:
+        return {
+            "market_signal_events": None,
+            "market_signal_matched_events": None,
+            "market_signal_recall": None,
+            "hindsight_market_direction_alignment": None,
+            "market_direction_checks": 0,
+        }
+    if not price_data or not impact_scores:
+        return {
+            "market_signal_events": 0,
+            "market_signal_matched_events": 0,
+            "market_signal_recall": None,
+            "hindsight_market_direction_alignment": None,
+            "market_direction_checks": 0,
+        }
+
+    signal_indices: set[int] = set()
+    direction_checks: list[bool] = []
+    for idx, event in enumerate(hindsight_events):
+        if event.is_outcome:
+            continue
+        signed_impact = impact_scores.primary_signed_scores.get(event.id)
+        if signed_impact is None or signed_impact == 0:
+            continue
+        delta = price_delta_around_event(price_data, event.occurred_date, window_days)
+        if delta is None or abs(delta) < min_price_delta:
+            continue
+        aligned = (signed_impact > 0 and delta > 0) or (signed_impact < 0 and delta < 0)
+        direction_checks.append(aligned)
+        if aligned:
+            signal_indices.add(idx)
+
+    matched_signals = len(signal_indices & matched_h)
+    signal_recall = matched_signals / len(signal_indices) if signal_indices else None
+    return {
+        "market_signal_events": len(signal_indices),
+        "market_signal_matched_events": matched_signals,
+        "market_signal_recall": signal_recall,
+        "hindsight_market_direction_alignment": mean(direction_checks) if direction_checks else None,
+        "market_direction_checks": len(direction_checks),
+    }
+
+
+def key_event_metrics(
+    hindsight_events: list[EventNode],
+    forecast_events: list[EventNode],
+    matched_h: set[int],
+    matched_f: set[int],
+    impact_scores: ImpactScores | None,
+    key_event_top_k: int,
+    key_event_min_score: float,
+) -> dict[str, Any]:
+    if not forecast_events:
+        return {
+            "key_events": None,
+            "matched_key_events": None,
+            "key_event_recall": None,
+            "key_event_precision": None,
+        }
+    if not impact_scores:
+        return {
+            "key_events": 0,
+            "matched_key_events": 0,
+            "key_event_recall": None,
+            "key_event_precision": None,
+        }
+
+    ranked: list[tuple[float, int]] = []
+    for idx, event in enumerate(hindsight_events):
+        if event.is_outcome:
+            continue
+        score = impact_scores.key_scores.get(event.id, 0.0)
+        if score >= key_event_min_score:
+            ranked.append((score, idx))
+    ranked.sort(reverse=True)
+    key_indices = {idx for _, idx in ranked[:key_event_top_k]}
+    matched_keys = len(key_indices & matched_h)
+    key_recall = matched_keys / len(key_indices) if key_indices else None
+    key_precision = matched_keys / len(forecast_events) if forecast_events else None
+    return {
+        "key_events": len(key_indices),
+        "matched_key_events": matched_keys,
+        "key_event_recall": key_recall,
+        "key_event_precision": key_precision,
+    }
+
+
 def greedy_event_matches(
     hindsight: list[EventNode],
     forecast: list[EventNode],
@@ -553,9 +838,16 @@ def score_forecast(
     hindsight_edges: list[Edge],
     forecast_edges: list[Edge],
     question_source_articles: set[str],
+    question_info: QuestionInfo | None,
+    impact_scores: ImpactScores | None,
+    price_data: dict[str, Any],
     threshold: float,
     match_method: str,
     top_k: int,
+    key_event_top_k: int,
+    key_event_min_score: float,
+    market_window_days: float,
+    market_min_price_delta: float,
 ) -> dict[str, Any]:
     hindsight_events = [event for event in hindsight_events_all if not event.is_outcome]
     matches = greedy_event_matches(
@@ -574,6 +866,46 @@ def score_forecast(
         event_f1 = 2 * event_recall * event_precision / (event_recall + event_precision)
     else:
         event_f1 = None
+
+    accessible_hindsight_events_all = events_available_by(
+        hindsight_events_all,
+        forecast.simulated_date,
+    )
+    accessible_hindsight_events = [
+        event for event in accessible_hindsight_events_all if not event.is_outcome
+    ]
+    accessible_matches = greedy_event_matches(
+        accessible_hindsight_events_all,
+        forecast_events,
+        threshold,
+        method=match_method,
+        top_k=top_k,
+    )
+    accessible_matched_h = {hi for hi, _, _ in accessible_matches}
+    accessible_matched_f = {fi for _, fi, _ in accessible_matches}
+    accessible_event_recall = (
+        len(accessible_matched_h) / len(accessible_hindsight_events)
+        if accessible_hindsight_events
+        else None
+    )
+    accessible_event_precision = (
+        len(accessible_matched_f) / len(forecast_events)
+        if forecast_events
+        else None
+    )
+    if (
+        accessible_event_recall is not None
+        and accessible_event_precision is not None
+        and accessible_event_recall + accessible_event_precision
+    ):
+        accessible_event_f1 = (
+            2
+            * accessible_event_recall
+            * accessible_event_precision
+            / (accessible_event_recall + accessible_event_precision)
+        )
+    else:
+        accessible_event_f1 = None
 
     date_errors = [
         date_error_days(hindsight_events_all[hi].occurred_date, forecast_events[fi].occurred_date)
@@ -595,6 +927,25 @@ def score_forecast(
         forecast_events=forecast_events,
         matches=matches,
     )
+    key_events = key_event_metrics(
+        hindsight_events=hindsight_events_all,
+        forecast_events=forecast_events,
+        matched_h=matched_h,
+        matched_f=matched_f,
+        impact_scores=impact_scores,
+        key_event_top_k=key_event_top_k,
+        key_event_min_score=key_event_min_score,
+    )
+    market_events = market_event_metrics(
+        hindsight_events=hindsight_events_all,
+        forecast_events=forecast_events,
+        matched_h=matched_h,
+        impact_scores=impact_scores,
+        price_data=price_data,
+        question_info=question_info,
+        window_days=market_window_days,
+        min_price_delta=market_min_price_delta,
+    )
 
     forecast_node_ids = {event.id for event in forecast_events}
     matched_pairs = [
@@ -615,11 +966,16 @@ def score_forecast(
         "brier_score": forecast.brier_score,
         "log_score": forecast.log_score,
         "hindsight_events": len(hindsight_events),
+        "accessible_hindsight_events": len(accessible_hindsight_events),
         "forecast_events": len(forecast_events),
         "matched_events": len(matches),
+        "accessible_matched_events": len(accessible_matches),
         "event_recall": event_recall,
         "event_precision": event_precision,
         "event_f1": event_f1,
+        "accessible_event_recall": accessible_event_recall,
+        "accessible_event_precision": accessible_event_precision,
+        "accessible_event_f1": accessible_event_f1,
         "mean_match_similarity": mean([m[2] for m in matches]) if matches else None,
         "temporal_mae_days": mean(date_errors) if date_errors else None,
         "event_pair_source_overlap_rate": mean(source_hits) if source_hits else None,
@@ -627,6 +983,8 @@ def score_forecast(
         "has_forecast_graph": bool(forecast_events and forecast_edges),
         "matched_pairs": matched_pairs,
         **question_source_metrics(forecast.articles_accessed, question_source_articles),
+        **key_events,
+        **market_events,
         **edges,
     }
 
@@ -645,15 +1003,23 @@ def aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "event_recall": avg("event_recall"),
         "event_precision": avg("event_precision"),
         "event_f1": avg("event_f1"),
+        "accessible_event_recall": avg("accessible_event_recall"),
+        "accessible_event_precision": avg("accessible_event_precision"),
+        "accessible_event_f1": avg("accessible_event_f1"),
         "mean_match_similarity": avg("mean_match_similarity"),
         "temporal_mae_days": avg("temporal_mae_days"),
         "exact_source_recall": avg("exact_source_recall"),
         "exact_source_precision": avg("exact_source_precision"),
         "event_pair_source_overlap_rate": avg("event_pair_source_overlap_rate"),
+        "key_event_recall": avg("key_event_recall"),
+        "key_event_precision": avg("key_event_precision"),
+        "market_signal_recall": avg("market_signal_recall"),
+        "hindsight_market_direction_alignment": avg("hindsight_market_direction_alignment"),
         "edge_recall": avg("edge_recall"),
         "edge_precision": avg("edge_precision"),
         "direction_accuracy": avg("direction_accuracy"),
         "forecast_max_depth": avg("forecast_max_depth"),
+        "market_direction_checks": sum(row.get("market_direction_checks") or 0 for row in rows),
     }
 
 
@@ -667,11 +1033,16 @@ def write_tsv(rows: list[dict[str, Any]], path: Path) -> None:
         "brier_score",
         "log_score",
         "hindsight_events",
+        "accessible_hindsight_events",
         "forecast_events",
         "matched_events",
+        "accessible_matched_events",
         "event_recall",
         "event_precision",
         "event_f1",
+        "accessible_event_recall",
+        "accessible_event_precision",
+        "accessible_event_f1",
         "mean_match_similarity",
         "temporal_mae_days",
         "forecast_articles_accessed",
@@ -680,6 +1051,15 @@ def write_tsv(rows: list[dict[str, Any]], path: Path) -> None:
         "exact_source_recall",
         "exact_source_precision",
         "event_pair_source_overlap_rate",
+        "key_events",
+        "matched_key_events",
+        "key_event_recall",
+        "key_event_precision",
+        "market_signal_events",
+        "market_signal_matched_events",
+        "market_signal_recall",
+        "hindsight_market_direction_alignment",
+        "market_direction_checks",
         "hindsight_edges",
         "forecast_edges",
         "aligned_edges",
@@ -702,10 +1082,33 @@ def write_markdown(summary: dict[str, Any], path: Path) -> None:
     def num(value: float | None) -> str:
         return f"{value:.3f}" if value is not None else "--"
 
+    def model_label(model: str) -> str:
+        return model
+
+    def add_metric_row(lines: list[str], label: str, value: Any, kind: str = "pct") -> None:
+        if kind == "raw":
+            rendered = str(value) if value is not None else "--"
+        elif kind == "num":
+            rendered = num(value)
+        else:
+            rendered = pct(value)
+        lines.append(f"| {label} | {rendered} |")
+
     lines = [
         "# Forecast Reasoning Graph Evaluation",
         "",
         f"Generated: {summary['generated_at']}",
+        "",
+        "## Run Settings",
+        "",
+        "| Setting | Value |",
+        "|---|---|",
+        f"| DB | `{summary['db']}` |",
+        f"| Include IDs | `{summary['include_ids']}` |",
+        f"| Match method | `{summary['match_method']}` |",
+        f"| Match threshold | {summary['match_threshold']} |",
+        f"| Knowledge leakage filter | {'enabled' if summary['filter_knowledge_leakage'] else 'disabled'} |",
+        f"| Leakage-excluded rows | {summary['knowledge_leakage_excluded']} |",
         "",
         "## Overall",
         "",
@@ -713,45 +1116,91 @@ def write_markdown(summary: dict[str, Any], path: Path) -> None:
         "|---|---:|",
     ]
     overall = summary["overall"]
-    for key in [
-        "n",
-        "n_with_graph",
-        "accuracy",
-        "event_recall",
-        "event_precision",
-        "event_f1",
-        "edge_recall",
-        "edge_precision",
-        "direction_accuracy",
-        "temporal_mae_days",
-        "exact_source_precision",
-        "forecast_max_depth",
-    ]:
-        value = overall.get(key)
-        rendered = pct(value) if key not in {"n", "n_with_graph", "temporal_mae_days", "forecast_max_depth"} else num(value)
-        if key in {"n", "n_with_graph"}:
-            rendered = str(value)
-        lines.append(f"| {key} | {rendered} |")
+    add_metric_row(lines, "Forecast rows", overall.get("n"), "raw")
+    add_metric_row(lines, "Rows with graph artifacts", overall.get("n_with_graph"), "raw")
+    add_metric_row(lines, "Accuracy", overall.get("accuracy"))
+    add_metric_row(lines, "Event recall", overall.get("event_recall"))
+    add_metric_row(lines, "Event precision", overall.get("event_precision"))
+    add_metric_row(lines, "Event F1", overall.get("event_f1"))
+    add_metric_row(lines, "Accessible event recall", overall.get("accessible_event_recall"))
+    add_metric_row(lines, "Accessible event precision", overall.get("accessible_event_precision"))
+    add_metric_row(lines, "Accessible event F1", overall.get("accessible_event_f1"))
+    add_metric_row(lines, "Key-event recall", overall.get("key_event_recall"))
+    add_metric_row(lines, "Market-signal recall", overall.get("market_signal_recall"))
+    add_metric_row(lines, "Market-direction alignment", overall.get("hindsight_market_direction_alignment"))
+    add_metric_row(lines, "Source precision", overall.get("exact_source_precision"))
+    add_metric_row(lines, "Temporal MAE days", overall.get("temporal_mae_days"), "num")
+    add_metric_row(lines, "Edge recall", overall.get("edge_recall"))
+    add_metric_row(lines, "Edge precision", overall.get("edge_precision"))
+    add_metric_row(lines, "Direction accuracy", overall.get("direction_accuracy"))
 
     lines += [
         "",
         "Exact source recall is omitted from the main table because it is a strict coverage diagnostic over the full hindsight evidence corpus. Source quality is reported primarily as precision: among the sources the agent chose to access, how many exactly match question/hindsight provenance.",
         "",
+        "Event F1 compares forecast events against the full post-resolution hindsight graph. Accessible Event F1 repeats the same matching after filtering hindsight events to those whose occurred date is on or before the forecast's simulated date.",
+        "",
+        "Key events are the highest-scoring hindsight events by impact magnitude times confidence. Market-signal recall is computed only for Polymarket questions with cached price history and primary-outcome impact links.",
+        "",
+        "A trailing `*` after `n` marks model-condition cells with fewer than 100 forecast rows.",
+        "",
+        "## By Condition",
+        "",
+        "| Condition | n | Graph n | Event F1 | Accessible F1 | Key-event Recall | Market-signal Recall | Source Precision | Temporal MAE | Accuracy |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for condition, stats in sorted(summary["by_condition"].items()):
+        low_n = " *" if stats["n"] < 100 else ""
+        lines.append(
+            f"| {condition} | {stats['n']}{low_n} | {stats['n_with_graph']} | "
+            f"{pct(stats['event_f1'])} | {pct(stats['accessible_event_f1'])} | "
+            f"{pct(stats['key_event_recall'])} | "
+            f"{pct(stats['market_signal_recall'])} | {pct(stats['exact_source_precision'])} | "
+            f"{num(stats['temporal_mae_days'])} | {pct(stats['accuracy'])} |"
+        )
+
+    lines += [
         "",
         "## By Condition and Model",
         "",
-        "| Condition | Model | n | Event F1 | Event Recall | Event Precision | Exact Source Precision | Accuracy |",
-        "|---|---|---:|---:|---:|---:|---:|---:|",
+        "### Full Table",
+        "",
+        "| Condition | Model | n | Graph n | Event F1 | Accessible F1 | Key-event Recall | Market-signal Recall | Source Precision | Temporal MAE | Accuracy |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for _, stats in sorted(summary["by_condition_model"].items()):
         condition = stats["condition"]
-        short_model = stats["model"].split("/")[-1]
+        model = stats["model"]
+        low_n = " *" if stats["n"] < 100 else ""
         lines.append(
-            f"| {condition} | {short_model} | {stats['n']} | "
-            f"{pct(stats['event_f1'])} | {pct(stats['event_recall'])} | "
-            f"{pct(stats['event_precision'])} | {pct(stats['exact_source_precision'])} | "
-            f"{pct(stats['accuracy'])} |"
+            f"| {condition} | {model} | {stats['n']}{low_n} | {stats['n_with_graph']} | "
+            f"{pct(stats['event_f1'])} | {pct(stats['accessible_event_f1'])} | "
+            f"{pct(stats['key_event_recall'])} | "
+            f"{pct(stats['market_signal_recall'])} | {pct(stats['exact_source_precision'])} | "
+            f"{num(stats['temporal_mae_days'])} | {pct(stats['accuracy'])} |"
         )
+
+    lines += ["", "### Split by Condition", ""]
+    by_condition_models: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for stats in summary["by_condition_model"].values():
+        by_condition_models[stats["condition"]].append(stats)
+    for condition, rows in sorted(by_condition_models.items()):
+        lines += [
+            f"#### {condition}",
+            "",
+            "| Model | n | Graph n | Event F1 | Accessible F1 | Key-event Recall | Market-signal Recall | Source Precision | Temporal MAE | Accuracy |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+        for stats in sorted(rows, key=lambda item: (-1 if item.get("event_f1") is None else item["event_f1"]), reverse=True):
+            low_n = " *" if stats["n"] < 100 else ""
+            lines.append(
+                f"| {stats['model']} | {stats['n']}{low_n} | {stats['n_with_graph']} | "
+                f"{pct(stats['event_f1'])} | {pct(stats['accessible_event_f1'])} | "
+                f"{pct(stats['key_event_recall'])} | "
+                f"{pct(stats['market_signal_recall'])} | {pct(stats['exact_source_precision'])} | "
+                f"{num(stats['temporal_mae_days'])} | {pct(stats['accuracy'])} |"
+            )
+        lines.append("")
 
     path.write_text("\n".join(lines), encoding="utf-8")
 
@@ -769,10 +1218,32 @@ def main() -> None:
         help="Event matching method. Hybrid uses BM25 candidates plus lexical overlap.",
     )
     parser.add_argument("--top-k", type=int, default=5, help="BM25 candidate count per hindsight event")
+    parser.add_argument("--key-event-top-k", type=int, default=5)
+    parser.add_argument("--key-event-min-score", type=float, default=0.20)
+    parser.add_argument("--price-cache", default=str(DEFAULT_PRICE_CACHE))
+    parser.add_argument("--market-window-days", type=float, default=3.0)
+    parser.add_argument(
+        "--market-min-price-delta",
+        type=float,
+        default=0.03,
+        help="Minimum local market move, in probability points, for market-signal checks.",
+    )
+    parser.add_argument(
+        "--filter-knowledge-leakage",
+        action="store_true",
+        help="Exclude model-question pairs where question start predates the model knowledge cutoff.",
+    )
     parser.add_argument("--condition", nargs="*", default=None)
+    parser.add_argument(
+        "--model",
+        nargs="*",
+        default=None,
+        help="Optional model whitelist. Use full model names as stored in forecast metadata.",
+    )
     args = parser.parse_args()
 
     include_ids = read_ids(args.include_ids)
+    price_cache = load_price_cache(args.price_cache)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -783,12 +1254,22 @@ def main() -> None:
         if args.condition:
             allowed = set(args.condition)
             forecasts = [f for f in forecasts if f.condition in allowed]
+        if args.model:
+            allowed_models = set(args.model)
+            forecasts = [f for f in forecasts if f.model in allowed_models]
+        before_leakage_filter = len(forecasts)
+        if args.filter_knowledge_leakage:
+            forecasts = [f for f in forecasts if not is_knowledge_leakage_pair(f)]
+        knowledge_leakage_excluded = before_leakage_filter - len(forecasts)
 
         hindsight_events = load_hindsight_events(conn, include_ids)
         forecast_events = load_forecast_events(conn)
         hindsight_edges = load_hindsight_edges(conn, hindsight_events)
         forecast_edges = load_forecast_edges(conn)
         question_source_articles = load_question_source_articles(conn, include_ids)
+        question_info = load_question_info(conn, include_ids)
+        primary_outcome_ids = load_primary_outcome_ids(conn, question_info)
+        impact_scores = load_impact_scores(conn, primary_outcome_ids, include_ids)
     finally:
         conn.close()
 
@@ -801,14 +1282,25 @@ def main() -> None:
             hindsight_edges=hindsight_edges.get(forecast.question_id, []),
             forecast_edges=forecast_edges.get(forecast.id, []),
             question_source_articles=question_source_articles.get(forecast.question_id, set()),
+            question_info=question_info.get(forecast.question_id),
+            impact_scores=impact_scores.get(forecast.question_id),
+            price_data=price_cache.get(forecast.question_id, {}),
             threshold=args.match_threshold,
             match_method=args.match_method,
             top_k=args.top_k,
+            key_event_top_k=args.key_event_top_k,
+            key_event_min_score=args.key_event_min_score,
+            market_window_days=args.market_window_days,
+            market_min_price_delta=args.market_min_price_delta,
         )
         rows.append(row)
 
     timestamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d_%H%M%S")
-    stem = f"reasoning_graph_eval_{timestamp}"
+    stem = (
+        f"reasoning_graph_eval_filtered_{timestamp}"
+        if args.filter_knowledge_leakage
+        else f"reasoning_graph_eval_{timestamp}"
+    )
 
     summary: dict[str, Any] = {
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -817,12 +1309,30 @@ def main() -> None:
         "match_threshold": args.match_threshold,
         "match_method": args.match_method,
         "top_k": args.top_k,
+        "key_event_top_k": args.key_event_top_k,
+        "key_event_min_score": args.key_event_min_score,
+        "price_cache": args.price_cache,
+        "market_window_days": args.market_window_days,
+        "market_min_price_delta": args.market_min_price_delta,
+        "models": args.model,
+        "filter_knowledge_leakage": args.filter_knowledge_leakage,
+        "knowledge_leakage_excluded": knowledge_leakage_excluded,
         "overall": aggregate(rows),
+        "by_condition": {},
         "by_condition_model": {},
     }
     grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    grouped_by_condition: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
         grouped[(row["condition"], row["model"])].append(row)
+        grouped_by_condition[row["condition"]].append(row)
+    summary["by_condition"] = {
+        condition: {
+            "condition": condition,
+            **aggregate(value),
+        }
+        for condition, value in grouped_by_condition.items()
+    }
     summary["by_condition_model"] = {
         f"{condition}::{model}": {
             "condition": condition,
@@ -833,12 +1343,23 @@ def main() -> None:
     }
 
     json_path = output_dir / f"{stem}.json"
+    tsv_path = output_dir / f"{stem}.tsv"
+    md_path = output_dir / f"{stem}.md"
     json_path.write_text(json.dumps(summary | {"rows": rows}, indent=2, ensure_ascii=False), encoding="utf-8")
-    write_tsv(rows, output_dir / f"{stem}.tsv")
-    write_markdown(summary, output_dir / f"{stem}.md")
+    write_tsv(rows, tsv_path)
+    write_markdown(summary, md_path)
+    latest_stem = (
+        "reasoning_graph_eval_filtered_latest"
+        if args.filter_knowledge_leakage
+        else "reasoning_graph_eval_latest"
+    )
+    shutil.copyfile(json_path, output_dir / f"{latest_stem}.json")
+    shutil.copyfile(tsv_path, output_dir / f"{latest_stem}.tsv")
+    shutil.copyfile(md_path, output_dir / f"{latest_stem}.md")
 
     print(f"rows={len(rows)}")
     print(f"wrote={json_path}")
+    print(f"latest={output_dir / f'{latest_stem}.md'}")
     print(f"overall_event_f1={summary['overall']['event_f1']}")
     print(f"overall_edge_recall={summary['overall']['edge_recall']}")
 
