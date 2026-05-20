@@ -119,10 +119,10 @@ class ForecastAgent(BaseAgent):
                 ]
         # Increase max steps if search tools enabled (they require more reasoning and iterative calls)
         if mode == "container" or mode == "real_time":
-            max_steps = max(max_steps, 25)
+            max_steps = max(max_steps, 30)
         # Increase max steps if causal tools enabled (they need more reasoning)        
         if enable_causal_tools:
-            max_steps = max(max_steps, 25)
+            max_steps = max(max_steps, 30)
 
 
         # Add any additional custom tools
