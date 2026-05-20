@@ -551,6 +551,206 @@ def write_model_leakage_svg(rows: list[dict], path: Path) -> None:
     path.write_text("\n".join(parts), encoding="utf-8")
 
 
+def write_vanilla_leakage_markdown(rows: list[dict], path: Path) -> None:
+    vanilla_rows = [
+        r for r in rows
+        if r["condition"] == "vanilla_llm" and r["model"] != "__overall__"
+    ]
+    vanilla_rows.sort(
+        key=lambda r: (
+            -(r["excluded_n"] / r["all_n"] if r["all_n"] else 0),
+            r["accuracy_delta"] or 0,
+            r["model"],
+        )
+    )
+
+    lines = [
+        "# Vanilla-Only Contamination Diagnostic",
+        "",
+        "This table uses only the `Vanilla LLM` condition, where models have no search or tool access. "
+        "This is the cleanest diagnostic for whether newer training cutoffs may inflate performance through parametric knowledge.",
+        "",
+        "| Model | All n | Filtered n | Excluded | Excluded Share | All Acc | Filtered Acc | Acc Delta | All Brier | Filtered Brier |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in vanilla_rows:
+        excluded_share = row["excluded_n"] / row["all_n"] if row["all_n"] else None
+        lines.append(
+            f"| {row['model']} | {row['all_n']} | {row['filtered_n']} | "
+            f"{row['excluded_n']} | {_pct(excluded_share)} | "
+            f"{_pct(row['all_accuracy'])} | {_pct(row['filtered_accuracy'])} | "
+            f"{_pct(row['accuracy_delta'])} | {_f(row['all_brier'])} | "
+            f"{_f(row['filtered_brier'])} |"
+        )
+
+    lines += [
+        "",
+        "## Interpretation",
+        "",
+        "- Prefer this table over the all-condition contamination table when discussing knowledge leakage.",
+        "- A large negative `Acc Delta` means the model's unfiltered Vanilla score is substantially higher than its leakage-filtered score.",
+        "- Models with unknown or proxy cutoffs should be treated as diagnostic rather than definitive.",
+    ]
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def write_vanilla_leakage_svg(rows: list[dict], path: Path) -> None:
+    vanilla_rows = [
+        r for r in rows
+        if r["condition"] == "vanilla_llm" and r["model"] != "__overall__"
+    ]
+    if not vanilla_rows:
+        return
+    vanilla_rows.sort(key=lambda r: r["all_accuracy"] or 0, reverse=True)
+
+    width = 1100
+    row_h = 52
+    top = 64
+    left = 300
+    chart_w = 560
+    height = top + row_h * len(vanilla_rows) + 70
+
+    def x_for(v):
+        return left + max(0.0, min(1.0, v or 0.0)) * chart_w
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        '<rect width="100%" height="100%" fill="#ffffff"/>',
+        '<text x="24" y="32" font-family="Arial, sans-serif" font-size="20" font-weight="700">Vanilla-only contamination diagnostic</text>',
+        '<text x="24" y="52" font-family="Arial, sans-serif" font-size="12" fill="#555">No search/tools: all vs. knowledge-cutoff-filtered accuracy by model.</text>',
+    ]
+    for tick in [0, 0.25, 0.5, 0.75, 1.0]:
+        x = x_for(tick)
+        parts.append(f'<line x1="{x:.1f}" y1="{top-10}" x2="{x:.1f}" y2="{height-52}" stroke="#dddddd" stroke-width="1"/>')
+        parts.append(f'<text x="{x:.1f}" y="{height-30}" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="#666">{int(tick*100)}%</text>')
+
+    for i, row in enumerate(vanilla_rows):
+        y = top + i * row_h
+        all_x = x_for(row["all_accuracy"])
+        filt_x = x_for(row["filtered_accuracy"])
+        excluded_share = row["excluded_n"] / row["all_n"] if row["all_n"] else 0
+        radius = 4 + 13 * excluded_share
+        parts.append(f'<text x="24" y="{y+25}" font-family="Arial, sans-serif" font-size="12" font-weight="600">{row["model"]}</text>')
+        parts.append(f'<line x1="{all_x:.1f}" y1="{y+18}" x2="{filt_x:.1f}" y2="{y+18}" stroke="#777" stroke-width="1.5"/>')
+        parts.append(f'<circle cx="{all_x:.1f}" cy="{y+18}" r="5" fill="#b7d7ea" stroke="#6f9db5"/>')
+        parts.append(f'<circle cx="{filt_x:.1f}" cy="{y+18}" r="{radius:.1f}" fill="#d9efd2" fill-opacity="0.85" stroke="#7aa66f"/>')
+        parts.append(f'<text x="{max(all_x, filt_x)+18:.1f}" y="{y+22}" font-family="Arial, sans-serif" font-size="11" fill="#333">{_pct(row["all_accuracy"])} -> {_pct(row["filtered_accuracy"])} ({_pct(row["accuracy_delta"])})</text>')
+        parts.append(f'<text x="{width-135}" y="{y+22}" font-family="Arial, sans-serif" font-size="11" fill="#666">excluded {_pct(excluded_share)}</text>')
+
+    legend_y = height - 12
+    parts.append(f'<circle cx="{left}" cy="{legend_y-4}" r="5" fill="#b7d7ea" stroke="#6f9db5"/>')
+    parts.append(f'<text x="{left+14}" y="{legend_y}" font-family="Arial, sans-serif" font-size="12" fill="#444">All</text>')
+    parts.append(f'<circle cx="{left+70}" cy="{legend_y-4}" r="8" fill="#d9efd2" stroke="#7aa66f"/>')
+    parts.append(f'<text x="{left+84}" y="{legend_y}" font-family="Arial, sans-serif" font-size="12" fill="#444">Filtered; larger circle = more excluded pairs</text>')
+    parts.append("</svg>")
+    path.write_text("\n".join(parts), encoding="utf-8")
+
+
+def _latest_condition_rows(outputs: list[dict]) -> list[dict]:
+    rows = []
+    for output in outputs:
+        ov = output["overall"]
+        clean = output.get("clean", {}).get("overall", {})
+        rows.append({
+            "condition": output["condition"],
+            "condition_label": _short_condition(output["condition"]),
+            "all_n": ov.get("total", 0),
+            "all_accuracy": ov.get("accuracy"),
+            "all_brier": ov.get("avg_brier_score"),
+            "all_log_score": ov.get("avg_log_score"),
+            "filtered_n": clean.get("total", 0),
+            "filtered_accuracy": clean.get("accuracy"),
+            "filtered_brier": clean.get("avg_brier_score"),
+            "filtered_log_score": clean.get("avg_log_score"),
+            "excluded_n": max(ov.get("total", 0) - clean.get("total", 0), 0),
+        })
+    return rows
+
+
+def write_latest_summary(outputs: list[dict], rows: list[dict], path: Path) -> None:
+    condition_rows = _latest_condition_rows(outputs)
+    vanilla_rows = [
+        r for r in rows
+        if r["condition"] == "vanilla_llm" and r["model"] != "__overall__"
+    ]
+    vanilla_rows.sort(key=lambda r: r["accuracy_delta"] or 0)
+
+    lines = [
+        "# Latest Evaluation Summary",
+        "",
+        f"Generated: {datetime.now(timezone.utc).isoformat()}",
+        "",
+        "## What To Use",
+        "",
+        "- Main result table: use `All Acc`, `Brier`, and `Log Score` by condition/model from the condition eval files.",
+        "- Knowledge leakage diagnostic: use the Vanilla-only contamination table, not the all-condition aggregate.",
+        "- Filtered numbers are diagnostic; the benchmark's hard access control is still the simulated-date Temporal Gateway.",
+        "",
+        "## Condition-Level Forecast Results",
+        "",
+        "| Condition | All n | All Acc | Brier | Log Score | Filtered n | Filtered Acc | Filtered Brier | Excluded |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in condition_rows:
+        lines.append(
+            f"| {row['condition_label']} | {row['all_n']} | "
+            f"{_pct(row['all_accuracy'])} | {_f(row['all_brier'])} | "
+            f"{_f(row['all_log_score'])} | {row['filtered_n']} | "
+            f"{_pct(row['filtered_accuracy'])} | {_f(row['filtered_brier'])} | "
+            f"{row['excluded_n']} |"
+        )
+
+    lines += [
+        "",
+        "## Vanilla-Only Knowledge Leakage Diagnostic",
+        "",
+        "| Model | All n | Filtered n | Excluded Share | All Acc | Filtered Acc | Acc Delta |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in vanilla_rows:
+        excluded_share = row["excluded_n"] / row["all_n"] if row["all_n"] else None
+        lines.append(
+            f"| {row['model']} | {row['all_n']} | {row['filtered_n']} | "
+            f"{_pct(excluded_share)} | {_pct(row['all_accuracy'])} | "
+            f"{_pct(row['filtered_accuracy'])} | {_pct(row['accuracy_delta'])} |"
+        )
+
+    incomplete = []
+    for output in outputs:
+        for model, stats in output.get("by_model", {}).items():
+            n = stats.get("total", 0)
+            if n < 100:
+                incomplete.append((output["condition"], model, n))
+
+    lines += [
+        "",
+        "## Still Missing Or Needs Caution",
+        "",
+        "- Final reasoning/graph evaluation still needs to be refreshed after the final forecast rows are frozen.",
+        "- Qwen3-235B-A22B-Instruct-2507 uses a conservative release-date proxy cutoff; interpret filtered scores as diagnostic.",
+        "- Qwen3.5 currently has no cutoff entry, so it excludes 0 pairs under the contamination filter.",
+    ]
+    if incomplete:
+        lines += [
+            "- Some model-condition cells have fewer than 100 forecasts and should not be treated as final:",
+            "",
+            "| Condition | Model | n |",
+            "|---|---|---:|",
+        ]
+        for condition, model, n in sorted(incomplete):
+            lines.append(f"| {_short_condition(condition)} | {model} | {n} |")
+
+    lines += [
+        "",
+        "## Generated Files",
+        "",
+        "- `contamination_vanilla_only_<timestamp>.md/svg`: clean leakage diagnostic.",
+        "- `contamination_comparison_<timestamp>.md/tsv/svg`: all-condition diagnostic.",
+        "- `<condition>_eval_<timestamp>.md/json`: condition-level detailed reports.",
+    ]
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
 def write_comparison_svg(rows: list[dict], path: Path) -> None:
     """Write a dependency-free paired bar chart for overall condition accuracy."""
     overall = [r for r in rows if r["model"] == "__overall__"]
@@ -733,16 +933,31 @@ def main():
     comparison_svg = OUTPUT_DIR / f"contamination_comparison_{ts}.svg"
     model_md = OUTPUT_DIR / f"contamination_by_model_{ts}.md"
     model_svg = OUTPUT_DIR / f"contamination_by_model_{ts}.svg"
+    vanilla_md = OUTPUT_DIR / f"contamination_vanilla_only_{ts}.md"
+    vanilla_svg = OUTPUT_DIR / f"contamination_vanilla_only_{ts}.svg"
+    vanilla_latest_md = OUTPUT_DIR / "contamination_vanilla_only_latest.md"
+    vanilla_latest_svg = OUTPUT_DIR / "contamination_vanilla_only_latest.svg"
+    latest_summary = OUTPUT_DIR / "evaluation_summary_latest.md"
     write_comparison_markdown(rows, comparison_md)
     write_comparison_tsv(rows, comparison_tsv)
     write_comparison_svg(rows, comparison_svg)
     write_model_leakage_markdown(rows, model_md)
     write_model_leakage_svg(rows, model_svg)
+    write_vanilla_leakage_markdown(rows, vanilla_md)
+    write_vanilla_leakage_svg(rows, vanilla_svg)
+    write_vanilla_leakage_markdown(rows, vanilla_latest_md)
+    write_vanilla_leakage_svg(rows, vanilla_latest_svg)
+    write_latest_summary(outputs, rows, latest_summary)
     print(f"\nSaved contamination comparison to {comparison_md}")
     print(f"Saved contamination comparison data to {comparison_tsv}")
     print(f"Saved contamination comparison chart to {comparison_svg}")
     print(f"Saved model-level contamination comparison to {model_md}")
     print(f"Saved model-level contamination chart to {model_svg}")
+    print(f"Saved vanilla-only contamination diagnostic to {vanilla_md}")
+    print(f"Saved vanilla-only contamination chart to {vanilla_svg}")
+    print(f"Updated latest vanilla-only diagnostic at {vanilla_latest_md}")
+    print(f"Updated latest vanilla-only chart at {vanilla_latest_svg}")
+    print(f"Saved latest evaluation summary to {latest_summary}")
 
 
 if __name__ == "__main__":
