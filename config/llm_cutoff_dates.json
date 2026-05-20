@@ -88,6 +88,14 @@
       "source": "[Source](https://web.archive.org/web/20250604215405/https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models?tabs=python-secure%2Cglobal-standard%2Cstandard-chat-completions#gpt-35-turbo-model-availability)",
       "company": "OpenAI"
     },
+    "gpt-4o-2024-11-20": {
+      "model_name": "GPT-4o (2024-11-20)",
+      "provider": "OpenAI",
+      "cutoff_date": "2023-10-01",
+      "cutoff_date_raw": "2023.10",
+      "source": "[Source](https://platform.openai.com/docs/models/gpt-4o)",
+      "company": "OpenAI"
+    },
     "gpt-4o-mini-2024-07-18": {
       "model_name": "GPT-4o mini (2024-07-18)",
       "provider": "OpenAI",
@@ -654,6 +662,14 @@
       "cutoff_date": null,
       "cutoff_date_raw": "Unknown; model-family cutoff not disclosed",
       "source": "[Qwen3-235B-A22B-Instruct-2507 model card](https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507)",
+      "company": "Qwen"
+    },
+    "qwen3.5": {
+      "model_name": "Qwen3.5",
+      "provider": "Qwen",
+      "cutoff_date": null,
+      "cutoff_date_raw": "Unknown; official training cutoff not disclosed. Release date 2026-02-16 but using it as a proxy would exclude ~88% of benchmark pairs, making results incomparable. Treated as unfiltered.",
+      "source": "[Hugging Face model page](https://huggingface.co/Qwen/Qwen3.5-397B-A17B)",
       "company": "Qwen"
     },
     "deepseek-llm-7b67b-chat": {
