@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react'
 import QuestionList from './QuestionList'
 import PipelineControl from './PipelineControl'
 import { JobSidebar, JobDetails } from './JobManager'
+import SearchIndexStatus from './SearchIndexStatus'
 import { usePipelineJobs } from '../hooks/usePipelineJobs'
 import './PipelinePage.css'
 
-const PipelinePage = ({ questions, onJobComplete }) => {
+const PipelinePage = ({ questions, onJobComplete, databasePath }) => {
   const [selectedQuestions, setSelectedQuestions] = useState([])
 
   // Use shared hook for job management
@@ -32,6 +33,7 @@ const PipelinePage = ({ questions, onJobComplete }) => {
       </div>
 
       <div className="page-content" style={{ display: 'flex', flexDirection: 'column' }}>
+        <SearchIndexStatus databasePath={databasePath} />
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           {/* Left Sidebar: Pipeline Controls + Jobs */}
           <div className="page-sidebar">

@@ -28,9 +28,25 @@ export const useQuestionCollection = ({
         loadJobs
     } = usePipelineJobs(null);
 
-    // Log when preview questions change (for debugging)
-    useEffect(() => {
+    // Only show preview questions if they match the current source tab
+    const filteredPreviewQuestions = useMemo(() => {
+        if (!previewSource) return []
+        if (previewSource === sourceTab) return previewQuestions
+        return []
+    }, [previewQuestions, previewSource, sourceTab])
 
+    // Handle news job completion — merge newly collected questions into preview
+    const handleNewsJobCompletion = useCallback(() => {
+        if (
+            jobDetails &&
+            jobDetails.status === 'completed' &&
+            jobDetails.pipeline_type === 'news_collection' &&
+            sourceTab === 'news'
+        ) {
+            const results = jobDetails.results || {}
+            const questions = results.processed_details || []
+
+            if (questions.length > 0) {
                 const mappedQuestions = questions.map(q => ({
                     id: q.id,
                     question_text: q.text || q.question_text,
@@ -45,17 +61,17 @@ export const useQuestionCollection = ({
                     related_event_ids: q.related_event_ids,
                     estimated_start_time: q.estimated_start_time,
                     metadata: q.metadata || {}
-                }));
+                }))
 
-                const currentQuestions = Array.isArray(previewQuestions) ? previewQuestions : [];
-                const existingIds = new Set(currentQuestions.map(p => p.id));
-                const newUnique = mappedQuestions.filter(q => !existingIds.has(q.id));
+                const currentQuestions = Array.isArray(previewQuestions) ? previewQuestions : []
+                const existingIds = new Set(currentQuestions.map(p => p.id))
+                const newUnique = mappedQuestions.filter(q => !existingIds.has(q.id))
 
                 if (newUnique.length > 0) {
-                    setPreviewQuestions([...currentQuestions, ...newUnique]);
-                    setPreviewSource('news');
-                    selectJob(null);
-                    setSuccess(`✓ Job completed! Added ${newUnique.length} new questions to preview list.`);
+                    setPreviewQuestions([...currentQuestions, ...newUnique])
+                    setPreviewSource('news')
+                    selectJob(null)
+                    setSuccess(`✓ Job completed! Added ${newUnique.length} new questions to preview list.`)
                 }
             }
         }
@@ -66,13 +82,27 @@ export const useQuestionCollection = ({
         handleNewsJobCompletion()
     }, [handleNewsJobCompletion])
 
-
     /**
      * Handle fetching preview questions from the API
      */
     const handleFetchPreview = useCallback(async (config) => {
-                await loadJobs();
-                selectJob(data.job_id);
+        setLoading(true)
+        setError(null)
+        setSuccess(null)
+        setPreviewQuestions([])
+        setPreviewSource(null)
+
+        try {
+            if (sourceTab === 'news') {
+                const data = await startNewsCollectionJob({
+                    question_ids: [],
+                    pipeline_type: 'news_collection',
+                    config: config
+                })
+
+                setSuccess(`Started News Collection Job: ${data.job_id}`)
+                await loadJobs()
+                selectJob(data.job_id)
 
             } else {
                 const requestBody = {
@@ -129,8 +159,8 @@ export const useQuestionCollection = ({
 
                 const savedIds = new Set(selectedQuestions.map(q => q.id))
                 setPreviewQuestions(prevQuestions => {
-                    const current = Array.isArray(prevQuestions) ? prevQuestions : [];
-                    return current.filter(q => !savedIds.has(q.id));
+                    const current = Array.isArray(prevQuestions) ? prevQuestions : []
+                    return current.filter(q => !savedIds.has(q.id))
                 })
 
                 if (onQuestionsAdded) {

@@ -1,6 +1,5 @@
 import React, { Suspense, useCallback, lazy } from 'react'
 import DatabaseDropdown from './components/DatabaseDropdown'
-import SearchIndexStatus from './components/SearchIndexStatus'
 import { useGraphStore } from './stores/graphStore'
 import { useQuestionStore } from './stores/questionStore'
 import { useUIStore } from './stores/uiStore'
@@ -111,13 +110,7 @@ function App() {
         </div>
       </header>
 
-      {/* Search Index Status Banner */}
-      <SearchIndexStatus
-        databasePath={currentDatabasePath}
-        visible={true}
-      />
-
-      <div className="app-content">
+<div className="app-content">
         {/* Top navigation tabs */}
         <div className="top-tabs">
           <button
@@ -205,6 +198,7 @@ function App() {
             <PipelinePage
               questions={questions}
               onJobComplete={handleJobComplete}
+              databasePath={currentDatabasePath}
             />
           ) : null}
         </Suspense>
