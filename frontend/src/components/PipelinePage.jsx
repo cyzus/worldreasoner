@@ -33,11 +33,15 @@ const PipelinePage = ({ questions, onJobComplete, databasePath }) => {
       </div>
 
       <div className="page-content" style={{ display: 'flex', flexDirection: 'column' }}>
-        <SearchIndexStatus databasePath={databasePath} />
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           {/* Left Sidebar: Pipeline Controls + Jobs */}
           <div className="page-sidebar">
             <div className="scroll-container">
+              {/* Search Index */}
+              <div className="section-card">
+                <SearchIndexStatus databasePath={databasePath} />
+              </div>
+
               {/* Pipeline Controls */}
               <div className="section-card">
                 <PipelineControl
