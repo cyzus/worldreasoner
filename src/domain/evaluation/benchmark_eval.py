@@ -15,7 +15,7 @@ import statistics
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Set
+from typing import Callable, List, Optional, Set
 
 from src.core.database import GenericDatabase
 from src.core.llm import get_knowledge_cutoff_date

@@ -513,32 +513,6 @@ def init(
     init_and_migrate(db_path, log=console.print)
 
 
-@app.command("build-index")
-def build_index(
-    db_path: str = db_option(),
-    model: Optional[str] = typer.Option(
-        None, "--model", help="LiteLLM embedding model (default: from config)"
-    ),
-    rebuild: bool = typer.Option(
-        False, "--rebuild", help="Clear and rebuild indexes from scratch"
-    ),
-    batch_size: int = typer.Option(
-        100, "--batch-size", help="Batch size for embedding generation"
-    ),
-):
-    """Build or rebuild FTS5 and semantic search indexes for all articles."""
-    from src.core.db_maintenance import build_search_index
-
-    asyncio.run(
-        build_search_index(
-            db_path=db_path,
-            embedding_model=model,
-            rebuild=rebuild,
-            batch_size=batch_size,
-        )
-    )
-
-
 @app.command()
 def clean(
     db_path: str = db_option("combined.db"),
