@@ -233,3 +233,18 @@ logs/
 # SQLite
 *.db-shm
 *.db-wal
+
+# Research / paper artifacts (not for public repo)
+meeting_*.md
+roadmap.md
+*_cleanup_plan.md
+Chi_slide.pdf
+annotation_*.tsv
+annotation_*.md
+annotation_pilot_summary.md
+binary_to_mcq_migration_*.tsv
+eval_*_ids.txt
+rerun_*_ids.txt
+include_ids_annotation_safe.txt
+docs/annotation_quality.md
+assets/figures/

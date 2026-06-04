@@ -1,146 +1,149 @@
 # Scripts
 
-All scripts run from the repo root with `uv run python scripts/<name>.py`.
+Scripts are supplementary tools that complement the `wr` CLI. Most day-to-day
+operations are now available as CLI commands — see `wr --help`. The scripts here
+cover benchmark evaluation, paper figures, annotation study tooling, and DB
+screening that don't fit naturally as interactive CLI commands.
 
-```
-scripts/
-├── init_db.py
-├── run_experiment_collection.py
-├── build_search_index.py
-├── fetch_knowledge_cutoff_date.py
-├── merge_databases.py
-├── cleanup.py
-├── rerun_evidence.py
-├── select_prolific_questions.py
-├── benchmark/
-│   ├── evaluate_benchmark.py
-│   └── cleanup_experiment_db.py
-├── screening/
-│   ├── apply_decisions.py
-│   ├── batch_*.json / results_batch_*.json
-│   ├── needs_evidence.json
-│   ├── pending_ids.txt
-│   └── CRITERIA.md
-└── annotation_ui/
-    ├── recreate_wr_annotation.sh
-    ├── export_data.py
-    ├── import_data.py
-    └── fetch_price_history.py
+All scripts run from the repo root:
+```bash
+uv run python scripts/<path>.py [options]
 ```
 
 ---
 
-## Data pipeline
+## CLI commands (promoted from scripts)
 
-### `init_db.py`
-Initialize or migrate the database schema for all registered models.
-```bash
-uv run python scripts/init_db.py
-```
+These operations were previously standalone scripts and are now `wr` subcommands:
 
-### `run_experiment_collection.py`
-Collect questions from Polymarket and news sources into the database.
-```bash
-uv run python scripts/run_experiment_collection.py --db combined.db
-uv run python scripts/run_experiment_collection.py --db combined.db --no-news   # Polymarket only
-uv run python scripts/run_experiment_collection.py --db combined.db --dry-run   # show plan only
-```
-
-### `build_search_index.py`
-Build or rebuild FTS5 and semantic search indexes after importing new articles.
-```bash
-uv run python scripts/build_search_index.py
-```
-
-### `fetch_knowledge_cutoff_date.py`
-Fetch and cache LLM knowledge cutoff dates to a local JSON file.
-
-### `merge_databases.py`
-Merge multiple source databases (`experiment.db`, `worldreasoner.db`, etc.) into `combined.db`.
-Deduplicates by question ID and preserves all articles, events, and forecasts.
-```bash
-uv run python scripts/merge_databases.py
-```
-
----
-
-## Database maintenance
-
-### `cleanup.py`
-Remove bad data from `combined.db`: fake example.com articles, invalid-content articles
-(<500 chars), and exact-title duplicate events. Cascades to all referencing tables.
-```bash
-uv run python scripts/cleanup.py --db combined.db              # dry run (default)
-uv run python scripts/cleanup.py --db combined.db --execute    # apply changes
-```
-
-### `rerun_evidence.py`
-Re-run the evidence + graph-builder pipelines for questions with too few unique source
-articles (default: ≤2). Run after `cleanup.py` to avoid re-fetching bad sources.
-```bash
-uv run python scripts/rerun_evidence.py --db combined.db --dry-run
-uv run python scripts/rerun_evidence.py --db combined.db
-uv run python scripts/rerun_evidence.py --db combined.db --threshold 3   # stricter filter
-uv run python scripts/rerun_evidence.py --db combined.db --ids q_id1 q_id2
-```
+| Old script | New command |
+|---|---|
+| `init_db.py` | `wr db init` |
+| `build_search_index.py` | `wr db build-index` |
+| `merge_databases.py` | `wr db merge` |
+| `cleanup.py` | `wr db clean` |
+| `fetch_knowledge_cutoff_date.py` | `wr db fetch-cutoffs` |
+| `run_experiment_collection.py` | `wr question collect` |
+| `select_prolific_questions.py` | `wr question select` |
+| `rerun_evidence.py` | `wr evidence rerun` |
+| `evaluate_benchmark.py` (core) | `wr benchmark evaluate` |
 
 ---
 
 ## Benchmark
 
-### `benchmark/evaluate_benchmark.py`
-Evaluate benchmark forecasts from `combined.db` for any condition. Auto-detects all conditions
-with data, or specify conditions explicitly. Outputs JSON + Markdown to `experiments/evaluation/`.
-```bash
-uv run python scripts/benchmark/evaluate_benchmark.py                             # all conditions with data
-uv run python scripts/benchmark/evaluate_benchmark.py --condition vanilla_llm structured_scenario
-uv run python scripts/benchmark/evaluate_benchmark.py --db other.db
-```
-Output: `experiments/evaluation/<condition>_eval_<timestamp>.json` and `.md`
-
 ### `benchmark/cleanup_experiment_db.py`
-Reclassify "general"-domain questions, remove low-quality micro-duration Bitcoin markets,
-and report distribution against experiment targets.
+Reclassify "general"-domain questions, remove low-quality micro-duration Bitcoin
+markets, and report distribution against experiment targets.
 ```bash
 uv run python scripts/benchmark/cleanup_experiment_db.py --db combined.db --dry-run
 uv run python scripts/benchmark/cleanup_experiment_db.py --db combined.db
 ```
 
----
-
-## Screening
-
-### `screening/apply_decisions.py`
-Apply manual screening decisions from `batch_*.json` files to the database
-(include / exclude questions from the benchmark).
+### `benchmark/contamination_report.py`
+Run per-condition benchmark evaluation and produce contamination-filter comparison
+tables and SVG charts (used in the paper). Builds on `wr benchmark evaluate` core.
 ```bash
-uv run python scripts/screening/apply_decisions.py --db combined.db
+uv run python scripts/benchmark/contamination_report.py
+uv run python scripts/benchmark/contamination_report.py --condition vanilla_llm
+uv run python scripts/benchmark/contamination_report.py --db other.db
+```
+Output: `experiments/evaluation/contamination_*.md/.tsv/.svg`
+
+### `benchmark/evaluate_graphs.py`
+Evaluate forecast graphs against hindsight reference graphs.
+```bash
+uv run python scripts/benchmark/evaluate_graphs.py --db combined.db
 ```
 
-**Files in `screening/`:**
-- `batch_1.json` … `batch_6.json` — raw screening inputs (questions to review)
-- `results_batch_1.json` … `results_batch_6.json` — decisions output from annotators
-- `needs_evidence.json` — questions flagged as needing more evidence collection
-- `CRITERIA.md` — screening criteria documentation
-- `pending_ids.txt` — question IDs pending re-evidence-collection (feed to `rerun_evidence.py --ids`)
+### `benchmark/evaluate_reasoning_graphs.py`
+Evaluate reasoning graph quality (event F1, key-event recall, source precision).
+```bash
+uv run python scripts/benchmark/evaluate_reasoning_graphs.py --db combined.db
+```
 
 ---
 
-## Prolific annotation study
+## Paper figures
 
-### `select_prolific_questions.py`
-Select high-quality questions for the Prolific study and write `include_ids.txt` and
-`overlap.txt`. Balances domain distribution with a configurable per-domain cap.
+All figure scripts write output to `assets/figures/` by default.
+
+### `analysis/plot_sliding_window.py`
+Sliding-window ablation figure — accuracy across early/mid/late/near-res/real-time
+slots per model, line chart.
 ```bash
-uv run python scripts/select_prolific_questions.py --db combined.db --dry-run
-uv run python scripts/select_prolific_questions.py --db combined.db
+uv run python scripts/analysis/plot_sliding_window.py [--db combined.db] [--out assets/]
 ```
-Key options: `--n 120`, `--min-score 0.8`, `--min-sources 3`, `--domain-cap 0.25`,
-`--questions-per-session 4`, `--overlap-sessions 3`
+Output: `assets/figures/sliding_window.pdf` and `.png`
+
+### `analysis/plot_reasoning_quality.py`
+Per-model reasoning quality figure — 3-row panel (Event F1, Key-event Recall,
+Source Precision) across conditions.
+```bash
+uv run python scripts/analysis/plot_reasoning_quality.py
+uv run python scripts/analysis/plot_reasoning_quality.py --eval-json experiments/evaluation/reasoning_graph_eval_filtered_latest.json
+```
+Output: `assets/figures/reasoning_quality.pdf` and `.png`
+
+### `benchmark/plot_vanilla_time_performance.py`
+Vanilla-LLM accuracy over time (question resolution date) figure.
+```bash
+uv run python scripts/benchmark/plot_vanilla_time_performance.py --db combined.db
+```
+
+### `figures/render_pressure_charts.py`
+Causal pressure charts — converts resolved questions into dated hindsight event
+timelines with signed impact links.
+```bash
+uv run python scripts/figures/render_pressure_charts.py --db combined.db
+```
+
+---
+
+## Paper numbers
+
+### `analysis/compute_metrics_table.py`
+Compute all implemented metrics from the eval JSON and append a results table to
+`docs/metrics.md`.
+```bash
+uv run python scripts/analysis/compute_metrics_table.py
+```
+
+### `analysis/final_numbers.py`
+Pull the final paper numbers from evaluation JSON (before/after annotation
+filtering).
+```bash
+uv run python scripts/analysis/final_numbers.py
+```
+
+### `analysis/sliding_window_results.py`
+Sliding-window ablation data dump — per-model accuracy & Brier score across slots,
+knowledge-only gap. Use as input to `plot_sliding_window.py` or independently.
+```bash
+uv run python scripts/analysis/sliding_window_results.py --db combined.db
+```
+
+### `analysis/compare_semantic_robustness.py`
+Compare hybrid (BM25+lexical) vs semantic (sentence-transformer) matching across
+matching strategies. Intended for appendix.
+```bash
+uv run python scripts/analysis/compare_semantic_robustness.py
+```
+
+### `analysis/compare_annotation_eval.py`
+Before/after comparison of reasoning graph eval with and without annotation
+filtering.
+```bash
+uv run python scripts/analysis/compare_annotation_eval.py
+```
+
+---
+
+## Annotation study
 
 ### `annotation_ui/recreate_wr_annotation.sh`
-Rebuild `D:/workspace/wr-annotation` from `combined.db` and the annotation UI source.
-Run after `select_prolific_questions.py` updates `include_ids.txt`.
+Rebuild the annotation study workspace from `combined.db` and the annotation UI
+source. Run after `wr question select` updates `include_ids.txt`.
 ```bash
 bash scripts/annotation_ui/recreate_wr_annotation.sh            # reuse cached prices
 bash scripts/annotation_ui/recreate_wr_annotation.sh --fetch    # refresh price history
@@ -151,32 +154,76 @@ Export question data to `annotation_data_*.js` session files. Called by
 `recreate_wr_annotation.sh`; can also be run directly.
 
 ### `annotation_ui/import_data.py`
-Import completed annotation JSON files (downloaded from Google Drive) back into the
-database.
+Import completed annotation JSON files (downloaded from Google Drive) back into
+the database.
+
+### `annotation_ui/fetch_price_history.py`
+Fetch and cache Polymarket price history for annotated questions.
+
+### `analysis/annotation_quality.py`
+Compute annotation quality metrics (IRR, attention checks, majority-vote
+agreement) from the annotated session data.
+```bash
+uv run python scripts/analysis/annotation_quality.py
+```
+Output: `docs/annotation_quality.md`
+
+### `analysis/apply_annotation_review.py`
+Apply annotation majority votes to `events.review_status` in `combined.db`.
+```bash
+uv run python scripts/analysis/apply_annotation_review.py --db combined.db
+```
+
+### `analysis/check_attention.py`
+Analyse attention-check pass/fail rates across annotation sessions.
+```bash
+uv run python scripts/analysis/check_attention.py
+```
+
+---
+
+## Screening
+
+### `screening/apply_decisions.py`
+Apply manual screening decisions from `batch_*.json` files to the database.
+```bash
+uv run python scripts/screening/apply_decisions.py --db combined.db
+```
+
+**Files in `screening/`** (gitignored — kept locally):
+- `batch_1.json` … `batch_6.json` — raw screening inputs
+- `results_batch_1.json` … `results_batch_6.json` — annotator decisions
+- `needs_evidence.json` — questions needing more evidence collection
+- `CRITERIA.md` — screening criteria documentation
 
 ---
 
 ## Recommended workflow
 
-```
+```bash
 # 1. Collect questions
-uv run python scripts/run_experiment_collection.py --db combined.db
+wr question collect --db combined.db
 
 # 2. Clean bad data
-uv run python scripts/cleanup.py --db combined.db --execute
+wr db clean --db combined.db --execute
 
 # 3. Re-run evidence for low-source questions
-uv run python scripts/rerun_evidence.py --db combined.db
+wr evidence rerun --db combined.db
 
-# 4. Select Prolific questions
-uv run python scripts/select_prolific_questions.py --db combined.db
+# 4. Select annotation questions
+wr question select --db combined.db
 
 # 5. Build annotation study
 bash scripts/annotation_ui/recreate_wr_annotation.sh
 
 # 6. Run benchmark
-uv run wr benchmark run --db combined.db -m <model> --resume -n 100 -w 8 -y
+wr benchmark run --db combined.db -m <model> --resume -n 100 -w 8 -y
 
-# 7. Evaluate results  (outputs to experiments/evaluation/)
-uv run python scripts/benchmark/evaluate_benchmark.py
+# 7. Evaluate results
+wr benchmark evaluate --db combined.db
+
+# 8. Generate paper figures
+uv run python scripts/analysis/plot_sliding_window.py
+uv run python scripts/analysis/plot_reasoning_quality.py
+uv run python scripts/benchmark/contamination_report.py
 ```
