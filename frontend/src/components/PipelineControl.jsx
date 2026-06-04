@@ -13,7 +13,6 @@ const PipelineControl = ({ selectedQuestions, onJobComplete }) => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = `${protocol}//${window.location.host}/api/pipelines/jobs/${activeJob}/ws`
 
-    console.log('Connecting to WebSocket:', wsUrl)
     const ws = new WebSocket(wsUrl)
 
     let connected = false
@@ -21,13 +20,11 @@ const PipelineControl = ({ selectedQuestions, onJobComplete }) => {
 
     ws.onopen = () => {
       connected = true
-      console.log('WebSocket connected successfully')
     }
 
     ws.onmessage = (event) => {
       hasReceivedData = true
       const data = JSON.parse(event.data)
-      console.log('WebSocket message:', data)
       setJobStatus(data)
 
       if (data.status === 'completed') {
@@ -55,7 +52,6 @@ const PipelineControl = ({ selectedQuestions, onJobComplete }) => {
     }
 
     ws.onclose = (event) => {
-      console.log('WebSocket closed:', { code: event.code, reason: event.reason, wasClean: event.wasClean })
       // Only show error if connection closed unexpectedly before we got any data
       if (!connected && !event.wasClean && !hasReceivedData) {
         setError('WebSocket connection closed unexpectedly. Check the browser console for details.')
@@ -63,7 +59,6 @@ const PipelineControl = ({ selectedQuestions, onJobComplete }) => {
     }
 
     return () => {
-      console.log('Closing WebSocket connection')
       ws.close()
     }
   }, [activeJob])

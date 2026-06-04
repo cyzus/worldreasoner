@@ -1,20 +1,23 @@
 # WorldReasoner Frontend
 
-Real-time causal graph visualization for WorldReasoner.
+Interactive causal graph visualization and research dashboard for WorldReasoner.
 
 ## Features
 
-- **Interactive Force-Directed Graph**: Drag, zoom, pan to explore causal relationships
-- **Node Filtering**: Filter by domain (politics, economics, technology, etc.)
-- **Neighborhood View**: Explore 1-hop or 2-hop neighborhoods around events
-- **Event Details**: Click any node to see full event information
-- **Real-time Updates**: WebSocket support for live pipeline progress (future)
+- **Event Graph Visualization** — Force-directed graph for exploring causal relationships between events
+- **Question & Forecast Management** — Create, track, and compare forecasting questions
+- **Evidence Collection Pipeline** — Run and monitor evidence collection jobs with real-time WebSocket progress
+- **Benchmark Dashboard** — Compare model performance across conditions with evaluation metrics
+- **Case Study View** — Deep analysis of outcomes: causal trajectories, market price movements, impact assessment
+- **Database Switcher** — Switch between multiple SQLite databases for different datasets
+- **Search Index Management** — Build and rebuild FTS5 + semantic embedding indexes
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 18+ and npm
+- Node.js 18+
+- WorldReasoner backend running (see root README)
 
 ### Installation
 
@@ -26,62 +29,94 @@ npm install
 ### Development
 
 ```bash
-# Start development server (with hot reload)
 npm run dev
 ```
 
-The frontend will be available at http://localhost:3000
+The frontend will be available at **http://localhost:5173** by default (or `FRONTEND_PORT` if set).
 
-**Note**: Backend port is unified via root `.env` using `WORLDREASONER__SERVER__PORT`.
+The Vite dev server proxies `/api` and `/ws` requests to the backend. Backend port
+is resolved in this order:
 
-Vite proxy resolution order:
-1. `BACKEND_PORT` (frontend-only override)
-2. `WORLDREASONER__SERVER__PORT` (shared source)
-3. `config/config.yaml` -> `server.port`
-4. `config/config.example.yaml` -> `server.port`
-5. fallback `8300`
+1. `BACKEND_PORT` env var (frontend-specific override)
+2. `WORLDREASONER__SERVER__PORT` env var (shared with backend)
+3. `config/config.yaml` → `server.port`
+4. `config/config.example.yaml` → `server.port`
+5. Fallback: `8300`
 
-Make sure backend is running on the same resolved port:
+Make sure the backend is running on the same resolved port:
 
 ```bash
-# In the project root
+# From the project root
 uv run worldreasoner --reload
 ```
 
-### Building for Production
+### Environment configuration
+
+Copy `.env.example` to `.env` in the **project root** (not `frontend/`) and adjust
+as needed:
 
 ```bash
-npm run build
-npm run preview
+cp .env.example .env
+```
+
+Frontend-only overrides (optional) can be set in `frontend/.env`:
+
+```
+FRONTEND_PORT=5173
+FRONTEND_HOST=localhost
+BACKEND_PORT=8300
+```
+
+### Building for production
+
+```bash
+npm run build   # outputs to frontend/dist/
+npm run preview # preview the production build locally
 ```
 
 ## Architecture
 
-### Components
+### Component structure
 
-- **App.jsx**: Main application component, manages state and data fetching
-- **GraphVisualization**: Force-directed graph using react-force-graph-2d
-- **ControlPanel**: Filters and controls for graph queries
-- **EventDetails**: Side panel showing detailed event information
+```
+src/
+├── api/          # HTTP and WebSocket API layer
+│   ├── graphApi.js        # All REST endpoints (via axios)
+│   └── polymarketApi.js   # Polymarket search wrapper
+├── components/   # React UI components (60+ files)
+│   ├── EventGraphsPage    # Main graph view
+│   ├── BenchmarkPage      # Benchmark results
+│   ├── ForecastPage       # Forecast management
+│   ├── PipelinePage       # Evidence collection pipeline
+│   └── ...
+├── hooks/        # Custom React hooks
+│   ├── queries/           # React Query hooks
+│   ├── useAppData.js      # Global data loading
+│   ├── useGraphTraversal.js # Graph navigation
+│   └── ...
+├── stores/       # Zustand global state
+│   ├── graphStore.js
+│   ├── questionStore.js
+│   └── uiStore.js
+└── lib/
+    └── queryClient.js     # React Query client config
+```
 
-### API Client
+### Tech stack
 
-`src/api/graphApi.js` provides typed API calls to the FastAPI backend:
+| Layer | Library |
+|---|---|
+| UI framework | React 18 |
+| Build tool | Vite 6 |
+| Server state | TanStack React Query |
+| Client state | Zustand |
+| HTTP | Axios |
+| Graph rendering | react-force-graph-2d + D3 |
+| Markdown | react-markdown + remark-gfm |
 
-- `fetchGraph(params)`: Get graph data with filters
-- `fetchNode(nodeId)`: Get single node details
-- `fetchNeighborhood(nodeId, depth)`: Get node neighborhood
-- `fetchPaths(sourceId, targetId)`: Find causal paths
-- `fetchStatistics()`: Get graph statistics
+### API proxy
 
-### Styling
-
-Dark theme with blue/red accent colors. Uses CSS modules for component isolation.
-
-## Future Enhancements
-
-- WebSocket integration for real-time pipeline updates
-- Path highlighting between selected nodes
-- 3D graph visualization option
-- Timeline view for temporal analysis
-- Export graph as image/SVG
+All `/api/*` calls are proxied to the backend in development. In production, serve
+the built `dist/` from a web server that also reverse-proxies `/api` to the
+FastAPI backend (e.g. nginx, caddy, or the built-in `worldreasoner` server which
+serves `dist/` directly on the same port).

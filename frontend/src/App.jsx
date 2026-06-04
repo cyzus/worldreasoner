@@ -75,16 +75,11 @@ function App() {
   const handleTimeRangeChange = useCallback((startDate, endDate) => {
     // Just update the filter state - do NOT mutate graphData
     // The visualization component will handle hiding nodes based on this state
-    console.log('[TimeFilter] Updating visual filter:', {
-      start: startDate?.toISOString(),
-      end: endDate?.toISOString()
-    })
     setTimeFilter(startDate && endDate ? { start: startDate, end: endDate } : null)
   }, [setTimeFilter])
 
   // Handle question deleted
   const handleQuestionDeleted = useCallback((questionId) => {
-    console.log('Question deleted:', questionId)
     removeQuestion(questionId)
     // Clear selection if deleted question was selected
     if (selectedQuestionId === questionId) {

@@ -30,29 +30,6 @@ export const useQuestionCollection = ({
 
     // Log when preview questions change (for debugging)
     useEffect(() => {
-        console.log(`[useQuestionCollection] Preview: ${previewQuestions.length} questions from ${previewSource}, current tab: ${sourceTab}`)
-    }, [previewQuestions, previewSource, sourceTab])
-
-    // Only show preview questions if they match the current source tab
-    const filteredPreviewQuestions = useMemo(() => {
-        if (!previewSource) return []
-        if (previewSource === sourceTab) return previewQuestions
-        return []
-    }, [previewQuestions, previewSource, sourceTab])
-
-    // Function to handle news job completion
-    const handleNewsJobCompletion = useCallback(() => {
-        if (
-            jobDetails &&
-            jobDetails.status === 'completed' &&
-            jobDetails.pipeline_type === 'news_collection' &&
-            sourceTab === 'news'
-        ) {
-            const results = jobDetails.results || {};
-            const questions = results.processed_details || [];
-
-            if (questions.length > 0) {
-                console.log(`[useQuestionCollection] Job ${jobDetails.job_id} completed with ${questions.length} questions. Updating preview.`);
 
                 const mappedQuestions = questions.map(q => ({
                     id: q.id,
@@ -75,7 +52,6 @@ export const useQuestionCollection = ({
                 const newUnique = mappedQuestions.filter(q => !existingIds.has(q.id));
 
                 if (newUnique.length > 0) {
-                    console.log(`[useQuestionCollection] Adding ${newUnique.length} new unique questions to preview.`);
                     setPreviewQuestions([...currentQuestions, ...newUnique]);
                     setPreviewSource('news');
                     selectJob(null);
@@ -95,23 +71,6 @@ export const useQuestionCollection = ({
      * Handle fetching preview questions from the API
      */
     const handleFetchPreview = useCallback(async (config) => {
-        console.log('[useQuestionCollection] Fetching preview with config:', config, 'source:', sourceTab)
-
-        setLoading(true)
-        setError(null)
-        setSuccess(null)
-        setPreviewQuestions([])
-        setPreviewSource(null)
-
-        try {
-            if (sourceTab === 'news') {
-                const data = await startNewsCollectionJob({
-                    question_ids: [],
-                    pipeline_type: 'news_collection',
-                    config: config
-                })
-
-                setSuccess(`Started News Collection Job: ${data.job_id}`);
                 await loadJobs();
                 selectJob(data.job_id);
 

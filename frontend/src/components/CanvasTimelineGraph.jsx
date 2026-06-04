@@ -182,12 +182,6 @@ const CanvasTimelineGraph = ({
 
         // Debug logging for Santa node
         if ((node.name || '').includes('Santa')) {
-            console.log(`Santa node in getNodeColor:`, {
-                name: node.name,
-                hasImpactDirection: !!node._impactDirection,
-                impactDirection: node._impactDirection,
-                impactMagnitude: node._impactMagnitude
-            })
         }
 
         // Impact-based coloring
@@ -197,13 +191,6 @@ const CanvasTimelineGraph = ({
                         : node._impactDirection === 'mixed' ? GraphStyles.linkColors.impact_mixed
                         : null
             if (color && (node.name || '').includes('Santa')) {
-                console.log(`Santa Claus node color:`, {
-                    name: node.name,
-                    impactDirection: node._impactDirection,
-                    color,
-                    positive_color: GraphStyles.linkColors.impact_positive,
-                    negative_color: GraphStyles.linkColors.impact_negative
-                })
             }
             if (color) return color
         }

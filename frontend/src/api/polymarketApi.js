@@ -7,9 +7,8 @@ export async function searchPolymarket({
   events_status = 'resolved',
   sort = 'closed_time',
   presets = ['EventsTitle', 'Events'],
-  baseUrl = ''
 }) {
-  const res = await fetch(`${baseUrl}/api/questions/polymarket/search`, {
+  const res = await fetch(`/api/questions/polymarket/search`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

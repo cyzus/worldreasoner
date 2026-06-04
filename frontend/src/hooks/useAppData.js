@@ -36,7 +36,6 @@ export const useAppData = () => {
 
     // Load full graph data
     const loadGraph = useCallback(async (queryParams = {}) => {
-        console.log('Loading graph with params:', queryParams)
         setLoading(true)
         setError(null)
 
@@ -47,7 +46,6 @@ export const useAppData = () => {
                 includeOutcomes: includeOutcomes
             }
             const data = await fetchGraph(params)
-            console.log('Received graph data:', data)
 
             // Convert to react-force-graph format
             const graphFormatted = {
@@ -71,7 +69,6 @@ export const useAppData = () => {
                 })),
             }
 
-            console.log('Formatted graph data:', graphFormatted)
 
             // Ensure no synthetic links in the full dataset
             const cleanLinks = graphFormatted.links.filter(link =>
@@ -87,7 +84,6 @@ export const useAppData = () => {
                 links: cleanLinks
             }
 
-            console.log(`Full graph loaded: ${cleanNodes.length} nodes, ${cleanLinks.length} links`)
 
             setFullGraphData(cleanGraphData)
             setGraphData(cleanGraphData) // Initially show all
@@ -115,7 +111,6 @@ export const useAppData = () => {
         try {
             const questionsData = await fetchQuestions()
             setQuestions(questionsData)
-            console.log('Loaded questions:', questionsData.length)
         } catch (err) {
             console.error('Failed to load questions:', err)
         }
@@ -123,7 +118,6 @@ export const useAppData = () => {
 
     // Initial load
     useEffect(() => {
-        console.log('Initial load with filters:', filters)
         loadGraph(filters)
         loadStatistics()
         loadQuestions()
@@ -139,7 +133,6 @@ export const useAppData = () => {
 
     // Handle database change
     const handleDatabaseChange = useCallback(async (dbPath) => {
-        console.log('Database changed to:', dbPath)
         // Reload all data from the new database
         setLoading(true)
         setError(null)
@@ -166,7 +159,6 @@ export const useAppData = () => {
 
     // Handle pipeline job completion
     const handleJobComplete = useCallback((results) => {
-        console.log('Pipeline job completed:', results)
         // Refresh graph data after pipeline completion
         loadGraph(filters)
         loadStatistics()
@@ -174,13 +166,11 @@ export const useAppData = () => {
 
     // Handle questions added from collection page
     const handleQuestionsAdded = useCallback((count) => {
-        console.log(`${count} questions added, refreshing...`)
         loadQuestions() // Reload questions list
     }, [loadQuestions])
 
     // Handle question updated
     const handleQuestionUpdated = useCallback((updatedQuestion) => {
-        console.log('Question updated:', updatedQuestion.id)
         // Update questions list in state
         setQuestions(prevQuestions =>
             prevQuestions.map(q => q.id === updatedQuestion.id ? { ...q, ...updatedQuestion } : q)
@@ -195,7 +185,6 @@ export const useAppData = () => {
             return
         }
 
-        console.log(`Fetching price history for question ${questionId} with interval ${interval}`)
         setLoadingPriceHistory(true)
 
         try {
@@ -207,9 +196,7 @@ export const useAppData = () => {
                 includeTurningPoints,
                 5.0  // min change for turning points (5 percentage points)
             )
-            console.log('✓ Loaded price history:', priceData)
             if (includeTurningPoints && priceData.turning_points) {
-                console.log(`  Found ${priceData.turning_points.length} turning points`)
             }
             setPriceHistoryData(priceData)
         } catch (error) {
