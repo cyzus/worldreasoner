@@ -1,14 +1,8 @@
 import React, { useState } from 'react'
 import CaseStudyView from '../CaseStudyView'
 import QuestionGraphTab from './QuestionGraphTab'
+import QuestionForecastTab from './QuestionForecastTab'
 import './QuestionDetailPanel.css'
-
-// Stub — replaced in step 5
-const ForecastTab = ({ question }) => (
-  <div className="qdp-stub">
-    <p>Forecast view — coming in step 5</p>
-  </div>
-)
 
 const TABS = [
   { id: 'evidence', label: 'Evidence' },
@@ -87,7 +81,7 @@ const QuestionDetailPanel = ({
           />
         )}
         {activeTab === 'forecast' && (
-          <ForecastTab question={question} />
+          <QuestionForecastTab question={question} />
         )}
       </div>
     </div>
