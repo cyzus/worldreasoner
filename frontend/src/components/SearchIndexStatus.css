@@ -10,12 +10,12 @@
 
 .search-index-card-title {
   font-weight: 600;
-  color: var(--text-primary, #e0e0e0);
+  color: #212529;
   flex-shrink: 0;
 }
 
 .search-index-card-counts {
-  color: var(--text-muted, #888);
+  color: #6c757d;
   font-size: 0.75rem;
   flex: 1;
 }
@@ -80,13 +80,13 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 5px;
   padding: 2px 5px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .search-index-btn-label {
   font-size: 10px;
   font-weight: 700;
-  color: var(--text-muted, #888);
+  color: #6c757d;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-right: 2px;

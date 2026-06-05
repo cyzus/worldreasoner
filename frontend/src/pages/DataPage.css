@@ -9,8 +9,8 @@
   display: flex;
   gap: 2px;
   padding: 8px 16px 0;
-  border-bottom: 1px solid var(--border-color, #2a2a3e);
-  background: var(--header-bg, #12121e);
+  border-bottom: 1px solid #dee2e6;
+  background: #fff;
   flex-shrink: 0;
 }
 
@@ -19,7 +19,7 @@
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
-  color: var(--text-muted, #888);
+  color: #6c757d;
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
@@ -28,12 +28,12 @@
 }
 
 .data-tab-btn:hover {
-  color: var(--text-primary, #e0e0e0);
+  color: #212529;
 }
 
 .data-tab-btn.active {
-  color: var(--accent, #4a90e2);
-  border-bottom-color: var(--accent, #4a90e2);
+  color: #4a90e2;
+  border-bottom-color: #4a90e2;
 }
 
 .data-page-content {

@@ -3,15 +3,15 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background: var(--page-bg, #0f0f1a);
+  background: #f8f9fa;
 }
 
 /* ── Header ─────────────────────────────────────────── */
 .qdp-header {
   padding: 14px 20px 10px;
-  border-bottom: 1px solid var(--border-color, #2a2a3e);
+  border-bottom: 1px solid #dee2e6;
   flex-shrink: 0;
-  background: var(--header-bg, #12121e);
+  background: #fff;
 }
 
 .qdp-meta {
@@ -34,16 +34,16 @@
   letter-spacing: 0.04em;
 }
 
-.qdp-source  { background: #1e3a5f; color: #7eb8f7; }
-.qdp-domain  { background: #1e3d2f; color: #7ecfa0; }
-.qdp-gt      { background: #3d2a1e; color: #f7b77e; }
-.qdp-date    { background: #2a2a2a; color: #aaa; }
+.qdp-source { background: #cce5ff; color: #004085; }
+.qdp-domain { background: #d4edda; color: #155724; }
+.qdp-gt     { background: #fff3cd; color: #856404; }
+.qdp-date   { background: #f8f9fa; color: #6c757d; border: 1px solid #dee2e6; }
 
 .qdp-title {
   margin: 0;
   font-size: 1rem;
   font-weight: 600;
-  color: var(--text-primary, #e8e8f0);
+  color: #212529;
   line-height: 1.4;
 }
 
@@ -52,8 +52,8 @@
   display: flex;
   gap: 2px;
   padding: 0 20px;
-  border-bottom: 1px solid var(--border-color, #2a2a3e);
-  background: var(--header-bg, #12121e);
+  border-bottom: 1px solid #dee2e6;
+  background: #fff;
   flex-shrink: 0;
 }
 
@@ -62,7 +62,7 @@
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
-  color: var(--text-muted, #888);
+  color: #6c757d;
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
@@ -70,11 +70,11 @@
   margin-bottom: -1px;
 }
 
-.qdp-tab-btn:hover { color: var(--text-primary, #e0e0e0); }
+.qdp-tab-btn:hover { color: #212529; }
 
 .qdp-tab-btn.active {
-  color: var(--accent, #4a90e2);
-  border-bottom-color: var(--accent, #4a90e2);
+  color: #4a90e2;
+  border-bottom-color: #4a90e2;
 }
 
 /* ── Content area ────────────────────────────────────── */
@@ -82,14 +82,14 @@
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+  background: #f8f9fa;
 }
 
-/* Stub placeholder */
 .qdp-stub {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--text-muted, #888);
+  color: #6c757d;
   font-size: 0.875rem;
 }
