@@ -7,13 +7,9 @@ import { useGraphTraversal } from './hooks/useGraphTraversal'
 import { useAppData } from './hooks/useAppData'
 import './App.css'
 
-// Lazy load heavy page components for code splitting
-const PipelinePage = lazy(() => import('./components/PipelinePage'))
-const QuestionCollectionPage = lazy(() => import('./components/QuestionCollectionPage'))
-const ForecastPage = lazy(() => import('./components/ForecastPage'))
-const BenchmarkPage = lazy(() => import('./components/BenchmarkPage'))
 const EventGraphsPage = lazy(() => import('./components/EventGraphsPage'))
-
+const DataPage = lazy(() => import('./pages/DataPage'))
+const BenchmarkPage = lazy(() => import('./components/BenchmarkPage'))
 
 function App() {
   // Graph store
@@ -47,7 +43,6 @@ function App() {
   const setLeftPanelTab = useUIStore(state => state.setLeftPanelTab)
   const currentDatabasePath = useUIStore(state => state.currentDatabasePath)
 
-  // Custom Hooks
   const {
     questions,
     statistics,
@@ -57,35 +52,31 @@ function App() {
     handleJobComplete,
     handleQuestionsAdded,
     handleQuestionUpdated,
-    removeQuestion
+    removeQuestion,
   } = useAppData()
 
-  const {
-    handleShowNeighborhood,
-    handleQuestionFilter
-  } = useGraphTraversal(questions)
+  const { handleShowNeighborhood, handleQuestionFilter } = useGraphTraversal(questions)
 
-  // Handle node selection
   const handleNodeClick = useCallback((node) => {
     setSelectedNode(node)
   }, [setSelectedNode])
 
-  // Handle time range change from timeline (client-side filtering)
   const handleTimeRangeChange = useCallback((startDate, endDate) => {
-    // Just update the filter state - do NOT mutate graphData
-    // The visualization component will handle hiding nodes based on this state
     setTimeFilter(startDate && endDate ? { start: startDate, end: endDate } : null)
   }, [setTimeFilter])
 
-  // Handle question deleted
   const handleQuestionDeleted = useCallback((questionId) => {
     removeQuestion(questionId)
-    // Clear selection if deleted question was selected
     if (selectedQuestionId === questionId) {
       setSelectedQuestionId(null)
       handleQuestionFilter(null)
     }
   }, [selectedQuestionId, handleQuestionFilter, removeQuestion, setSelectedQuestionId])
+
+  const handleQuestionSelect = useCallback((questionId) => {
+    setSelectedQuestionId(questionId)
+    handleQuestionFilter(questionId)
+  }, [setSelectedQuestionId, handleQuestionFilter])
 
   return (
     <div className="app">
@@ -106,37 +97,22 @@ function App() {
             )}
           </div>
         </div>
-        <div className="header-right">
-        </div>
+        <div className="header-right" />
       </header>
 
-<div className="app-content">
-        {/* Top navigation tabs */}
+      <div className="app-content">
         <div className="top-tabs">
           <button
-            className={`top-tab-btn ${leftPanelTab === 'eventgraphs' ? 'active' : ''}`}
-            onClick={() => setLeftPanelTab('eventgraphs')}
+            className={`top-tab-btn ${leftPanelTab === 'questions' ? 'active' : ''}`}
+            onClick={() => setLeftPanelTab('questions')}
           >
-            📊 Event Graphs
+            🗂 Questions
           </button>
           <button
-            className={`top-tab-btn ${leftPanelTab === 'collection' ? 'active' : ''}`}
-            onClick={() => setLeftPanelTab('collection')}
+            className={`top-tab-btn ${leftPanelTab === 'data' ? 'active' : ''}`}
+            onClick={() => setLeftPanelTab('data')}
           >
-            🔍 Collection
-          </button>
-          <button
-            className={`top-tab-btn ${leftPanelTab === 'pipelines' ? 'active' : ''}`}
-            onClick={() => setLeftPanelTab('pipelines')}
-          >
-            🔬 Evidence
-          </button>
-
-          <button
-            className={`top-tab-btn ${leftPanelTab === 'forecast' ? 'active' : ''}`}
-            onClick={() => setLeftPanelTab('forecast')}
-          >
-            🎯 Forecast
+            🔬 Data
           </button>
           <button
             className={`top-tab-btn ${leftPanelTab === 'benchmark' ? 'active' : ''}`}
@@ -147,8 +123,7 @@ function App() {
         </div>
 
         <Suspense fallback={<div className="loading-fallback">Loading...</div>}>
-          {leftPanelTab === 'eventgraphs' ? (
-            /* Event Graphs page with nested tabs */
+          {leftPanelTab === 'questions' ? (
             <EventGraphsPage
               fullGraphData={fullGraphData}
               graphData={graphData}
@@ -161,10 +136,7 @@ function App() {
               onRefresh={() => loadGraph(filters)}
               questions={questions}
               selectedQuestionId={selectedQuestionId}
-              onQuestionFilter={(questionId) => {
-                setSelectedQuestionId(questionId)
-                handleQuestionFilter(questionId)
-              }}
+              onQuestionFilter={handleQuestionSelect}
               onShowNeighborhood={handleShowNeighborhood}
               onTimeRangeChange={handleTimeRangeChange}
               priceHistoryData={priceHistoryData}
@@ -176,9 +148,8 @@ function App() {
               onQuestionDeleted={handleQuestionDeleted}
               timeFilter={timeFilter}
             />
-          ) : leftPanelTab === 'collection' ? (
-            /* Full-width collection page */
-            <QuestionCollectionPage
+          ) : leftPanelTab === 'data' ? (
+            <DataPage
               onQuestionsAdded={handleQuestionsAdded}
               previewQuestions={previewQuestions}
               setPreviewQuestions={setPreviewQuestions}
@@ -186,20 +157,12 @@ function App() {
               setSourceTab={setPreviewSourceTab}
               previewSource={previewSource}
               setPreviewSource={setPreviewSource}
-            />
-          ) : leftPanelTab === 'forecast' ? (
-            /* Full-width forecast page */
-            <ForecastPage />
-          ) : leftPanelTab === 'benchmark' ? (
-            /* Full-width benchmark page */
-            <BenchmarkPage />
-          ) : leftPanelTab === 'pipelines' ? (
-            /* Full-width pipeline page */
-            <PipelinePage
               questions={questions}
               onJobComplete={handleJobComplete}
               databasePath={currentDatabasePath}
             />
+          ) : leftPanelTab === 'benchmark' ? (
+            <BenchmarkPage />
           ) : null}
         </Suspense>
       </div>
