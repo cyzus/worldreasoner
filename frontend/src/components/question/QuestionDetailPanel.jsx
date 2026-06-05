@@ -18,7 +18,6 @@ const QuestionDetailPanel = ({
   loading,
   error,
   onShowNeighborhood,
-  onTimeRangeChange,
   timeFilter,
   priceHistoryData,
   loadingPriceHistory,

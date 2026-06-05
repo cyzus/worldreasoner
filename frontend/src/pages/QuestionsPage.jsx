@@ -59,7 +59,6 @@ const QuestionsPage = ({
             loading={loading}
             error={error}
             onShowNeighborhood={onShowNeighborhood}
-            onTimeRangeChange={onTimeRangeChange}
             timeFilter={timeFilter}
             priceHistoryData={priceHistoryData}
             loadingPriceHistory={loadingPriceHistory}
