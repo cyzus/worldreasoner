@@ -32,7 +32,7 @@
 
 .search-index-refresh-btn:hover:not(:disabled) {
   opacity: 1;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .search-index-refresh-btn:disabled {
@@ -49,7 +49,7 @@
 .search-index-progress {
   margin-top: 8px;
   height: 3px;
-  background: rgba(255, 255, 255, 0.1);
+  background: #e9ecef;
   border-radius: 2px;
   overflow: hidden;
 }
@@ -77,10 +77,10 @@
   display: flex;
   align-items: center;
   gap: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid #dee2e6;
   border-radius: 5px;
   padding: 2px 5px;
-  background: rgba(0, 0, 0, 0.04);
+  background: #f8f9fa;
 }
 
 .search-index-btn-label {
@@ -118,12 +118,12 @@
 }
 
 .search-index-btn.secondary {
-  background: #555;
-  color: #ddd;
+  background: #6c757d;
+  color: #fff;
 }
 
 .search-index-btn.secondary:hover:not(:disabled) {
-  background: #666;
+  background: #5a6268;
 }
 
 .search-index-btn.warning {

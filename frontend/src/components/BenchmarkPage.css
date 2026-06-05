@@ -145,6 +145,42 @@
   background: #45a049;
 }
 
+/* Config grid — 2-col label+input rows */
+.config-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.config-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.config-item label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+}
+
+.config-item input,
+.config-item select {
+  padding: 6px 8px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  font-size: 13px;
+  background: white;
+  color: #333;
+}
+
+.config-item input:focus,
+.config-item select:focus {
+  outline: none;
+  border-color: #339af0;
+}
+
 /* Resume checkbox */
 .resume-checkbox {
   display: flex;
