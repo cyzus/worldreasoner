@@ -1,14 +1,9 @@
 import React, { useState } from 'react'
 import CaseStudyView from '../CaseStudyView'
+import QuestionGraphTab from './QuestionGraphTab'
 import './QuestionDetailPanel.css'
 
-// Lazy stubs — replaced in steps 4 and 5
-const GraphTab = ({ question, graphData, selectedNode, onNodeClick, loading, error, onShowNeighborhood, timeFilter }) => (
-  <div className="qdp-stub">
-    <p>Graph view — coming in step 4</p>
-  </div>
-)
-
+// Stub — replaced in step 5
 const ForecastTab = ({ question }) => (
   <div className="qdp-stub">
     <p>Forecast view — coming in step 5</p>
@@ -80,7 +75,7 @@ const QuestionDetailPanel = ({
           />
         )}
         {activeTab === 'graph' && (
-          <GraphTab
+          <QuestionGraphTab
             question={question}
             graphData={graphData}
             selectedNode={selectedNode}
