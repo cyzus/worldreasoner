@@ -1,0 +1,95 @@
+.qdp {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--page-bg, #0f0f1a);
+}
+
+/* ── Header ─────────────────────────────────────────── */
+.qdp-header {
+  padding: 14px 20px 10px;
+  border-bottom: 1px solid var(--border-color, #2a2a3e);
+  flex-shrink: 0;
+  background: var(--header-bg, #12121e);
+}
+
+.qdp-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.qdp-source,
+.qdp-domain,
+.qdp-gt,
+.qdp-date {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.qdp-source  { background: #1e3a5f; color: #7eb8f7; }
+.qdp-domain  { background: #1e3d2f; color: #7ecfa0; }
+.qdp-gt      { background: #3d2a1e; color: #f7b77e; }
+.qdp-date    { background: #2a2a2a; color: #aaa; }
+
+.qdp-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary, #e8e8f0);
+  line-height: 1.4;
+}
+
+/* ── Sub-tab bar ─────────────────────────────────────── */
+.qdp-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border-color, #2a2a3e);
+  background: var(--header-bg, #12121e);
+  flex-shrink: 0;
+}
+
+.qdp-tab-btn {
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted, #888);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+}
+
+.qdp-tab-btn:hover { color: var(--text-primary, #e0e0e0); }
+
+.qdp-tab-btn.active {
+  color: var(--accent, #4a90e2);
+  border-bottom-color: var(--accent, #4a90e2);
+}
+
+/* ── Content area ────────────────────────────────────── */
+.qdp-content {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Stub placeholder */
+.qdp-stub {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted, #888);
+  font-size: 0.875rem;
+}

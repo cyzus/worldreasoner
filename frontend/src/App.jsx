@@ -7,7 +7,7 @@ import { useGraphTraversal } from './hooks/useGraphTraversal'
 import { useAppData } from './hooks/useAppData'
 import './App.css'
 
-const EventGraphsPage = lazy(() => import('./components/EventGraphsPage'))
+const QuestionsPage = lazy(() => import('./pages/QuestionsPage'))
 const DataPage = lazy(() => import('./pages/DataPage'))
 const BenchmarkPage = lazy(() => import('./components/BenchmarkPage'))
 
@@ -124,7 +124,7 @@ function App() {
 
         <Suspense fallback={<div className="loading-fallback">Loading...</div>}>
           {leftPanelTab === 'questions' ? (
-            <EventGraphsPage
+            <QuestionsPage
               fullGraphData={fullGraphData}
               graphData={graphData}
               selectedNode={selectedNode}
@@ -135,8 +135,6 @@ function App() {
               onFilterChange={handleFilterChange}
               onRefresh={() => loadGraph(filters)}
               questions={questions}
-              selectedQuestionId={selectedQuestionId}
-              onQuestionFilter={handleQuestionSelect}
               onShowNeighborhood={handleShowNeighborhood}
               onTimeRangeChange={handleTimeRangeChange}
               priceHistoryData={priceHistoryData}
