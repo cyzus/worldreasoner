@@ -80,9 +80,19 @@
 /* ── Content area ────────────────────────────────────── */
 .qdp-content {
   flex: 1;
-  overflow-y: auto;
   min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: #f8f9fa;
+}
+
+/* Evidence tab scroll wrapper — lets CaseStudyView scroll naturally */
+.qdp-evidence-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
 }
 
 .qdp-stub {

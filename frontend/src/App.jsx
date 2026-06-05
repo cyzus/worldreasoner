@@ -125,18 +125,14 @@ function App() {
         <Suspense fallback={<div className="loading-fallback">Loading...</div>}>
           {leftPanelTab === 'questions' ? (
             <QuestionsPage
-              fullGraphData={fullGraphData}
               graphData={graphData}
               selectedNode={selectedNode}
               onNodeClick={handleNodeClick}
               loading={loading}
               error={error}
-              filters={filters}
-              onFilterChange={handleFilterChange}
-              onRefresh={() => loadGraph(filters)}
               questions={questions}
               onShowNeighborhood={handleShowNeighborhood}
-              onTimeRangeChange={handleTimeRangeChange}
+              timeFilter={timeFilter}
               priceHistoryData={priceHistoryData}
               loadingPriceHistory={loadingPriceHistory}
               questionRelatedEvents={questionRelatedEvents}
@@ -144,7 +140,6 @@ function App() {
               setPriceHistoryInterval={setPriceHistoryInterval}
               onQuestionUpdated={handleQuestionUpdated}
               onQuestionDeleted={handleQuestionDeleted}
-              timeFilter={timeFilter}
             />
           ) : leftPanelTab === 'data' ? (
             <DataPage

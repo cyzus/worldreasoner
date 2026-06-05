@@ -70,6 +70,7 @@
 /* ── Matrix table ────────────────────────────────────── */
 .bm-table-wrap {
   flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 16px 20px;
 }

@@ -63,10 +63,12 @@ const QuestionDetailPanel = ({
       {/* Tab content */}
       <div className="qdp-content">
         {activeTab === 'evidence' && (
-          <CaseStudyView
-            graphData={graphData}
-            selectedQuestion={question}
-          />
+          <div className="qdp-evidence-scroll">
+            <CaseStudyView
+              graphData={graphData}
+              selectedQuestion={question}
+            />
+          </div>
         )}
         {activeTab === 'graph' && (
           <QuestionGraphTab

@@ -1,23 +1,17 @@
 import React from 'react'
 import QuestionList from '../components/QuestionList'
 import QuestionDetailPanel from '../components/question/QuestionDetailPanel'
-import { useGraphStore } from '../stores/graphStore'
 import { useQuestionStore } from '../stores/questionStore'
 import './QuestionsPage.css'
 
 const QuestionsPage = ({
-  // graph data
-  fullGraphData,
+  // graph data (passed to detail panel tabs)
   graphData,
   selectedNode,
   onNodeClick,
   loading,
   error,
-  filters,
-  onFilterChange,
-  onRefresh,
   onShowNeighborhood,
-  onTimeRangeChange,
   timeFilter,
   // question callbacks
   questions,
@@ -35,7 +29,6 @@ const QuestionsPage = ({
 
   const handleQuestionSelect = (questionId) => {
     setSelectedQuestionId(questionId)
-    onFilterChange && onFilterChange({ ...filters, question_id: questionId })
   }
 
   const selectedQuestion = questions.find(q => q.id === selectedQuestionId) ?? null
