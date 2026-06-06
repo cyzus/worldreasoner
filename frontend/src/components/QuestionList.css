@@ -7,7 +7,7 @@
 }
 
 .question-list-filters {
-  padding: 15px 20px;
+  padding: 12px 14px;
   border-bottom: 1px solid #e0e0e0;
   background: #fafafa;
 }
@@ -97,10 +97,11 @@
 
 .filter-select {
   flex: 1;
-  padding: 8px 10px;
+  min-width: 0;
+  padding: 6px 4px;
   border: 1px solid #d0d0d0;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
   background: white;
   cursor: pointer;
   transition: border-color 0.2s;

@@ -5,7 +5,7 @@
   background: white;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  padding: 20px;
+  padding: 16px;
 }
 
 .benchmark-config-section h3 {
@@ -94,6 +94,15 @@
   padding: 4px 10px;
   font-size: 12px;
   color: #1c7ed6;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.model-tag span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .remove-model-btn {
@@ -114,6 +123,7 @@
 .add-model-row {
   display: flex;
   gap: 8px;
+  min-width: 0;
 }
 
 .add-model-row input {
@@ -145,10 +155,10 @@
   background: #45a049;
 }
 
-/* Config grid — 2-col label+input rows */
+/* Config grid — single column (sidebar is too narrow for 2-col) */
 .config-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   margin-bottom: 16px;
 }
