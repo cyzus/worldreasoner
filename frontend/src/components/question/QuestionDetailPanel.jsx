@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import CaseStudyView from '../CaseStudyView'
+import ArticleCoverage from '../ArticleCoverage'
 import QuestionGraphTab from './QuestionGraphTab'
 import QuestionForecastTab from './QuestionForecastTab'
 import './QuestionDetailPanel.css'
@@ -63,6 +64,7 @@ const QuestionDetailPanel = ({
       <div className="qdp-content">
         {activeTab === 'evidence' && (
           <div className="qdp-evidence-scroll">
+            <ArticleCoverage questionId={question.id} />
             <CaseStudyView
               graphData={graphData}
               selectedQuestion={question}

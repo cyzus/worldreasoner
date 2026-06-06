@@ -2,7 +2,6 @@ import React, { useState } from 'react'
 import CanvasTimelineGraph from '../CanvasTimelineGraph'
 import ForecastGraph from '../ForecastGraph'
 import EventDetails from '../EventDetails'
-import ArticleCoverage from '../ArticleCoverage'
 import CausalPathProgress from '../CausalPathProgress'
 import { useForecasts } from '../../hooks/useForecasts'
 import './QuestionGraphTab.css'
@@ -31,12 +30,9 @@ const QuestionGraphTab = ({
 
   return (
     <div className="qgt">
-      {/* Controls bar */}
+      {/* Controls bar — only toggle + forecast selector (fixed height) */}
       <div className="qgt-controls">
-        <ArticleCoverage questionId={question.id} />
-
         <div className="qgt-controls-row">
-          {/* Graph view toggle */}
           <div className="qgt-toggle-group">
             {['evidence', 'forecast', 'both'].map(v => (
               <button
@@ -50,7 +46,6 @@ const QuestionGraphTab = ({
             ))}
           </div>
 
-          {/* Forecast selector */}
           {!loadingForecasts && forecasts.length > 0 && (
             <div className="qgt-forecast-select">
               <label>Forecast:</label>
@@ -73,10 +68,11 @@ const QuestionGraphTab = ({
             <span className="qgt-status error">{forecastsError}</span>
           )}
           {!loadingForecasts && !forecastsError && forecasts.length === 0 && (
-            <span className="qgt-status muted">No forecasts — run one to see causal reasoning.</span>
+            <span className="qgt-status muted">No forecasts yet.</span>
           )}
         </div>
 
+        {/* Causal path progress is compact enough to stay here */}
         <CausalPathProgress questionId={question.id} />
       </div>
 
