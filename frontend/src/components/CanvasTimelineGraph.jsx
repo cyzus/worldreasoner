@@ -129,12 +129,14 @@ function generateTicks(dayKeys) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNode, timeFilter }) {
-    const scrollRef    = useRef(null)
+    const containerRef = useRef(null)
     const [contW, setContW] = useState(800)
-    const [vZoom, setVZoom] = useState(1)   // vertical zoom only (scales card heights)
+    const [vZoom, setVZoom] = useState(1)
+    const [panX, setPanX]   = useState(0)   // horizontal drag offset
+    const dragging = useRef(null)
 
     useEffect(() => {
-        const el = scrollRef.current
+        const el = containerRef.current
         if (!el) return
         const ro = new ResizeObserver(([e]) => setContW(e.contentRect.width))
         ro.observe(el)
@@ -167,6 +169,31 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
         return { nodes: laid, links: resolvedLinks, ticks: generateTicks(dayKeys) }
     }, [layout, graphData])
 
+    // Clamp panX so content never drifts entirely off-screen
+    const clampPan = useCallback((x, totalW) => {
+        const max = 0
+        const min = Math.min(0, contW - totalW)
+        return Math.max(min, Math.min(max, x))
+    }, [contW])
+
+    const onMouseDown = useCallback(e => {
+        if (e.target.closest('.tl-card')) return
+        dragging.current = { startX: e.clientX, startPan: panX }
+        e.currentTarget.setPointerCapture(e.pointerId)
+    }, [panX])
+
+    const onMouseMove = useCallback(e => {
+        if (!dragging.current) return
+        const dx = e.clientX - dragging.current.startX
+        if (!layout) return
+        setPanX(clampPan(dragging.current.startPan + dx, layout.totalW))
+    }, [clampPan, layout])
+
+    const onMouseUp = useCallback(() => { dragging.current = null }, [])
+
+    // Reset pan when data changes
+    useEffect(() => { setPanX(0) }, [graphData])
+
     const visible = useCallback(node => {
         if (!timeFilter?.start || !timeFilter?.end) return true
         return node._date >= timeFilter.start && node._date <= timeFilter.end
@@ -174,7 +201,7 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
 
     if (!layout || !nodes.length) {
         return (
-            <div className="canvas-timeline-graph" ref={scrollRef}>
+            <div className="canvas-timeline-graph" ref={containerRef}>
                 <div className="canvas-timeline-graph-empty">
                     <p>{!graphData?.nodes?.length
                         ? 'No graph data for this question.'
@@ -188,16 +215,23 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
     const svgH = SVG_H * vZoom
 
     return (
-        <div className="canvas-timeline-graph" ref={scrollRef}>
-            {/* Horizontally scrollable SVG */}
-            <div style={{ overflowX: 'auto', overflowY: 'hidden', height: '100%', width: '100%' }}>
+        <div
+            className="canvas-timeline-graph"
+            ref={containerRef}
+            onPointerDown={onMouseDown}
+            onPointerMove={onMouseMove}
+            onPointerUp={onMouseUp}
+            onPointerLeave={onMouseUp}
+            style={{ cursor: dragging.current ? 'grabbing' : 'grab', overflow: 'hidden' }}
+        >
                 <svg
-                    width={totalW}
+                    width={contW}
                     height={svgH}
-                    style={{ display: 'block', minHeight: svgH }}
+                    style={{ display: 'block' }}
                 >
-                    {/* ── Axis ── */}
-                    <line x1={0} y1={axisY * vZoom} x2={totalW} y2={axisY * vZoom}
+                    <g transform={`translate(${panX} 0)`}>
+                    {/* ── Axis — extends full content width ── */}
+                    <line x1={-PAD_X} y1={axisY * vZoom} x2={totalW + PAD_X} y2={axisY * vZoom}
                         stroke={C.axis} strokeWidth={1} />
 
                     {/* ── Tick marks + labels ── */}
@@ -295,17 +329,16 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
                             </g>
                         )
                     })}
+                    </g>
                 </svg>
-            </div>
 
-            {/* Vertical zoom controls only — horizontal scroll is native */}
             <div className="graph-overlay-controls">
                 <button className="control-btn" title="Expand vertically"
                     onClick={() => setVZoom(z => Math.min(3, +(z + 0.25).toFixed(2)))}>↕+</button>
                 <button className="control-btn" title="Compress vertically"
                     onClick={() => setVZoom(z => Math.max(0.5, +(z - 0.25).toFixed(2)))}>↕−</button>
                 <button className="control-btn" title="Reset"
-                    onClick={() => setVZoom(1)}>⟲</button>
+                    onClick={() => { setVZoom(1); setPanX(0) }}>⟲</button>
             </div>
         </div>
     )
