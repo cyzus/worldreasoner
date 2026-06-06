@@ -264,6 +264,17 @@
   border-color: #f1aeb5;
 }
 
+/* Suspense loading fallback */
+.loading-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  height: 100%;
+  font-size: 0.875rem;
+  color: #6c757d;
+}
+
 /* --- Global Layout Utilities --- */
 
 /* Base container for any page (takes full height of parent) */
