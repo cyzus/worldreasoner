@@ -56,7 +56,7 @@
 
 .search-index-progress-fill {
   height: 100%;
-  background: #4a90e2;
+  background: #111;
   animation: sis-slide 1.4s ease-in-out infinite;
   width: 40%;
 }
@@ -109,12 +109,12 @@
 }
 
 .search-index-btn.primary {
-  background: #4a90e2;
+  background: #111;
   color: #fff;
 }
 
 .search-index-btn.primary:hover:not(:disabled) {
-  background: #357abd;
+  background: #333;
 }
 
 .search-index-btn.secondary {
@@ -127,10 +127,10 @@
 }
 
 .search-index-btn.warning {
-  background: #e67e22;
+  background: #555;
   color: #fff;
 }
 
 .search-index-btn.warning:hover:not(:disabled) {
-  background: #d35400;
+  background: #444;
 }

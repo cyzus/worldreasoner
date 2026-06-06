@@ -27,13 +27,13 @@ const DataPage = ({
           className={`data-tab-btn ${activeTab === 'collection' ? 'active' : ''}`}
           onClick={() => setActiveTab('collection')}
         >
-          🔍 Collection
+          Collection
         </button>
         <button
           className={`data-tab-btn ${activeTab === 'evidence' ? 'active' : ''}`}
           onClick={() => setActiveTab('evidence')}
         >
-          🔬 Evidence
+          Evidence
         </button>
       </div>
 

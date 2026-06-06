@@ -18,7 +18,7 @@
 }
 
 .run-eval-btn {
-  background: #228be6;
+  background: #333;
   color: white;
   border: none;
   padding: 8px 16px;
@@ -29,7 +29,7 @@
 }
 
 .run-eval-btn:hover {
-  background: #1c7ed6;
+  background: #222;
 }
 
 .run-eval-btn:disabled {

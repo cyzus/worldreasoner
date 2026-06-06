@@ -273,9 +273,9 @@
 }
 
 .view-btn.active {
-  background: #e7f5ff;
-  border-color: #339af0;
-  color: #1c7ed6;
+  background: #f0f0f0;
+  border-color: #222;
+  color: #222;
 }
 
 .questions-header h3 {
@@ -286,7 +286,7 @@
 }
 
 .selection-info {
-  background: #4CAF50;
+  background: #111;
   color: white;
   padding: 4px 12px;
   border-radius: 12px;
@@ -333,14 +333,14 @@
 }
 
 .forecast-chip.active {
-  background: #1a73e8;
-  border-color: #1a73e8;
+  background: #222;
+  border-color: #222;
   color: white;
 }
 
 .forecast-chip.status-forecasted.active {
-  background: #2e7d32;
-  border-color: #2e7d32;
+  background: #333;
+  border-color: #333;
 }
 
 .forecast-chip.status-missing.active {
@@ -349,8 +349,8 @@
 }
 
 .forecast-chip.mode-knowledge.active {
-  background: #1c7ed6;
-  border-color: #1c7ed6;
+  background: #222;
+  border-color: #222;
 }
 
 .forecast-chip.mode-container.active {
@@ -405,7 +405,7 @@
 .search-input:focus,
 .filter-select:focus {
   outline: none;
-  border-color: #4CAF50;
+  border-color: #111;
   box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
 }
 
@@ -430,13 +430,13 @@
 
 .question-item:hover {
   background: #f0f0f0;
-  border-color: #4CAF50;
+  border-color: #111;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .question-item.active {
-  background: #e8f5e9;
-  border-color: #4CAF50;
+  background: #f0f0f0;
+  border-color: #111;
   box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
 }
 
@@ -445,7 +445,7 @@
   cursor: pointer;
   width: 18px;
   height: 18px;
-  accent-color: #4CAF50;
+  accent-color: #111;
 }
 
 .question-content {
@@ -474,18 +474,18 @@
 }
 
 .badge.source {
-  background: #e3f2fd;
-  color: #1976d2;
+  background: #f0f0f0;
+  color: #333;
 }
 
 .badge.domain {
   background: #f3e5f5;
-  color: #7b1fa2;
+  color: #444;
 }
 
 .badge.difficulty {
-  background: #fff3e0;
-  color: #e65100;
+  background: #f5f5f5;
+  color: #555;
 }
 
 .badge.forecast-badge {
@@ -629,14 +629,14 @@
 .config-item select:focus,
 .config-item input:focus {
   outline: none;
-  border-color: #4CAF50;
+  border-color: #111;
   box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
 }
 
 .run-forecast-btn {
   width: 100%;
   padding: 12px 20px;
-  background: #4CAF50;
+  background: #111;
   color: white;
   border: none;
   border-radius: 6px;
@@ -648,7 +648,7 @@
 }
 
 .run-forecast-btn:hover:not(:disabled) {
-  background: #45a049;
+  background: #333;
   box-shadow: 0 4px 8px rgba(76, 175, 80, 0.4);
 }
 
@@ -706,12 +706,12 @@
 
 .interval-btn:hover {
   background: #f5f5f5;
-  border-color: #4CAF50;
+  border-color: #111;
 }
 
 .interval-btn.active {
-  background: #4CAF50;
-  border-color: #4CAF50;
+  background: #111;
+  border-color: #111;
   color: white;
 }
 
@@ -853,7 +853,7 @@
 
 .view-graph-btn {
   padding: 8px 16px;
-  background: #4CAF50;
+  background: #111;
   color: white;
   border: none;
   border-radius: 4px;
@@ -862,7 +862,7 @@
 }
 
 .view-graph-btn:hover {
-  background: #45a049;
+  background: #333;
 }
 
 .forecast-graph-section {
@@ -888,8 +888,8 @@
 
 /* Job item selected state */
 .job-item.selected {
-  background: #e3f2fd;
-  border-left: 3px solid #4a90e2;
+  background: #f0f0f0;
+  border-left: 3px solid #111;
 }
 
 /* Job Details Section */
@@ -1005,7 +1005,7 @@
 }
 
 .result-stat-large.success {
-  border-color: #4caf50;
+  border-color: #111;
 }
 
 .result-stat-large.failed {
@@ -1013,7 +1013,7 @@
 }
 
 .result-stat-large.skipped {
-  border-color: #ff9800;
+  border-color: #555;
 }
 
 .result-stat-large.duration {
@@ -1027,7 +1027,7 @@
 }
 
 .result-stat-large.success .stat-value {
-  color: #4caf50;
+  color: #111;
 }
 
 .result-stat-large.failed .stat-value {
@@ -1035,7 +1035,7 @@
 }
 
 .result-stat-large.skipped .stat-value {
-  color: #ff9800;
+  color: #555;
 }
 
 .result-stat-large.duration .stat-value {
@@ -1077,8 +1077,8 @@
 }
 
 .result-item.success {
-  background: #e8f5e9;
-  border-left: 3px solid #4caf50;
+  background: #f0f0f0;
+  border-left: 3px solid #111;
 }
 
 .result-item.failed {
@@ -1087,8 +1087,8 @@
 }
 
 .result-item.skipped {
-  background: #fff3e0;
-  border-left: 3px solid #ff9800;
+  background: #f5f5f5;
+  border-left: 3px solid #555;
 }
 
 .error-message,
@@ -1101,7 +1101,7 @@
 
 .view-graph-btn-small {
   padding: 4px 8px;
-  background: #4CAF50;
+  background: #111;
   color: white;
   border: none;
   border-radius: 4px;
@@ -1111,7 +1111,7 @@
 }
 
 .view-graph-btn-small:hover {
-  background: #45a049;
+  background: #333;
 }
 
 .loading-details {
@@ -1128,7 +1128,7 @@
   width: 40px;
   height: 40px;
   border: 4px solid #f0f0f0;
-  border-top-color: #4a90e2;
+  border-top-color: #111;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }

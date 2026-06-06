@@ -47,7 +47,7 @@
 }
 
 .canvas-timeline-graph .control-btn:hover {
-    background: #f0f4f8;
+    background: #f5f5f5;
     color: #1e293b;
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);

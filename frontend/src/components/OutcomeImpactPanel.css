@@ -14,7 +14,7 @@
 
 .outcome-panel-header {
   padding: 16px;
-  background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+  background: linear-gradient(135deg, #ffc107 0%, #555 100%);
   color: #333;
   display: flex;
   justify-content: space-between;

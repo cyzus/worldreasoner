@@ -34,9 +34,9 @@
   letter-spacing: 0.04em;
 }
 
-.qdp-source { background: #cce5ff; color: #004085; }
-.qdp-domain { background: #d4edda; color: #155724; }
-.qdp-gt     { background: #fff3cd; color: #856404; }
+.qdp-source { background: #e0e0e0; color: #222; }
+.qdp-domain { background: #f0f0f0; color: #333; }
+.qdp-gt     { background: #f5f5f5; color: #555; }
 .qdp-date   { background: #f8f9fa; color: #6c757d; border: 1px solid #dee2e6; }
 
 .qdp-title {
@@ -73,8 +73,8 @@
 .qdp-tab-btn:hover { color: #212529; }
 
 .qdp-tab-btn.active {
-  color: #4a90e2;
-  border-bottom-color: #4a90e2;
+  color: #111;
+  border-bottom-color: #111;
 }
 
 /* ── Content area ────────────────────────────────────── */

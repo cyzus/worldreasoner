@@ -37,8 +37,8 @@
 }
 
 .qft-run-btn:hover {
-  color: #4a90e2;
-  border-color: #4a90e2;
+  color: #111;
+  border-color: #111;
 }
 
 /* ── Run popover ─────────────────────────────────────── */
@@ -94,8 +94,8 @@
 
 .qft-opt-btn:hover { background: #f8f9fa; }
 .qft-opt-btn.active {
-  background: #4a90e2;
-  border-color: #4a90e2;
+  background: #111;
+  border-color: #111;
   color: #fff;
 }
 
@@ -111,7 +111,7 @@
 
 .qft-slot-fill {
   height: 100%;
-  background: #4a90e2;
+  background: #111;
   border-radius: 3px;
   opacity: 0.35;
 }
@@ -121,7 +121,7 @@
   top: -3px;
   width: 2px;
   height: 12px;
-  background: #4a90e2;
+  background: #111;
   border-radius: 1px;
   transform: translateX(-50%);
 }
@@ -133,11 +133,11 @@
   color: #6c757d;
 }
 
-.qft-slot-sim { color: #4a90e2; font-weight: 600; }
+.qft-slot-sim { color: #111; font-weight: 600; }
 
 .qft-submit-msg {
   font-size: 0.8125rem;
-  color: #28a745;
+  color: #333;
 }
 
 .qft-popover-actions {
@@ -160,7 +160,7 @@
   padding: 5px 14px;
   border: none;
   border-radius: 4px;
-  background: #4a90e2;
+  background: #111;
   color: #fff;
   font-size: 0.8125rem;
   font-weight: 600;

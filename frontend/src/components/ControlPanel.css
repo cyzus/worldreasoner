@@ -139,14 +139,14 @@
 }
 
 .primary-btn {
-  background: #228be6;
-  border: 1px solid #228be6;
+  background: #333;
+  border: 1px solid #333;
   color: #ffffff;
 }
 
 .primary-btn:hover:not(:disabled) {
-  background: #1c7ed6;
-  border-color: #1c7ed6;
+  background: #222;
+  border-color: #222;
   box-shadow: 0 2px 5px rgba(34, 139, 230, 0.3);
 }
 
@@ -255,7 +255,7 @@
 }
 
 .question-item.selected {
-  background: #e7f5ff;
+  background: #f0f0f0;
   border-left: 3px solid #495057;
 }
 

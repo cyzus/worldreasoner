@@ -106,19 +106,19 @@ function App() {
             className={`top-tab-btn ${leftPanelTab === 'questions' ? 'active' : ''}`}
             onClick={() => setLeftPanelTab('questions')}
           >
-            🗂 Questions
+            Questions
           </button>
           <button
             className={`top-tab-btn ${leftPanelTab === 'data' ? 'active' : ''}`}
             onClick={() => setLeftPanelTab('data')}
           >
-            🔬 Data
+            Data
           </button>
           <button
             className={`top-tab-btn ${leftPanelTab === 'benchmark' ? 'active' : ''}`}
             onClick={() => setLeftPanelTab('benchmark')}
           >
-            📈 Benchmark
+            Benchmark
           </button>
         </div>
 

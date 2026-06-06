@@ -37,39 +37,39 @@
 }
 
 .status-filter-btn.active {
-  background: #1a73e8;
-  border-color: #1a73e8;
+  background: #222;
+  border-color: #222;
   color: white;
 }
 
 .status-filter-btn.evidence-collected.active {
-  background: #e65100;
-  border-color: #e65100;
+  background: #555;
+  border-color: #555;
 }
 
 .status-filter-btn.graph-collected.active {
-  background: #6a1b9a;
-  border-color: #6a1b9a;
+  background: #444;
+  border-color: #444;
 }
 
 .status-filter-btn.forecasted.active {
-  background: #2e7d32;
-  border-color: #2e7d32;
+  background: #333;
+  border-color: #333;
 }
 
 .status-filter-btn.needs-evidence.active {
-  background: #e65100;
-  border-color: #e65100;
+  background: #555;
+  border-color: #555;
 }
 
 .status-filter-btn.needs-graph.active {
-  background: #6a1b9a;
-  border-color: #6a1b9a;
+  background: #444;
+  border-color: #444;
 }
 
 .status-filter-btn.complete.active {
-  background: #2e7d32;
-  border-color: #2e7d32;
+  background: #333;
+  border-color: #333;
 }
 
 .search-box {
@@ -85,7 +85,7 @@
 
 .search-box:focus {
   outline: none;
-  border-color: #4a90e2;
+  border-color: #111;
 }
 
 .filter-row {
@@ -109,7 +109,7 @@
 
 .filter-select:focus {
   outline: none;
-  border-color: #4a90e2;
+  border-color: #111;
 }
 
 .clear-filters-btn {
@@ -146,15 +146,15 @@
 }
 
 .question-list-item:hover {
-  border-color: #4a90e2;
-  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.1);
+  border-color: #111;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   transform: translateY(-1px);
 }
 
 .question-list-item.selected {
-  border-color: #4a90e2;
-  background: #f0f7ff;
-  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.15);
+  border-color: #111;
+  background: #f5f5f5;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
 }
 
 .question-list-item.in-db {
@@ -203,24 +203,24 @@
 }
 
 .badge.domain {
-  background: #e3f2fd;
-  color: #1976d2;
+  background: #f0f0f0;
+  color: #333;
 }
 
 .badge.difficulty {
-  background: #fff3e0;
-  color: #f57c00;
+  background: #f5f5f5;
+  color: #555;
 }
 
 .badge.difficulty-1,
 .badge.difficulty-2 {
-  background: #e8f5e9;
-  color: #2e7d32;
+  background: #f0f0f0;
+  color: #333;
 }
 
 .badge.difficulty-3 {
-  background: #fff3e0;
-  color: #f57c00;
+  background: #f5f5f5;
+  color: #555;
 }
 
 .badge.difficulty-4,
@@ -326,19 +326,19 @@
 }
 
 .selection-btn:hover {
-  background: #4a90e2;
+  background: #111;
   color: white;
-  border-color: #4a90e2;
+  border-color: #111;
 }
 
 .selection-count {
   margin-left: auto;
   font-size: 12px;
   font-weight: 600;
-  color: #4a90e2;
+  color: #111;
   padding: 6px 12px;
   background: white;
-  border: 1px solid #4a90e2;
+  border: 1px solid #111;
   border-radius: 6px;
 }
 
@@ -358,8 +358,8 @@
 }
 
 .question-list-item.multi-selected {
-  border-color: #4a90e2;
-  background: #f0f7ff;
+  border-color: #111;
+  background: #f5f5f5;
 }
 
 .question-item-content {
@@ -403,8 +403,8 @@
 }
 
 .question-edit-btn:hover {
-  background-color: rgba(74, 144, 226, 0.1);
-  border-color: rgba(74, 144, 226, 0.25);
+  background-color: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.12);
 }
 
 .question-delete-btn:hover {
@@ -493,7 +493,7 @@
 }
 
 .option-badge {
-  background-color: #f0f4f8;
+  background-color: #f5f5f5;
   border: 1px solid #dce4eb;
   border-radius: 4px;
   padding: 2px 6px;

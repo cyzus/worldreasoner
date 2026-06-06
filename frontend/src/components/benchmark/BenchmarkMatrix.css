@@ -51,8 +51,8 @@
   cursor: pointer;
 }
 .bm-metric-toggle.active {
-  background: #4a90e2;
-  border-color: #4a90e2;
+  background: #111;
+  border-color: #111;
   color: #fff;
 }
 
@@ -118,7 +118,7 @@
 
 .bm-row:hover .bm-td-cond,
 .bm-row:hover .bm-td-cell {
-  background: #f0f7ff;
+  background: #f5f5f5;
 }
 
 .bm-td-cond {
@@ -139,14 +139,14 @@
 }
 
 .bm-td-cell.has-data { cursor: pointer; }
-.bm-td-cell.has-data:hover { background: #e8f0fb; }
+.bm-td-cell.has-data:hover { background: #f0f0f0; }
 .bm-td-cell.active {
-  background: #e8f0fb;
-  outline: 2px solid #4a90e2;
+  background: #f0f0f0;
+  outline: 2px solid #111;
   outline-offset: -2px;
 }
 .bm-td-cell.best .bm-cell-main {
-  color: #28a745;
+  color: #333;
   font-weight: 700;
 }
 .bm-td-cell.no-data { opacity: 0.35; }
@@ -171,7 +171,7 @@
 /* ── Expanded detail row ─────────────────────────────── */
 .bm-expand-cell {
   padding: 0;
-  border-bottom: 2px solid #4a90e2;
+  border-bottom: 2px solid #111;
 }
 
 .bm-expand-header {
@@ -179,14 +179,14 @@
   align-items: center;
   justify-content: space-between;
   padding: 8px 16px;
-  background: #e8f0fb;
+  background: #f0f0f0;
   border-bottom: 1px solid #dee2e6;
 }
 
 .bm-expand-label {
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #4a90e2;
+  color: #111;
   text-transform: capitalize;
 }
 
