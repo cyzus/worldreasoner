@@ -6,7 +6,6 @@ import BenchmarkMatrix from './benchmark/BenchmarkMatrix'
 import './BenchmarkPage.css'
 
 const BenchmarkPage = () => {
-  const [activeView, setActiveView] = useState('results') // 'run' | 'results'
 
   // Conditions
   const [conditions, setConditions]           = useState([])
@@ -61,7 +60,6 @@ const BenchmarkPage = () => {
         body: JSON.stringify({ pipeline_type: 'auto_benchmark', config }),
       })
       const data = await res.json()
-      setActiveView('run')
       await loadJobs()
       selectJob(data.job_id)
     } catch (err) {
@@ -76,14 +74,6 @@ const BenchmarkPage = () => {
     <div className="benchmark-page page-container">
       <div className="benchmark-header page-header">
         <h2>Benchmark</h2>
-        <div className="header-actions">
-          <button className={`view-btn ${activeView === 'run' ? 'active' : ''}`} onClick={() => setActiveView('run')}>
-            Run
-          </button>
-          <button className={`view-btn ${activeView === 'results' ? 'active' : ''}`} onClick={() => setActiveView('results')}>
-            Results
-          </button>
-        </div>
       </div>
 
       <div className="page-content">
@@ -201,31 +191,16 @@ const BenchmarkPage = () => {
           </div>
         </div>
 
-        {/* ── Right panel ── */}
-        <div className="page-main">
-          {activeView === 'run' ? (
+        {/* ── Right panel: matrix always visible; job details overlay when selected ── */}
+        <div className="page-main" style={{ position: 'relative' }}>
+          {selectedJobId && jobDetails ? (
             <div className="scroll-container">
-              {selectedJobId && jobDetails ? (
-                <JobDetails job={jobDetails} onClose={() => selectJob(null)} />
-              ) : loadingDetails ? (
-                <div className="loading-details">
-                  <div className="loading-spinner" />
-                  <div>Loading job details…</div>
-                </div>
-              ) : (
-                <div className="benchmark-placeholder">
-                  <div className="placeholder-icon">📊</div>
-                  <h3>Auto-Benchmark</h3>
-                  <p>Configure conditions and models, then click Start.</p>
-                  <div className="placeholder-conditions">
-                    {conditions.map(c => (
-                      <div key={c.name} className="placeholder-condition-item">
-                        <strong>{c.display_name}</strong>: {c.description}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <JobDetails job={jobDetails} onClose={() => selectJob(null)} />
+            </div>
+          ) : loadingDetails ? (
+            <div className="loading-details">
+              <div className="loading-spinner" />
+              <div>Loading job details…</div>
             </div>
           ) : (
             <BenchmarkMatrix />
