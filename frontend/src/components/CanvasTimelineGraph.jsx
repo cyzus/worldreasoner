@@ -1,5 +1,5 @@
 /**
- * CanvasTimelineGraph — SVG timeline, scrollable horizontally.
+ * CanvasTimelineGraph — SVG timeline, drag to pan horizontally.
  *
  * Layout rules:
  *  - Axis runs horizontally through the lower third of the canvas.
