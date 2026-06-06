@@ -15,6 +15,7 @@ const QuestionsPage = ({
   timeFilter,
   // question callbacks
   questions,
+  onQuestionSelect,
   onQuestionUpdated,
   onQuestionDeleted,
   // price history (passed through to detail panel)
@@ -29,6 +30,7 @@ const QuestionsPage = ({
 
   const handleQuestionSelect = (questionId) => {
     setSelectedQuestionId(questionId)
+    onQuestionSelect?.(questionId)
   }
 
   const selectedQuestion = questions.find(q => q.id === selectedQuestionId) ?? null

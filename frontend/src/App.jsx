@@ -131,6 +131,7 @@ function App() {
               loading={loading}
               error={error}
               questions={questions}
+              onQuestionSelect={handleQuestionSelect}
               onShowNeighborhood={handleShowNeighborhood}
               timeFilter={timeFilter}
               priceHistoryData={priceHistoryData}
