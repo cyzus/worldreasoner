@@ -14,6 +14,7 @@
  *    with a small vertical jog to the card bottom.  They never cross cards.
  */
 import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react'
+import EventDetails from './EventDetails'
 import './CanvasTimelineGraph.css'
 
 // ── Layout constants ──────────────────────────────────────────────────────────
@@ -177,18 +178,22 @@ function generateTicks(dayKeys) {
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNode, timeFilter }) {
+export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNode, timeFilter, onShowNeighborhood }) {
     const containerRef = useRef(null)
-    const [contW, setContW] = useState(800)
+    const [contW, setContW]       = useState(800)
     const [vZoom, setVZoom]       = useState(1)
     const [panX, setPanX]         = useState(0)
     const [isDragging, setIsDragging] = useState(false)
+    // Panel: which node is selected and where to show the detail panel
+    const [panel, setPanel]       = useState(null) // { node, x, y }
     const dragging = useRef(null)
 
     useEffect(() => {
         const el = containerRef.current
         if (!el) return
-        const ro = new ResizeObserver(([e]) => setContW(e.contentRect.width))
+        const ro = new ResizeObserver(([e]) => {
+            setContW(e.contentRect.width)
+        })
         ro.observe(el)
         return () => ro.disconnect()
     }, [])
@@ -227,8 +232,22 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
             .filter(l => l.source && l.target && l.source.id !== l.target.id
                 && l.source.cx < l.target.cx)  // left-to-right only
 
-        return { nodes: laid, links: resolvedLinks, ticks: generateTicks(dayKeys) }
+        return { nodes: laid, links: resolvedLinks, ticks: generateTicks(dayKeys), nodeMap }
     }, [layout, graphData])
+
+    // IDs of nodes connected to the selected panel node
+    const connectedIds = useMemo(() => {
+        if (!panel?.node || !links.length) return new Set()
+        const nid = panel.node.id
+        const ids = new Set()
+        links.forEach(l => {
+            const sid = l.source?.id || l.source
+            const tid = l.target?.id || l.target
+            if (sid === nid) ids.add(tid)
+            if (tid === nid) ids.add(sid)
+        })
+        return ids
+    }, [panel, links])
 
     // Clamp panX so content never drifts entirely off-screen
     const clampPan = useCallback((x, totalW) => {
@@ -238,17 +257,21 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
     }, [contW])
 
     const onMouseDown = useCallback(e => {
-        // Ignore clicks on cards (SVG <g> elements — use data attribute instead of .closest)
-        if (e.target.dataset?.card) return
-        dragging.current = { startX: e.clientX, startPan: panX }
-        setIsDragging(true)
-        e.currentTarget.setPointerCapture(e.pointerId)
-    }, [panX])
+        if (e.target.closest?.('[data-card]')) return
+        // Click on background closes panel
+        setPanel(null)
+        onNodeClick?.(null)
+        dragging.current = { startX: e.clientX, startPan: panX, moved: false }
+    }, [panX, onNodeClick])
 
     const onMouseMove = useCallback(e => {
         if (!dragging.current || !layout) return
         const dx = e.clientX - dragging.current.startX
-        setPanX(clampPan(dragging.current.startPan + dx, layout.totalW))
+        if (Math.abs(dx) > 3) {
+            dragging.current.moved = true
+            setIsDragging(true)
+            setPanX(clampPan(dragging.current.startPan + dx, layout.totalW))
+        }
     }, [clampPan, layout])
 
     const onMouseUp = useCallback(() => {
@@ -283,10 +306,10 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
         <div
             className="canvas-timeline-graph"
             ref={containerRef}
-            onPointerDown={onMouseDown}
-            onPointerMove={onMouseMove}
-            onPointerUp={onMouseUp}
-            onPointerLeave={onMouseUp}
+            onMouseDown={onMouseDown}
+            onMouseMove={onMouseMove}
+            onMouseUp={onMouseUp}
+            onMouseLeave={onMouseUp}
             style={{ cursor: isDragging ? 'grabbing' : 'grab', overflow: 'hidden' }}
         >
                 <svg
@@ -331,24 +354,39 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
                         )
                     })}
 
-                    {/* ── Causal links — route along axis ── */}
+                    {/* ── Causal links — cubic bezier curves ── */}
                     {links.filter(l => visible(l.source) && visible(l.target)).map((l, i) => {
+                        const sid = l.source.id; const tid = l.target.id
+                        const pid = panel?.node?.id
+                        const isActive = pid && (sid === pid || tid === pid)
                         const ay   = axisY * vZoom
-                        const sx   = l.source.cx
-                        const tx   = l.target.cx
-                        const srcB = l.source.cardBottom * vZoom
-                        const tgtB = l.target.cardBottom * vZoom
+                        const sx   = l.source.cx + CARD_W / 2
+                        const sy   = l.source.cardBottom * vZoom
+                        const tx   = l.target.cx - CARD_W / 2
+                        const ty   = l.target.cardBottom * vZoom
                         const col  = linkColor(l)
                         const isImpact = (l.relation_type || l.type || '').toLowerCase().includes('impact')
-                        const d = `M ${sx} ${srcB} L ${sx} ${ay} L ${tx} ${ay} L ${tx} ${tgtB}`
+                        const curveDip = Math.min(60, (ay - Math.min(sy, ty)) * 0.6)
+                        const cy1 = sy + curveDip
+                        const cy2 = ty + curveDip
+                        const mx  = (sx + tx) / 2
+                        const d   = `M ${sx} ${sy} C ${mx} ${cy1}, ${mx} ${cy2}, ${tx} ${ty}`
+                        const angle = Math.atan2(ty - cy2, tx - mx)
+                        const aLen = 7
+                        const ax1 = tx - aLen * Math.cos(angle - 0.4)
+                        const ay1 = ty - aLen * Math.sin(angle - 0.4)
+                        const ax2 = tx - aLen * Math.cos(angle + 0.4)
+                        const ay2 = ty - aLen * Math.sin(angle + 0.4)
+                        // Dim non-active links when something is expanded
+                        const opacity = panel ? (isActive ? 0.9 : 0.15) : 0.65
+                        const strokeW = isActive ? (isImpact ? 2.5 : 2) : (isImpact ? 1.5 : 1)
+
                         return (
-                            <g key={i} opacity={0.6}>
-                                <path d={d} fill="none"
-                                    stroke={col}
-                                    strokeWidth={isImpact ? 1.5 : 1}
+                            <g key={i} opacity={opacity}>
+                                <path d={d} fill="none" stroke={col}
+                                    strokeWidth={strokeW}
                                     strokeDasharray={isImpact ? '5 3' : undefined} />
-                                <polygon
-                                    points={`${tx},${tgtB - 1} ${tx - 5},${tgtB + 7} ${tx + 5},${tgtB + 7}`}
+                                <polygon points={`${tx},${ty} ${ax1},${ay1} ${ax2},${ay2}`}
                                     fill={col} />
                             </g>
                         )
@@ -356,45 +394,63 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
 
                     {/* ── Cards ── */}
                     {nodes.filter(visible).map(n => {
-                        const sel      = selectedNode?.id === n.id
-                        const isOutcome = n.properties?.is_actual_outcome
-                        const barCol   = nodeBarColor(n)
-                        const borderCol = nodeBorderColor(n, sel)
-                        const borderW  = nodeBorderWidth(n, sel)
-                        const cy    = n.cy * vZoom
-                        const x     = n.cx - CARD_W / 2
-                        const y     = cy - CARD_H / 2
+                        const isSelected  = panel?.node?.id === n.id
+                        const isConnected = connectedIds.has(n.id)
+                        const isOutcome   = n.properties?.is_actual_outcome
+                        const barCol      = nodeBarColor(n)
+                        const cy  = n.cy * vZoom
+                        const x   = n.cx - CARD_W / 2
+                        const y   = cy - CARD_H / 2
                         const title = n.name || n.title || n.id || ''
                         const short = title.length > 18 ? title.slice(0, 18) + '…' : title
 
+                        const borderCol = isSelected  ? '#111'
+                            : isConnected             ? barCol
+                            : isOutcome               ? C.outcomeRing
+                            : C.cardBorder
+                        const borderW = isSelected ? 2 : (isConnected || isOutcome) ? 1.5 : 1
+
                         return (
                             <g key={n.id} className="tl-card" data-card="1" style={{ cursor: 'pointer' }}
-                                onClick={() => onNodeClick?.(n)}>
-                                {/* Outcome glow ring */}
+                                onClick={() => {
+                                    if (isSelected) {
+                                        setPanel(null); onNodeClick?.(null)
+                                    } else {
+                                        // Compute viewport coords for useDraggablePopup
+                                        const rect = containerRef.current?.getBoundingClientRect() || { left: 0, top: 0 }
+                                        const screenX = rect.left + n.cx + CARD_W / 2 + panX
+                                        const screenY = rect.top + cy
+                                        const nodeWithCoords = { ...n, _screenX: screenX, _screenY: screenY }
+                                        setPanel({ node: nodeWithCoords })
+                                        onNodeClick?.(nodeWithCoords)
+                                    }
+                                }}>
+                                {/* Outcome glow */}
                                 {isOutcome && (
                                     <rect x={x - 4} y={y - 4} width={CARD_W + 8} height={CARD_H + 8}
                                         rx={7} fill={C.outcomeGlow} stroke={C.outcomeRing}
                                         strokeWidth={1.5} strokeDasharray="4 2" />
                                 )}
+                                {/* Connected ring */}
+                                {isConnected && !isSelected && (
+                                    <rect x={x - 3} y={y - 3} width={CARD_W + 6} height={CARD_H + 6}
+                                        rx={6} fill="none" stroke={barCol} strokeWidth={1} opacity={0.5} />
+                                )}
                                 {/* Shadow */}
-                                <rect x={x + 1} y={y + 1} width={CARD_W} height={CARD_H}
-                                    rx={4} fill="rgba(0,0,0,0.05)" />
+                                <rect x={x + 1} y={y + 2} width={CARD_W} height={CARD_H}
+                                    rx={4} fill="rgba(0,0,0,0.06)" />
                                 {/* Body */}
                                 <rect x={x} y={y} width={CARD_W} height={CARD_H}
-                                    rx={4}
-                                    fill={C.cardBg}
-                                    stroke={borderCol}
-                                    strokeWidth={borderW} />
-                                {/* Color bar — semantic */}
-                                <rect x={x} y={y} width={CARD_W} height={3}
-                                    rx={4} fill={barCol} />
-                                {/* Date + outcome label */}
-                                <text x={x + 7} y={y + 15} fontSize={8} fill={C.textDate}
+                                    rx={4} fill={C.cardBg} stroke={borderCol} strokeWidth={borderW} />
+                                {/* Color bar */}
+                                <rect x={x} y={y} width={CARD_W} height={3} rx={4} fill={barCol} />
+                                {/* Date */}
+                                <text x={x + 8} y={y + 15} fontSize={8} fill={C.textDate}
                                     fontFamily="Inter,sans-serif">
                                     {fmtDate(n._date)}{isOutcome ? ' · OUTCOME' : ''}
                                 </text>
                                 {/* Title */}
-                                <text x={x + 7} y={y + 30} fontSize={9.5}
+                                <text x={x + 8} y={y + 30} fontSize={9.5}
                                     fill={isOutcome ? C.outcomeRing : C.textTitle}
                                     fontFamily="Inter,sans-serif" fontWeight={isOutcome ? 700 : 600}>
                                     {short}
@@ -405,6 +461,15 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
                     })}
                     </g>
                 </svg>
+
+            {/* EventDetails — uses useDraggablePopup with viewport coords from _screenX/_screenY */}
+            {panel && (
+                <EventDetails
+                    node={panel.node}
+                    onClose={() => { setPanel(null); onNodeClick?.(null) }}
+                    onShowNeighborhood={onShowNeighborhood}
+                />
+            )}
 
             <div className="graph-overlay-controls">
                 <button className="control-btn" title="Expand vertically"

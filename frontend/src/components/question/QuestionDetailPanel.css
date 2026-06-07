@@ -4,6 +4,7 @@
   height: 100%;
   overflow: hidden;
   background: #f8f9fa;
+  position: relative;
 }
 
 /* ── Header ─────────────────────────────────────────── */

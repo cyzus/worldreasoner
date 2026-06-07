@@ -3,7 +3,6 @@ import CaseStudyView from '../CaseStudyView'
 import ArticleCoverage from '../ArticleCoverage'
 import QuestionGraphTab from './QuestionGraphTab'
 import QuestionForecastTab from './QuestionForecastTab'
-import EventDetails from '../EventDetails'
 import './QuestionDetailPanel.css'
 
 const TABS = [
@@ -60,15 +59,6 @@ const QuestionDetailPanel = ({
           </button>
         ))}
       </div>
-
-      {/* Event details panel — outside qdp-content so it's not clipped */}
-      {selectedNode && activeTab === 'graph' && (
-        <EventDetails
-          node={selectedNode}
-          onClose={() => onNodeClick(null)}
-          onShowNeighborhood={onShowNeighborhood}
-        />
-      )}
 
       {/* Tab content */}
       <div className="qdp-content">

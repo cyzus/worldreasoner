@@ -92,6 +92,7 @@ const QuestionGraphTab = ({
                   onNodeClick={onNodeClick}
                   selectedNode={selectedNode}
                   timeFilter={timeFilter}
+                  onShowNeighborhood={onShowNeighborhood}
                 />
               )}
             </div>
