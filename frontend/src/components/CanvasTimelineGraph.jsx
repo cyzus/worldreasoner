@@ -29,33 +29,82 @@ const MIN_COL_W = CARD_W + COL_PAD  // min width per date column
 
 // ── Colors ────────────────────────────────────────────────────────────────────
 const C = {
-    bg:         '#fafafa',
-    axis:       '#c0c0c0',
-    tick:       '#aaa',
-    stem:       '#ddd',
-    cardBg:     '#fff',
-    cardBgSel:  '#f5f5f5',
-    cardBorder: '#ddd',
-    cardSel:    '#111',
-    textDate:   '#bbb',
-    textTitle:  '#1a1a1a',
-    barOcc:     '#555',
-    barDef:     '#ccc',
-    barOut:     '#111',
-    link:       '#ccc',
-    linkStrong: '#999',
-    arrow:      '#999',
+    axis:           '#d0d0d0',
+    tick:           '#aaa',
+    stem:           '#e0e0e0',
+    cardBg:         '#fff',
+    cardBgSel:      '#fafafa',
+    cardBorder:     '#ddd',
+    cardSel:        '#111',
+    textDate:       '#bbb',
+    textTitle:      '#1a1a1a',
+    // Node bar colors — semantic
+    barOccurred:    '#10b981',  // green: confirmed event
+    barPredicted:   '#94a3b8',  // slate: predicted/uncertain
+    barPositive:    '#22c55e',  // bright green: positive impact on outcome
+    barNegative:    '#ef4444',  // red: negative impact
+    barMixed:       '#a855f7',  // purple: mixed
+    barOutcome:     '#f59e0b',  // amber: outcome node
+    // Link colors — semantic
+    linkCauses:     '#10b981',
+    linkEnables:    '#3b82f6',
+    linkAmplifies:  '#22c55e',
+    linkTriggers:   '#10b981',
+    linkPrevents:   '#ef4444',
+    linkInhibits:   '#f97316',
+    linkPositive:   '#22c55e',
+    linkNegative:   '#ef4444',
+    linkMixed:      '#a855f7',
+    linkDefault:    '#cbd5e1',
+    // Outcome highlight
+    outcomeRing:    '#f59e0b',
+    outcomeGlow:    'rgba(245,158,11,0.15)',
 }
 
-function barColor(node) {
-    if (node.properties?.is_actual_outcome) return C.barOut
+function nodeBarColor(node) {
+    // Actual outcome node — amber
+    if (node.properties?.is_actual_outcome) return C.barOutcome
+    // Impact direction (set by applyOutcomeAwareImpactColors)
+    const dir = node._impactDirection
+    if (dir === 'positive') return C.barPositive
+    if (dir === 'negative') return C.barNegative
+    if (dir === 'mixed')    return C.barMixed
+    // Fallback: status
     const s = node.properties?.status || node.status
-    return s === 'occurred' ? C.barOcc : C.barDef
+    if (s === 'occurred') return C.barOccurred
+    return C.barPredicted
+}
+
+function nodeBorderColor(node, selected) {
+    if (selected) return C.cardSel
+    if (node.properties?.is_actual_outcome) return C.outcomeRing
+    return C.cardBorder
+}
+
+function nodeBorderWidth(node, selected) {
+    if (selected) return 1.5
+    if (node.properties?.is_actual_outcome) return 2
+    return 1
+}
+
+function linkColor(link) {
+    const t = (link.relation_type || link.type || link.edge_type || '').toLowerCase().replace(/ /g, '_')
+    if (t.includes('impact_positive') || t === 'amplifies' || t === 'causes' || t === 'triggers') return C.linkPositive
+    if (t.includes('impact_negative') || t === 'prevents' || t === 'inhibits') return C.linkNegative
+    if (t.includes('impact_mixed'))  return C.linkMixed
+    if (t === 'enables')             return C.linkEnables
+    return C.linkDefault
 }
 
 function parseDate(node) {
-    const s = node.properties?.occurred_date || node.properties?.predicted_date
-        || node.occurred_date || node.predicted_date
+    // Try nested properties first, then top-level fields
+    const s = node.properties?.occurred_date
+        || node.properties?.predicted_date
+        || node.properties?.date
+        || node.occurred_date
+        || node.predicted_date
+        || node.date
+        || node.event_date
     if (!s) return null
     const d = new Date(s)
     return isNaN(d) ? null : d
@@ -131,8 +180,9 @@ function generateTicks(dayKeys) {
 export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNode, timeFilter }) {
     const containerRef = useRef(null)
     const [contW, setContW] = useState(800)
-    const [vZoom, setVZoom] = useState(1)
-    const [panX, setPanX]   = useState(0)   // horizontal drag offset
+    const [vZoom, setVZoom]       = useState(1)
+    const [panX, setPanX]         = useState(0)
+    const [isDragging, setIsDragging] = useState(false)
     const dragging = useRef(null)
 
     useEffect(() => {
@@ -148,7 +198,18 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
         const raw = graphData.nodes
             .map(n => ({ ...n, _date: parseDate(n) }))
             .filter(n => n._date)
-        if (!raw.length) return null
+        // If no nodes have dates, try top-level date fields as fallback
+        if (!raw.length) {
+            const fallback = graphData.nodes
+                .map(n => {
+                    const s = n.occurred_date || n.predicted_date || n.date
+                    const d = s ? new Date(s) : null
+                    return { ...n, _date: d && !isNaN(d) ? d : null }
+                })
+                .filter(n => n._date)
+            if (!fallback.length) return null
+            return buildLayout(fallback, contW)
+        }
         return buildLayout(raw, contW)
     }, [graphData, contW])
 
@@ -177,19 +238,23 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
     }, [contW])
 
     const onMouseDown = useCallback(e => {
-        if (e.target.closest('.tl-card')) return
+        // Ignore clicks on cards (SVG <g> elements — use data attribute instead of .closest)
+        if (e.target.dataset?.card) return
         dragging.current = { startX: e.clientX, startPan: panX }
+        setIsDragging(true)
         e.currentTarget.setPointerCapture(e.pointerId)
     }, [panX])
 
     const onMouseMove = useCallback(e => {
-        if (!dragging.current) return
+        if (!dragging.current || !layout) return
         const dx = e.clientX - dragging.current.startX
-        if (!layout) return
         setPanX(clampPan(dragging.current.startPan + dx, layout.totalW))
     }, [clampPan, layout])
 
-    const onMouseUp = useCallback(() => { dragging.current = null }, [])
+    const onMouseUp = useCallback(() => {
+        dragging.current = null
+        setIsDragging(false)
+    }, [])
 
     // Reset pan when data changes
     useEffect(() => { setPanX(0) }, [graphData])
@@ -222,7 +287,7 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
             onPointerMove={onMouseMove}
             onPointerUp={onMouseUp}
             onPointerLeave={onMouseUp}
-            style={{ cursor: dragging.current ? 'grabbing' : 'grab', overflow: 'hidden' }}
+            style={{ cursor: isDragging ? 'grabbing' : 'grab', overflow: 'hidden' }}
         >
                 <svg
                     width={contW}
@@ -273,27 +338,29 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
                         const tx   = l.target.cx
                         const srcB = l.source.cardBottom * vZoom
                         const tgtB = l.target.cardBottom * vZoom
-                        const isStrong = (l.relation_type || l.type || '').toLowerCase().includes('impact')
-                        // Route: source card bottom → axis → target card bottom
+                        const col  = linkColor(l)
+                        const isImpact = (l.relation_type || l.type || '').toLowerCase().includes('impact')
                         const d = `M ${sx} ${srcB} L ${sx} ${ay} L ${tx} ${ay} L ${tx} ${tgtB}`
                         return (
-                            <g key={i} opacity={0.45}>
+                            <g key={i} opacity={0.6}>
                                 <path d={d} fill="none"
-                                    stroke={isStrong ? C.linkStrong : C.link}
-                                    strokeWidth={isStrong ? 1.5 : 1}
-                                    strokeDasharray={isStrong ? '5 3' : undefined} />
-                                {/* Arrowhead pointing up at target */}
+                                    stroke={col}
+                                    strokeWidth={isImpact ? 1.5 : 1}
+                                    strokeDasharray={isImpact ? '5 3' : undefined} />
                                 <polygon
                                     points={`${tx},${tgtB - 1} ${tx - 5},${tgtB + 7} ${tx + 5},${tgtB + 7}`}
-                                    fill={isStrong ? C.linkStrong : C.link} />
+                                    fill={col} />
                             </g>
                         )
                     })}
 
                     {/* ── Cards ── */}
                     {nodes.filter(visible).map(n => {
-                        const sel   = selectedNode?.id === n.id
-                        const color = barColor(n)
+                        const sel      = selectedNode?.id === n.id
+                        const isOutcome = n.properties?.is_actual_outcome
+                        const barCol   = nodeBarColor(n)
+                        const borderCol = nodeBorderColor(n, sel)
+                        const borderW  = nodeBorderWidth(n, sel)
                         const cy    = n.cy * vZoom
                         const x     = n.cx - CARD_W / 2
                         const y     = cy - CARD_H / 2
@@ -301,28 +368,35 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
                         const short = title.length > 18 ? title.slice(0, 18) + '…' : title
 
                         return (
-                            <g key={n.id} className="tl-card" style={{ cursor: 'pointer' }}
+                            <g key={n.id} className="tl-card" data-card="1" style={{ cursor: 'pointer' }}
                                 onClick={() => onNodeClick?.(n)}>
+                                {/* Outcome glow ring */}
+                                {isOutcome && (
+                                    <rect x={x - 4} y={y - 4} width={CARD_W + 8} height={CARD_H + 8}
+                                        rx={7} fill={C.outcomeGlow} stroke={C.outcomeRing}
+                                        strokeWidth={1.5} strokeDasharray="4 2" />
+                                )}
                                 {/* Shadow */}
                                 <rect x={x + 1} y={y + 1} width={CARD_W} height={CARD_H}
-                                    rx={4} fill="rgba(0,0,0,0.04)" />
+                                    rx={4} fill="rgba(0,0,0,0.05)" />
                                 {/* Body */}
                                 <rect x={x} y={y} width={CARD_W} height={CARD_H}
                                     rx={4}
-                                    fill={sel ? C.cardBgSel : C.cardBg}
-                                    stroke={sel ? C.cardSel : C.cardBorder}
-                                    strokeWidth={sel ? 1.5 : 1} />
-                                {/* Color bar */}
+                                    fill={C.cardBg}
+                                    stroke={borderCol}
+                                    strokeWidth={borderW} />
+                                {/* Color bar — semantic */}
                                 <rect x={x} y={y} width={CARD_W} height={3}
-                                    rx={4} fill={color} />
-                                {/* Date */}
+                                    rx={4} fill={barCol} />
+                                {/* Date + outcome label */}
                                 <text x={x + 7} y={y + 15} fontSize={8} fill={C.textDate}
                                     fontFamily="Inter,sans-serif">
-                                    {fmtDate(n._date)}
+                                    {fmtDate(n._date)}{isOutcome ? ' · OUTCOME' : ''}
                                 </text>
                                 {/* Title */}
-                                <text x={x + 7} y={y + 29} fontSize={9.5} fill={C.textTitle}
-                                    fontFamily="Inter,sans-serif" fontWeight={600}>
+                                <text x={x + 7} y={y + 30} fontSize={9.5}
+                                    fill={isOutcome ? C.outcomeRing : C.textTitle}
+                                    fontFamily="Inter,sans-serif" fontWeight={isOutcome ? 700 : 600}>
                                     {short}
                                 </text>
                                 <title>{title}</title>

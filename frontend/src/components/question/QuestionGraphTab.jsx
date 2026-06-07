@@ -1,10 +1,10 @@
 import React, { useState } from 'react'
 import CanvasTimelineGraph from '../CanvasTimelineGraph'
 import ForecastGraph from '../ForecastGraph'
-import EventDetails from '../EventDetails'
 import CausalPathProgress from '../CausalPathProgress'
 import { useForecasts } from '../../hooks/useForecasts'
 import './QuestionGraphTab.css'
+
 
 const QuestionGraphTab = ({
   question,
@@ -123,14 +123,6 @@ const QuestionGraphTab = ({
         )}
       </div>
 
-      {/* Floating event details */}
-      {selectedNode && (
-        <EventDetails
-          node={selectedNode}
-          onClose={() => onNodeClick(null)}
-          onShowNeighborhood={onShowNeighborhood}
-        />
-      )}
     </div>
   )
 }
