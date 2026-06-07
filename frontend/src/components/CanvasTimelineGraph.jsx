@@ -231,7 +231,7 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
                 >
                     <g transform={`translate(${panX} 0)`}>
                     {/* ── Axis — extends full content width ── */}
-                    <line x1={-PAD_X} y1={axisY * vZoom} x2={totalW + PAD_X} y2={axisY * vZoom}
+                    <line x1={0} y1={axisY * vZoom} x2={totalW} y2={axisY * vZoom}
                         stroke={C.axis} strokeWidth={1} />
 
                     {/* ── Tick marks + labels ── */}
