@@ -5,45 +5,49 @@ import './BenchmarkMatrix.css'
 const pct  = v => (v != null ? `${(v * 100).toFixed(1)}%` : '—')
 const brier = v => (v != null ? v.toFixed(3) : '—')
 
-/** Aggregate all runs into a condition×model map of {accuracy, brier, n} */
+/**
+ * Build condition×model map using the LATEST run for each (condition, model) cell.
+ * Runs are sorted newest-first so the first match wins — no double-counting across runs.
+ */
 function aggregateRuns(runs, runDetails) {
-  // Map: condition -> model -> {correct, total, brierSum, brierN}
-  const acc = {}
+  // Sort runs newest-first so we always take the most recent result per cell
+  const sortedRunIds = [...runs]
+    .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
+    .map(r => r.run_id)
 
-  for (const detail of Object.values(runDetails)) {
+  // Map: condition -> model -> result from the most recent run that has that cell
+  const latest = {}
+
+  for (const runId of sortedRunIds) {
+    const detail = runDetails[runId]
+    if (!detail) continue
     const condResults = detail.condition_results || {}
     for (const [cond, modelMap] of Object.entries(condResults)) {
-      if (!acc[cond]) acc[cond] = {}
+      if (!latest[cond]) latest[cond] = {}
       for (const [model, result] of Object.entries(modelMap)) {
-        if (!acc[cond][model]) {
-          acc[cond][model] = { correct: 0, total: 0, brierSum: 0, brierN: 0 }
-        }
-        const cell = acc[cond][model]
-        const n    = result.successful || 0   // forecasts that ran (denominator for accuracy)
-        const correct = Math.round((result.accuracy ?? 0) * n)  // correct = accuracy × n
-        cell.correct += correct
-        cell.total   += n                     // aggregate over successful runs only
-        if (result.avg_brier_score != null && n > 0) {
-          cell.brierSum += result.avg_brier_score * n
-          cell.brierN   += n
+        // Only take this cell if we haven't seen a newer one already
+        if (!latest[cond][model]) {
+          latest[cond][model] = { ...result, runId }
         }
       }
     }
   }
 
-  // Compute final stats
-  const result = {}
-  for (const [cond, modelMap] of Object.entries(acc)) {
-    result[cond] = {}
-    for (const [model, s] of Object.entries(modelMap)) {
-      result[cond][model] = {
-        accuracy: s.total ? s.correct / s.total : null,
-        brier:    s.brierN ? s.brierSum / s.brierN : null,
-        n:        s.total,
+  // Convert to display format
+  const matrix = {}
+  for (const [cond, modelMap] of Object.entries(latest)) {
+    matrix[cond] = {}
+    for (const [model, result] of Object.entries(modelMap)) {
+      const n = result.successful || 0
+      matrix[cond][model] = {
+        accuracy: result.accuracy ?? null,
+        brier:    result.avg_brier_score ?? null,
+        n,
+        runId: result.runId,
       }
     }
   }
-  return result
+  return matrix
 }
 
 const BenchmarkMatrix = ({ onRefresh }) => {
