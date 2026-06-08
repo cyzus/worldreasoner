@@ -287,6 +287,17 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
         return node._date >= timeFilter.start && node._date <= timeFilter.end
     }, [timeFilter])
 
+    const onWheel = useCallback(e => {
+        e.preventDefault()
+        if (e.ctrlKey || e.metaKey) {
+            const factor = e.deltaY > 0 ? 0.88 : 1.14
+            setVZoom(z => Math.min(3, Math.max(0.5, z * factor)))
+        } else {
+            if (!layout) return
+            setPanX(prev => clampPan(prev - e.deltaY * 1.5, layout.totalW))
+        }
+    }, [layout, clampPan])
+
     if (!layout || !nodes.length) {
         return (
             <div className="canvas-timeline-graph" ref={containerRef}>
@@ -301,19 +312,6 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
 
     const { totalW, axisY, colInfo } = layout
     const svgH = SVG_H * vZoom
-
-    const onWheel = useCallback(e => {
-        e.preventDefault()
-        if (e.ctrlKey || e.metaKey) {
-            // Ctrl+scroll → vertical zoom
-            const factor = e.deltaY > 0 ? 0.88 : 1.14
-            setVZoom(z => Math.min(3, Math.max(0.5, z * factor)))
-        } else {
-            // Plain scroll → horizontal pan
-            if (!layout) return
-            setPanX(prev => clampPan(prev - e.deltaY * 1.5, layout.totalW))
-        }
-    }, [layout, clampPan])
 
     return (
         <div
