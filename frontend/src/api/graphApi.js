@@ -367,6 +367,11 @@ export async function fetchBenchmarkResult(runId) {
   return response.data
 }
 
+export async function fetchBenchmarkResultFiltered(runId) {
+  const response = await axios.get(`${API_BASE_URL}/benchmark/results/${runId}/filtered`)
+  return response.data
+}
+
 /**
  * Fetch available experiment conditions
  */

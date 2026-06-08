@@ -1,11 +1,15 @@
 """API routes for auto-benchmark results and conditions."""
 
 import json
+import statistics
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 
+from src.config.settings import get_config
+from src.core.llm import get_knowledge_cutoff_date
 from src.domain.evaluation.conditions import EXPERIMENT_CONDITIONS
 from src.utils.logging import logger
 
@@ -62,6 +66,144 @@ async def get_benchmark_result(run_id: str) -> Dict[str, Any]:
         raise HTTPException(
             status_code=500, detail=f"Failed to read benchmark result: {e}"
         )
+
+
+@router.get("/results/{run_id}/filtered")
+async def get_benchmark_result_filtered(run_id: str) -> Dict[str, Any]:
+    """Re-aggregate a benchmark run with contamination filtering applied.
+
+    Excludes (model, question) pairs where the question's estimated_start_time
+    falls before the model's knowledge cutoff date — matching the paper's
+    reporting methodology.
+
+    Returns the same shape as GET /results/{run_id} but with condition_results
+    recomputed on the clean subset, plus a 'contamination_summary' field
+    showing how many forecasts were excluded per (condition, model).
+    """
+    path = BENCHMARKS_DIR / f"{run_id}.json"
+    if not path.exists():
+        raise HTTPException(
+            status_code=404, detail=f"Benchmark run '{run_id}' not found"
+        )
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to read benchmark result: {e}"
+        )
+
+    # Load question estimated_start_time from DB
+    try:
+        import sqlite3
+        cfg = get_config()
+        conn = sqlite3.connect(str(cfg.database.db_path))
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT id, estimated_start_time FROM questions"
+        ).fetchall()
+        conn.close()
+        q_start: Dict[str, Optional[str]] = {
+            r["id"]: r["estimated_start_time"] for r in rows
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load question start times from DB: {e}",
+        )
+
+    contamination_summary: Dict[str, Dict[str, int]] = {}
+
+    # Re-aggregate each (condition, model) cell using only clean forecasts
+    filtered_condition_results: Dict[str, Dict[str, Any]] = {}
+
+    for cond_name, model_map in data.get("condition_results", {}).items():
+        filtered_condition_results[cond_name] = {}
+        contamination_summary[cond_name] = {}
+
+        for model_name, cell in model_map.items():
+            detailed = cell.get("detailed_results") or []
+            if not detailed:
+                # No per-forecast data — can't filter, keep as-is
+                filtered_condition_results[cond_name][model_name] = cell
+                contamination_summary[cond_name][model_name] = 0
+                continue
+
+            # Get model cutoff once
+            cutoff_str = get_knowledge_cutoff_date(model_name)
+            cutoff_dt: Optional[datetime] = None
+            if cutoff_str and cutoff_str != "Unknown":
+                try:
+                    cutoff_dt = datetime.fromisoformat(cutoff_str).replace(
+                        tzinfo=timezone.utc
+                    )
+                except ValueError:
+                    pass
+
+            # Filter forecasts
+            clean = []
+            excluded = 0
+            for r in detailed:
+                if r.get("status") != "success":
+                    continue
+                qid = r.get("question_id", "")
+                start_str = q_start.get(qid)
+
+                if cutoff_dt and start_str:
+                    try:
+                        start_dt = datetime.fromisoformat(
+                            start_str.replace("Z", "+00:00")
+                        )
+                        if start_dt.tzinfo is None:
+                            start_dt = start_dt.replace(tzinfo=timezone.utc)
+                        if start_dt < cutoff_dt:
+                            excluded += 1
+                            continue
+                    except ValueError:
+                        pass
+
+                clean.append(r)
+
+            contamination_summary[cond_name][model_name] = excluded
+
+            if not clean:
+                filtered_condition_results[cond_name][model_name] = {
+                    **cell,
+                    "successful": 0,
+                    "total_questions": 0,
+                    "accuracy": None,
+                    "avg_brier_score": None,
+                    "avg_log_score": None,
+                }
+                continue
+
+            # Re-compute metrics on clean set
+            correct = sum(1 for r in clean if r.get("is_correct"))
+            brier_vals = [r["brier_score"] for r in clean if r.get("brier_score") is not None]
+            log_vals = [r["log_score"] for r in clean if r.get("log_score") is not None]
+
+            filtered_condition_results[cond_name][model_name] = {
+                **cell,
+                "successful": len(clean),
+                "total_questions": len(clean),
+                "accuracy": correct / len(clean),
+                "avg_brier_score": (
+                    statistics.mean(brier_vals) if brier_vals else None
+                ),
+                "avg_log_score": (
+                    statistics.mean(log_vals) if log_vals else None
+                ),
+                # Keep detailed_results so the per-run table still works
+                "detailed_results": clean,
+            }
+
+    return {
+        **data,
+        "condition_results": filtered_condition_results,
+        "contamination_filtered": True,
+        "contamination_summary": contamination_summary,
+    }
 
 
 @router.get("/conditions")

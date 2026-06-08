@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { fetchBenchmarkResults, fetchBenchmarkResult } from '../../api/graphApi'
+import { fetchBenchmarkResults, fetchBenchmarkResult, fetchBenchmarkResultFiltered } from '../../api/graphApi'
 import './BenchmarkMatrix.css'
 
 const pct  = v => (v != null ? `${(v * 100).toFixed(1)}%` : '—')
@@ -51,12 +51,14 @@ function aggregateRuns(runs, runDetails) {
 }
 
 const BenchmarkMatrix = ({ onRefresh }) => {
-  const [runs, setRuns]           = useState([])
-  const [runDetails, setRunDetails] = useState({}) // runId -> full detail
-  const [loading, setLoading]     = useState(false)
-  const [error, setError]         = useState(null)
-  const [expanded, setExpanded]   = useState(null) // 'cond:model'
-  const [showBrier, setShowBrier] = useState(false)
+  const [runs, setRuns]               = useState([])
+  const [runDetails, setRunDetails]   = useState({})
+  const [loading, setLoading]         = useState(false)
+  const [filtering, setFiltering]     = useState(false) // loading contamination filter
+  const [error, setError]             = useState(null)
+  const [expanded, setExpanded]       = useState(null)
+  const [showBrier, setShowBrier]     = useState(false)
+  const [contamFilter, setContamFilter] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -64,7 +66,6 @@ const BenchmarkMatrix = ({ onRefresh }) => {
     try {
       const list = await fetchBenchmarkResults()
       setRuns(list)
-      // Fetch details for all runs in parallel
       const details = await Promise.all(
         list.map(r => fetchBenchmarkResult(r.run_id).catch(() => null))
       )
@@ -78,6 +79,34 @@ const BenchmarkMatrix = ({ onRefresh }) => {
       setLoading(false)
     }
   }, [])
+
+  // When contamination filter is toggled on, fetch filtered versions for all runs
+  const applyContamFilter = useCallback(async (enabled) => {
+    if (!enabled) {
+      // Revert to unfiltered — reload originals
+      load()
+      return
+    }
+    setFiltering(true)
+    try {
+      const details = await Promise.all(
+        runs.map(r => fetchBenchmarkResultFiltered(r.run_id).catch(() => null))
+      )
+      const map = {}
+      runs.forEach((r, i) => { if (details[i]) map[r.run_id] = details[i] })
+      setRunDetails(map)
+    } catch (err) {
+      console.error('Error applying contamination filter:', err)
+      setError(err.message)
+    } finally {
+      setFiltering(false)
+    }
+  }, [runs, load])
+
+  const toggleContamFilter = useCallback((val) => {
+    setContamFilter(val)
+    applyContamFilter(val)
+  }, [applyContamFilter])
 
   useEffect(() => { load() }, [load])
 
@@ -119,7 +148,9 @@ const BenchmarkMatrix = ({ onRefresh }) => {
     <div className="bm-matrix">
       <div className="bm-matrix-header">
         <span className="bm-matrix-title">
-          {conditions.length} conditions · {models.length} models · {runs.length} runs aggregated
+          {conditions.length} conditions · {models.length} models · {runs.length} runs
+          {contamFilter && ' · contamination-filtered'}
+          {filtering && ' · filtering…'}
         </span>
         <div className="bm-matrix-controls">
           <button
@@ -130,6 +161,14 @@ const BenchmarkMatrix = ({ onRefresh }) => {
             className={`bm-metric-toggle ${showBrier ? 'active' : ''}`}
             onClick={() => setShowBrier(true)}
           >Brier</button>
+          <button
+            className={`bm-metric-toggle ${contamFilter ? 'active' : ''}`}
+            onClick={() => toggleContamFilter(!contamFilter)}
+            title="Exclude questions where estimated_start_time < model knowledge cutoff"
+            style={{ marginLeft: 8 }}
+          >
+            {filtering ? '…' : 'Contam. filter'}
+          </button>
           <button className="bm-refresh-btn" onClick={load} title="Refresh">🔄</button>
         </div>
       </div>
