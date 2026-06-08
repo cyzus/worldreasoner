@@ -19,11 +19,13 @@ function aggregateRuns(runs, runDetails) {
           acc[cond][model] = { correct: 0, total: 0, brierSum: 0, brierN: 0 }
         }
         const cell = acc[cond][model]
-        cell.correct += result.successful || 0
-        cell.total   += result.total_questions || 0
-        if (result.avg_brier_score != null && result.total_questions) {
-          cell.brierSum += result.avg_brier_score * result.total_questions
-          cell.brierN   += result.total_questions
+        const n    = result.successful || 0   // forecasts that ran (denominator for accuracy)
+        const correct = Math.round((result.accuracy ?? 0) * n)  // correct = accuracy × n
+        cell.correct += correct
+        cell.total   += n                     // aggregate over successful runs only
+        if (result.avg_brier_score != null && n > 0) {
+          cell.brierSum += result.avg_brier_score * n
+          cell.brierN   += n
         }
       }
     }
@@ -187,8 +189,8 @@ const BenchmarkMatrix = ({ onRefresh }) => {
                         timestamp: run?.timestamp,
                         accuracy:  r.accuracy,
                         brier:     r.avg_brier_score,
-                        n:         r.total_questions,
-                        successful: r.successful,
+                        n:         r.successful,    // denominator for accuracy
+                        total:     r.total_questions,
                         failed:    r.failed,
                       }
                     })
@@ -210,7 +212,8 @@ const BenchmarkMatrix = ({ onRefresh }) => {
                               <th>Date</th>
                               <th>Accuracy</th>
                               <th>Brier</th>
-                              <th>n</th>
+                              <th>n (scored)</th>
+                              <th>Total</th>
                               <th>Failed</th>
                             </tr>
                           </thead>
@@ -224,6 +227,7 @@ const BenchmarkMatrix = ({ onRefresh }) => {
                                 <td>{pct(r.accuracy)}</td>
                                 <td>{brier(r.brier)}</td>
                                 <td>{r.n}</td>
+                                <td>{r.total ?? '—'}</td>
                                 <td>{r.failed ?? 0}</td>
                               </tr>
                             ))}
