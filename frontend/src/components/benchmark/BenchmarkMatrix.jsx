@@ -58,16 +58,21 @@ const BenchmarkMatrix = ({ onRefresh }) => {
   const [error, setError]             = useState(null)
   const [expanded, setExpanded]       = useState(null)
   const [showBrier, setShowBrier]     = useState(false)
-  const [contamFilter, setContamFilter] = useState(false)
+  const [contamFilter, setContamFilter] = useState(true) // on by default — matches paper
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (withFilter = true) => {
     setLoading(true)
     setError(null)
     try {
       const list = await fetchBenchmarkResults()
       setRuns(list)
+      // Fetch filtered or unfiltered depending on current mode
+      const fetcher = withFilter ? fetchBenchmarkResultFiltered : fetchBenchmarkResult
       const details = await Promise.all(
-        list.map(r => fetchBenchmarkResult(r.run_id).catch(() => null))
+        list.map(r => fetcher(r.run_id).catch(() =>
+          // Filtered endpoint may fail if no detailed_results; fall back to unfiltered
+          fetchBenchmarkResult(r.run_id).catch(() => null)
+        ))
       )
       const map = {}
       list.forEach((r, i) => { if (details[i]) map[r.run_id] = details[i] })
@@ -80,35 +85,12 @@ const BenchmarkMatrix = ({ onRefresh }) => {
     }
   }, [])
 
-  // When contamination filter is toggled on, fetch filtered versions for all runs
-  const applyContamFilter = useCallback(async (enabled) => {
-    if (!enabled) {
-      // Revert to unfiltered — reload originals
-      load()
-      return
-    }
-    setFiltering(true)
-    try {
-      const details = await Promise.all(
-        runs.map(r => fetchBenchmarkResultFiltered(r.run_id).catch(() => null))
-      )
-      const map = {}
-      runs.forEach((r, i) => { if (details[i]) map[r.run_id] = details[i] })
-      setRunDetails(map)
-    } catch (err) {
-      console.error('Error applying contamination filter:', err)
-      setError(err.message)
-    } finally {
-      setFiltering(false)
-    }
-  }, [runs, load])
-
   const toggleContamFilter = useCallback((val) => {
     setContamFilter(val)
-    applyContamFilter(val)
-  }, [applyContamFilter])
+    load(val)
+  }, [load])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load(true) }, [load]) // initial load with filter on
 
   if (loading) return <div className="bm-state">Loading results…</div>
   if (error)   return <div className="bm-state error">{error}</div>
@@ -169,7 +151,7 @@ const BenchmarkMatrix = ({ onRefresh }) => {
           >
             {filtering ? '…' : 'Contam. filter'}
           </button>
-          <button className="bm-refresh-btn" onClick={load} title="Refresh">🔄</button>
+          <button className="bm-refresh-btn" onClick={() => load(contamFilter)} title="Refresh">🔄</button>
         </div>
       </div>
 
