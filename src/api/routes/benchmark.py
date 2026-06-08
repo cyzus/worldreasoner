@@ -50,6 +50,40 @@ async def list_benchmark_results() -> List[Dict[str, Any]]:
     return results
 
 
+def _normalize_model_name(name: str) -> str:
+    """Strip whitespace and normalize routing/proxy prefixes.
+
+    - litellm_proxy/ and litellm/ are always stripped (they wrap real model ids)
+    - dashscope/deepseek-* -> deepseek/deepseek-* (DashScope was used as a proxy)
+    - dashscope/qwen* stays as-is (dashscope is the canonical provider for Qwen)
+    """
+    name = name.strip()
+    for prefix in ("litellm_proxy/", "litellm/"):
+        if name.startswith(prefix):
+            name = name[len(prefix):]
+    # DashScope used as proxy for DeepSeek models
+    if name.startswith("dashscope/deepseek"):
+        name = "deepseek/" + name[len("dashscope/"):]
+    return name
+
+
+def _normalize_condition_results(condition_results: dict) -> dict:
+    """Normalize model names in condition_results, merging duplicate keys."""
+    normalized: dict = {}
+    for cond, model_map in condition_results.items():
+        normalized[cond] = {}
+        for model, cell in model_map.items():
+            key = _normalize_model_name(model)
+            if key not in normalized[cond]:
+                normalized[cond][key] = cell
+            else:
+                # Merge: keep the cell with more successful forecasts
+                existing = normalized[cond][key]
+                if cell.get("successful", 0) > existing.get("successful", 0):
+                    normalized[cond][key] = cell
+    return normalized
+
+
 @router.get("/results/{run_id}")
 async def get_benchmark_result(run_id: str) -> Dict[str, Any]:
     """Get full result JSON for a specific benchmark run."""
@@ -61,7 +95,12 @@ async def get_benchmark_result(run_id: str) -> Dict[str, Any]:
 
     try:
         with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+        if "condition_results" in data:
+            data["condition_results"] = _normalize_condition_results(
+                data["condition_results"]
+            )
+        return data
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to read benchmark result: {e}"
@@ -89,6 +128,11 @@ async def get_benchmark_result_filtered(run_id: str) -> Dict[str, Any]:
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
+        # Normalize model names before filtering
+        if "condition_results" in data:
+            data["condition_results"] = _normalize_condition_results(
+                data["condition_results"]
+            )
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to read benchmark result: {e}"
