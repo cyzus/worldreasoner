@@ -302,6 +302,19 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
     const { totalW, axisY, colInfo } = layout
     const svgH = SVG_H * vZoom
 
+    const onWheel = useCallback(e => {
+        e.preventDefault()
+        if (e.ctrlKey || e.metaKey) {
+            // Ctrl+scroll → vertical zoom
+            const factor = e.deltaY > 0 ? 0.88 : 1.14
+            setVZoom(z => Math.min(3, Math.max(0.5, z * factor)))
+        } else {
+            // Plain scroll → horizontal pan
+            if (!layout) return
+            setPanX(prev => clampPan(prev - e.deltaY * 1.5, layout.totalW))
+        }
+    }, [layout, clampPan])
+
     return (
         <div
             className="canvas-timeline-graph"
@@ -310,6 +323,7 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
             onMouseMove={onMouseMove}
             onMouseUp={onMouseUp}
             onMouseLeave={onMouseUp}
+            onWheel={onWheel}
             style={{ cursor: isDragging ? 'grabbing' : 'grab', overflow: 'hidden' }}
         >
                 <svg
@@ -462,13 +476,15 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
                     </g>
                 </svg>
 
-            {/* EventDetails — uses useDraggablePopup with viewport coords from _screenX/_screenY */}
+            {/* EventDetails — stop mousedown propagation so panel clicks don't close the panel */}
             {panel && (
-                <EventDetails
-                    node={panel.node}
-                    onClose={() => { setPanel(null); onNodeClick?.(null) }}
-                    onShowNeighborhood={onShowNeighborhood}
-                />
+                <div onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+                    <EventDetails
+                        node={panel.node}
+                        onClose={() => { setPanel(null); onNodeClick?.(null) }}
+                        onShowNeighborhood={onShowNeighborhood}
+                    />
+                </div>
             )}
 
             <div className="graph-overlay-controls">
