@@ -287,7 +287,10 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
         return node._date >= timeFilter.start && node._date <= timeFilter.end
     }, [timeFilter])
 
-    const onWheel = useCallback(e => {
+    // Wheel handler must be non-passive to call preventDefault (blocks page scroll)
+    // Attach via useEffect so we can pass { passive: false }
+    const onWheelRef = useRef(null)
+    onWheelRef.current = useCallback(e => {
         e.preventDefault()
         if (e.ctrlKey || e.metaKey) {
             const factor = e.deltaY > 0 ? 0.88 : 1.14
@@ -297,6 +300,14 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
             setPanX(prev => clampPan(prev - e.deltaY * 1.5, layout.totalW))
         }
     }, [layout, clampPan])
+
+    useEffect(() => {
+        const el = containerRef.current
+        if (!el) return
+        const handler = (e) => onWheelRef.current?.(e)
+        el.addEventListener('wheel', handler, { passive: false })
+        return () => el.removeEventListener('wheel', handler)
+    }, []) // stable — handler is looked up via ref each time
 
     if (!layout || !nodes.length) {
         return (
@@ -321,7 +332,6 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
             onMouseMove={onMouseMove}
             onMouseUp={onMouseUp}
             onMouseLeave={onMouseUp}
-            onWheel={onWheel}
             style={{ cursor: isDragging ? 'grabbing' : 'grab', overflow: 'hidden' }}
         >
                 <svg
