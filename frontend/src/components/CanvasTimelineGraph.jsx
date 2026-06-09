@@ -195,12 +195,16 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
     useEffect(() => {
         const el = containerRef.current
         if (!el) return
+        let raf = null
         const ro = new ResizeObserver(([e]) => {
-            setContW(e.contentRect.width)
-            setContH(e.contentRect.height)
+            if (raf) cancelAnimationFrame(raf)
+            raf = requestAnimationFrame(() => {
+                setContW(e.contentRect.width)
+                setContH(e.contentRect.height)
+            })
         })
         ro.observe(el)
-        return () => ro.disconnect()
+        return () => { ro.disconnect(); if (raf) cancelAnimationFrame(raf) }
     }, [])
 
     const layout = useMemo(() => {
