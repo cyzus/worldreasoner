@@ -1,0 +1,18 @@
+{
+  "_comment": "Add this to ~/Library/Application Support/Claude/claude_desktop_config.json (macOS) or %APPDATA%\\Claude\\claude_desktop_config.json (Windows)",
+  "mcpServers": {
+    "worldreasoner": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory", "/path/to/worldreasoner",
+        "worldreasoner-mcp-forecast",
+        "--transport", "stdio",
+        "--db", "/path/to/worldreasoner/combined.db"
+      ],
+      "env": {
+        "WORLDREASONER_DB": "/path/to/worldreasoner/combined.db"
+      }
+    }
+  }
+}

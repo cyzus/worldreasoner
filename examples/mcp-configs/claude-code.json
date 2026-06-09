@@ -1,0 +1,14 @@
+{
+  "_comment": "Claude Code MCP config — add to .mcp.json in the repo root, or run: claude mcp add worldreasoner",
+  "mcpServers": {
+    "worldreasoner": {
+      "command": "uv",
+      "args": [
+        "run",
+        "worldreasoner-mcp-forecast",
+        "--transport", "stdio",
+        "--db", "combined.db"
+      ]
+    }
+  }
+}

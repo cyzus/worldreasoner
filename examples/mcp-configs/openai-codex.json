@@ -1,0 +1,14 @@
+{
+  "_comment": "OpenAI Codex / agents SDK MCP config (stdio transport)",
+  "mcpServers": {
+    "worldreasoner": {
+      "command": "uv",
+      "args": [
+        "run",
+        "worldreasoner-mcp-forecast",
+        "--transport", "stdio",
+        "--db", "combined.db"
+      ]
+    }
+  }
+}

@@ -12,19 +12,14 @@ metadata:
 
 End-to-end workflow: add a question → collect evidence → build causal graph → run forecast → evaluate.
 
-See `examples/forecast_custom_question.py` for a complete runnable script.
-
 ## Step 1: Add the question
 
 ```bash
-# Add via CLI (interactive)
 uv run wr question add \
   --text "Will X happen by Y date?" \
   --resolution-date 2025-12-31 \
   --source manual \
   --domain politics
-
-# Or add programmatically — see examples/forecast_custom_question.py
 ```
 
 Note the question ID printed after creation (e.g. `manual_abc123`).
