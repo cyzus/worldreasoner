@@ -98,6 +98,14 @@ uv run python scripts/analysis/plot_reasoning_quality.py \
 ```
 Output: `assets/figures/reasoning_quality.pdf/.png`
 
+### `benchmark/temporal_forecast_analysis.py`
+Analyze how forecast accuracy evolves as the resolution date approaches for a
+single question — runs live forecasts at multiple temporal points.
+```bash
+uv run python scripts/benchmark/temporal_forecast_analysis.py \
+  --question-id <ID> --db combined.db
+```
+
 ### `benchmark/plot_vanilla_time_performance.py`
 Vanilla-LLM accuracy over time (question resolution date).
 ```bash
