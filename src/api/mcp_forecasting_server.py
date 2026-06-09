@@ -596,15 +596,34 @@ def propose_forecast_subgraph(ctx: Context, subgraph_json: str) -> str:
     More efficient than calling identify_forecast_event and
     create_forecast_causal_link separately for each node/edge.
 
-    Provide a JSON object with two keys:
-      - "events": list of event defs (alias, title, description, domain, occurred_date)
-      - "edges": list of causal links (source, target, relation, strength, confidence, reasoning)
-
-    Event aliases (e.g. "E1:IranStrikes") are resolved to UUIDs automatically;
-    use the same alias in 'source'/'target' of edges to reference a just-created event.
+    Args:
+        subgraph_json: JSON string with schema:
+            {
+              "events": [
+                {
+                  "alias": "E1",           // short alias used in edges below
+                  "title": "Event title",
+                  "description": "What happened",
+                  "domain": "politics",    // politics/economics/technology/science/sports/culture
+                  "occurred_date": "2024-03-15",  // ISO date or datetime
+                  "event_type": "development"     // optional
+                }
+              ],
+              "edges": [
+                {
+                  "source": "E1",          // alias or existing event UUID
+                  "target": "E2",
+                  "relation": "causes",    // causes/enables/amplifies/triggers/prevents/inhibits
+                  "strength": 0.8,         // 0-1
+                  "confidence": 0.7,       // 0-1
+                  "reasoning": "Because..."
+                }
+              ]
+            }
 
     Returns:
         JSON with events_created, edges_created, failed_items, and alias_map
+        (alias_map maps each alias to the created UUID for reference)
     """
     try:
         from src.tools.reasoning.propose_subgraph import ProposeSubgraphTool

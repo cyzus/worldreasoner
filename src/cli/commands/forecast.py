@@ -58,7 +58,12 @@ def run(
     mode: str = typer.Option(
         "container",
         "--mode",
-        help="Forecasting mode: knowledge_only (no research), container (temporal research), real_time (live info)",
+        help=(
+            "Forecasting mode:\n"
+            "  knowledge_only — training knowledge only, no search tools\n"
+            "  container      — temporal search (articles before simulated_date)\n"
+            "  real_time      — live internet search, ignores simulated_date"
+        ),
     ),
     enable_causal_tools: bool = typer.Option(
         False,
@@ -74,6 +79,11 @@ def run(
         False,
         "--skip-indexing",
         help="Skip automatic search indexing after completion",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Output result as JSON (suppresses interactive prompts)",
     ),
     db_path: str = db_option(),
 ):
@@ -127,25 +137,20 @@ def run(
         console.print("[red]Please provide either --question or --interactive[/red]")
         raise typer.Exit(1)
 
-    # Show question details
-    console.print("\n")
-    selector.show_question_details(question.id)
-
-    # Confirm before running
-    console.print("\n[bold]Configuration:[/bold]")
-    console.print(f"  Model: {model or 'default'}")
-    console.print(f"  Mode: {mode}")
-    console.print(f"  Causal tools: {'enabled' if enable_causal_tools else 'disabled'}")
-    console.print(f"  Slot: {slot}")
-
-    if not typer.confirm("\nRun forecast?"):
-        raise typer.Exit(0)
-
-    # Run forecast
-    console.print("\n[bold cyan]Running forecast...[/bold cyan]")
+    if not json_output:
+        # Show question details and confirm
+        console.print("\n")
+        selector.show_question_details(question.id)
+        console.print("\n[bold]Configuration:[/bold]")
+        console.print(f"  Model: {model or 'default'}")
+        console.print(f"  Mode: {mode}")
+        console.print(f"  Causal tools: {'enabled' if enable_causal_tools else 'disabled'}")
+        console.print(f"  Slot: {slot}")
+        if not typer.confirm("\nRun forecast?"):
+            raise typer.Exit(0)
+        console.print("\n[bold cyan]Running forecast...[/bold cyan]")
 
     try:
-        # Use PipelineRunner to execute the forecast
         result = asyncio.run(
             _run_forecast_async(
                 [question],
@@ -158,15 +163,24 @@ def run(
             )
         )
 
-        # Display result
-        _display_forecast_result(result, question)
+        if json_output:
+            import json as _json
+            import sys
+            out = result.processed[0] if result.processed else (result.failed[0] if result.failed else {})
+            sys.stdout.write(_json.dumps(out) + "\n")
+        else:
+            _display_forecast_result(result, question)
 
         if result.failure_count > 0:
             raise typer.Exit(1)
 
     except Exception as e:
         logger.error(f"Forecast failed: {e}")
-        console.print(f"\n[red]Forecast failed: {e}[/red]")
+        if json_output:
+            import json as _json, sys
+            sys.stdout.write(_json.dumps({"error": str(e)}) + "\n")
+        else:
+            console.print(f"\n[red]Forecast failed: {e}[/red]")
         raise typer.Exit(1)
 
 
