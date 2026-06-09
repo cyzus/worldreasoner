@@ -139,9 +139,14 @@ A React/Vite dashboard for exploring results interactively:
 
 
 
-<p align="center"><img src="docs/images/evidence-2.png" width="100%" /><br/><em>Questions tab — causal events list with impact direction and evidence accumulation chart</em></p>
+### Example
 
-<p align="center"><img src="docs/images/hindsight_graph.png" width="100%" /><br/><em>Graph tab — SVG evidence timeline with event detail popup and causal links</em></p>
+Question: Will Netflix close Warner Bros. acquisition by end of 2026?
+
+
+<p align="center"><img src="docs/images/evidence-2.png" width="100%" /><br/><em>Evidence accumulation chart</em></p>
+
+<p align="center"><img src="docs/images/hindsight_graph.png" width="100%" /><br/><em>Hindsight graph with event detail popup and causal links</em></p>
 
 
 
