@@ -1,3 +1,5 @@
+![WorldReasoner](docs/images/banner.png)
+
 # WorldReasoner
 
 **WorldReasoner** is a temporal forecasting benchmark for large language models. It evaluates how well LLMs predict real-world outcomes when given structured, temporally-filtered evidence — measuring the contribution of causal reasoning, web search, and evidence quality across six experimental conditions.
