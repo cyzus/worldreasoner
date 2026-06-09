@@ -77,7 +77,7 @@ All metrics are computed in `src/domain/evaluation/metrics.py` and `src/domain/e
 
 ### Reasoning graph quality
 
-Computed by matching agent-produced events against the hindsight graph for each question. Implementation: `src/domain/evaluation/benchmark_eval.py` and `scripts/analysis/compute_metrics_table.py`.
+Computed by matching agent-produced events against the hindsight graph for each question. Implementation: `scripts/benchmark/evaluate_reasoning_graphs.py`.
 
 | Metric | Better | Notes |
 |--------|--------|-------|
@@ -226,15 +226,20 @@ Navigate to the **Benchmark** tab. The matrix shows accuracy (or Brier score) fo
 ## 5.10 Reproducing Paper Figures
 
 ```bash
-# Table 2: condition × model accuracy
+# Metrics table → docs/metrics.md
 uv run python scripts/analysis/compute_metrics_table.py
 
-# Figure: accuracy comparison across conditions
-uv run python scripts/analysis/plot_accuracy_comparison.py
+# Reasoning quality figure (Event F1, Key-event Recall, Source Precision)
+uv run python scripts/analysis/plot_reasoning_quality.py
 
-# Figure: Brier score calibration
-uv run python scripts/analysis/plot_brier_calibration.py
+# Sliding-window ablation figure
+uv run python scripts/analysis/plot_sliding_window.py
+
+# Vanilla-LLM accuracy over time
+uv run python scripts/benchmark/plot_vanilla_time_performance.py --db combined.db
 ```
+
+See [scripts/README.md](../scripts/README.md) for the full reproduction workflow.
 
 See [scripts/README.md](../scripts/README.md) for the full list of reproduction scripts.
 

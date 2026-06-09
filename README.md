@@ -144,8 +144,10 @@ uv run wr benchmark evaluate \
   --include-ids include_ids.txt \
   --filter-knowledge-leakage
 
-# 4. Generate paper figures
-uv run python scripts/analysis/plot_accuracy_comparison.py
+# 4. Generate paper figures and metrics table
+uv run python scripts/analysis/plot_reasoning_quality.py
+uv run python scripts/analysis/plot_sliding_window.py
+uv run python scripts/benchmark/plot_vanilla_time_performance.py
 uv run python scripts/analysis/compute_metrics_table.py
 ```
 
