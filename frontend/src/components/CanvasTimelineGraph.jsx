@@ -289,18 +289,16 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
         setIsDragging(false)
     }, [])
 
-    // When layout changes, position the view so the axis is near the
-    // bottom of the visible area — cards fill upward from there.
+    // Center the content band (topmost card → tick labels) vertically in viewport.
     useEffect(() => {
         if (!layout) return
         setPanX(0)
-        // axisY is the axis position inside the SVG canvas.
-        // We want the axis to appear at (contH - AXIS_BOT) px from the top of
-        // the viewport, i.e. near the bottom with just the tick labels below.
-        // panY = targetScreenY - axisY
-        const targetScreenY = contH - AXIS_BOT - 10
-        const axisY = layout.svgH - AXIS_BOT
-        setPanY(clampY(targetScreenY - axisY, layout.svgH))
+        const { axisY, svgH, laid } = layout
+        const minCardTop = laid.length
+            ? Math.min(...laid.map(n => n.cardTop))
+            : axisY - 100
+        const contentMid = (minCardTop + axisY + AXIS_BOT) / 2
+        setPanY(clampY(contH / 2 - contentMid, svgH))
     }, [layout, contH, clampY])
 
     const visible = useCallback(node => {
@@ -514,9 +512,12 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
                 <button className="control-btn" title="Reset view"
                     onClick={() => {
                         const axisY = svgH - AXIS_BOT
-                        const targetScreenY = contH - AXIS_BOT - 10
+                        const minCardTop = nodes.length
+                            ? Math.min(...nodes.map(n => n.cardTop ?? n.cy - CARD_H / 2))
+                            : axisY - 100
+                        const contentMid = (minCardTop + axisY + AXIS_BOT) / 2
                         setPanX(0)
-                        setPanY(clampY(targetScreenY - axisY, svgH))
+                        setPanY(clampY(contH / 2 - contentMid, svgH))
                     }}>⟲</button>
             </div>
         </div>
