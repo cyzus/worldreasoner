@@ -3,38 +3,34 @@
 }
 
 .collection-header {
-  margin: 12px 20px;
-  padding: 12px 20px;
+  padding: 10px 20px 6px;
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid #dee2e6;
+  flex-shrink: 0;
 }
 
 .collection-header h2 {
-  font-size: 20px;
-  margin: 0 0 4px 0;
+  font-size: 0.95rem;
+  margin: 0 0 2px 0;
   color: #333;
   font-weight: 600;
 }
 
 .collection-subtitle {
-  font-size: 13px;
-  color: #666;
+  font-size: 0.78rem;
+  color: #888;
   margin: 0;
 }
 
 /* Source tabs */
 .source-tabs {
   display: flex;
-  gap: 10px;
+  gap: 0;
   flex-wrap: wrap;
-  margin: 0 20px 12px 20px;
-  border-bottom: 2px solid #e0e0e0;
-  padding-bottom: 0;
+  border-bottom: 1px solid #dee2e6;
   background: white;
-  padding: 0 20px;
-  border-radius: 8px 8px 0 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 0 16px;
+  flex-shrink: 0;
 }
 
 .source-tab {
@@ -86,27 +82,13 @@
 
 @media (max-width: 768px) {
   .collection-header {
-    margin: 8px;
-    padding: 10px 12px;
+    padding: 8px 12px 4px;
   }
-
-  .collection-header h2 {
-    font-size: 18px;
-  }
-
   .source-tabs {
-    margin: 0 8px 8px;
-    padding: 8px;
-    gap: 6px;
-    border-bottom-width: 1px;
-    border-radius: 8px;
+    padding: 0 8px;
   }
-
   .source-tab {
-    flex: 1 1 calc(50% - 6px);
-    min-width: 120px;
-    padding: 8px 10px;
+    padding: 8px 12px;
     font-size: 13px;
-    top: 0;
   }
 }

@@ -26,14 +26,14 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
+  padding: 8px 16px;
   border-bottom: 1px solid #e0e0e0;
   background: #fafafa;
 }
 
 .section-header h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 0.85rem;
   font-weight: 600;
   color: #333;
 }
