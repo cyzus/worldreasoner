@@ -22,11 +22,12 @@ const CARD_W    = 130   // card width px
 const CARD_H    = 40    // card height px
 const CARD_GAP  = 6     // vertical gap between stacked cards
 const COL_PAD   = 20    // min horizontal padding between columns
-const AXIS_BOT  = 60    // px from bottom of SVG to axis line
+const AXIS_BOT  = 60    // px below axis to bottom of SVG (tick labels)
 const TICK_H    = 5
 const LABEL_H   = 16    // height of tick label below axis
-const SVG_H     = 400   // fixed SVG height (scrolls horizontally)
+const CARD_TOP_PAD = 24 // min padding above topmost card
 const MIN_COL_W = CARD_W + COL_PAD  // min width per date column
+const VIEW_H    = 400   // viewport height (container CSS height)
 
 // ── Colors ────────────────────────────────────────────────────────────────────
 const C = {
@@ -124,19 +125,25 @@ function buildLayout(rawNodes, containerW) {
         ;(byDay[key] = byDay[key] || []).push(n)
     }
 
-    // Sort day keys chronologically
     const dayKeys = Object.keys(byDay).sort((a, b) => new Date(a) - new Date(b))
 
-    // Assign column X positions — spread evenly across containerW, min MIN_COL_W each
     const nCols  = dayKeys.length
     const colW   = Math.max(MIN_COL_W, containerW / nCols)
     const totalW = Math.max(containerW, nCols * colW)
 
-    const axisY  = SVG_H - AXIS_BOT
+    // How tall does the content need to be?
+    // Tallest column determines the required height above the axis.
+    const maxStack = Math.max(...dayKeys.map(k => byDay[k].length))
+    const stackH   = maxStack * (CARD_H + CARD_GAP) + CARD_GAP + TICK_H
+    const contentH = stackH + CARD_TOP_PAD  // space above topmost card
 
-    // Build node positions
+    // Total SVG height: enough for content + axis + tick labels
+    // At minimum, fill the viewport
+    const svgH  = Math.max(VIEW_H, contentH + AXIS_BOT)
+    const axisY = svgH - AXIS_BOT
+
     const laid = []
-    const colInfo = {}   // key -> { x, nodes[] }
+    const colInfo = {}
 
     dayKeys.forEach((key, ci) => {
         const cx = colW * ci + colW / 2
@@ -151,12 +158,12 @@ function buildLayout(rawNodes, containerW) {
                 cx,
                 cy,
                 cardTop: cy - CARD_H / 2,
-                cardBottom: cardBottom,
+                cardBottom,
             })
         })
     })
 
-    return { laid, totalW, axisY, colInfo, dayKeys, colW }
+    return { laid, totalW, svgH, axisY, colInfo, dayKeys, colW }
 }
 
 function generateTicks(dayKeys) {
@@ -180,12 +187,11 @@ function generateTicks(dayKeys) {
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNode, timeFilter, onShowNeighborhood }) {
     const containerRef = useRef(null)
-    const [contW, setContW]       = useState(800)
-    const [vZoom, setVZoom]       = useState(1)
-    const [panX, setPanX]         = useState(0)
+    const [contW, setContW]           = useState(800)
+    const [panX, setPanX]             = useState(0)
+    const [panY, setPanY]             = useState(0)
     const [isDragging, setIsDragging] = useState(false)
-    // Panel: which node is selected and where to show the detail panel
-    const [panel, setPanel]       = useState(null) // { node, x, y }
+    const [panel, setPanel]           = useState(null)
     const dragging = useRef(null)
 
     useEffect(() => {
@@ -249,30 +255,32 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
         return ids
     }, [panel, links])
 
-    // Clamp panX so content never drifts entirely off-screen
-    const clampPan = useCallback((x, totalW) => {
-        const max = 0
-        const min = Math.min(0, contW - totalW)
-        return Math.max(min, Math.min(max, x))
-    }, [contW])
+    const clampX = useCallback((x, totalW) =>
+        Math.max(Math.min(0, contW - totalW), Math.min(0, x))
+    , [contW])
+
+    const clampY = useCallback((y, svgH) =>
+        Math.max(Math.min(0, VIEW_H - svgH), Math.min(0, y))
+    , [])
 
     const onMouseDown = useCallback(e => {
         if (e.target.closest?.('[data-card]')) return
-        // Click on background closes panel
         setPanel(null)
         onNodeClick?.(null)
-        dragging.current = { startX: e.clientX, startPan: panX, moved: false }
-    }, [panX, onNodeClick])
+        dragging.current = { startX: e.clientX, startY: e.clientY, startPanX: panX, startPanY: panY, moved: false }
+    }, [panX, panY, onNodeClick])
 
     const onMouseMove = useCallback(e => {
         if (!dragging.current || !layout) return
         const dx = e.clientX - dragging.current.startX
-        if (Math.abs(dx) > 3) {
+        const dy = e.clientY - dragging.current.startY
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
             dragging.current.moved = true
             setIsDragging(true)
-            setPanX(clampPan(dragging.current.startPan + dx, layout.totalW))
+            setPanX(clampX(dragging.current.startPanX + dx, layout.totalW))
+            setPanY(clampY(dragging.current.startPanY + dy, layout.svgH))
         }
-    }, [clampPan, layout])
+    }, [clampX, clampY, layout])
 
     const onMouseUp = useCallback(() => {
         dragging.current = null
@@ -280,7 +288,7 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
     }, [])
 
     // Reset pan when data changes
-    useEffect(() => { setPanX(0) }, [graphData])
+    useEffect(() => { setPanX(0); setPanY(0) }, [graphData])
 
     const visible = useCallback(node => {
         if (!timeFilter?.start || !timeFilter?.end) return true
@@ -292,14 +300,15 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
     const onWheelRef = useRef(null)
     onWheelRef.current = useCallback(e => {
         e.preventDefault()
-        if (e.ctrlKey || e.metaKey) {
-            const factor = e.deltaY > 0 ? 0.88 : 1.14
-            setVZoom(z => Math.min(3, Math.max(0.5, z * factor)))
+        if (!layout) return
+        if (e.shiftKey) {
+            // Shift+scroll → horizontal pan
+            setPanX(prev => clampX(prev - e.deltaY * 1.5, layout.totalW))
         } else {
-            if (!layout) return
-            setPanX(prev => clampPan(prev - e.deltaY * 1.5, layout.totalW))
+            // Default scroll → vertical pan
+            setPanY(prev => clampY(prev - e.deltaY, layout.svgH))
         }
-    }, [layout, clampPan])
+    }, [layout, clampX, clampY])
 
     useEffect(() => {
         const el = containerRef.current
@@ -321,8 +330,7 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
         )
     }
 
-    const { totalW, axisY, colInfo } = layout
-    const svgH = SVG_H * vZoom
+    const { totalW, svgH, axisY, colInfo } = layout
 
     return (
         <div
@@ -332,16 +340,16 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
             onMouseMove={onMouseMove}
             onMouseUp={onMouseUp}
             onMouseLeave={onMouseUp}
-            style={{ cursor: isDragging ? 'grabbing' : 'grab', overflow: 'hidden' }}
+            style={{ cursor: isDragging ? 'grabbing' : 'grab', overflow: 'hidden', height: VIEW_H }}
         >
                 <svg
                     width={contW}
-                    height={svgH}
+                    height={VIEW_H}
                     style={{ display: 'block' }}
                 >
-                    <g transform={`translate(${panX} 0)`}>
+                    <g transform={`translate(${panX} ${panY})`}>
                     {/* ── Axis — extends full content width ── */}
-                    <line x1={0} y1={axisY * vZoom} x2={totalW} y2={axisY * vZoom}
+                    <line x1={0} y1={axisY} x2={totalW} y2={axisY}
                         stroke={C.axis} strokeWidth={1} />
 
                     {/* ── Tick marks + labels ── */}
@@ -349,12 +357,11 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
                         const col = colInfo[t.key]
                         if (!col) return null
                         const x = col.cx
-                        const ay = axisY * vZoom
                         return (
                             <g key={i}>
-                                <line x1={x} y1={ay - TICK_H} x2={x} y2={ay + TICK_H}
+                                <line x1={x} y1={axisY - TICK_H} x2={x} y2={axisY + TICK_H}
                                     stroke={C.tick} strokeWidth={1} />
-                                <text x={x} y={ay + TICK_H + LABEL_H}
+                                <text x={x} y={axisY + TICK_H + LABEL_H}
                                     textAnchor="middle" fontSize={9} fill={C.tick}
                                     fontFamily="Inter,sans-serif">
                                     {t.label}
@@ -364,31 +371,25 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
                     })}
 
                     {/* ── Stems (card bottom → axis) ── */}
-                    {nodes.filter(visible).map(n => {
-                        const ay = axisY * vZoom
-                        const cy = n.cy * vZoom
-                        const cb = n.cardBottom * vZoom
-                        return (
-                            <line key={`stem-${n.id}`}
-                                x1={n.cx} y1={cb}
-                                x2={n.cx} y2={ay}
-                                stroke={C.stem} strokeWidth={1} strokeDasharray="3 3" />
-                        )
-                    })}
+                    {nodes.filter(visible).map(n => (
+                        <line key={`stem-${n.id}`}
+                            x1={n.cx} y1={n.cardBottom}
+                            x2={n.cx} y2={axisY}
+                            stroke={C.stem} strokeWidth={1} strokeDasharray="3 3" />
+                    ))}
 
                     {/* ── Causal links — cubic bezier curves ── */}
                     {links.filter(l => visible(l.source) && visible(l.target)).map((l, i) => {
                         const sid = l.source.id; const tid = l.target.id
                         const pid = panel?.node?.id
                         const isActive = pid && (sid === pid || tid === pid)
-                        const ay   = axisY * vZoom
                         const sx   = l.source.cx + CARD_W / 2
-                        const sy   = l.source.cardBottom * vZoom
+                        const sy   = l.source.cardBottom
                         const tx   = l.target.cx - CARD_W / 2
-                        const ty   = l.target.cardBottom * vZoom
+                        const ty   = l.target.cardBottom
                         const col  = linkColor(l)
                         const isImpact = (l.relation_type || l.type || '').toLowerCase().includes('impact')
-                        const curveDip = Math.min(60, (ay - Math.min(sy, ty)) * 0.6)
+                        const curveDip = Math.min(60, (axisY - Math.min(sy, ty)) * 0.6)
                         const cy1 = sy + curveDip
                         const cy2 = ty + curveDip
                         const mx  = (sx + tx) / 2
@@ -420,7 +421,7 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
                         const isConnected = connectedIds.has(n.id)
                         const isOutcome   = n.properties?.is_actual_outcome
                         const barCol      = nodeBarColor(n)
-                        const cy  = n.cy * vZoom
+                        const cy  = n.cy
                         const x   = n.cx - CARD_W / 2
                         const y   = cy - CARD_H / 2
                         const title = n.name || n.title || n.id || ''
@@ -441,7 +442,7 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
                                         // Compute viewport coords for useDraggablePopup
                                         const rect = containerRef.current?.getBoundingClientRect() || { left: 0, top: 0 }
                                         const screenX = rect.left + n.cx + CARD_W / 2 + panX
-                                        const screenY = rect.top + cy
+                                        const screenY = rect.top + cy + panY
                                         const nodeWithCoords = { ...n, _screenX: screenX, _screenY: screenY }
                                         setPanel({ node: nodeWithCoords })
                                         onNodeClick?.(nodeWithCoords)
@@ -496,12 +497,9 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
             )}
 
             <div className="graph-overlay-controls">
-                <button className="control-btn" title="Expand vertically"
-                    onClick={() => setVZoom(z => Math.min(3, +(z + 0.25).toFixed(2)))}>↕+</button>
-                <button className="control-btn" title="Compress vertically"
-                    onClick={() => setVZoom(z => Math.max(0.5, +(z - 0.25).toFixed(2)))}>↕−</button>
-                <button className="control-btn" title="Reset"
-                    onClick={() => { setVZoom(1); setPanX(0) }}>⟲</button>
+                <span className="control-hint">scroll ↕ · shift+scroll ↔ · drag freely</span>
+                <button className="control-btn" title="Reset view"
+                    onClick={() => { setPanX(0); setPanY(0) }}>⟲</button>
             </div>
         </div>
     )
