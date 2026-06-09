@@ -287,8 +287,15 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
         setIsDragging(false)
     }, [])
 
-    // Reset pan when data changes
-    useEffect(() => { setPanX(0); setPanY(0) }, [graphData])
+    // When layout changes, reset horizontal pan and set vertical pan so
+    // the axis sits near the bottom of the viewport (cards visible immediately).
+    useEffect(() => {
+        if (!layout) return
+        setPanX(0)
+        // panY = -(svgH - VIEW_H) scrolls to the bottom of the canvas
+        // so the axis and all cards are visible without needing to scroll first
+        setPanY(Math.min(0, VIEW_H - layout.svgH))
+    }, [layout])
 
     const visible = useCallback(node => {
         if (!timeFilter?.start || !timeFilter?.end) return true
@@ -499,7 +506,7 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
             <div className="graph-overlay-controls">
                 <span className="control-hint">scroll ↕ · shift+scroll ↔ · drag freely</span>
                 <button className="control-btn" title="Reset view"
-                    onClick={() => { setPanX(0); setPanY(0) }}>⟲</button>
+                    onClick={() => { setPanX(0); setPanY(Math.min(0, VIEW_H - svgH)) }}>⟲</button>
             </div>
         </div>
     )
