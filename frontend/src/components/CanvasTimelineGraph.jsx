@@ -27,7 +27,7 @@ const TICK_H    = 5
 const LABEL_H   = 16    // height of tick label below axis
 const CARD_TOP_PAD = 24 // min padding above topmost card
 const MIN_COL_W = CARD_W + COL_PAD  // min width per date column
-const VIEW_H    = 400   // viewport height (container CSS height)
+const VIEW_H_DEFAULT = 400  // fallback before ResizeObserver fires
 
 // ── Colors ────────────────────────────────────────────────────────────────────
 const C = {
@@ -117,7 +117,7 @@ function fmtDate(d) {
 }
 
 // ── Layout engine ─────────────────────────────────────────────────────────────
-function buildLayout(rawNodes, containerW) {
+function buildLayout(rawNodes, containerW, viewH = VIEW_H_DEFAULT) {
     // Group by day
     const byDay = {}
     for (const n of rawNodes) {
@@ -139,7 +139,7 @@ function buildLayout(rawNodes, containerW) {
 
     // Total SVG height: enough for content + axis + tick labels
     // At minimum, fill the viewport
-    const svgH  = Math.max(VIEW_H, contentH + AXIS_BOT)
+    const svgH  = Math.max(viewH, contentH + AXIS_BOT)
     const axisY = svgH - AXIS_BOT
 
     const laid = []
@@ -188,6 +188,7 @@ function generateTicks(dayKeys) {
 export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNode, timeFilter, onShowNeighborhood }) {
     const containerRef = useRef(null)
     const [contW, setContW]           = useState(800)
+    const [contH, setContH]           = useState(400)
     const [panX, setPanX]             = useState(0)
     const [panY, setPanY]             = useState(0)
     const [isDragging, setIsDragging] = useState(false)
@@ -199,6 +200,7 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
         if (!el) return
         const ro = new ResizeObserver(([e]) => {
             setContW(e.contentRect.width)
+            setContH(e.contentRect.height)
         })
         ro.observe(el)
         return () => ro.disconnect()
@@ -219,10 +221,10 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
                 })
                 .filter(n => n._date)
             if (!fallback.length) return null
-            return buildLayout(fallback, contW)
+            return buildLayout(fallback, contW, contH)
         }
-        return buildLayout(raw, contW)
-    }, [graphData, contW])
+        return buildLayout(raw, contW, contH)
+    }, [graphData, contW, contH])
 
     const { nodes, links, ticks } = useMemo(() => {
         if (!layout) return { nodes: [], links: [], ticks: [] }
@@ -260,8 +262,8 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
     , [contW])
 
     const clampY = useCallback((y, svgH) =>
-        Math.max(Math.min(0, VIEW_H - svgH), Math.min(0, y))
-    , [])
+        Math.max(Math.min(0, contH - svgH), Math.min(0, y))
+    , [contH])
 
     const onMouseDown = useCallback(e => {
         if (e.target.closest?.('[data-card]')) return
@@ -287,15 +289,19 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
         setIsDragging(false)
     }, [])
 
-    // When layout changes, reset horizontal pan and set vertical pan so
-    // the axis sits near the bottom of the viewport (cards visible immediately).
+    // When layout changes, position the view so the axis is near the
+    // bottom of the visible area — cards fill upward from there.
     useEffect(() => {
         if (!layout) return
         setPanX(0)
-        // panY = -(svgH - VIEW_H) scrolls to the bottom of the canvas
-        // so the axis and all cards are visible without needing to scroll first
-        setPanY(Math.min(0, VIEW_H - layout.svgH))
-    }, [layout])
+        // axisY is the axis position inside the SVG canvas.
+        // We want the axis to appear at (contH - AXIS_BOT) px from the top of
+        // the viewport, i.e. near the bottom with just the tick labels below.
+        // panY = targetScreenY - axisY
+        const targetScreenY = contH - AXIS_BOT - 10
+        const axisY = layout.svgH - AXIS_BOT
+        setPanY(clampY(targetScreenY - axisY, layout.svgH))
+    }, [layout, contH, clampY])
 
     const visible = useCallback(node => {
         if (!timeFilter?.start || !timeFilter?.end) return true
@@ -347,11 +353,11 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
             onMouseMove={onMouseMove}
             onMouseUp={onMouseUp}
             onMouseLeave={onMouseUp}
-            style={{ cursor: isDragging ? 'grabbing' : 'grab', overflow: 'hidden', height: VIEW_H }}
+            style={{ cursor: isDragging ? 'grabbing' : 'grab', overflow: 'hidden' }}
         >
                 <svg
                     width={contW}
-                    height={VIEW_H}
+                    height={contH}
                     style={{ display: 'block' }}
                 >
                     <g transform={`translate(${panX} ${panY})`}>
@@ -506,7 +512,12 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
             <div className="graph-overlay-controls">
                 <span className="control-hint">scroll ↕ · shift+scroll ↔ · drag freely</span>
                 <button className="control-btn" title="Reset view"
-                    onClick={() => { setPanX(0); setPanY(Math.min(0, VIEW_H - svgH)) }}>⟲</button>
+                    onClick={() => {
+                        const axisY = svgH - AXIS_BOT
+                        const targetScreenY = contH - AXIS_BOT - 10
+                        setPanX(0)
+                        setPanY(clampY(targetScreenY - axisY, svgH))
+                    }}>⟲</button>
             </div>
         </div>
     )
