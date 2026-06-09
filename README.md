@@ -11,7 +11,7 @@ The system builds on two core ideas:
 - **Temporal access control** — every model call is gated to evidence published before a configurable `simulated_date`, preventing future knowledge leakage.
 - **Causal evidence graphs** — a backward pipeline extracts events, builds causal chains, and quality-scores the graph against the known outcome, providing richer signal than raw article retrieval.
 
-Benchmarking is an ablation from pure knowledge recall (`vanilla_llm`) up to oracle access (`oracle`), evaluated on a curated 120-question dataset sourced from Polymarket.
+Benchmarking is an ablation from pure knowledge recall up to near resolution access, evaluated on a curated 120-question dataset sourced from Polymarket.
 
 ## Installation
 
@@ -62,7 +62,7 @@ See `wr --help` for the full command reference.
 
 ## Experimental Conditions
 
-| Paper name | CLI name | Search | Causal tools | Oracle |
+| Paper name | CLI name | Search | Causal tools | Near-resolution |
 |------------|----------|:------:|:------------:|:------:|
 | Vanilla LLM | `vanilla_llm` | | | |
 | Causal Simulation | `structured_scenario` | | ✓ | |
