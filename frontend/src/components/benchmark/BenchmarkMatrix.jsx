@@ -100,6 +100,7 @@ const BenchmarkMatrix = ({ onRefresh }) => {
   const [expanded, setExpanded]     = useState(null)
   const [metric, setMetric]         = useState('accuracy')
   const [contamFilter, setContamFilter] = useState(true)
+  const [evaluating, setEvaluating] = useState(false)
 
   const load = useCallback(async (withFilter = true) => {
     setLoading(true)
@@ -128,6 +129,26 @@ const BenchmarkMatrix = ({ onRefresh }) => {
       setLoading(false)
     }
   }, [])
+
+  const runReasoningEval = useCallback(async () => {
+    setEvaluating(true)
+    try {
+      await axios.post(`${API_BASE}/pipelines/jobs`, {
+        pipeline_type: 'reasoning_eval',
+        config: {
+          include_ids: 'include_ids.txt',
+          filter_knowledge_leakage: true,
+          exclude_annotation_rejected: true,
+          match_method: 'hybrid',
+        },
+      })
+      // Reload after a short delay so the new eval file is picked up
+      setTimeout(() => { load(contamFilter); setEvaluating(false) }, 3000)
+    } catch (err) {
+      console.error('Failed to start reasoning eval:', err)
+      setEvaluating(false)
+    }
+  }, [contamFilter, load])
 
   const toggleContamFilter = useCallback((val) => {
     setContamFilter(val)
@@ -197,6 +218,15 @@ const BenchmarkMatrix = ({ onRefresh }) => {
             title="Exclude questions where estimated_start_time < model knowledge cutoff"
           >
             Contam. filter
+          </button>
+          <button
+            className="bm-metric-toggle"
+            onClick={runReasoningEval}
+            disabled={evaluating}
+            title="Re-run reasoning graph evaluation against hindsight graphs"
+            style={{ marginLeft: 8 }}
+          >
+            {evaluating ? 'Evaluating…' : 'Re-evaluate'}
           </button>
           <button className="bm-refresh-btn" onClick={() => load(contamFilter)} title="Refresh">🔄</button>
         </div>
