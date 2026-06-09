@@ -117,8 +117,10 @@ function fmtDate(d) {
 }
 
 // ── Layout engine ─────────────────────────────────────────────────────────────
+// axisY is placed at 78% of viewH so cards are visible with balanced whitespace.
+// If the tallest stack overflows above that, svgH grows and panY lets the user
+// scroll up to see the clipped cards.
 function buildLayout(rawNodes, containerW, viewH = VIEW_H_DEFAULT) {
-    // Group by day
     const byDay = {}
     for (const n of rawNodes) {
         const key = new Date(n._date).toDateString()
@@ -126,23 +128,25 @@ function buildLayout(rawNodes, containerW, viewH = VIEW_H_DEFAULT) {
     }
 
     const dayKeys = Object.keys(byDay).sort((a, b) => new Date(a) - new Date(b))
+    const nCols   = dayKeys.length
+    const colW    = Math.max(MIN_COL_W, containerW / nCols)
+    const totalW  = Math.max(containerW, nCols * colW)
 
-    const nCols  = dayKeys.length
-    const colW   = Math.max(MIN_COL_W, containerW / nCols)
-    const totalW = Math.max(containerW, nCols * colW)
+    // Place axis at 60% down the viewport
+    const axisY = Math.round(viewH * 0.60)
 
-    // How tall does the content need to be?
-    // Tallest column determines the required height above the axis.
+    // How much vertical space do cards need above the axis?
     const maxStack = Math.max(...dayKeys.map(k => byDay[k].length))
-    const stackH   = maxStack * (CARD_H + CARD_GAP) + CARD_GAP + TICK_H
-    const contentH = stackH + CARD_TOP_PAD  // space above topmost card
+    const stackH   = maxStack * (CARD_H + CARD_GAP) + CARD_GAP + TICK_H + CARD_TOP_PAD
 
-    // Total SVG height: enough for content + axis + tick labels
-    // At minimum, fill the viewport
-    const svgH  = Math.max(viewH, contentH + AXIS_BOT)
-    const axisY = svgH - AXIS_BOT
+    // SVG canvas must be at least viewH; grow upward if cards overflow
+    const svgH = Math.max(viewH, stackH + AXIS_BOT)
 
-    const laid = []
+    // If svgH > viewH the axis must shift down by the overflow amount
+    // so it stays at the same screen position when panY=0
+    const axisYFinal = axisY + (svgH - viewH)
+
+    const laid    = []
     const colInfo = {}
 
     dayKeys.forEach((key, ci) => {
@@ -150,20 +154,13 @@ function buildLayout(rawNodes, containerW, viewH = VIEW_H_DEFAULT) {
         colInfo[key] = { cx, nodes: byDay[key] }
 
         byDay[key].forEach((n, ni) => {
-            // Stack upward from axis
-            const cardBottom = axisY - TICK_H - (ni * (CARD_H + CARD_GAP)) - CARD_GAP
-            const cy = cardBottom - CARD_H / 2
-            laid.push({
-                ...n,
-                cx,
-                cy,
-                cardTop: cy - CARD_H / 2,
-                cardBottom,
-            })
+            const cardBottom = axisYFinal - TICK_H - (ni * (CARD_H + CARD_GAP)) - CARD_GAP
+            const cy         = cardBottom - CARD_H / 2
+            laid.push({ ...n, cx, cy, cardTop: cy - CARD_H / 2, cardBottom })
         })
     })
 
-    return { laid, totalW, svgH, axisY, colInfo, dayKeys, colW }
+    return { laid, totalW, svgH, axisY: axisYFinal, colInfo, dayKeys, colW }
 }
 
 function generateTicks(dayKeys) {
@@ -262,10 +259,8 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
     , [contW])
 
     const clampY = useCallback((y, svgH) => {
-        // When svgH < contH the content is shorter than the viewport —
-        // allow positive panY so content can be centered.
-        const minY = Math.min(0, contH - svgH)  // negative: content taller than viewport
-        const maxY = Math.max(0, contH - svgH)  // positive: content shorter than viewport
+        const minY = contH - svgH   // negative when svgH > contH (can scroll up)
+        const maxY = 0              // never push content below top of viewport
         return Math.max(minY, Math.min(maxY, y))
     }, [contH])
 
@@ -293,17 +288,15 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
         setIsDragging(false)
     }, [])
 
-    // Center the content band (topmost card → tick labels) vertically in viewport.
+    // Scroll to show the bottom of the canvas (where axis and cards are).
+    // The axis was already placed at 78% of contH in buildLayout, so
+    // when svgH == contH panY=0 is perfect. When svgH > contH (overflow),
+    // pan up by the extra height so the axis stays on screen.
     useEffect(() => {
         if (!layout) return
         setPanX(0)
-        const { axisY, svgH, laid } = layout
-        const minCardTop = laid.length
-            ? Math.min(...laid.map(n => n.cardTop))
-            : axisY - 100
-        const contentMid = (minCardTop + axisY + AXIS_BOT) / 2
-        setPanY(clampY(contH / 2 - contentMid, svgH))
-    }, [layout, contH, clampY])
+        setPanY(-(layout.svgH - contH))
+    }, [layout, contH])
 
     const visible = useCallback(node => {
         if (!timeFilter?.start || !timeFilter?.end) return true
@@ -515,13 +508,8 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
                 <span className="control-hint">scroll ↕ · shift+scroll ↔ · drag freely</span>
                 <button className="control-btn" title="Reset view"
                     onClick={() => {
-                        const axisY = svgH - AXIS_BOT
-                        const minCardTop = nodes.length
-                            ? Math.min(...nodes.map(n => n.cardTop ?? n.cy - CARD_H / 2))
-                            : axisY - 100
-                        const contentMid = (minCardTop + axisY + AXIS_BOT) / 2
                         setPanX(0)
-                        setPanY(clampY(contH / 2 - contentMid, svgH))
+                        setPanY(-(svgH - contH))
                     }}>⟲</button>
             </div>
         </div>
