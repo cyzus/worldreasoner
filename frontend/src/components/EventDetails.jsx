@@ -5,7 +5,7 @@ import { RelatedArticles, RelatedQuestions } from './EventDetails/RelatedItems'
 import { EventImpacts } from './EventDetails/EventImpacts'
 import './EventDetails.css'
 
-const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborhood }) {
+const EventDetails = memo(function EventDetails({ node, onClose }) {
   const [showArticles, setShowArticles] = useState(false)
   const [showQuestions, setShowQuestions] = useState(false)
   const [showImpacts, setShowImpacts] = useState(false)
@@ -144,17 +144,6 @@ const EventDetails = memo(function EventDetails({ node, onClose, onShowNeighborh
           onToggle={() => setShowImpacts(!showImpacts)}
         />
 
-        <div className="actions-footer" style={{ marginTop: '16px' }}>
-          <h4 style={{ fontSize: '0.8rem', marginBottom: '8px', color: '#6b7280' }}>Explore Neighborhood</h4>
-          <div className="button-group">
-            <button className="action-btn primary" onClick={() => onShowNeighborhood(node.id, 1)} style={{ fontSize: '0.8rem', padding: '6px 12px' }}>
-              Immediate
-            </button>
-            <button className="action-btn secondary" onClick={() => onShowNeighborhood(node.id, 2)} style={{ fontSize: '0.8rem', padding: '6px 12px' }}>
-              2-Hop
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   )
