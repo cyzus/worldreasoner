@@ -48,13 +48,13 @@ The full database (`combined.db`) contains ~345 questions; only the 120 curated 
 
 Six conditions form an ablation across search mode, causal tools, and information access. Defined in `src/domain/evaluation/conditions.py`.
 
-| # | Condition | CLI name | Search | Causal tools | Oracle |
-|---|-----------|----------|:------:|:------------:|:------:|
+| # | Paper name | CLI name | Search | Causal tools | Oracle |
+|---|------------|----------|:------:|:------------:|:------:|
 | 1 | Vanilla LLM | `vanilla_llm` | | | |
-| 2 | Structured Scenario | `structured_scenario` | | ✓ | |
+| 2 | Causal Simulation | `structured_scenario` | | ✓ | |
 | 3 | Search-Enabled | `search_enabled` | ✓ | | |
-| 4 | WorldReasoner | `worldreasoner` | ✓ | ✓ | |
-| 5 | Oracle | `oracle` | ✓ | ✓ | ✓ |
+| 4 | Search-Enabled Graph | `worldreasoner` | ✓ | ✓ | |
+| 5 | Near-Resolution | `oracle` | ✓ | ✓ | ✓ |
 | 6 | Real-Time | `real_time` | live | ✓ | |
 
 ```bash
@@ -65,13 +65,28 @@ wr benchmark conditions        # list all conditions with descriptions
 
 ## 5.5 Scoring Metrics
 
-All metrics are computed in `src/domain/evaluation/metrics.py`. See [metrics.md](metrics.md) for full definitions.
+All metrics are computed in `src/domain/evaluation/metrics.py` and `src/domain/evaluation/benchmark_eval.py`. See [metrics.md](metrics.md) for full definitions.
 
-| Metric | Better | Formula / Notes |
-|--------|--------|-----------------|
-| **Accuracy** | Higher | Fraction correct. Binary/MCQ: exact match. Quantity: within 10% tolerance. |
-| **Brier Score** | Lower | `(forecast_prob − outcome)²`. Range 0–1. Primary metric for ranking. |
+### Forecasting accuracy
+
+| Metric | Better | Notes |
+|--------|--------|-------|
+| **Accuracy** | Higher | Fraction correct. Binary/MCQ: exact match. Quantity: ±10% tolerance. |
+| **Brier Score** | Lower | `(forecast_prob − outcome)²`. Range 0–1. Primary ranking metric. |
 | **Log Score** | Higher | `log(prob_of_correct_outcome)`. Penalises confident wrong answers. |
+
+### Reasoning graph quality
+
+Computed by matching agent-produced events against the hindsight graph for each question. Implementation: `src/domain/evaluation/benchmark_eval.py` and `scripts/analysis/compute_metrics_table.py`.
+
+| Metric | Better | Notes |
+|--------|--------|-------|
+| **Source Precision** | Higher | Fraction of agent-cited sources that appear in the hindsight evidence set. Undefined for knowledge-only conditions. |
+| **Event F1** | Higher | Token-level F1 between agent event descriptions and hindsight events. |
+| **Key-Event Recall** | Higher | Fraction of paper-annotated key events mentioned by the agent. |
+| **Key-Event F1** | Higher | Harmonic mean of key-event precision and recall. |
+| **Key-Event Precision** | Higher | Fraction of agent events that match a key event. |
+| **Temporal MAE** | Lower | Mean absolute error in days between agent event dates and ground truth. Only for conditions with structured event output. |
 
 Contamination filtering (see §5.6) is applied before computing any aggregate metrics.
 

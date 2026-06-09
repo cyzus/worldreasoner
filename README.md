@@ -62,14 +62,14 @@ See `wr --help` for the full command reference.
 
 ## Experimental Conditions
 
-| Condition | CLI name | Search | Causal tools | Oracle |
-|-----------|----------|:------:|:------------:|:------:|
+| Paper name | CLI name | Search | Causal tools | Oracle |
+|------------|----------|:------:|:------------:|:------:|
 | Vanilla LLM | `vanilla_llm` | | | |
-| Structured Scenario | `structured_scenario` | | ✓ | |
-| Search-Enabled Agent | `search_enabled` | ✓ | | |
-| WorldReasoner Agent | `worldreasoner` | ✓ | ✓ | |
-| Oracle Agent | `oracle` | ✓ | ✓ | ✓ |
-| Real-Time Agent | `real_time` | live | ✓ | |
+| Causal Simulation | `structured_scenario` | | ✓ | |
+| Search-Enabled | `search_enabled` | ✓ | | |
+| Search-Enabled Graph | `worldreasoner` | ✓ | ✓ | |
+| Near-Resolution | `oracle` | ✓ | ✓ | ✓ |
+| Real-Time | `real_time` | live | ✓ | |
 
 ## Architecture
 
