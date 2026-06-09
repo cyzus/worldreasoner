@@ -159,7 +159,7 @@
 }
 
 .btn-submit:hover:not(:disabled) {
-  background-color: #1976d2;
+  background-color: #333;
 }
 
 .btn-submit:disabled {
@@ -180,9 +180,9 @@
 }
 
 .success-message {
-  background-color: #e8f5e9;
-  color: #2e7d32;
-  border-left: 4px solid #4caf50;
+  background-color: #f0f0f0;
+  color: #333;
+  border-left: 4px solid #111;
 }
 
 /* Responsive */

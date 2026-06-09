@@ -53,7 +53,7 @@
 
 .save-button {
   padding: 10px 20px;
-  background-color: #4CAF50;
+  background-color: #111;
   border: none;
   border-radius: 6px;
   color: #fff;
@@ -65,7 +65,7 @@
 }
 
 .save-button:hover {
-  background-color: #45a049;
+  background-color: #333;
   transform: translateY(-1px);
   box-shadow: 0 4px 8px rgba(76, 175, 80, 0.4);
 }
@@ -111,7 +111,7 @@
 
 .search-input:focus {
   outline: none;
-  border-color: #4CAF50;
+  border-color: #111;
   box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
 }
 
@@ -128,7 +128,7 @@
 
 .filter-select:focus {
   outline: none;
-  border-color: #4CAF50;
+  border-color: #111;
   box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
 }
 
@@ -147,7 +147,7 @@
 .control-button:hover {
   background-color: #f5f5f5;
   color: #333;
-  border-color: #4CAF50;
+  border-color: #111;
 }
 
 .control-button:disabled {
@@ -176,13 +176,13 @@
 
 .question-preview-item:hover {
   background-color: #f5f5f5;
-  border-color: #4CAF50;
+  border-color: #111;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .question-preview-item.selected {
-  border-color: #4CAF50;
-  background-color: #e8f5e9;
+  border-color: #111;
+  background-color: #f0f0f0;
 }
 
 .question-checkbox {
@@ -195,7 +195,7 @@
   width: 20px;
   height: 20px;
   cursor: pointer;
-  accent-color: #4CAF50;
+  accent-color: #111;
 }
 
 .question-content {
@@ -228,23 +228,23 @@
 }
 
 .type-badge {
-  background-color: #e3f2fd;
-  color: #1976d2;
+  background-color: #f0f0f0;
+  color: #333;
 }
 
 .domain-badge {
   background-color: #f3e5f5;
-  color: #7b1fa2;
+  color: #444;
 }
 
 .difficulty-badge {
-  background-color: #fff3e0;
-  color: #e65100;
+  background-color: #f5f5f5;
+  color: #555;
 }
 
 .quality-badge {
-  background-color: #e8f5e9;
-  color: #2e7d32;
+  background-color: #f0f0f0;
+  color: #333;
 }
 
 .date-badge {
@@ -284,8 +284,8 @@
 
 .ground-truth-value {
   font-weight: 600;
-  color: #2e7d32;
-  background-color: #e8f5e9;
+  color: #333;
+  background-color: #f0f0f0;
   padding: 2px 6px;
   border-radius: 4px;
 }
@@ -296,13 +296,13 @@
 
 .question-link a {
   font-size: 13px;
-  color: #4CAF50;
+  color: #111;
   text-decoration: none;
   transition: color 0.2s;
 }
 
 .question-link a:hover {
-  color: #45a049;
+  color: #333;
   text-decoration: underline;
 }
 

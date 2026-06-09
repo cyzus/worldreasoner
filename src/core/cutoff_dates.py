@@ -1,10 +1,14 @@
-#!/usr/bin/env python3
-"""Fetch and parse LLM knowledge cutoff dates into local JSON."""
+"""Fetch and parse LLM knowledge cutoff dates into local JSON.
+
+Importable home for the logic that used to live in
+``scripts/fetch_knowledge_cutoff_date.py``. The ``wr db fetch-cutoffs`` CLI
+command wraps ``fetch_and_save``.
+"""
 
 from datetime import datetime, timezone
 import json
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import requests
 
@@ -12,51 +16,36 @@ import requests
 SOURCE_README_URL = (
     "https://github.com/HaoooWang/llm-knowledge-cutoff-dates/blob/main/README.md"
 )
-OUTPUT_FILE = "config/llm_cutoff_dates.json"
+DEFAULT_OUTPUT_FILE = "config/llm_cutoff_dates.json"
 
 
 def fetch_readme_content(url: str) -> str:
     """Fetch the raw README content from GitHub."""
-    # Convert GitHub blob URL to raw URL
     raw_url = url.replace("github.com", "raw.githubusercontent.com").replace(
         "/blob/", "/"
     )
-
     response = requests.get(raw_url, timeout=30)
     response.raise_for_status()
     return response.text
 
 
 def parse_cutoff_date(date_str: str) -> Optional[str]:
-    """
-    Parse various date formats to ISO format (YYYY-MM-DD).
-
-    Handles formats like:
-    - 2023.10
-    - 2023.10.01
-    - early 2023
-    - 2022.09 (from pretraining)
-    - Unknown
-    """
+    """Parse various date formats to ISO format (YYYY-MM-DD)."""
     date_str = date_str.strip()
     date_str = re.sub(r"`", "", date_str)
     date_str = re.sub(r"\[[^\]]+\]\([^\)]+\)", "", date_str).strip()
 
-    # Handle unknown dates
     if date_str.lower() in ["unknown", "tbd", "n/a", "na", ""]:
         return None
 
-    # Handle "early YYYY" format
     early_match = re.match(r"early\s+(\d{4})", date_str, re.IGNORECASE)
     if early_match:
         return f"{early_match.group(1)}-01-01"
 
-    # Handle "late YYYY" format
     late_match = re.match(r"late\s+(\d{4})", date_str, re.IGNORECASE)
     if late_match:
         return f"{late_match.group(1)}-10-01"
 
-    # Handle quarter format (Q1 2024 / 2024 Q1)
     quarter_match = re.search(
         r"(?:Q([1-4])\s*(\d{4})|(\d{4})\s*Q([1-4]))", date_str, re.IGNORECASE
     )
@@ -66,38 +55,31 @@ def parse_cutoff_date(date_str: str) -> Optional[str]:
         month = (quarter - 1) * 3 + 1
         return f"{year:04d}-{month:02d}-01"
 
-    # Handle "Pretraining YYYY.MM, Finetuning YYYY.MM" format - use pretraining date
     pretraining_match = re.search(
         r"Pretraining[:\s]+(\d{4}\.\d{2}(?:\.\d{2})?)", date_str, re.IGNORECASE
     )
     if pretraining_match:
         date_str = pretraining_match.group(1)
 
-    # Handle end of YYYY format
     end_match = re.match(r"end\s+of\s+(\d{4})", date_str, re.IGNORECASE)
     if end_match:
         return f"{end_match.group(1)}-12-31"
 
-    # Handle YYYY.MM.DD format
     full_date_match = re.match(r"(\d{4})\.(\d{2})\.(\d{2})", date_str)
     if full_date_match:
         year, month, day = full_date_match.groups()
         return f"{year}-{month}-{day}"
 
-    # Handle YYYY-MM-DD / YYYY/MM/DD format
     iso_or_slash_date_match = re.match(r"(\d{4})[-/](\d{2})[-/](\d{2})", date_str)
     if iso_or_slash_date_match:
         year, month, day = iso_or_slash_date_match.groups()
         return f"{year}-{month}-{day}"
 
-    # Handle YYYY.MM format
     year_month_match = re.match(r"(\d{4})\.(\d{2})", date_str)
     if year_month_match:
         year, month = year_month_match.groups()
-        # Use last day of month as approximation
         return f"{year}-{month}-01"
 
-    # Handle YYYY format
     year_match = re.match(r"(\d{4})", date_str)
     if year_match:
         return f"{year_match.group(1)}-01-01"
@@ -142,14 +124,10 @@ def iter_markdown_sections(content: str) -> List[Tuple[str, str]]:
 
 
 def normalize_model_name(name: str) -> str:
-    """Normalize model name to lowercase without spaces, preserving dots for version numbers."""
-    # Convert to lowercase and replace spaces/underscores with dashes
+    """Normalize model name to lowercase, preserving dots for version numbers."""
     normalized = name.lower().replace(" ", "-").replace("_", "-")
-    # Remove special characters except alphanumeric, dots, and dashes
     normalized = re.sub(r"[^a-z0-9.-]", "", normalized)
-    # Remove consecutive dashes
     normalized = re.sub(r"-+", "-", normalized)
-    # Remove leading/trailing dashes and dots
     normalized = normalized.strip("-.")
     return normalized
 
@@ -181,7 +159,7 @@ def _normalized_header(cell: str) -> str:
 
 def parse_markdown_table(table_text: str, company: str) -> Dict[str, Dict]:
     """Parse a markdown table and extract model information."""
-    models = {}
+    models: Dict[str, Dict] = {}
 
     lines = [line.strip() for line in table_text.split("\n") if line.strip()]
     if len(lines) < 2:
@@ -252,7 +230,9 @@ def parse_markdown_table(table_text: str, company: str) -> Dict[str, Dict]:
         provider = columns[provider_idx].strip() if provider_idx < len(columns) else ""
         provider = provider or company
 
-        cutoff_date_raw = columns[cutoff_idx].strip() if cutoff_idx < len(columns) else ""
+        cutoff_date_raw = (
+            columns[cutoff_idx].strip() if cutoff_idx < len(columns) else ""
+        )
         source_link = columns[source_idx].strip() if source_idx < len(columns) else ""
 
         cutoff_date = parse_cutoff_date(cutoff_date_raw)
@@ -275,69 +255,57 @@ def parse_markdown_table(table_text: str, company: str) -> Dict[str, Dict]:
 
 def parse_readme(content: str) -> Dict:
     """Parse the entire README and extract all model information."""
-    models = {}
+    models: Dict[str, Dict] = {}
 
-    # Parse all heading sections that include markdown tables.
-    # This avoids hardcoded vendor lists and works with both
-    # '# OpenAI' and '# Unknown Models' style headings.
     for section_name, section_text in iter_markdown_sections(content):
         for table_text in extract_markdown_tables(section_text):
-            company_name = re.sub(r"\s+Models$", "", section_name, flags=re.IGNORECASE)
+            company_name = re.sub(
+                r"\s+Models$", "", section_name, flags=re.IGNORECASE
+            )
             section_models = parse_markdown_table(table_text, company_name)
             models.update(section_models)
 
-    result = {
+    return {
         "models": models,
         "metadata": {
             "source_url": "https://github.com/HaoooWang/llm-knowledge-cutoff-dates",
-            "parsed_at": datetime.now(timezone.utc).isoformat().replace(
-                "+00:00", "Z"
-            ),
+            "parsed_at": datetime.now(timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z"),
             "total_models": len(models),
         },
     }
 
-    return result
 
+def fetch_and_save(
+    output_file: str = DEFAULT_OUTPUT_FILE,
+    source_url: str = SOURCE_README_URL,
+    log: Optional[Callable[[str], None]] = None,
+) -> Dict:
+    """Fetch, parse, and save LLM knowledge cutoff dates to ``output_file``.
 
-def main():
-    """Main function to fetch, parse, and save LLM knowledge cutoff dates."""
-    github_url = SOURCE_README_URL
-    output_file = OUTPUT_FILE
+    Returns the parsed data dict.
+    """
+    emit = log or print
 
-    print(f"Fetching README from {github_url}...")
-    content = fetch_readme_content(github_url)
+    emit(f"Fetching README from {source_url}...")
+    content = fetch_readme_content(source_url)
 
-    print("Parsing content...")
+    emit("Parsing content...")
     data = parse_readme(content)
 
-    print(f"\nParsed {data['metadata']['total_models']} models:")
-
-    # Group by company for display
-    by_company = {}
-    for key, model in data["models"].items():
-        company = model["company"]
-        if company not in by_company:
-            by_company[company] = []
-        by_company[company].append(model)
-
+    emit(f"\nParsed {data['metadata']['total_models']} models:")
+    by_company: Dict[str, List[Dict]] = {}
+    for model in data["models"].values():
+        by_company.setdefault(model["company"], []).append(model)
     for company, models in sorted(by_company.items()):
-        print(f"  {company}: {len(models)} models")
+        emit(f"  {company}: {len(models)} models")
 
-    print(f"\nSaving to {output_file}...")
+    emit(f"\nSaving to {output_file}...")
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-    print(
+    emit(
         f"Success: saved {data['metadata']['total_models']} models to {output_file}"
     )
-
-    # Show some examples
-    print("\nExample entries:")
-    for i, (key, model) in enumerate(list(data["models"].items())[:5], 1):
-        print(f"\n{i}. {key}: {model['model_name']} ({model['provider']})")
-        print(f"   Cutoff: {model['cutoff_date']} (raw: {model['cutoff_date_raw']})")
-
-
-if __name__ == "__main__":
-    main()
+    return data

@@ -344,3 +344,52 @@ def conditions():
         )
 
     console.print(table)
+
+
+@app.command()
+def evaluate(
+    db_path: str = db_option("combined.db"),
+    conditions: Optional[List[str]] = typer.Option(
+        None,
+        "--condition",
+        "-c",
+        help="Condition(s) to evaluate (default: all conditions with data)",
+    ),
+    include_ids: Optional[str] = typer.Option(
+        None,
+        "--include-ids",
+        help="File with one question ID per line to restrict evaluation",
+    ),
+    models: Optional[List[str]] = typer.Option(
+        None, "--model", "-m", help="Only include forecasts from these model id(s)"
+    ),
+    exclude_models: Optional[List[str]] = typer.Option(
+        None, "--exclude-model", help="Model id(s) to exclude"
+    ),
+    output_dir: str = typer.Option(
+        "experiments/evaluation",
+        "--output-dir",
+        "-o",
+        help="Directory for JSON/Markdown reports",
+    ),
+):
+    """Score benchmark forecasts and write per-condition JSON + Markdown reports.
+
+    Examples:
+        wr benchmark evaluate
+        wr benchmark evaluate --condition vanilla_llm --condition structured_scenario
+        wr benchmark evaluate --db other.db
+    """
+    from pathlib import Path
+
+    from src.domain.evaluation.benchmark_eval import evaluate_benchmark
+
+    evaluate_benchmark(
+        db_path=db_path,
+        conditions=conditions,
+        include_ids_path=include_ids,
+        models=models,
+        exclude_models=exclude_models,
+        output_dir=Path(output_dir),
+        log=console.print,
+    )

@@ -56,8 +56,8 @@
 }
 
 .source-tab.active {
-  color: #4CAF50;
-  border-bottom-color: #4CAF50;
+  color: #111;
+  border-bottom-color: #111;
   font-weight: 600;
 }
 
@@ -76,9 +76,9 @@
 }
 
 .success-message {
-  background-color: #e8f5e9;
+  background-color: #f0f0f0;
   border: 1px solid #c8e6c9;
-  color: #2e7d32;
+  color: #333;
 }
 
 /* Internal panel styling (overriding global card style slightly if needed) */

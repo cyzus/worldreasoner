@@ -96,7 +96,7 @@
 
 .form-input:focus {
   outline: none;
-  border-color: #4CAF50;
+  border-color: #111;
   box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
 }
 
@@ -137,12 +137,12 @@ textarea.form-input {
 }
 
 .btn-primary {
-  background-color: #4CAF50;
+  background-color: #111;
   color: white;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background-color: #45a049;
+  background-color: #333;
 }
 
 .btn-secondary {

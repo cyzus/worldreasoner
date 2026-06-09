@@ -1,0 +1,148 @@
+.qgt {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #f8f9fa;
+}
+
+/* ── Controls ────────────────────────────────────────── */
+.qgt-controls {
+  flex-shrink: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid #dee2e6;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qgt-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.qgt-toggle-group {
+  display: flex;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.qgt-toggle-btn {
+  padding: 5px 12px;
+  background: #fff;
+  border: none;
+  border-right: 1px solid #ced4da;
+  color: #6c757d;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.qgt-toggle-btn:last-child { border-right: none; }
+
+.qgt-toggle-btn:hover:not(:disabled) {
+  background: #f8f9fa;
+  color: #212529;
+}
+
+.qgt-toggle-btn.active {
+  background: #111;
+  color: #fff;
+}
+
+.qgt-toggle-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.qgt-forecast-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8125rem;
+}
+
+.qgt-forecast-select label {
+  color: #6c757d;
+  white-space: nowrap;
+}
+
+.qgt-forecast-select select {
+  border: 1px solid #ced4da;
+  background: #fff;
+  color: #212529;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.8125rem;
+  max-width: 280px;
+}
+
+.qgt-status { font-size: 0.8125rem; color: #6c757d; }
+.qgt-status.error { color: #dc3545; }
+.qgt-status.muted { font-style: italic; }
+
+/* ── Graph area ──────────────────────────────────────── */
+.qgt-graphs {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.qgt-graphs.split {
+  flex-direction: row;
+}
+
+.qgt-graph-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid #dee2e6;
+}
+
+.qgt-graph-pane:last-child { border-right: none; }
+
+.qgt-pane-header {
+  padding: 8px 16px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #6c757d;
+  border-bottom: 1px solid #dee2e6;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #fff;
+}
+
+.qgt-pane-body {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background: #f8f9fa;
+}
+
+.qgt-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 8px;
+  color: #6c757d;
+  font-size: 0.875rem;
+  text-align: center;
+  padding: 24px;
+}
+
+.qgt-state.error { color: #dc3545; }
+.qgt-state.muted { font-style: italic; }

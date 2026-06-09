@@ -163,7 +163,6 @@ export const useGraphTraversal = (questions) => {
                 node._impactMagnitude = Math.min(1, absScore / total)
             })
 
-            console.log('Applied outcome-aware impact colors to nodes')
         } catch (err) {
             console.warn('Failed to apply outcome-aware impact coloring:', err)
         }
@@ -238,7 +237,6 @@ export const useGraphTraversal = (questions) => {
     // Handle question filter
     const handleQuestionFilter = useCallback(async (questionId, depth = 2) => {
         if (!questionId) {
-            console.log('Clearing question filter - resetting to full graph')
             // No filter, show all data and clear outcome markers
             // Create fresh copies to ensure synthetic edges are removed
             const resetNodes = fullGraphData.nodes.map(node => ({
@@ -251,7 +249,6 @@ export const useGraphTraversal = (questions) => {
                 .filter(link => !link.isSynthetic && link.type !== 'potentially_relevant')
                 .map(link => ({ ...link }))
 
-            console.log(`Resetting graph: ${resetNodes.length} nodes, ${resetLinks.length} links (filtered from ${fullGraphData.links.length})`)
 
             const resetData = {
                 nodes: resetNodes,
@@ -276,21 +273,13 @@ export const useGraphTraversal = (questions) => {
             return
         }
 
-        console.log('Filtering by question:', question.question_text)
 
         try {
             // Fetch all events related to this question (including from metadata and hypotheses)
             const questionEventsData = await fetchQuestionEvents(questionId)
             const seedEventIds = new Set(questionEventsData.event_ids)
 
-            console.log('=== Question Filter Statistics ===')
-            console.log(`Direct events: ${questionEventsData.direct_events}`)
-            console.log(`Extracted during evidence: ${questionEventsData.extracted_events}`)
-            console.log(`In causal hypotheses: ${questionEventsData.hypothesis_events}`)
-            console.log(`Orphaned (extracted but not in hypotheses): ${questionEventsData.orphaned_events}`)
-            console.log(`Total seed events: ${questionEventsData.total_events}`)
 
-            console.log(`Total seed events: ${questionEventsData.total_events}`)
 
             // Debug: Check if seed events exist in fullGraphData
             const missingEventIds = Array.from(seedEventIds).filter(id => !fullGraphData.nodes.find(n => n.id === id))
@@ -350,7 +339,6 @@ export const useGraphTraversal = (questions) => {
                     }
                     currentGraphLinks = Array.from(currentLinksMap.values())
 
-                    console.log(`Successfully merged ${missingSubgraph.nodes.length} nodes and ${missingSubgraph.edges ? missingSubgraph.edges.length : 0} edges into local graph copy.`)
                 } catch (err) {
                     console.error('Failed to fetch missing subgraph for question:', err)
                 }
@@ -384,7 +372,6 @@ export const useGraphTraversal = (questions) => {
                 })
             }
 
-            console.log(`Expanded to ${visited.size} nodes (from ${seedEventIds.size} seed events, depth ${depth})`)
 
             // Filter nodes to include the neighborhood
             const filteredNodes = currentGraphNodes.filter(node => visited.has(node.id))
@@ -396,7 +383,6 @@ export const useGraphTraversal = (questions) => {
                 return visited.has(sourceId) && visited.has(targetId)
             })
 
-            console.log(`Filtered graph: ${filteredNodes.length} nodes, ${filteredLinks.length} links (from ${currentGraphLinks.length} total links)`)
 
             // Mark outcome nodes from backend is_outcome / is_actual_outcome properties
             const outcomeNodeId = filteredNodes.find(n => n.properties?.is_actual_outcome)?.id
@@ -438,18 +424,10 @@ export const useGraphTraversal = (questions) => {
             // Update with new filtered data including synthetic links
             const combinedLinks = [...filteredLinks, ...syntheticLinks]
 
-            console.log(`Created ${syntheticLinks.length} synthetic links for orphaned nodes`)
-            console.log(`Final graph data: ${filteredNodes.length} nodes, ${combinedLinks.length} links`)
 
             // Verify Santa node has impact before setting graph data
             const santaNode = filteredNodes.find(n => (n.name || '').includes('Santa'))
             if (santaNode) {
-                console.log(`Santa node before setGraphData:`, {
-                    name: santaNode.name,
-                    hasImpactDirection: !!santaNode._impactDirection,
-                    impactDirection: santaNode._impactDirection,
-                    impactMagnitude: santaNode._impactMagnitude
-                })
             }
 
             const questionFilteredData = {
@@ -461,7 +439,6 @@ export const useGraphTraversal = (questions) => {
             // Build chart events AFTER impact coloring so marker colors match graph semantics.
             const relatedEvents = buildChartEvents(filteredNodes, seedEventIds)
             setQuestionRelatedEvents(relatedEvents)
-            console.log(`Stored ${relatedEvents.length} events for TimeSeriesChart`)
 
         } catch (error) {
             console.error('Failed to fetch question events:', error)

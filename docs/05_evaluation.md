@@ -1,364 +1,248 @@
 # Section 5: Evaluation
 
-This section covers the full evaluation system: the experiment dataset, models under test, experimental conditions, scoring metrics, benchmark execution, and result visualization.
+Evaluation of WorldReasoner forecasts covers dataset selection, contamination filtering, scoring metrics, benchmark execution, and result analysis.
 
 ---
 
 ## 5.1 Overview
 
-Evaluation is **strictly separated** from the forecasting agent to prevent any information leakage:
+Evaluation is **strictly separated** from the forecasting agent:
 
-1. **Forecasting (Simulated Past)**: The agent makes a prediction. It has no access to ground truth and can only retrieve evidence published before `simulated_date`.
-2. **Evaluation (Present)**: After forecasting is complete, the evaluator compares the forecast against the known ground truth using standard scoring metrics.
+1. **Forecasting (simulated past)** — the agent predicts. It has no access to ground truth and can only retrieve evidence published before `simulated_date`.
+2. **Evaluation (present)** — after forecasting completes, the evaluator compares the prediction against the known ground truth using standard scoring metrics.
 
-The `ForecastEvaluator` and all scoring logic live in `src/domain/evaluation/metrics.py`. They are never exposed to or called by the forecasting agent.
+All scoring logic lives in `src/domain/evaluation/metrics.py` and is never called by the forecasting agent.
 
 ---
 
-## 5.2 Experimental Dataset
+## 5.2 Benchmark Dataset
 
-The benchmark uses a curated dataset of **300 resolved questions** stored in `experiment.db`.
+The paper benchmark uses a curated subset of **120 resolved questions** stored in `combined.db`. Question IDs are listed in `include_ids.txt`.
 
 | Dimension | Value |
 |-----------|-------|
-| Total questions | 300 |
-| Domains | 6 (Finance, Politics, Sports, Culture, Climate, Health) |
-| Time horizons | 3 (Short, Medium, Long) |
-| Sources | Polymarket + News pipeline |
+| Questions | 120 (from `include_ids.txt`) |
+| Sources | Polymarket |
+| Domains | Politics, Economics, Science, Technology, Sports, Culture |
+| Resolution | All resolved with known ground truth |
+| Evidence | Causal event graphs built and quality-reviewed |
 
-For full dataset composition details, see [Section 2.4](02_data_collection.md#24-dataset-composition).
+The full database (`combined.db`) contains ~345 questions; only the 120 curated questions are used for paper results to ensure quality and annotation completeness.
 
 ---
 
-## 5.3 Models Under Test
+## 5.3 Models
 
-The benchmark is designed to evaluate **6 models × 6 conditions × 300 questions = 10,800 total runs**.
-
-| Model | LiteLLM ID | Role |
-|-------|-----------|------|
-| GPT-5 | `gpt-5` | Frontier (OpenAI) |
-| Claude 4.5 Sonnet | `anthropic/claude-sonnet-4-5-20250514` | Frontier (Anthropic) |
-| Gemini 2.5 Pro | `gemini/gemini-2.5-pro` | Frontier (Google) |
-| Gemini 2.5 Flash | `gemini/gemini-2.5-flash` | Scaling baseline (cost-efficient) |
-| DeepSeek V3 | `deepseek/deepseek-chat` | Open-weight frontier |
-| Qwen 3 | `qwen/qwen3` | Open-weight frontier |
+| Model | LiteLLM ID |
+|-------|-----------|
+| Gemini 3 Flash | `gemini/gemini-3-flash-preview` |
+| Gemini 3 Pro | `gemini/gemini-3-pro-preview` |
+| DeepSeek V4 Flash | `deepseek/deepseek-v4-flash` |
+| DeepSeek V4 Pro | `deepseek/deepseek-v4-pro` |
+| Qwen 3.5 397B | `dashscope/qwen3.5-397b-a17b` |
+| GPT-4o | `openai/gpt-4o-2024-11-20` |
 
 ---
 
 ## 5.4 Experimental Conditions
 
-Six conditions form an ablation study across search mode, causal tools, and information access. Conditions are defined in `src/domain/evaluation/conditions.py`.
+Six conditions form an ablation across search mode, causal tools, and information access. Defined in `src/domain/evaluation/conditions.py`.
 
-| # | Condition | CLI Name | Mode | Causal Tools | Oracle | Max Steps | Description |
-|---|-----------|----------|------|:------------:|:------:|----------:|-------------|
-| 1 | Vanilla LLM | `vanilla_llm` | `knowledge_only` | No | No | 10 | Baseline: LLM forecasts from training knowledge only |
-| 2 | Structured Scenario | `structured_scenario` | `knowledge_only` | Yes | No | 25 | LLM + causal reasoning tools, no external search |
-| 3 | Search-Enabled | `search_enabled` | `container` | No | No | 15 | LLM + article search via MCP, no causal structure |
-| 4 | WorldReasoner | `worldreasoner` | `container` | Yes | No | 25 | Full system: search + causal reasoning |
-| 5 | Oracle | `oracle` | `container` | Yes | Yes | 25 | Full system with near-resolution-date info (upper bound) |
-| 6 | Real-Time | `real_time` | `real_time` | Yes | No | 25 | Full system using live internet access |
+| # | Paper name | CLI name | Search | Causal tools | Oracle |
+|---|------------|----------|:------:|:------------:|:------:|
+| 1 | Vanilla LLM | `vanilla_llm` | | | |
+| 2 | Causal Simulation | `structured_scenario` | | ✓ | |
+| 3 | Search-Enabled | `search_enabled` | ✓ | | |
+| 4 | Search-Enabled Graph | `worldreasoner` | ✓ | ✓ | |
+| 5 | Near-Resolution | `oracle` | ✓ | ✓ | ✓ |
+| 6 | Real-Time | `real_time` | live | ✓ | |
 
-List available conditions at any time:
 ```bash
-wr benchmark conditions
+wr benchmark conditions        # list all conditions with descriptions
 ```
 
 ---
 
-## 5.5 Evaluation Metrics
+## 5.5 Scoring Metrics
 
-All metrics are computed per-condition and aggregated across questions. Implementation: `src/domain/evaluation/metrics.py`.
+All metrics are computed in `src/domain/evaluation/metrics.py` and `src/domain/evaluation/benchmark_eval.py`. See [metrics.md](metrics.md) for full definitions.
 
-| Metric | Range | Better | Description |
-|--------|-------|--------|-------------|
-| **Accuracy** | 0.0–1.0 | Higher | Binary/MCQ: exact match. Quantity: within 10% tolerance. Simple fraction of correct predictions. |
-| **Brier Score** | 0.0–1.0 | Lower | Mean squared error: `(probability - outcome)²`. Perfect = 0. Primary metric for competitive comparison. |
-| **Log Score** | -∞–0.0 | Higher | Logarithmic scoring rule. Heavily penalizes confident wrong answers. Rewards well-calibrated uncertainty. |
-| **Calibration Error** | 0.0–1.0 | Lower | Mean absolute difference between stated confidence bins and actual accuracy. |
+### Forecasting accuracy
 
-**Python API:**
-```python
-from src.domain.evaluation import ForecastEvaluator
+| Metric | Better | Notes |
+|--------|--------|-------|
+| **Accuracy** | Higher | Fraction correct. Binary/MCQ: exact match. Quantity: ±10% tolerance. |
+| **Brier Score** | Lower | `(forecast_prob − outcome)²`. Range 0–1. Primary ranking metric. |
+| **Log Score** | Higher | `log(prob_of_correct_outcome)`. Penalises confident wrong answers. |
 
-evaluator = ForecastEvaluator()
-results = evaluator.evaluate_all_resolved(update_forecasts=True)
-print(f"Overall Accuracy: {results['overall_accuracy']:.2%}")
-```
+### Reasoning graph quality
 
-**CLI:**
-```bash
-# Evaluate all resolved forecasts
-python examples/evaluate_forecasts.py
+Computed by matching agent-produced events against the hindsight graph for each question. Implementation: `scripts/benchmark/evaluate_reasoning_graphs.py`.
 
-# Evaluate a specific forecast
-python examples/evaluate_forecasts.py --forecast-id fcst_123
+| Metric | Better | Notes |
+|--------|--------|-------|
+| **Source Precision** | Higher | Fraction of agent-cited sources that appear in the hindsight evidence set. Undefined for knowledge-only conditions. |
+| **Event F1** | Higher | Token-level F1 between agent event descriptions and hindsight events. |
+| **Key-Event Recall** | Higher | Fraction of paper-annotated key events mentioned by the agent. |
+| **Key-Event F1** | Higher | Harmonic mean of key-event precision and recall. |
+| **Key-Event Precision** | Higher | Fraction of agent events that match a key event. |
+| **Temporal MAE** | Lower | Mean absolute error in days between agent event dates and ground truth. Only for conditions with structured event output. |
 
-# Output JSON report
-python examples/evaluate_forecasts.py --output report.json
-```
+Contamination filtering (see §5.6) is applied before computing any aggregate metrics.
 
 ---
 
-## 5.6 Evaluation Setup Prerequisites
+## 5.6 Contamination Filtering
 
-Complete these steps before running any benchmark:
+A question is **contaminated** for a given model if:
 
-**Step 1: Resolved questions in database**
-
-Questions must have `resolution` and `resolution_date` set. The experiment dataset (`experiment.db`) should already have these from the collection phase (see [Section 2](02_data_collection.md)).
-
-**Step 2: Evidence collected and reviewed**
-
-```bash
-# Collect evidence (stratified sample or full)
-wr evidence run --db experiment.db --sample 50
-
-# Review events for accuracy (manual — interactive)
-wr evidence review --db experiment.db --sample 30
-
-# OR auto-review using LLM (faster, recommended)
-wr evidence auto-review --db experiment.db --sample 30
+```
+question.estimated_start_time < model.knowledge_cutoff_date
 ```
 
-**Step 3: Search index built**
+This means the model may have seen the question's resolution in training data, making its forecast trivially easy. Contaminated `(model, question)` pairs are excluded before computing accuracy and Brier score.
 
-Required for `container` mode conditions (3, 4, 5):
+Contamination has a large effect on models with late cutoffs. For example, DeepSeek V4 (cutoff 2025-05-01) has 52 of 120 questions excluded, shifting accuracy from ~65% to ~53% on `vanilla_llm`.
+
+**CLI (paper evaluation):**
 ```bash
-wr db build-index --db experiment.db
+wr benchmark evaluate \
+  --db combined.db \
+  --include-ids include_ids.txt \
+  --filter-knowledge-leakage
 ```
 
-**Step 4: MCP forecasting server running**
+**Dashboard:** the Benchmark tab has a "Contam. filter" toggle that is **on by default** to show paper-consistent numbers.
 
-Required for `container` mode conditions:
+Knowledge cutoff dates are stored in `config/llm_cutoff_dates.json` and can be refreshed with:
 ```bash
-python src/mcp_forecasting_server.py
-# Default port: 8110
+wr db fetch-cutoffs --output config/llm_cutoff_dates.json
 ```
-
-**Step 5: LLM knowledge cutoff dates**
-
-Needed for temporal access control to enforce per-model training cutoffs:
-```bash
-python scripts/fetch_knowledge_cutoff_date.py
-```
-
-Ensure `config/config.yaml` has a valid LLM provider configured before running.
 
 ---
 
 ## 5.7 Running the Benchmark
 
-The primary benchmark script is `examples/run_benchmark_evaluation.py`. It identifies resolved questions, runs the `ForecastAgent` with temporal masking, and calculates metrics.
-
-### Full Benchmark (All Conditions)
+### Prerequisites
 
 ```bash
-# Run all 6 conditions with default model on all resolved questions
-wr benchmark run --db experiment.db -y
+# 1. Database set up and indexed
+wr db init --db combined.db
+wr db build-index --db combined.db
 
-# Dry run — shows plan without executing
-wr benchmark run --db experiment.db
+# 2. MCP server running (needed for search/oracle conditions)
+uv run worldreasoner-mcp-forecast
+
+# 3. LLM API keys configured in config/config.yaml
 ```
 
-### Single Condition
+### Run commands
 
 ```bash
-# Vanilla LLM baseline only
-wr benchmark run --db experiment.db -c vanilla_llm -y
+# Quick sanity check — 5 questions, one condition
+wr benchmark run -c vanilla_llm -n 5
 
-# WorldReasoner full system only
-wr benchmark run --db experiment.db -c worldreasoner -y
+# Full paper run — all conditions, specific models, curated question set
+wr benchmark run \
+  -c vanilla_llm -c structured_scenario -c search_enabled \
+  -c worldreasoner -c oracle -c real_time \
+  -m gemini/gemini-3-flash-preview -m deepseek/deepseek-v4-flash \
+  --question-ids include_ids.txt \
+  --db combined.db
+
+# Resume an interrupted run (skips completed triples)
+wr benchmark run -c worldreasoner --resume
+
+# Filter by domain or source
+wr benchmark run -c vanilla_llm --domain politics --source polymarket
 ```
 
-### Multiple Models
+### Recommended order (cheapest first)
 
-```bash
-# Compare two models across all conditions
-wr benchmark run --db experiment.db -m gemini/gemini-2.5-flash -m gpt-5 -y
-
-# Single condition, multiple models
-wr benchmark run --db experiment.db -c vanilla_llm -m gemini/gemini-2.5-flash -m gpt-5 -y
-```
-
-### Limiting Questions
-
-```bash
-# Quick test: 5 questions, one condition
-wr benchmark run --db experiment.db -c vanilla_llm -n 5 -y
-
-# Filter by domain
-wr benchmark run --db experiment.db --domain finance -y
-
-# Filter by source
-wr benchmark run --db experiment.db --source polymarket -y
-
-# Specific questions
-wr benchmark run --db experiment.db -q q_finance_123 -q q_politics_456 -y
-```
-
-### Resuming Interrupted Runs
-
-```bash
-# Resume from where it left off (skips completed question/condition/model triples)
-wr benchmark run --db experiment.db --resume -y
-```
-
-### Offset Days
-
-By default, the simulated date is based on the question's `estimated_start_time`. Use `--offset-days` to shift the simulated date earlier relative to the resolution date:
-
-```bash
-# Simulate forecasting 7 days before resolution
-wr benchmark run --db experiment.db --offset-days 7 -y
-```
-
-### Key Script Options
-
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--model` | LLM model to test | Config default |
-| `--knowledge-only` | Disable external research tools | `False` |
-| `--offset-days` | Analysis point relative to resolution (0 = at resolution) | `0` |
-| `--knowledge-cutoff` | Simulate a specific past date for training cutoff | None |
-| `--min-context-items` | Minimum articles/events required before forecasting | `3` |
-| `--output` | Custom path for results JSON | `benchmarks/autobench_<time>.json` |
+1. `vanilla_llm` — no MCP server, fastest (training knowledge only)
+2. `structured_scenario` — no MCP server, uses causal reasoning tools
+3. `search_enabled` — requires MCP server + search index
+4. `worldreasoner` — requires MCP server + search index
+5. `oracle` — most expensive, upper-bound reference
+6. `real_time` — uses live internet, bypasses temporal simulation
 
 ---
 
-## 5.8 Results Format
+## 5.8 Scoring Saved Runs
 
-Results are saved as JSON files in `benchmarks/`:
-```
-benchmarks/autobench_<timestamp>.json
+After running the benchmark, score the results with contamination filtering:
+
+```bash
+# Score a specific condition against the paper question set
+wr benchmark evaluate \
+  --condition worldreasoner \
+  --db combined.db \
+  --include-ids include_ids.txt \
+  --filter-knowledge-leakage
+
+# Score all conditions (produces per-condition JSON + Markdown)
+wr benchmark evaluate \
+  --db combined.db \
+  --include-ids include_ids.txt \
+  --filter-knowledge-leakage \
+  --output-dir experiments/evaluation/
 ```
 
-Each file contains:
+Results are written to `experiments/evaluation/<condition>_eval_<timestamp>.json` and `.md`.
+
+### Result format
 
 ```json
 {
-  "run_id": "...",
-  "conditions": {
-    "vanilla_llm": {
-      "accuracy": 0.62,
-      "brier_score": 0.21,
-      "log_score": -0.45,
-      "calibration_error": 0.08,
-      "n_questions": 300
-    }
+  "condition": "worldreasoner",
+  "all": {
+    "overall": { "accuracy": 0.694, "total": 120 },
+    "by_model": { "gemini/gemini-3-flash-preview": { "accuracy": 0.675, "total": 120 } }
   },
-  "individual_results": [
-    {
-      "question_id": "q_finance_123",
-      "condition": "vanilla_llm",
-      "model": "gpt-5",
-      "prediction": "Yes",
-      "confidence": 0.75,
-      "ground_truth": "Yes",
-      "correct": true,
-      "brier_score": 0.0625,
-      "log_score": -0.287
-    }
-  ],
-  "leaderboard": [...]
+  "clean": {
+    "overall": { "accuracy": 0.682, "total": 98 },
+    "by_model": { "gemini/gemini-3-flash-preview": { "accuracy": 0.648, "total": 108 } }
+  }
 }
 ```
 
-A summary report is also printed to the console after each run.
+`clean` is the contamination-filtered subset and matches the paper numbers.
 
 ---
 
-## 5.9 Visualization
+## 5.9 Dashboard
 
-Generate comparative charts from benchmark JSON files.
+The research dashboard provides an interactive condition × model matrix:
 
 ```bash
-# Multi-metric side-by-side (accuracy, Brier, log score) — default
-python examples/visualize_benchmarks.py
-
-# Save to file instead of displaying
-python examples/visualize_benchmarks.py --output benchmarks/figures/results.png
-
-# Single metric
-python examples/visualize_benchmarks.py --metric accuracy
-python examples/visualize_benchmarks.py --metric brier
-
-# Text summary table (no GUI required)
-python examples/visualize_benchmarks.py --table
-
-# Custom output directory
-python examples/visualize_benchmarks.py --output-dir my_figures/
+uv run worldreasoner --reload          # backend
+cd frontend && npm run dev             # frontend → http://localhost:5173
 ```
 
-**Output files:**
-- `accuracy_comparison.png` — Bar chart by model/condition
-- `brier_score_comparison.png` — Calibration quality (lower is better)
-- `performance_timeline.png` — Accuracy trends over time
-
-The visualizer loads both `autobench_*.json` (from `wr benchmark run`) and legacy `benchmark_*.json` files from the `benchmarks/` directory.
-
-**Temporal Analysis:**
-
-To understand how early a model can predict a specific event:
-```bash
-python examples/run_temporal_forecast_analysis.py --question-id <id> --num-points 5
-```
-
-This generates a timeline showing context availability versus forecast confidence across multiple simulated dates.
+Navigate to the **Benchmark** tab. The matrix shows accuracy (or Brier score) for each `(condition, model)` cell using the most recent run. The "Contam. filter" toggle applies contamination filtering server-side via `GET /benchmark/results/{run_id}/filtered`.
 
 ---
 
-## 5.10 Recommended Evaluation Order
-
-Run conditions in order of cost (cheapest first) to validate setup before committing to expensive runs:
-
-1. **`vanilla_llm`** — No MCP server needed; fastest (10 steps max); cheapest API cost
-2. **`structured_scenario`** — No MCP server needed; uses causal tools from memory
-3. **`search_enabled`** — Requires MCP server + search index
-4. **`worldreasoner`** — Requires MCP server + search index + event graph
-5. **`oracle`** — Most expensive; uses near-resolution-date information
-6. **`real_time`** — Uses live search engines; ignores clock simulation overrides
+## 5.10 Reproducing Paper Figures
 
 ```bash
-# Step-by-step evaluation
-wr benchmark run --db experiment.db -c vanilla_llm -n 10 -y      # Quick sanity check
-wr benchmark run --db experiment.db -c vanilla_llm -y             # Full baseline
-wr benchmark run --db experiment.db -c structured_scenario -y
-wr benchmark run --db experiment.db -c search_enabled -y
-wr benchmark run --db experiment.db -c worldreasoner -y
-wr benchmark run --db experiment.db -c oracle -y
-wr benchmark run --db experiment.db -c real_time -y
+# Metrics table → docs/metrics.md
+uv run python scripts/analysis/compute_metrics_table.py
+
+# Reasoning quality figure (Event F1, Key-event Recall, Source Precision)
+uv run python scripts/analysis/plot_reasoning_quality.py
+
+# Sliding-window ablation figure
+uv run python scripts/analysis/plot_sliding_window.py
+
+# Vanilla-LLM accuracy over time
+uv run python scripts/benchmark/plot_vanilla_time_performance.py --db combined.db
 ```
 
----
+See [scripts/README.md](../scripts/README.md) for the full reproduction workflow.
 
-## 5.11 Best Practices
-
-- **Never** expose `ground_truth` to forecasting agents. Evaluation and forecasting are fully separate processes.
-- Use **Brier Score** as the primary metric for competitive model comparison (it is the most interpretable probabilistic metric).
-- Run evaluation on a schedule (e.g., cron job) to catch newly resolved questions.
-- Always run `vanilla_llm` first — it serves as the baseline against which all other conditions are measured.
-- When testing a new model, run a small subset (`-n 10`) before committing to a full run.
-- Use `--resume` to recover from API failures or interrupted runs without re-running completed work.
+See [scripts/README.md](../scripts/README.md) for the full list of reproduction scripts.
 
 ---
 
-## 5.12 CI/CD Integration
-
-To run weekly benchmarks via GitHub Actions:
-
-```yaml
-- name: Run benchmark
-  run: python examples/run_benchmark_evaluation.py --max-questions 10
-```
-
-**Potential future enhancements:**
-1. Parallel execution — run multiple forecasts simultaneously to reduce wall time
-2. Ensemble methods — combine predictions from multiple models
-3. Active learning — identify questions where models disagree most
-4. Cost tracking — monitor API costs per benchmark run
-5. Domain-specific analysis — compare performance across domains
-6. Multi-question temporal analysis — aggregate temporal patterns across the dataset
-
----
-
-*For the complete CLI reference including all `wr benchmark` options, see [Appendix A](appendix/A_cli_reference.md).*
+*For the complete `wr benchmark` CLI reference, run `wr benchmark --help`.*

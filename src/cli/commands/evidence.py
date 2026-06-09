@@ -1274,3 +1274,43 @@ def reset(
         count += 1
 
     console.print(f"[green]Reset {count} events to pending.[/green]")
+
+
+@app.command()
+def rerun(
+    db_path: str = db_option("combined.db"),
+    threshold: int = typer.Option(
+        2,
+        "--threshold",
+        help="Re-run questions with <= this many unique source articles",
+    ),
+    ids: Optional[List[str]] = typer.Option(
+        None,
+        "--ids",
+        help="Explicit question IDs to re-run (overrides --threshold scan)",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Print questions that would be re-run, then stop"
+    ),
+):
+    """Re-run evidence + graph-builder pipelines for low-source questions.
+
+    Examples:
+        wr evidence rerun --db combined.db
+        wr evidence rerun --db combined.db --threshold 3
+        wr evidence rerun --db combined.db --ids q1 q2 q3
+        wr evidence rerun --db combined.db --dry-run
+    """
+    from src.pipelines.evidence.rerun import rerun_evidence
+
+    ok = asyncio.run(
+        rerun_evidence(
+            db_path=db_path,
+            threshold=threshold,
+            ids=ids,
+            dry_run=dry_run,
+            log=console.print,
+        )
+    )
+    if not ok:
+        raise typer.Exit(1)

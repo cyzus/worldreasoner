@@ -203,7 +203,6 @@ const ForecastPage = ({
         setForecastGraphData(data);
         setSelectedForecastId(forecastId);
       } else {
-        console.log('No graph data for forecast:', forecastId);
         setForecastGraphData(null);
       }
     } catch (error) {

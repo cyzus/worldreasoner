@@ -65,7 +65,6 @@ function CollectionConfigPanel({ source, onFetch, loading }) {
       }
     }
 
-    console.log('[CollectionConfigPanel] Fetching with config:', cleanConfig)
     onFetch(cleanConfig)
   }
 

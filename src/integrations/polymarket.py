@@ -153,7 +153,20 @@ def _detect_turning_points_pelt_bic(
         jump=max(1, pelt_jump),
     ).fit(signal)
 
-    breakpoints = algo.predict(pen=penalty)
+    try:
+        breakpoints = algo.predict(pen=penalty)
+    except Exception as exc:
+        logger.warning(
+            f"PELT turning-point detection failed ({type(exc).__name__}); "
+            "falling back to local turning-point detection"
+        )
+        return _detect_turning_points_local(
+            sorted_history=sorted_history,
+            min_change_pct=min_change_pct,
+            lookback_window=lookback_window,
+            lookahead_window=lookahead_window,
+            min_time_between_points_hours=min_time_between_points_hours,
+        )
     boundaries = [b for b in breakpoints[:-1] if 0 < b < n_points]
     if not boundaries:
         return []

@@ -715,8 +715,8 @@
     "deepseek-v4": {
       "model_name": "DeepSeek-V4",
       "provider": "DeepSeek",
-      "cutoff_date": "2025-01-01",
-      "cutoff_date_raw": "2025.01",
+      "cutoff_date": "2025-05-01",
+      "cutoff_date_raw": "2025.05",
       "source": "",
       "company": "DeepSeek"
     },

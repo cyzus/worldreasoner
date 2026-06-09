@@ -1,8 +1,6 @@
-# WorldReasoner: AI-Powered Forecasting with Temporal Evidence Control
+# WorldReasoner: Temporal Forecasting Benchmark for LLMs
 
-## Abstract
-
-WorldReasoner is a forecasting research platform that evaluates how AI language models perform on real-world prediction tasks when given structured access to temporally-filtered evidence. The system addresses core limitations of LLMs as forecasters — including training data cutoffs and the absence of causal structure — by providing a temporal gateway that simulates a controlled "past" for each question, paired with an evidence pipeline that collects, structures, and quality-scores articles and causal event graphs. Benchmarking is conducted across six experimental conditions ranging from pure knowledge recall to full evidence-augmented reasoning, measured against a 300-question dataset sourced from Polymarket and news pipelines. The platform is designed as a rigorous ablation testbed suitable for comparing frontier models and forecasting architectures.
+WorldReasoner evaluates how AI language models perform on real-world prediction tasks when given structured, temporally-filtered evidence. The system addresses core limitations of LLMs as forecasters — training data cutoffs and lack of causal structure — by providing a temporal gateway that simulates a controlled "past" for each question, paired with an evidence pipeline that collects, structures, and quality-scores articles and causal event graphs. Benchmarking is conducted across six experimental conditions ranging from pure knowledge recall to full evidence-augmented reasoning, evaluated against a 120-question curated dataset sourced from Polymarket.
 
 ---
 
@@ -10,42 +8,44 @@ WorldReasoner is a forecasting research platform that evaluates how AI language 
 
 | Section | File | Description |
 |---------|------|-------------|
-| **1. Introduction** | [01_introduction.md](01_introduction.md) | Background, problem statement, system overview, key contributions |
-| **2. Data Collection** | [02_data_collection.md](02_data_collection.md) | Polymarket API, codebase integration, dataset composition |
-| **3. Evidence Pipeline** | [03_evidence_pipeline.md](03_evidence_pipeline.md) | Article collection, event graphs, market price analysis |
-| **4. Forecasting** | [04_forecasting.md](04_forecasting.md) | MCP server, temporal gateway, context window management |
-| **5. Evaluation** | [05_evaluation.md](05_evaluation.md) | Metrics, experimental conditions, benchmarking guide |
-| **6. Analysis Tools** | [06_analysis_tools.md](06_analysis_tools.md) | Graph inspector, article inspector, quality scoring |
-| **Appendix A: CLI Reference** | [appendix/A_cli_reference.md](appendix/A_cli_reference.md) | Complete `wr` command reference |
+| **1. Introduction** | [01_introduction.md](01_introduction.md) | Background, problem statement, system overview |
+| **2. Data Collection** | [02_data_collection.md](02_data_collection.md) | Polymarket API, dataset composition |
+| **3. Evidence Pipeline** | [03_evidence_pipeline.md](03_evidence_pipeline.md) | Article collection, event graphs, quality scoring |
+| **4. Forecasting** | [04_forecasting.md](04_forecasting.md) | MCP server, temporal gateway, context management |
+| **5. Evaluation** | [05_evaluation.md](05_evaluation.md) | Metrics, conditions, contamination filtering, benchmark guide |
+| **6. Analysis Tools** | [06_analysis_tools.md](06_analysis_tools.md) | Graph inspector, article inspector |
+| **Metrics** | [metrics.md](metrics.md) | Accuracy, Brier score, log score definitions |
+| **Appendix A: CLI** | [appendix/A_cli_reference.md](appendix/A_cli_reference.md) | Complete `wr` command reference |
 
 ---
 
 ## Quick Start
 
 ```bash
-# Install dependencies
-uv pip install -e .
+# Install
+uv sync && uv run playwright install
+cp config/config.example.yaml config/config.yaml  # add API keys
 
-# Collect questions from Polymarket
-wr question goal
+# Collect and process questions
+uv run wr question collect
+uv run wr evidence run -q <question_id>
+uv run wr graph build -q <question_id>
 
-# Run evidence pipeline
-wr evidence run --sample 20
+# Run a benchmark
+uv run wr benchmark run -c vanilla_llm -n 10           # quick test
+uv run wr benchmark run -c worldreasoner --question-ids include_ids.txt
 
-# Build causal graphs
-wr graph build --limit 20
+# Score results (contamination-filtered, matches paper)
+uv run wr benchmark evaluate \
+  --db combined.db \
+  --include-ids include_ids.txt \
+  --filter-knowledge-leakage
 
-# Auto-review events
-wr evidence auto-review -y
-
-# Run baseline benchmark
-wr benchmark run -c vanilla_llm -n 10 -y
-
-# Run full WorldReasoner benchmark
-wr benchmark run -c worldreasoner -y
-
-# Visualize results
-python examples/visualize_benchmarks.py
+# Research dashboard
+uv run worldreasoner --reload &
+cd frontend && npm run dev   # → http://localhost:5173
 ```
 
-For the full CLI reference, see [Appendix A](appendix/A_cli_reference.md).
+For the full CLI reference: `wr --help` or [Appendix A](appendix/A_cli_reference.md).
+
+For paper figure reproduction: [scripts/README.md](../scripts/README.md).

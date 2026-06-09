@@ -78,6 +78,8 @@ class PipelineExecutor:
             result = await self._run_auto_benchmark(question_ids, on_progress, **kwargs)
         elif pipeline_type == PipelineType.GRAPH_BUILDER:
             result = await self._run_graph_builder(question_ids, on_progress, **kwargs)
+        elif pipeline_type == PipelineType.REASONING_EVAL:
+            result = await self._run_reasoning_eval(on_progress, **kwargs)
         else:
             raise ValueError(f"Unknown pipeline type: {pipeline_type}")
 
@@ -951,6 +953,79 @@ class PipelineExecutor:
 
         except Exception as e:
             logger.error(f"Auto-benchmark failed: {e}")
+            results.failed.append({"error": str(e)})
+
+        return results
+
+    async def _run_reasoning_eval(
+        self,
+        on_progress: Optional[Callable],
+        include_ids: Optional[str] = None,
+        filter_knowledge_leakage: bool = True,
+        exclude_annotation_rejected: bool = True,
+        match_method: str = "hybrid",
+        output_dir: str = "experiments/evaluation/canonical_final",
+        **kwargs,
+    ) -> PipelineResult:
+        """Run reasoning-graph evaluation against hindsight graphs.
+
+        Calls scripts/benchmark/evaluate_reasoning_graphs.py as a subprocess
+        so its heavy dependencies (BM25, optional sentence-transformers) are
+        isolated from the main server process.
+        """
+        import asyncio
+        import sys
+        from pathlib import Path
+
+        results = PipelineResult(processed=[], failed=[], skipped=[], duration_seconds=0)
+
+        if on_progress:
+            on_progress(PipelineProgress(
+                current=0, total=1, question_id=None,
+                stage="reasoning_eval",
+                message="Starting reasoning-graph evaluation…",
+            ))
+
+        script = Path(__file__).resolve().parents[2] / "scripts/benchmark/evaluate_reasoning_graphs.py"
+        cmd = [sys.executable, str(script), "--db", str(self.db_path)]
+
+        if include_ids:
+            cmd += ["--include-ids", include_ids]
+        if filter_knowledge_leakage:
+            cmd += ["--filter-knowledge-leakage"]
+        if exclude_annotation_rejected:
+            cmd += ["--exclude-annotation-rejected"]
+
+        cmd += ["--match-method", match_method, "--output-dir", output_dir]
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            stdout, _ = await proc.communicate()
+            output = stdout.decode(errors="replace") if stdout else ""
+
+            if proc.returncode == 0:
+                output_path = Path(output_dir) / "reasoning_graph_eval_filtered_latest.json"
+                results.processed.append({
+                    "output": str(output_path),
+                    "returncode": 0,
+                    "log": output[-2000:] if len(output) > 2000 else output,
+                })
+                if on_progress:
+                    on_progress(PipelineProgress(
+                        current=1, total=1, question_id=None,
+                        stage="reasoning_eval",
+                        message=f"Evaluation complete → {output_path.name}",
+                    ))
+            else:
+                logger.error(f"Reasoning eval failed (rc={proc.returncode}): {output[-500:]}")
+                results.failed.append({"error": output[-500:], "returncode": proc.returncode})
+
+        except Exception as e:
+            logger.error(f"Reasoning eval subprocess error: {e}")
             results.failed.append({"error": str(e)})
 
         return results

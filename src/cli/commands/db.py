@@ -4,7 +4,8 @@ Provides question-centric CRUD operations with cascading deletes.
 """
 
 import asyncio
-from typing import Optional
+from pathlib import Path
+from typing import List, Optional
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -500,3 +501,71 @@ def backfill_start_times(
     console.print(f"\n{action}: [green]{fixed}[/green]  Skipped (no data): [yellow]{skipped}[/yellow]")
     if dry_run:
         console.print("[dim]Run without --dry-run to apply changes.[/dim]")
+
+
+@app.command()
+def init(
+    db_path: str = db_option(),
+):
+    """Initialize and migrate database tables for all registered models."""
+    from src.core.db_init import init_and_migrate
+
+    init_and_migrate(db_path, log=console.print)
+
+
+@app.command()
+def clean(
+    db_path: str = db_option("combined.db"),
+    execute: bool = typer.Option(
+        False, "--execute", help="Apply changes (default is dry-run)"
+    ),
+):
+    """Remove bad data (fake/short articles, duplicate events) with cascade."""
+    from src.core.db_maintenance import clean_database
+
+    clean_database(db_path, execute=execute, log=console.print)
+
+
+@app.command()
+def merge(
+    sources: List[str] = typer.Option(
+        ...,
+        "--source",
+        "-s",
+        help=(
+            "Source database (repeatable). Optionally label as label=path; "
+            "later sources win on duplicate question IDs."
+        ),
+    ),
+    output: str = typer.Option(
+        "combined.db", "--output", "-o", help="Output combined database path"
+    ),
+):
+    """Merge multiple source databases into one combined database."""
+    from src.core.db_maintenance import merge_databases
+
+    parsed: List[tuple] = []
+    for entry in sources:
+        if "=" in entry:
+            label, path = entry.split("=", 1)
+        else:
+            path = entry
+            label = Path(entry).stem
+        parsed.append((label, path))
+
+    merge_databases(parsed, output, log=console.print)
+
+
+@app.command("fetch-cutoffs")
+def fetch_cutoffs(
+    output: str = typer.Option(
+        "config/llm_cutoff_dates.json",
+        "--output",
+        "-o",
+        help="Output JSON path",
+    ),
+):
+    """Fetch and cache LLM knowledge cutoff dates to a local JSON file."""
+    from src.core.cutoff_dates import fetch_and_save
+
+    fetch_and_save(output_file=output, log=console.print)

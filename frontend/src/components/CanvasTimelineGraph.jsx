@@ -1,564 +1,508 @@
 /**
- * CanvasTimelineGraph - High-performance canvas-based event timeline visualization
- * 
- * Uses react-force-graph-2d for canvas rendering with:
- * - Date-based X positioning (timeline layout)
- * - Collision-based Y spacing
- * - Zoom-aware LOD (dots → cards)
+ * CanvasTimelineGraph — SVG timeline, drag to pan horizontally.
+ *
+ * Layout rules:
+ *  - Axis runs horizontally through the lower third of the canvas.
+ *  - All nodes for the same date go into ONE column ABOVE the axis,
+ *    stacked top-down with a small gap.  Nothing goes below the axis
+ *    except tick labels.
+ *  - The total SVG width expands to fit all columns so cards never
+ *    clip on the right — the container scrolls horizontally.
+ *  - Vertical zoom/pan is provided via buttons; horizontal scroll via
+ *    the native scrollbar or trackpad.
+ *  - Causal arrows are thin grey horizontal lines along the axis level,
+ *    with a small vertical jog to the card bottom.  They never cross cards.
  */
-import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react'
-import ForceGraph2D from 'react-force-graph-2d'
-import * as d3 from 'd3'
-import { GraphStyles } from '../styles/GraphStyles'
-import { GraphLegend } from '../utils/graphRendering.jsx'
+import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react'
+import EventDetails from './EventDetails'
 import './CanvasTimelineGraph.css'
 
-/**
- * Calculate the point on a rectangle's edge where a line from center at given angle intersects
- * Uses ray-box intersection without tan() to avoid numerical issues
- */
-const getRectEdgePoint = (cx, cy, width, height, angle) => {
-    const hw = width / 2
-    const hh = height / 2
+// ── Layout constants ──────────────────────────────────────────────────────────
+const CARD_W    = 130   // card width px
+const CARD_H    = 40    // card height px
+const CARD_GAP  = 6     // vertical gap between stacked cards
+const COL_PAD   = 20    // min horizontal padding between columns
+const AXIS_BOT  = 60    // px from bottom of SVG to axis line
+const TICK_H    = 5
+const LABEL_H   = 16    // height of tick label below axis
+const SVG_H     = 400   // fixed SVG height (scrolls horizontally)
+const MIN_COL_W = CARD_W + COL_PAD  // min width per date column
 
-    // Direction vector from angle
-    const dx = Math.cos(angle)
-    const dy = Math.sin(angle)
-
-    // Handle edge cases where direction is near-zero
-    const absDx = Math.abs(dx)
-    const absDy = Math.abs(dy)
-
-    if (absDx < 0.0001 && absDy < 0.0001) {
-        return { x: cx, y: cy }  // No direction, return center
-    }
-
-    // Calculate t for intersection with each edge
-    // For a ray from center: point = center + t * direction
-    // We want the intersection point on the rectangle boundary
-
-    let t
-    if (absDx < 0.0001) {
-        // Nearly vertical line - intersects top or bottom
-        t = hh / absDy
-    } else if (absDy < 0.0001) {
-        // Nearly horizontal line - intersects left or right
-        t = hw / absDx
-    } else {
-        // General case: find which edge is hit first
-        const tHorizontal = hw / absDx  // Time to hit left/right edge
-        const tVertical = hh / absDy    // Time to hit top/bottom edge
-        t = Math.min(tHorizontal, tVertical)
-    }
-
-    return {
-        x: cx + dx * t,
-        y: cy + dy * t
-    }
+// ── Colors ────────────────────────────────────────────────────────────────────
+const C = {
+    axis:           '#d0d0d0',
+    tick:           '#aaa',
+    stem:           '#e0e0e0',
+    cardBg:         '#fff',
+    cardBgSel:      '#fafafa',
+    cardBorder:     '#ddd',
+    cardSel:        '#111',
+    textDate:       '#bbb',
+    textTitle:      '#1a1a1a',
+    // Node bar colors — semantic
+    barOccurred:    '#10b981',  // green: confirmed event
+    barPredicted:   '#94a3b8',  // slate: predicted/uncertain
+    barPositive:    '#22c55e',  // bright green: positive impact on outcome
+    barNegative:    '#ef4444',  // red: negative impact
+    barMixed:       '#a855f7',  // purple: mixed
+    barOutcome:     '#f59e0b',  // amber: outcome node
+    // Link colors — semantic
+    linkCauses:     '#10b981',
+    linkEnables:    '#3b82f6',
+    linkAmplifies:  '#22c55e',
+    linkTriggers:   '#10b981',
+    linkPrevents:   '#ef4444',
+    linkInhibits:   '#f97316',
+    linkPositive:   '#22c55e',
+    linkNegative:   '#ef4444',
+    linkMixed:      '#a855f7',
+    linkDefault:    '#cbd5e1',
+    // Outcome highlight
+    outcomeRing:    '#f59e0b',
+    outcomeGlow:    'rgba(245,158,11,0.15)',
 }
 
-const CanvasTimelineGraph = ({
-    graphData,
-    onNodeClick,
-    selectedNode,
-    timeFilter = null
-}) => {
+function nodeBarColor(node) {
+    // Actual outcome node — amber
+    if (node.properties?.is_actual_outcome) return C.barOutcome
+    // Impact direction (set by applyOutcomeAwareImpactColors)
+    const dir = node._impactDirection
+    if (dir === 'positive') return C.barPositive
+    if (dir === 'negative') return C.barNegative
+    if (dir === 'mixed')    return C.barMixed
+    // Fallback: status
+    const s = node.properties?.status || node.status
+    if (s === 'occurred') return C.barOccurred
+    return C.barPredicted
+}
+
+function nodeBorderColor(node, selected) {
+    if (selected) return C.cardSel
+    if (node.properties?.is_actual_outcome) return C.outcomeRing
+    return C.cardBorder
+}
+
+function nodeBorderWidth(node, selected) {
+    if (selected) return 1.5
+    if (node.properties?.is_actual_outcome) return 2
+    return 1
+}
+
+function linkColor(link) {
+    const t = (link.relation_type || link.type || link.edge_type || '').toLowerCase().replace(/ /g, '_')
+    if (t.includes('impact_positive') || t === 'amplifies' || t === 'causes' || t === 'triggers') return C.linkPositive
+    if (t.includes('impact_negative') || t === 'prevents' || t === 'inhibits') return C.linkNegative
+    if (t.includes('impact_mixed'))  return C.linkMixed
+    if (t === 'enables')             return C.linkEnables
+    return C.linkDefault
+}
+
+function parseDate(node) {
+    // Try nested properties first, then top-level fields
+    const s = node.properties?.occurred_date
+        || node.properties?.predicted_date
+        || node.properties?.date
+        || node.occurred_date
+        || node.predicted_date
+        || node.date
+        || node.event_date
+    if (!s) return null
+    const d = new Date(s)
+    return isNaN(d) ? null : d
+}
+
+function fmtDate(d) {
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' })
+}
+
+// ── Layout engine ─────────────────────────────────────────────────────────────
+function buildLayout(rawNodes, containerW) {
+    // Group by day
+    const byDay = {}
+    for (const n of rawNodes) {
+        const key = new Date(n._date).toDateString()
+        ;(byDay[key] = byDay[key] || []).push(n)
+    }
+
+    // Sort day keys chronologically
+    const dayKeys = Object.keys(byDay).sort((a, b) => new Date(a) - new Date(b))
+
+    // Assign column X positions — spread evenly across containerW, min MIN_COL_W each
+    const nCols  = dayKeys.length
+    const colW   = Math.max(MIN_COL_W, containerW / nCols)
+    const totalW = Math.max(containerW, nCols * colW)
+
+    const axisY  = SVG_H - AXIS_BOT
+
+    // Build node positions
+    const laid = []
+    const colInfo = {}   // key -> { x, nodes[] }
+
+    dayKeys.forEach((key, ci) => {
+        const cx = colW * ci + colW / 2
+        colInfo[key] = { cx, nodes: byDay[key] }
+
+        byDay[key].forEach((n, ni) => {
+            // Stack upward from axis
+            const cardBottom = axisY - TICK_H - (ni * (CARD_H + CARD_GAP)) - CARD_GAP
+            const cy = cardBottom - CARD_H / 2
+            laid.push({
+                ...n,
+                cx,
+                cy,
+                cardTop: cy - CARD_H / 2,
+                cardBottom: cardBottom,
+            })
+        })
+    })
+
+    return { laid, totalW, axisY, colInfo, dayKeys, colW }
+}
+
+function generateTicks(dayKeys) {
+    if (!dayKeys.length) return []
+    const total = dayKeys.length
+    // Show at most ~10 ticks evenly spaced
+    const step  = Math.max(1, Math.round(total / 10))
+    return dayKeys
+        .filter((_, i) => i % step === 0 || i === total - 1)
+        .map(key => ({ key, label: new Date(key).toLocaleDateString(undefined,
+            total <= 14
+                ? { month: 'short', day: 'numeric' }
+                : total <= 90
+                    ? { month: 'short', day: 'numeric' }
+                    : total <= 730
+                        ? { year: 'numeric', month: 'short' }
+                        : { year: 'numeric' }
+        )}))
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNode, timeFilter, onShowNeighborhood }) {
     const containerRef = useRef(null)
-    const graphRef = useRef(null)
-    const [dimensions, setDimensions] = useState({ width: 800, height: 600 })
-    const [currentZoom, setCurrentZoom] = useState(1)
+    const [contW, setContW]       = useState(800)
+    const [vZoom, setVZoom]       = useState(1)
+    const [panX, setPanX]         = useState(0)
+    const [isDragging, setIsDragging] = useState(false)
+    // Panel: which node is selected and where to show the detail panel
+    const [panel, setPanel]       = useState(null) // { node, x, y }
+    const dragging = useRef(null)
 
-    // Configuration
-    const NODE_BASE_SIZE = 6
-    const NODE_TARGET_SIZE = 10
-    const CARD_MIN_ZOOM = 0.8  // Show cards above this zoom
-    const CARD_WIDTH = 140
-    const CARD_HEIGHT = 50
-
-    // Responsive dimensions
     useEffect(() => {
-        if (!containerRef.current) return
-        const updateDimensions = () => {
-            if (containerRef.current) {
-                const { clientWidth, clientHeight } = containerRef.current
-                setDimensions(prev => {
-                    if (prev.width === clientWidth && prev.height === clientHeight) return prev
-                    return { width: clientWidth, height: clientHeight }
-                })
-            }
-        }
-        updateDimensions()
-        const observer = new ResizeObserver(updateDimensions)
-        observer.observe(containerRef.current)
-        return () => observer.disconnect()
+        const el = containerRef.current
+        if (!el) return
+        const ro = new ResizeObserver(([e]) => {
+            setContW(e.contentRect.width)
+        })
+        ro.observe(el)
+        return () => ro.disconnect()
     }, [])
 
-    // Process graph data with date positions
-    const processedData = useMemo(() => {
-        if (!graphData?.nodes?.length) {
-            return { nodes: [], links: [] }
+    const layout = useMemo(() => {
+        if (!graphData?.nodes?.length) return null
+        const raw = graphData.nodes
+            .map(n => ({ ...n, _date: parseDate(n) }))
+            .filter(n => n._date)
+        // If no nodes have dates, try top-level date fields as fallback
+        if (!raw.length) {
+            const fallback = graphData.nodes
+                .map(n => {
+                    const s = n.occurred_date || n.predicted_date || n.date
+                    const d = s ? new Date(s) : null
+                    return { ...n, _date: d && !isNaN(d) ? d : null }
+                })
+                .filter(n => n._date)
+            if (!fallback.length) return null
+            return buildLayout(fallback, contW)
         }
+        return buildLayout(raw, contW)
+    }, [graphData, contW])
 
-        // Parse dates and filter valid nodes
-        const nodesWithDates = graphData.nodes
-            .map(n => {
-                const dateStr = n.properties?.occurred_date || n.properties?.predicted_date ||
-                    n.occurred_date || n.predicted_date
-                const date = dateStr ? new Date(dateStr) : null
-                return { ...n, _date: date }
-            })
-            .filter(n => n._date && !isNaN(n._date))
+    const { nodes, links, ticks } = useMemo(() => {
+        if (!layout) return { nodes: [], links: [], ticks: [] }
+        const { laid, colInfo, dayKeys } = layout
+        const nodeMap = new Map(laid.map(n => [n.id, n]))
 
-        if (nodesWithDates.length === 0) {
-            return { nodes: [], links: [] }
-        }
-
-        // Calculate time scale
-        const dates = nodesWithDates.map(n => n._date)
-        const minDate = d3.min(dates)
-        const maxDate = d3.max(dates)
-        const span = maxDate - minDate || 86400000
-
-        // Create time scale for X positioning
-        const timeScale = d3.scaleTime()
-            .domain([new Date(minDate - span * 0.05), new Date(maxDate.getTime() + span * 0.05)])
-            .range([100, dimensions.width - 100])
-
-        // Identify node impacts from links
-        const nodeImpacts = new Map()
-        if (graphData.links) {
-            graphData.links.forEach(l => {
-                const type = (l.relation_type || l.type || l.edge_type || '').toLowerCase()
-                const sourceId = l.source?.id || l.source
-
-                if (type.includes('impact_positive')) {
-                    nodeImpacts.set(sourceId, 'positive')
-                } else if (type.includes('impact_negative')) {
-                    nodeImpacts.set(sourceId, 'negative')
-                } else if (type.includes('impact_mixed')) {
-                    nodeImpacts.set(sourceId, 'mixed')
-                }
-            })
-        }
-
-        // Assign fixed X positions based on date
-        const nodes = nodesWithDates.map(n => ({
-            ...n,
-            fx: timeScale(n._date),  // Fixed X position
-            // Initial Y with jitter
-            y: dimensions.height / 2 + (Math.random() - 0.5) * 200,
-            _impact: nodeImpacts.get(n.id) // Store impact direction
-        }))
-
-        // Build node map for link resolution
-        const nodeMap = new Map(nodes.map(n => [n.id, n]))
-
-        // Filter and resolve links
-        const links = (graphData.links || [])
-            .filter(l => {
-                const sourceId = l.source?.id || l.source
-                const targetId = l.target?.id || l.target
-                return nodeMap.has(sourceId) && nodeMap.has(targetId)
-            })
+        const resolvedLinks = (graphData.links || [])
             .map(l => ({
                 ...l,
-                source: l.source?.id || l.source,
-                target: l.target?.id || l.target
+                source: nodeMap.get(l.source?.id || l.source),
+                target: nodeMap.get(l.target?.id || l.target),
             }))
+            .filter(l => l.source && l.target && l.source.id !== l.target.id
+                && l.source.cx < l.target.cx)  // left-to-right only
 
-        return { nodes, links, timeScale }
-    }, [graphData, dimensions.width])
+        return { nodes: laid, links: resolvedLinks, ticks: generateTicks(dayKeys), nodeMap }
+    }, [layout, graphData])
 
-    // Get node color based on status
-    const getNodeColor = useCallback((node) => {
-        // Only actual outcome gets special color (large aura)
-        if (node.properties?.is_actual_outcome) {
-            return GraphStyles.nodeColors.outcome || '#FFC107'
-        }
-        // Other outcome events get a subtle indicator color
-        if (node.isOutcome) {
-            return '#FDB022' // Lighter amber for non-actual outcomes
-        }
+    // IDs of nodes connected to the selected panel node
+    const connectedIds = useMemo(() => {
+        if (!panel?.node || !links.length) return new Set()
+        const nid = panel.node.id
+        const ids = new Set()
+        links.forEach(l => {
+            const sid = l.source?.id || l.source
+            const tid = l.target?.id || l.target
+            if (sid === nid) ids.add(tid)
+            if (tid === nid) ids.add(sid)
+        })
+        return ids
+    }, [panel, links])
 
-        // Debug logging for Santa node
-        if ((node.name || '').includes('Santa')) {
-            console.log(`Santa node in getNodeColor:`, {
-                name: node.name,
-                hasImpactDirection: !!node._impactDirection,
-                impactDirection: node._impactDirection,
-                impactMagnitude: node._impactMagnitude
-            })
-        }
+    // Clamp panX so content never drifts entirely off-screen
+    const clampPan = useCallback((x, totalW) => {
+        const max = 0
+        const min = Math.min(0, contW - totalW)
+        return Math.max(min, Math.min(max, x))
+    }, [contW])
 
-        // Impact-based coloring
-        if (node._impactDirection) {
-            const color = node._impactDirection === 'positive' ? GraphStyles.linkColors.impact_positive
-                        : node._impactDirection === 'negative' ? GraphStyles.linkColors.impact_negative
-                        : node._impactDirection === 'mixed' ? GraphStyles.linkColors.impact_mixed
-                        : null
-            if (color && (node.name || '').includes('Santa')) {
-                console.log(`Santa Claus node color:`, {
-                    name: node.name,
-                    impactDirection: node._impactDirection,
-                    color,
-                    positive_color: GraphStyles.linkColors.impact_positive,
-                    negative_color: GraphStyles.linkColors.impact_negative
-                })
-            }
-            if (color) return color
-        }
+    const onMouseDown = useCallback(e => {
+        if (e.target.closest?.('[data-card]')) return
+        // Click on background closes panel
+        setPanel(null)
+        onNodeClick?.(null)
+        dragging.current = { startX: e.clientX, startPan: panX, moved: false }
+    }, [panX, onNodeClick])
 
-        const status = node.properties?.status || node.status
-        if (status === 'occurred') {
-            return '#10b981'  // Green
+    const onMouseMove = useCallback(e => {
+        if (!dragging.current || !layout) return
+        const dx = e.clientX - dragging.current.startX
+        if (Math.abs(dx) > 3) {
+            dragging.current.moved = true
+            setIsDragging(true)
+            setPanX(clampPan(dragging.current.startPan + dx, layout.totalW))
         }
-        if (status === 'predicted' || status === 'uncertain') {
-            return '#3b82f6'  // Blue
-        }
-        // Fallback: past = green, future = blue
-        if (node._date && node._date < new Date()) {
-            return '#10b981'
-        }
-        return '#3b82f6'
+    }, [clampPan, layout])
+
+    const onMouseUp = useCallback(() => {
+        dragging.current = null
+        setIsDragging(false)
     }, [])
 
-    // Get link color based on relation type
-    const getLinkColor = useCallback((link) => {
-        const type = (link.relation_type || link.type || 'default').toLowerCase().replace(/ /g, '_')
-        return GraphStyles.linkColors[type] || GraphStyles.linkColors.default || '#94a3b8'
-    }, [])
+    // Reset pan when data changes
+    useEffect(() => { setPanX(0) }, [graphData])
 
-    // Check if node is visible based on time filter
-    const isNodeVisible = useCallback((node) => {
+    const visible = useCallback(node => {
         if (!timeFilter?.start || !timeFilter?.end) return true
-        if (!node._date) return false
         return node._date >= timeFilter.start && node._date <= timeFilter.end
     }, [timeFilter])
 
-    // Custom node painting
-    const paintNode = useCallback((node, ctx, globalScale) => {
-        // Validate coordinates first - skip if not ready
-        if (!node.x || !node.y || !isFinite(node.x) || !isFinite(node.y)) {
-            return
-        }
-
-        if (!isNodeVisible(node)) {
-            return  // Skip invisible nodes
-        }
-
-        const isOutcome = node.isOutcome
-        const isActualOutcome = node.properties?.is_actual_outcome
-        const isSelected = selectedNode?.id === node.id
-        const size = isActualOutcome ? NODE_TARGET_SIZE : NODE_BASE_SIZE
-        const color = getNodeColor(node)
-        const showCard = globalScale >= CARD_MIN_ZOOM
-
-        // Draw glow for actual outcome/selected
-        if (isActualOutcome || isSelected) {
-            ctx.beginPath()
-            ctx.arc(node.x, node.y, size + (showCard ? 25 : 8), 0, 2 * Math.PI)
-            const gradient = ctx.createRadialGradient(
-                node.x, node.y, size,
-                node.x, node.y, size + (showCard ? 25 : 8)
-            )
-            if (isActualOutcome) {
-                gradient.addColorStop(0, 'rgba(255, 193, 7, 0.4)')
-                gradient.addColorStop(1, 'rgba(255, 193, 7, 0)')
-            } else {
-                gradient.addColorStop(0, 'rgba(59, 130, 246, 0.3)')
-                gradient.addColorStop(1, 'rgba(59, 130, 246, 0)')
-            }
-            ctx.fillStyle = gradient
-            ctx.fill()
-        }
-
-        if (showCard) {
-            // Card mode - draw rounded rectangle
-            const cardW = CARD_WIDTH / globalScale
-            const cardH = CARD_HEIGHT / globalScale
-            const radius = 6 / globalScale
-            const x = node.x - cardW / 2
-            const y = node.y - cardH / 2
-
-            // Card shadow
-            ctx.shadowColor = 'rgba(0, 0, 0, 0.1)'
-            ctx.shadowBlur = 8 / globalScale
-            ctx.shadowOffsetY = 2 / globalScale
-
-            // Card background
-            ctx.beginPath()
-            ctx.roundRect(x, y, cardW, cardH, radius)
-            ctx.fillStyle = isSelected ? '#ffffff' : 'rgba(255, 255, 255, 0.95)'
-            ctx.fill()
-
-            // Top border (status color)
-            ctx.beginPath()
-            ctx.moveTo(x + radius, y)
-            ctx.lineTo(x + cardW - radius, y)
-            ctx.strokeStyle = color
-            ctx.lineWidth = 3 / globalScale
-            ctx.stroke()
-
-            // Card border
-            ctx.beginPath()
-            ctx.roundRect(x, y, cardW, cardH, radius)
-            ctx.strokeStyle = isSelected ? '#3b82f6' : 'rgba(0, 0, 0, 0.1)'
-            ctx.lineWidth = (isSelected ? 2 : 1) / globalScale
-            ctx.stroke()
-
-            ctx.shadowColor = 'transparent'
-            ctx.shadowBlur = 0
-
-            // Date text
-            const dateStr = node._date ? node._date.toLocaleDateString(undefined, {
-                month: 'short', day: 'numeric'
-            }) : ''
-            ctx.font = `500 ${10 / globalScale}px Inter, sans-serif`
-            ctx.fillStyle = '#64748b'
-            ctx.textAlign = 'left'
-            ctx.fillText(dateStr, x + 8 / globalScale, y + 14 / globalScale)
-
-            // Title text
-            const title = node.name || node.title || node.id || ''
-            const maxChars = Math.floor(cardW * globalScale / 7)
-            const displayTitle = title.length > maxChars ? title.substring(0, maxChars - 2) + '...' : title
-            ctx.font = `600 ${11 / globalScale}px Inter, sans-serif`
-            ctx.fillStyle = '#1e293b'
-            ctx.fillText(displayTitle, x + 8 / globalScale, y + 30 / globalScale)
-
-            // Outcome badge
-            if (isActualOutcome) {
-                ctx.font = `700 ${9 / globalScale}px Inter, sans-serif`
-                ctx.fillStyle = '#d97706' // darker amber
-                ctx.textAlign = 'right'
-                ctx.fillText('🎯 OUTCOME', x + cardW - 8 / globalScale, y + 14 / globalScale)
-            }
+    // Wheel handler must be non-passive to call preventDefault (blocks page scroll)
+    // Attach via useEffect so we can pass { passive: false }
+    const onWheelRef = useRef(null)
+    onWheelRef.current = useCallback(e => {
+        e.preventDefault()
+        if (e.ctrlKey || e.metaKey) {
+            const factor = e.deltaY > 0 ? 0.88 : 1.14
+            setVZoom(z => Math.min(3, Math.max(0.5, z * factor)))
         } else {
-            // Dot mode - simple circle
-            ctx.beginPath()
-            ctx.arc(node.x, node.y, size, 0, 2 * Math.PI)
-            ctx.fillStyle = color
-            ctx.fill()
-
-            // Border
-            ctx.strokeStyle = isActualOutcome ? '#b45309' : 'rgba(255, 255, 255, 0.8)'
-            ctx.lineWidth = isActualOutcome ? 2 : 1.5
-            ctx.stroke()
+            if (!layout) return
+            setPanX(prev => clampPan(prev - e.deltaY * 1.5, layout.totalW))
         }
-    }, [getNodeColor, isNodeVisible, selectedNode])
+    }, [layout, clampPan])
 
-    // Custom link painting
-    const paintLink = useCallback((link, ctx, globalScale) => {
-        const start = link.source
-        const end = link.target
-
-        // Strict coordinate validation - both nodes must have valid finite coordinates
-        if (!start || !end) return
-        if (typeof start.x !== 'number' || typeof start.y !== 'number' ||
-            typeof end.x !== 'number' || typeof end.y !== 'number') return
-        if (!isFinite(start.x) || !isFinite(start.y) ||
-            !isFinite(end.x) || !isFinite(end.y)) return
-
-        // Check time filter visibility
-        if (!isNodeVisible(start) || !isNodeVisible(end)) return
-
-        // Get current viewport bounds from the graph (with generous margin)
-        // This prevents drawing links where nodes are way off-screen
-        const graphInstance = graphRef.current
-        if (graphInstance) {
-            const { x: centerX, y: centerY, k: zoom } = graphInstance.zoom?.() || { x: 0, y: 0, k: 1 }
-            const viewWidth = dimensions.width / zoom
-            const viewHeight = dimensions.height / zoom
-            const margin = 100 / zoom  // Allow some margin for partial visibility
-
-            const bounds = {
-                left: centerX - viewWidth / 2 - margin,
-                right: centerX + viewWidth / 2 + margin,
-                top: centerY - viewHeight / 2 - margin,
-                bottom: centerY + viewHeight / 2 + margin
-            }
-
-            // Skip if both nodes are on the same side outside bounds
-            const startOutLeft = start.x < bounds.left
-            const startOutRight = start.x > bounds.right
-            const endOutLeft = end.x < bounds.left
-            const endOutRight = end.x > bounds.right
-
-            // If source is completely off-screen left/right and target is in view,
-            // don't draw the link (it will look like it comes from nowhere)
-            if ((startOutLeft && !endOutLeft) || (startOutRight && !endOutRight)) {
-                return  // Source off-screen, skip link
-            }
-        }
-
-        const color = getLinkColor(link)
-        const showCard = globalScale >= CARD_MIN_ZOOM
-
-        // Calculate direction
-        const dx = end.x - start.x
-        const dy = end.y - start.y
-        const dist = Math.sqrt(dx * dx + dy * dy)
-        if (dist < 20) return
-
-        const angle = Math.atan2(dy, dx)
-
-        // Calculate start and end points at card/node edges
-        let startX, startY, endX, endY
-
-        if (showCard) {
-            // Card mode: calculate intersection with card rectangle
-            const cardW = CARD_WIDTH / globalScale
-            const cardH = CARD_HEIGHT / globalScale
-
-            // For start node - find edge intersection
-            const startEdge = getRectEdgePoint(start.x, start.y, cardW, cardH, angle)
-            startX = startEdge.x
-            startY = startEdge.y
-
-            // For end node - find edge intersection (opposite direction)
-            const endEdge = getRectEdgePoint(end.x, end.y, cardW, cardH, angle + Math.PI)
-            endX = endEdge.x
-            endY = endEdge.y
-        } else {
-            // Dot mode: use circular offset
-            const startOffset = NODE_BASE_SIZE + 2
-            const endOffset = NODE_BASE_SIZE + 6
-
-            startX = start.x + startOffset * Math.cos(angle)
-            startY = start.y + startOffset * Math.sin(angle)
-            endX = end.x - endOffset * Math.cos(angle)
-            endY = end.y - endOffset * Math.sin(angle)
-        }
-
-        // Draw line
-        ctx.beginPath()
-        ctx.moveTo(startX, startY)
-        ctx.lineTo(endX, endY)
-        ctx.strokeStyle = color
-        ctx.lineWidth = Math.max(1, 1.5 / globalScale)
-        ctx.globalAlpha = 0.6
-        ctx.stroke()
-        ctx.globalAlpha = 1
-
-        // Draw arrow at the end point
-        const arrowLen = 6 / globalScale
-        ctx.beginPath()
-        ctx.moveTo(endX, endY)
-        ctx.lineTo(
-            endX - arrowLen * Math.cos(angle - Math.PI / 6),
-            endY - arrowLen * Math.sin(angle - Math.PI / 6)
-        )
-        ctx.lineTo(
-            endX - arrowLen * Math.cos(angle + Math.PI / 6),
-            endY - arrowLen * Math.sin(angle + Math.PI / 6)
-        )
-        ctx.closePath()
-        ctx.fillStyle = color
-        ctx.globalAlpha = 0.7
-        ctx.fill()
-        ctx.globalAlpha = 1
-    }, [getLinkColor, isNodeVisible, dimensions])
-
-    // Handle zoom changes for LOD
-    const handleZoom = useCallback((transform) => {
-        // Defer state update to avoid warning about updating component during render
-        requestAnimationFrame(() => {
-            setCurrentZoom(transform.k)
-        })
-    }, [])
-
-    // Handle node click
-    const handleNodeClick = useCallback((node) => {
-        if (onNodeClick && isNodeVisible(node)) {
-            // Calculate screen coordinates for popup positioning
-            const coords = graphRef.current?.graph2ScreenCoords(node.x, node.y)
-
-            // Adjust for canvas position in viewport
-            const canvasRect = containerRef.current?.getBoundingClientRect()
-            const offsetX = canvasRect ? canvasRect.left : 0
-            const offsetY = canvasRect ? canvasRect.top : 0
-
-            const screenX = coords ? (coords.x + offsetX) : 0
-            const screenY = coords ? (coords.y + offsetY) : 0
-
-            // Allow parent to position UI relative to node
-            onNodeClick({
-                ...node,
-                _screenX: screenX,
-                _screenY: screenY
-            })
-        }
-    }, [onNodeClick, isNodeVisible])
-
-    // Reset view
-    const handleResetView = useCallback(() => {
-        if (graphRef.current) {
-            graphRef.current.zoomToFit(400, 50)
-        }
-    }, [])
-
-    // Initial zoom to fit
     useEffect(() => {
-        if (graphRef.current && processedData.nodes.length > 0) {
-            setTimeout(() => {
-                graphRef.current?.zoomToFit(400, 80)
-            }, 100)
-        }
-    }, [processedData.nodes.length])
+        const el = containerRef.current
+        if (!el) return
+        const handler = (e) => onWheelRef.current?.(e)
+        el.addEventListener('wheel', handler, { passive: false })
+        return () => el.removeEventListener('wheel', handler)
+    }, []) // stable — handler is looked up via ref each time
+
+    if (!layout || !nodes.length) {
+        return (
+            <div className="canvas-timeline-graph" ref={containerRef}>
+                <div className="canvas-timeline-graph-empty">
+                    <p>{!graphData?.nodes?.length
+                        ? 'No graph data for this question.'
+                        : 'No events with valid dates.'}</p>
+                </div>
+            </div>
+        )
+    }
+
+    const { totalW, axisY, colInfo } = layout
+    const svgH = SVG_H * vZoom
 
     return (
-        <div className="canvas-timeline-graph" ref={containerRef}>
-            <ForceGraph2D
-                ref={graphRef}
-                width={dimensions.width}
-                height={dimensions.height}
-                graphData={processedData}
-                // Layout forces
-                d3AlphaDecay={0.02}
-                d3VelocityDecay={0.3}
-                cooldownTicks={100}
-                // Y-axis collision only (X is fixed)
-                d3Force={(forceId) => {
-                    if (forceId === 'charge') return null  // No charge repulsion
-                    if (forceId === 'link') return d3.forceLink().strength(0.05)  // Weak links
-                    if (forceId === 'collide') return d3.forceCollide(60)  // Strong collision
-                    if (forceId === 'center') return null  // No centering
-                }}
-                // Rendering
-                nodeCanvasObject={paintNode}
-                linkCanvasObject={paintLink}
-                nodePointerAreaPaint={(node, color, ctx, globalScale) => {
-                    const size = currentZoom >= CARD_MIN_ZOOM
-                        ? Math.max(CARD_WIDTH, CARD_HEIGHT) / 2 / globalScale
-                        : NODE_BASE_SIZE + 4
-                    ctx.beginPath()
-                    ctx.arc(node.x, node.y, size, 0, 2 * Math.PI)
-                    ctx.fillStyle = color
-                    ctx.fill()
-                }}
-                // Interaction
-                onNodeClick={handleNodeClick}
-                onZoom={handleZoom}
-                enableNodeDrag={false}
-                enableZoomInteraction={true}
-                enablePanInteraction={true}
-                minZoom={0.1}
-                maxZoom={5}
-            />
+        <div
+            className="canvas-timeline-graph"
+            ref={containerRef}
+            onMouseDown={onMouseDown}
+            onMouseMove={onMouseMove}
+            onMouseUp={onMouseUp}
+            onMouseLeave={onMouseUp}
+            style={{ cursor: isDragging ? 'grabbing' : 'grab', overflow: 'hidden' }}
+        >
+                <svg
+                    width={contW}
+                    height={svgH}
+                    style={{ display: 'block' }}
+                >
+                    <g transform={`translate(${panX} 0)`}>
+                    {/* ── Axis — extends full content width ── */}
+                    <line x1={0} y1={axisY * vZoom} x2={totalW} y2={axisY * vZoom}
+                        stroke={C.axis} strokeWidth={1} />
+
+                    {/* ── Tick marks + labels ── */}
+                    {ticks.map((t, i) => {
+                        const col = colInfo[t.key]
+                        if (!col) return null
+                        const x = col.cx
+                        const ay = axisY * vZoom
+                        return (
+                            <g key={i}>
+                                <line x1={x} y1={ay - TICK_H} x2={x} y2={ay + TICK_H}
+                                    stroke={C.tick} strokeWidth={1} />
+                                <text x={x} y={ay + TICK_H + LABEL_H}
+                                    textAnchor="middle" fontSize={9} fill={C.tick}
+                                    fontFamily="Inter,sans-serif">
+                                    {t.label}
+                                </text>
+                            </g>
+                        )
+                    })}
+
+                    {/* ── Stems (card bottom → axis) ── */}
+                    {nodes.filter(visible).map(n => {
+                        const ay = axisY * vZoom
+                        const cy = n.cy * vZoom
+                        const cb = n.cardBottom * vZoom
+                        return (
+                            <line key={`stem-${n.id}`}
+                                x1={n.cx} y1={cb}
+                                x2={n.cx} y2={ay}
+                                stroke={C.stem} strokeWidth={1} strokeDasharray="3 3" />
+                        )
+                    })}
+
+                    {/* ── Causal links — cubic bezier curves ── */}
+                    {links.filter(l => visible(l.source) && visible(l.target)).map((l, i) => {
+                        const sid = l.source.id; const tid = l.target.id
+                        const pid = panel?.node?.id
+                        const isActive = pid && (sid === pid || tid === pid)
+                        const ay   = axisY * vZoom
+                        const sx   = l.source.cx + CARD_W / 2
+                        const sy   = l.source.cardBottom * vZoom
+                        const tx   = l.target.cx - CARD_W / 2
+                        const ty   = l.target.cardBottom * vZoom
+                        const col  = linkColor(l)
+                        const isImpact = (l.relation_type || l.type || '').toLowerCase().includes('impact')
+                        const curveDip = Math.min(60, (ay - Math.min(sy, ty)) * 0.6)
+                        const cy1 = sy + curveDip
+                        const cy2 = ty + curveDip
+                        const mx  = (sx + tx) / 2
+                        const d   = `M ${sx} ${sy} C ${mx} ${cy1}, ${mx} ${cy2}, ${tx} ${ty}`
+                        const angle = Math.atan2(ty - cy2, tx - mx)
+                        const aLen = 7
+                        const ax1 = tx - aLen * Math.cos(angle - 0.4)
+                        const ay1 = ty - aLen * Math.sin(angle - 0.4)
+                        const ax2 = tx - aLen * Math.cos(angle + 0.4)
+                        const ay2 = ty - aLen * Math.sin(angle + 0.4)
+                        // Dim non-active links when something is expanded
+                        const opacity = panel ? (isActive ? 0.9 : 0.15) : 0.65
+                        const strokeW = isActive ? (isImpact ? 2.5 : 2) : (isImpact ? 1.5 : 1)
+
+                        return (
+                            <g key={i} opacity={opacity}>
+                                <path d={d} fill="none" stroke={col}
+                                    strokeWidth={strokeW}
+                                    strokeDasharray={isImpact ? '5 3' : undefined} />
+                                <polygon points={`${tx},${ty} ${ax1},${ay1} ${ax2},${ay2}`}
+                                    fill={col} />
+                            </g>
+                        )
+                    })}
+
+                    {/* ── Cards ── */}
+                    {nodes.filter(visible).map(n => {
+                        const isSelected  = panel?.node?.id === n.id
+                        const isConnected = connectedIds.has(n.id)
+                        const isOutcome   = n.properties?.is_actual_outcome
+                        const barCol      = nodeBarColor(n)
+                        const cy  = n.cy * vZoom
+                        const x   = n.cx - CARD_W / 2
+                        const y   = cy - CARD_H / 2
+                        const title = n.name || n.title || n.id || ''
+                        const short = title.length > 18 ? title.slice(0, 18) + '…' : title
+
+                        const borderCol = isSelected  ? '#111'
+                            : isConnected             ? barCol
+                            : isOutcome               ? C.outcomeRing
+                            : C.cardBorder
+                        const borderW = isSelected ? 2 : (isConnected || isOutcome) ? 1.5 : 1
+
+                        return (
+                            <g key={n.id} className="tl-card" data-card="1" style={{ cursor: 'pointer' }}
+                                onClick={() => {
+                                    if (isSelected) {
+                                        setPanel(null); onNodeClick?.(null)
+                                    } else {
+                                        // Compute viewport coords for useDraggablePopup
+                                        const rect = containerRef.current?.getBoundingClientRect() || { left: 0, top: 0 }
+                                        const screenX = rect.left + n.cx + CARD_W / 2 + panX
+                                        const screenY = rect.top + cy
+                                        const nodeWithCoords = { ...n, _screenX: screenX, _screenY: screenY }
+                                        setPanel({ node: nodeWithCoords })
+                                        onNodeClick?.(nodeWithCoords)
+                                    }
+                                }}>
+                                {/* Outcome glow */}
+                                {isOutcome && (
+                                    <rect x={x - 4} y={y - 4} width={CARD_W + 8} height={CARD_H + 8}
+                                        rx={7} fill={C.outcomeGlow} stroke={C.outcomeRing}
+                                        strokeWidth={1.5} strokeDasharray="4 2" />
+                                )}
+                                {/* Connected ring */}
+                                {isConnected && !isSelected && (
+                                    <rect x={x - 3} y={y - 3} width={CARD_W + 6} height={CARD_H + 6}
+                                        rx={6} fill="none" stroke={barCol} strokeWidth={1} opacity={0.5} />
+                                )}
+                                {/* Shadow */}
+                                <rect x={x + 1} y={y + 2} width={CARD_W} height={CARD_H}
+                                    rx={4} fill="rgba(0,0,0,0.06)" />
+                                {/* Body */}
+                                <rect x={x} y={y} width={CARD_W} height={CARD_H}
+                                    rx={4} fill={C.cardBg} stroke={borderCol} strokeWidth={borderW} />
+                                {/* Color bar */}
+                                <rect x={x} y={y} width={CARD_W} height={3} rx={4} fill={barCol} />
+                                {/* Date */}
+                                <text x={x + 8} y={y + 15} fontSize={8} fill={C.textDate}
+                                    fontFamily="Inter,sans-serif">
+                                    {fmtDate(n._date)}{isOutcome ? ' · OUTCOME' : ''}
+                                </text>
+                                {/* Title */}
+                                <text x={x + 8} y={y + 30} fontSize={9.5}
+                                    fill={isOutcome ? C.outcomeRing : C.textTitle}
+                                    fontFamily="Inter,sans-serif" fontWeight={isOutcome ? 700 : 600}>
+                                    {short}
+                                </text>
+                                <title>{title}</title>
+                            </g>
+                        )
+                    })}
+                    </g>
+                </svg>
+
+            {/* EventDetails — stop mousedown propagation so panel clicks don't close the panel */}
+            {panel && (
+                <div onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+                    <EventDetails
+                        node={panel.node}
+                        onClose={() => { setPanel(null); onNodeClick?.(null) }}
+                        onShowNeighborhood={onShowNeighborhood}
+                    />
+                </div>
+            )}
 
             <div className="graph-overlay-controls">
-                <button
-                    className="control-btn"
-                    onClick={handleResetView}
-                    title="Reset View"
-                >
-                    ⟲
-                </button>
+                <button className="control-btn" title="Expand vertically"
+                    onClick={() => setVZoom(z => Math.min(3, +(z + 0.25).toFixed(2)))}>↕+</button>
+                <button className="control-btn" title="Compress vertically"
+                    onClick={() => setVZoom(z => Math.max(0.5, +(z - 0.25).toFixed(2)))}>↕−</button>
+                <button className="control-btn" title="Reset"
+                    onClick={() => { setVZoom(1); setPanX(0) }}>⟲</button>
             </div>
-
-            <GraphLegend />
         </div>
     )
 }
-
-export default CanvasTimelineGraph

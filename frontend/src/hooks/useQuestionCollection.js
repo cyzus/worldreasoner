@@ -28,11 +28,6 @@ export const useQuestionCollection = ({
         loadJobs
     } = usePipelineJobs(null);
 
-    // Log when preview questions change (for debugging)
-    useEffect(() => {
-        console.log(`[useQuestionCollection] Preview: ${previewQuestions.length} questions from ${previewSource}, current tab: ${sourceTab}`)
-    }, [previewQuestions, previewSource, sourceTab])
-
     // Only show preview questions if they match the current source tab
     const filteredPreviewQuestions = useMemo(() => {
         if (!previewSource) return []
@@ -40,7 +35,7 @@ export const useQuestionCollection = ({
         return []
     }, [previewQuestions, previewSource, sourceTab])
 
-    // Function to handle news job completion
+    // Handle news job completion — merge newly collected questions into preview
     const handleNewsJobCompletion = useCallback(() => {
         if (
             jobDetails &&
@@ -48,12 +43,10 @@ export const useQuestionCollection = ({
             jobDetails.pipeline_type === 'news_collection' &&
             sourceTab === 'news'
         ) {
-            const results = jobDetails.results || {};
-            const questions = results.processed_details || [];
+            const results = jobDetails.results || {}
+            const questions = results.processed_details || []
 
             if (questions.length > 0) {
-                console.log(`[useQuestionCollection] Job ${jobDetails.job_id} completed with ${questions.length} questions. Updating preview.`);
-
                 const mappedQuestions = questions.map(q => ({
                     id: q.id,
                     question_text: q.text || q.question_text,
@@ -68,18 +61,17 @@ export const useQuestionCollection = ({
                     related_event_ids: q.related_event_ids,
                     estimated_start_time: q.estimated_start_time,
                     metadata: q.metadata || {}
-                }));
+                }))
 
-                const currentQuestions = Array.isArray(previewQuestions) ? previewQuestions : [];
-                const existingIds = new Set(currentQuestions.map(p => p.id));
-                const newUnique = mappedQuestions.filter(q => !existingIds.has(q.id));
+                const currentQuestions = Array.isArray(previewQuestions) ? previewQuestions : []
+                const existingIds = new Set(currentQuestions.map(p => p.id))
+                const newUnique = mappedQuestions.filter(q => !existingIds.has(q.id))
 
                 if (newUnique.length > 0) {
-                    console.log(`[useQuestionCollection] Adding ${newUnique.length} new unique questions to preview.`);
-                    setPreviewQuestions([...currentQuestions, ...newUnique]);
-                    setPreviewSource('news');
-                    selectJob(null);
-                    setSuccess(`✓ Job completed! Added ${newUnique.length} new questions to preview list.`);
+                    setPreviewQuestions([...currentQuestions, ...newUnique])
+                    setPreviewSource('news')
+                    selectJob(null)
+                    setSuccess(`✓ Job completed! Added ${newUnique.length} new questions to preview list.`)
                 }
             }
         }
@@ -90,13 +82,10 @@ export const useQuestionCollection = ({
         handleNewsJobCompletion()
     }, [handleNewsJobCompletion])
 
-
     /**
      * Handle fetching preview questions from the API
      */
     const handleFetchPreview = useCallback(async (config) => {
-        console.log('[useQuestionCollection] Fetching preview with config:', config, 'source:', sourceTab)
-
         setLoading(true)
         setError(null)
         setSuccess(null)
@@ -111,9 +100,9 @@ export const useQuestionCollection = ({
                     config: config
                 })
 
-                setSuccess(`Started News Collection Job: ${data.job_id}`);
-                await loadJobs();
-                selectJob(data.job_id);
+                setSuccess(`Started News Collection Job: ${data.job_id}`)
+                await loadJobs()
+                selectJob(data.job_id)
 
             } else {
                 const requestBody = {
@@ -170,8 +159,8 @@ export const useQuestionCollection = ({
 
                 const savedIds = new Set(selectedQuestions.map(q => q.id))
                 setPreviewQuestions(prevQuestions => {
-                    const current = Array.isArray(prevQuestions) ? prevQuestions : [];
-                    return current.filter(q => !savedIds.has(q.id));
+                    const current = Array.isArray(prevQuestions) ? prevQuestions : []
+                    return current.filter(q => !savedIds.has(q.id))
                 })
 
                 if (onQuestionsAdded) {

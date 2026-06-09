@@ -312,7 +312,7 @@
 
 .article-link {
   font-size: 0.75rem;
-  color: #4a90e2;
+  color: #111;
   text-decoration: none;
   font-weight: 500;
   transition: color 0.2s;
@@ -391,9 +391,9 @@
 }
 
 .action-btn.primary {
-  background: #4a90e2;
+  background: #111;
   color: white;
-  border: 1px solid #4a90e2;
+  border: 1px solid #111;
 }
 
 .action-btn.primary:hover {

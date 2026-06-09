@@ -4,7 +4,7 @@ import { devtools } from 'zustand/middleware'
 export const useUIStore = create(
   devtools((set) => ({
     // State
-    leftPanelTab: 'eventgraphs', // 'eventgraphs', 'collection', 'forecast', 'pipelines'
+    leftPanelTab: 'questions', // 'questions' | 'data' | 'benchmark'
     currentDatabasePath: null,
 
     // Actions

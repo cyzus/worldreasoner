@@ -385,3 +385,112 @@ def _display_collection_results(result, goal: CollectionGoal):
 
         if len(questions) > 3:
             console.print(f"\n   ... and {len(questions) - 3} more questions")
+
+
+@app.command()
+def collect(
+    goal_config: str = typer.Option(
+        "config/collection_goal_experiment.yaml",
+        "--goal",
+        "-g",
+        help="Path to collection goal YAML config",
+    ),
+    db_path: str = db_option("experiment.db"),
+    sources_config: str = typer.Option(
+        "config/sources.yaml", "--sources", help="Path to article sources config"
+    ),
+    max_iterations: int = typer.Option(
+        3, "--max-iterations", help="Maximum orchestration iterations"
+    ),
+    no_polymarket: bool = typer.Option(
+        False, "--no-polymarket", help="Disable Polymarket source"
+    ),
+    no_news: bool = typer.Option(False, "--no-news", help="Disable news-based source"),
+    sequential: bool = typer.Option(
+        False, "--sequential", help="Run sources sequentially instead of in parallel"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show collection plan without running"
+    ),
+    export: Optional[str] = typer.Option(
+        None, "--export", help="Export dataset summary to JSON file"
+    ),
+    skip_indexing: bool = typer.Option(
+        False, "--skip-indexing", help="Skip automatic search indexing after collection"
+    ),
+):
+    """Collect a distribution-balanced experiment dataset until goals are met.
+
+    Examples:
+        wr question collect
+        wr question collect --dry-run
+        wr question collect --no-news --export dataset_summary.json
+        wr question collect --db experiment.db --max-iterations 5
+    """
+    from src.pipelines.collection.experiment import run_experiment_collection
+
+    goal_met = asyncio.run(
+        run_experiment_collection(
+            goal_path=goal_config,
+            db_path=db_path,
+            sources_config=sources_config,
+            max_iterations=max_iterations,
+            enable_polymarket=not no_polymarket,
+            enable_news=not no_news,
+            parallel_sources=not sequential,
+            dry_run=dry_run,
+            export_path=export,
+            skip_indexing=skip_indexing,
+        )
+    )
+    if not goal_met and not dry_run:
+        raise typer.Exit(1)
+
+
+@app.command()
+def select(
+    db_path: str = db_option("combined.db"),
+    n: int = typer.Option(120, "--n", help="Total questions to select"),
+    polymarket_n: int = typer.Option(
+        100, "--polymarket-n", help="Target number of polymarket questions"
+    ),
+    min_score: float = typer.Option(
+        0.8, "--min-score", help="Minimum quality score"
+    ),
+    min_sources: int = typer.Option(
+        3, "--min-sources", help="Minimum unique sources"
+    ),
+    domain_cap: float = typer.Option(
+        0.25, "--domain-cap", help="Max fraction of selections per domain"
+    ),
+    questions_per_session: int = typer.Option(4, "--questions-per-session"),
+    overlap_sessions: int = typer.Option(
+        3, "--overlap-sessions", help="Number of overlap (inter-rater) sessions"
+    ),
+    out_include: str = typer.Option(
+        "include_ids.txt", "--out-include", help="Output file for selected IDs"
+    ),
+    out_overlap: str = typer.Option(
+        "overlap.txt", "--out-overlap", help="Output file for overlap IDs"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Print stats only, don't write files"
+    ),
+):
+    """Select high-quality, domain-balanced questions for an annotation study."""
+    from src.domain.selection import select_questions
+
+    select_questions(
+        db_path=db_path,
+        n=n,
+        polymarket_n=polymarket_n,
+        min_score=min_score,
+        min_sources=min_sources,
+        domain_cap=domain_cap,
+        questions_per_session=questions_per_session,
+        overlap_sessions=overlap_sessions,
+        out_include=out_include,
+        out_overlap=out_overlap,
+        dry_run=dry_run,
+        log=console.print,
+    )

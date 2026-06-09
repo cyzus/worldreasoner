@@ -36,6 +36,7 @@ from src.domain.evaluation.metrics import (
     calculate_brier_score,
     calculate_log_score,
 )
+from src.integrations.polymarket import analyze_price_curve
 
 
 DEFAULT_DB = "combined.db"
@@ -251,7 +252,11 @@ def load_price_cache(path: str | None) -> dict[str, Any]:
     return json.loads(p.read_text(encoding="utf-8"))
 
 
-def latest_forecasts(conn: sqlite3.Connection, include_ids: set[str] | None) -> list[ForecastRecord]:
+def latest_forecasts(
+    conn: sqlite3.Connection,
+    include_ids: set[str] | None,
+    include_forecast_ids: set[str] | None = None,
+) -> list[ForecastRecord]:
     rows = conn.execute(
         """
         select f.id, f.question_id, f.model_name, f.timestamp, f.prediction,
@@ -269,6 +274,8 @@ def latest_forecasts(conn: sqlite3.Connection, include_ids: set[str] | None) -> 
         qid = row["question_id"]
         if include_ids is not None and qid not in include_ids:
             continue
+        if include_forecast_ids is not None and row["id"] not in include_forecast_ids:
+            continue
         meta = load_json(row["evaluation_metadata"], {}) or {}
         condition = meta.get("benchmark_condition")
         model = meta.get("benchmark_model") or row["model_name"] or "unknown"
@@ -276,7 +283,8 @@ def latest_forecasts(conn: sqlite3.Connection, include_ids: set[str] | None) -> 
             continue
         ts = row["timestamp"] or ""
         key = (qid, condition, model)
-        if key in latest and ts <= latest_ts[key]:
+        # When pinned to specific forecast IDs, skip the latest-per-key logic
+        if include_forecast_ids is None and key in latest and ts <= latest_ts[key]:
             continue
         options = load_json(row["options"], []) or []
         accuracy = calculate_accuracy(
@@ -347,15 +355,20 @@ def load_question_info(conn: sqlite3.Connection, include_ids: set[str] | None) -
     return info
 
 
-def load_hindsight_events(conn: sqlite3.Connection, include_ids: set[str] | None) -> dict[str, list[EventNode]]:
-    rows = conn.execute(
-        """
+def load_hindsight_events(
+    conn: sqlite3.Connection,
+    include_ids: set[str] | None,
+    exclude_annotation_rejected: bool = False,
+) -> dict[str, list[EventNode]]:
+    query = """
         select id, title, description, occurred_date, article_ids,
                extracted_for_question_id, is_outcome
         from events
         where extracted_for_question_id is not null
-        """
-    ).fetchall()
+    """
+    if exclude_annotation_rejected:
+        query += " AND (review_status IS NULL OR review_status != 'rejected')"
+    rows = conn.execute(query).fetchall()
     by_qid: dict[str, list[EventNode]] = defaultdict(list)
     for row in rows:
         qid = row["extracted_for_question_id"]
@@ -614,6 +627,40 @@ def price_delta_around_event(
     return float(after_point.get("p", 0.0)) - float(before_point.get("p", 0.0))
 
 
+def market_turning_point_datetimes(
+    price_data: dict[str, Any],
+    min_change_pct: float,
+) -> list[dt.datetime]:
+    history = price_data.get("history") if price_data else None
+    if not history:
+        return []
+    analysis = analyze_price_curve(
+        history,
+        min_turning_point_change=min_change_pct * 100.0,
+        min_sharp_movement_change=min_change_pct * 200.0,
+    )
+    points = []
+    for point in analysis.get("turning_points", []):
+        timestamp = point.get("timestamp")
+        if timestamp is None:
+            continue
+        points.append(dt.datetime.fromtimestamp(float(timestamp), tz=dt.timezone.utc))
+    return points
+
+
+def is_near_turning_point(
+    event_date: dt.datetime | None,
+    turning_points: list[dt.datetime],
+    window_days: float,
+) -> bool:
+    if event_date is None or not turning_points:
+        return False
+    if event_date.tzinfo is None:
+        event_date = event_date.replace(tzinfo=dt.timezone.utc)
+    window_seconds = window_days * 86400.0
+    return any(abs((event_date - point).total_seconds()) <= window_seconds for point in turning_points)
+
+
 def market_event_metrics(
     hindsight_events: list[EventNode],
     forecast_events: list[EventNode],
@@ -623,12 +670,18 @@ def market_event_metrics(
     question_info: QuestionInfo | None,
     window_days: float,
     min_price_delta: float,
+    turning_points: list[dt.datetime] | None = None,
 ) -> dict[str, Any]:
     if question_info is None or question_info.source != "polymarket":
         return {
             "market_signal_events": None,
             "market_signal_matched_events": None,
             "market_signal_recall": None,
+            "market_signal_precision": None,
+            "turning_point_signal_events": None,
+            "turning_point_signal_matched_events": None,
+            "turning_point_signal_recall": None,
+            "turning_point_signal_precision": None,
             "hindsight_market_direction_alignment": None,
             "market_direction_checks": 0,
         }
@@ -637,6 +690,11 @@ def market_event_metrics(
             "market_signal_events": None,
             "market_signal_matched_events": None,
             "market_signal_recall": None,
+            "market_signal_precision": None,
+            "turning_point_signal_events": None,
+            "turning_point_signal_matched_events": None,
+            "turning_point_signal_recall": None,
+            "turning_point_signal_precision": None,
             "hindsight_market_direction_alignment": None,
             "market_direction_checks": 0,
         }
@@ -645,12 +703,19 @@ def market_event_metrics(
             "market_signal_events": 0,
             "market_signal_matched_events": 0,
             "market_signal_recall": None,
+            "market_signal_precision": None,
+            "turning_point_signal_events": 0,
+            "turning_point_signal_matched_events": 0,
+            "turning_point_signal_recall": None,
+            "turning_point_signal_precision": None,
             "hindsight_market_direction_alignment": None,
             "market_direction_checks": 0,
         }
 
     signal_indices: set[int] = set()
+    turning_signal_indices: set[int] = set()
     direction_checks: list[bool] = []
+    turning_points = turning_points or []
     for idx, event in enumerate(hindsight_events):
         if event.is_outcome:
             continue
@@ -664,13 +729,32 @@ def market_event_metrics(
         direction_checks.append(aligned)
         if aligned:
             signal_indices.add(idx)
+            if is_near_turning_point(event.occurred_date, turning_points, window_days):
+                turning_signal_indices.add(idx)
 
     matched_signals = len(signal_indices & matched_h)
     signal_recall = matched_signals / len(signal_indices) if signal_indices else None
+    signal_precision = matched_signals / len(forecast_events) if forecast_events else None
+    matched_turning_signals = len(turning_signal_indices & matched_h)
+    turning_signal_recall = (
+        matched_turning_signals / len(turning_signal_indices)
+        if turning_signal_indices
+        else None
+    )
+    turning_signal_precision = (
+        matched_turning_signals / len(forecast_events)
+        if forecast_events
+        else None
+    )
     return {
         "market_signal_events": len(signal_indices),
         "market_signal_matched_events": matched_signals,
         "market_signal_recall": signal_recall,
+        "market_signal_precision": signal_precision,
+        "turning_point_signal_events": len(turning_signal_indices),
+        "turning_point_signal_matched_events": matched_turning_signals,
+        "turning_point_signal_recall": turning_signal_recall,
+        "turning_point_signal_precision": turning_signal_precision,
         "hindsight_market_direction_alignment": mean(direction_checks) if direction_checks else None,
         "market_direction_checks": len(direction_checks),
     }
@@ -720,18 +804,63 @@ def key_event_metrics(
     }
 
 
+_semantic_model = None
+
+def _get_semantic_model(model_name: str = "all-MiniLM-L6-v2"):
+    global _semantic_model
+    if _semantic_model is None:
+        from sentence_transformers import SentenceTransformer
+        print(f"Loading sentence transformer: {model_name}", flush=True)
+        _semantic_model = SentenceTransformer(model_name)
+    return _semantic_model
+
+
+def semantic_similarity_matrix(
+    h_texts: list[str],
+    f_texts: list[str],
+) -> list[list[float]]:
+    """Return cosine similarity matrix[hi][fi] using sentence transformers."""
+    if not h_texts or not f_texts:
+        return [[0.0] * len(f_texts) for _ in h_texts]
+    model = _get_semantic_model()
+    import numpy as np
+    h_emb = model.encode(h_texts, convert_to_numpy=True, show_progress_bar=False)
+    f_emb = model.encode(f_texts, convert_to_numpy=True, show_progress_bar=False)
+    h_norm = h_emb / (np.linalg.norm(h_emb, axis=1, keepdims=True) + 1e-9)
+    f_norm = f_emb / (np.linalg.norm(f_emb, axis=1, keepdims=True) + 1e-9)
+    sim = h_norm @ f_norm.T  # shape (n_h, n_f)
+    return sim.tolist()
+
+
 def greedy_event_matches(
     hindsight: list[EventNode],
     forecast: list[EventNode],
     threshold: float,
     method: str = "hybrid",
     top_k: int = 5,
+    date_window_days: float | None = None,
 ) -> list[tuple[int, int, float]]:
+    """Match forecast events to hindsight events greedily by text similarity.
+
+    date_window_days: if set, a text match is only accepted when both events
+    have a date AND |h_date - f_date| <= date_window_days. If either date is
+    missing the date gate is skipped (text match alone is sufficient).
+    """
     pairs: list[tuple[float, int, int]] = []
     h_texts = [event_text(event) for event in hindsight]
     f_texts = [event_text(event) for event in forecast]
-    h_to_f_bm25 = [normalize_scores(bm25_scores(h_text, f_texts)) for h_text in h_texts]
-    f_to_h_bm25 = [normalize_scores(bm25_scores(f_text, h_texts)) for f_text in f_texts]
+
+    # Pre-compute similarity matrices depending on method
+    h_to_f_bm25: list[list[float]] = []
+    f_to_h_bm25: list[list[float]] = []
+    sem_matrix:  list[list[float]] = []
+
+    if method in {"bm25", "hybrid"}:
+        h_to_f_bm25 = [normalize_scores(bm25_scores(h_text, f_texts)) for h_text in h_texts]
+        f_to_h_bm25 = [normalize_scores(bm25_scores(f_text, h_texts)) for f_text in f_texts]
+    if method == "semantic":
+        sem_matrix = semantic_similarity_matrix(h_texts, f_texts)
+
     for hi, he in enumerate(hindsight):
         if he.is_outcome:
             continue
@@ -751,10 +880,18 @@ def greedy_event_matches(
                 bm25_reverse = f_to_h_bm25[fi][hi]
                 lexical = token_f1(event_text(he), event_text(fe))
                 score = (0.6 * bm25_reverse) + (0.4 * lexical)
+            elif method == "semantic":
+                score = sem_matrix[hi][fi]
             else:
                 score = token_f1(event_text(he), event_text(fe))
-            if score >= threshold:
-                pairs.append((score, hi, fi))
+            if score < threshold:
+                continue
+            # Date gate: reject if both dates present and error exceeds window
+            if date_window_days is not None:
+                de = date_error_days(he.occurred_date, fe.occurred_date)
+                if de is not None and de > date_window_days:
+                    continue
+            pairs.append((score, hi, fi))
     pairs.sort(reverse=True)
     matched_h: set[int] = set()
     matched_f: set[int] = set()
@@ -848,6 +985,8 @@ def score_forecast(
     key_event_min_score: float,
     market_window_days: float,
     market_min_price_delta: float,
+    market_turning_points: list[dt.datetime] | None = None,
+    date_window_days: float | None = None,
 ) -> dict[str, Any]:
     hindsight_events = [event for event in hindsight_events_all if not event.is_outcome]
     matches = greedy_event_matches(
@@ -856,6 +995,7 @@ def score_forecast(
         threshold,
         method=match_method,
         top_k=top_k,
+        date_window_days=date_window_days,
     )
     matched_h = {hi for hi, _, _ in matches}
     matched_f = {fi for _, fi, _ in matches}
@@ -880,6 +1020,7 @@ def score_forecast(
         threshold,
         method=match_method,
         top_k=top_k,
+        date_window_days=date_window_days,
     )
     accessible_matched_h = {hi for hi, _, _ in accessible_matches}
     accessible_matched_f = {fi for _, fi, _ in accessible_matches}
@@ -945,6 +1086,7 @@ def score_forecast(
         question_info=question_info,
         window_days=market_window_days,
         min_price_delta=market_min_price_delta,
+        turning_points=market_turning_points,
     )
 
     forecast_node_ids = {event.id for event in forecast_events}
@@ -953,6 +1095,9 @@ def score_forecast(
             "hindsight_event_id": hindsight_events_all[hi].id,
             "forecast_event_id": forecast_events[fi].id,
             "similarity": round(sim, 4),
+            "date_error_days": round(de, 1) if (de := date_error_days(
+                hindsight_events_all[hi].occurred_date, forecast_events[fi].occurred_date
+            )) is not None else None,
         }
         for hi, fi, sim in matches
     ]
@@ -1014,6 +1159,9 @@ def aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "key_event_recall": avg("key_event_recall"),
         "key_event_precision": avg("key_event_precision"),
         "market_signal_recall": avg("market_signal_recall"),
+        "market_signal_precision": avg("market_signal_precision"),
+        "turning_point_signal_recall": avg("turning_point_signal_recall"),
+        "turning_point_signal_precision": avg("turning_point_signal_precision"),
         "hindsight_market_direction_alignment": avg("hindsight_market_direction_alignment"),
         "edge_recall": avg("edge_recall"),
         "edge_precision": avg("edge_precision"),
@@ -1058,6 +1206,11 @@ def write_tsv(rows: list[dict[str, Any]], path: Path) -> None:
         "market_signal_events",
         "market_signal_matched_events",
         "market_signal_recall",
+        "market_signal_precision",
+        "turning_point_signal_events",
+        "turning_point_signal_matched_events",
+        "turning_point_signal_recall",
+        "turning_point_signal_precision",
         "hindsight_market_direction_alignment",
         "market_direction_checks",
         "hindsight_edges",
@@ -1127,6 +1280,9 @@ def write_markdown(summary: dict[str, Any], path: Path) -> None:
     add_metric_row(lines, "Accessible event F1", overall.get("accessible_event_f1"))
     add_metric_row(lines, "Key-event recall", overall.get("key_event_recall"))
     add_metric_row(lines, "Market-signal recall", overall.get("market_signal_recall"))
+    add_metric_row(lines, "Market-signal precision", overall.get("market_signal_precision"))
+    add_metric_row(lines, "Turning-point market-signal recall", overall.get("turning_point_signal_recall"))
+    add_metric_row(lines, "Turning-point market-signal precision", overall.get("turning_point_signal_precision"))
     add_metric_row(lines, "Market-direction alignment", overall.get("hindsight_market_direction_alignment"))
     add_metric_row(lines, "Source precision", overall.get("exact_source_precision"))
     add_metric_row(lines, "Temporal MAE days", overall.get("temporal_mae_days"), "num")
@@ -1140,14 +1296,14 @@ def write_markdown(summary: dict[str, Any], path: Path) -> None:
         "",
         "Event F1 compares forecast events against the full post-resolution hindsight graph. Accessible Event F1 repeats the same matching after filtering hindsight events to those whose occurred date is on or before the forecast's simulated date.",
         "",
-        "Key events are the highest-scoring hindsight events by impact magnitude times confidence. Market-signal recall is computed only for Polymarket questions with cached price history and primary-outcome impact links.",
+        "Key events are the highest-scoring hindsight events by impact magnitude times confidence. Market-signal recall is computed only for Polymarket questions with cached price history and primary-outcome impact links. Turning-point market-signal recall is the stricter subset where the market-aligned hindsight event is also within the market window of a detected turning point.",
         "",
         "A trailing `*` after `n` marks model-condition cells with fewer than 100 forecast rows.",
         "",
         "## By Condition",
         "",
-        "| Condition | n | Graph n | Event F1 | Accessible F1 | Key-event Recall | Market-signal Recall | Source Precision | Temporal MAE | Accuracy |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Condition | n | Graph n | Event F1 | Accessible F1 | Key-event Recall | Market R | Market P | TP R | TP P | Source Precision | Temporal MAE | Accuracy |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for condition, stats in sorted(summary["by_condition"].items()):
         low_n = " *" if stats["n"] < 100 else ""
@@ -1155,7 +1311,9 @@ def write_markdown(summary: dict[str, Any], path: Path) -> None:
             f"| {condition} | {stats['n']}{low_n} | {stats['n_with_graph']} | "
             f"{pct(stats['event_f1'])} | {pct(stats['accessible_event_f1'])} | "
             f"{pct(stats['key_event_recall'])} | "
-            f"{pct(stats['market_signal_recall'])} | {pct(stats['exact_source_precision'])} | "
+            f"{pct(stats['market_signal_recall'])} | {pct(stats['market_signal_precision'])} | "
+            f"{pct(stats['turning_point_signal_recall'])} | {pct(stats['turning_point_signal_precision'])} | "
+            f"{pct(stats['exact_source_precision'])} | "
             f"{num(stats['temporal_mae_days'])} | {pct(stats['accuracy'])} |"
         )
 
@@ -1165,8 +1323,8 @@ def write_markdown(summary: dict[str, Any], path: Path) -> None:
         "",
         "### Full Table",
         "",
-        "| Condition | Model | n | Graph n | Event F1 | Accessible F1 | Key-event Recall | Market-signal Recall | Source Precision | Temporal MAE | Accuracy |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Condition | Model | n | Graph n | Event F1 | Accessible F1 | Key-event Recall | Market R | Market P | TP R | TP P | Source Precision | Temporal MAE | Accuracy |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for _, stats in sorted(summary["by_condition_model"].items()):
         condition = stats["condition"]
@@ -1176,7 +1334,9 @@ def write_markdown(summary: dict[str, Any], path: Path) -> None:
             f"| {condition} | {model} | {stats['n']}{low_n} | {stats['n_with_graph']} | "
             f"{pct(stats['event_f1'])} | {pct(stats['accessible_event_f1'])} | "
             f"{pct(stats['key_event_recall'])} | "
-            f"{pct(stats['market_signal_recall'])} | {pct(stats['exact_source_precision'])} | "
+            f"{pct(stats['market_signal_recall'])} | {pct(stats['market_signal_precision'])} | "
+            f"{pct(stats['turning_point_signal_recall'])} | {pct(stats['turning_point_signal_precision'])} | "
+            f"{pct(stats['exact_source_precision'])} | "
             f"{num(stats['temporal_mae_days'])} | {pct(stats['accuracy'])} |"
         )
 
@@ -1188,8 +1348,8 @@ def write_markdown(summary: dict[str, Any], path: Path) -> None:
         lines += [
             f"#### {condition}",
             "",
-            "| Model | n | Graph n | Event F1 | Accessible F1 | Key-event Recall | Market-signal Recall | Source Precision | Temporal MAE | Accuracy |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "| Model | n | Graph n | Event F1 | Accessible F1 | Key-event Recall | Market R | Market P | TP R | TP P | Source Precision | Temporal MAE | Accuracy |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
         for stats in sorted(rows, key=lambda item: (-1 if item.get("event_f1") is None else item["event_f1"]), reverse=True):
             low_n = " *" if stats["n"] < 100 else ""
@@ -1197,7 +1357,9 @@ def write_markdown(summary: dict[str, Any], path: Path) -> None:
                 f"| {stats['model']} | {stats['n']}{low_n} | {stats['n_with_graph']} | "
                 f"{pct(stats['event_f1'])} | {pct(stats['accessible_event_f1'])} | "
                 f"{pct(stats['key_event_recall'])} | "
-                f"{pct(stats['market_signal_recall'])} | {pct(stats['exact_source_precision'])} | "
+                f"{pct(stats['market_signal_recall'])} | {pct(stats['market_signal_precision'])} | "
+                f"{pct(stats['turning_point_signal_recall'])} | {pct(stats['turning_point_signal_precision'])} | "
+                f"{pct(stats['exact_source_precision'])} | "
                 f"{num(stats['temporal_mae_days'])} | {pct(stats['accuracy'])} |"
             )
         lines.append("")
@@ -1209,13 +1371,36 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--db", default=DEFAULT_DB)
     parser.add_argument("--include-ids", default=None)
+    parser.add_argument(
+        "--include-forecast-ids",
+        default=None,
+        help=(
+            "Path to a file of forecast IDs (one per line) to pin evaluation to specific runs. "
+            "When provided, bypasses latest-per-key selection and evaluates exactly these forecasts."
+        ),
+    )
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
     parser.add_argument("--match-threshold", type=float, default=0.45)
     parser.add_argument(
+        "--date-window-days",
+        type=float,
+        default=None,
+        help=(
+            "Maximum allowed date error (days) between a matched hindsight and forecast event. "
+            "If both events have a date and |h_date - f_date| > this value the match is rejected. "
+            "If either event has no date the gate is skipped. Default: disabled (no date gate)."
+        ),
+    )
+    parser.add_argument(
         "--match-method",
-        choices=["lexical", "bm25", "hybrid"],
+        choices=["lexical", "bm25", "hybrid", "semantic"],
         default="hybrid",
-        help="Event matching method. Hybrid uses BM25 candidates plus lexical overlap.",
+        help="Event matching method. 'hybrid' uses BM25 candidates + lexical overlap. 'semantic' uses sentence-transformers cosine similarity (all-MiniLM-L6-v2).",
+    )
+    parser.add_argument(
+        "--semantic-model",
+        default="all-MiniLM-L6-v2",
+        help="Sentence transformer model name (used when --match-method semantic).",
     )
     parser.add_argument("--top-k", type=int, default=5, help="BM25 candidate count per hindsight event")
     parser.add_argument("--key-event-top-k", type=int, default=5)
@@ -1229,9 +1414,20 @@ def main() -> None:
         help="Minimum local market move, in probability points, for market-signal checks.",
     )
     parser.add_argument(
+        "--market-turning-point-min-change",
+        type=float,
+        default=0.05,
+        help="Minimum reversal size, in probability points, for turning-point market-signal checks.",
+    )
+    parser.add_argument(
         "--filter-knowledge-leakage",
         action="store_true",
         help="Exclude model-question pairs where question start predates the model knowledge cutoff.",
+    )
+    parser.add_argument(
+        "--exclude-annotation-rejected",
+        action="store_true",
+        help="Exclude hindsight events with review_status='rejected' (annotation-filtered graph).",
     )
     parser.add_argument("--condition", nargs="*", default=None)
     parser.add_argument(
@@ -1243,6 +1439,7 @@ def main() -> None:
     args = parser.parse_args()
 
     include_ids = read_ids(args.include_ids)
+    include_forecast_ids = read_ids(args.include_forecast_ids)
     price_cache = load_price_cache(args.price_cache)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1250,7 +1447,7 @@ def main() -> None:
     conn = sqlite3.connect(args.db)
     conn.row_factory = sqlite3.Row
     try:
-        forecasts = latest_forecasts(conn, include_ids)
+        forecasts = latest_forecasts(conn, include_ids, include_forecast_ids=include_forecast_ids)
         if args.condition:
             allowed = set(args.condition)
             forecasts = [f for f in forecasts if f.condition in allowed]
@@ -1262,7 +1459,7 @@ def main() -> None:
             forecasts = [f for f in forecasts if not is_knowledge_leakage_pair(f)]
         knowledge_leakage_excluded = before_leakage_filter - len(forecasts)
 
-        hindsight_events = load_hindsight_events(conn, include_ids)
+        hindsight_events = load_hindsight_events(conn, include_ids, exclude_annotation_rejected=args.exclude_annotation_rejected)
         forecast_events = load_forecast_events(conn)
         hindsight_edges = load_hindsight_edges(conn, hindsight_events)
         forecast_edges = load_forecast_edges(conn)
@@ -1272,6 +1469,16 @@ def main() -> None:
         impact_scores = load_impact_scores(conn, primary_outcome_ids, include_ids)
     finally:
         conn.close()
+
+    market_turning_points = {
+        qid: market_turning_point_datetimes(data, args.market_turning_point_min_change)
+        for qid, data in price_cache.items()
+        if data
+    }
+
+    if args.match_method == "semantic":
+        # Pre-load model once before the per-forecast loop
+        _get_semantic_model(args.semantic_model)
 
     rows: list[dict[str, Any]] = []
     for forecast in forecasts:
@@ -1292,8 +1499,17 @@ def main() -> None:
             key_event_min_score=args.key_event_min_score,
             market_window_days=args.market_window_days,
             market_min_price_delta=args.market_min_price_delta,
+            market_turning_points=market_turning_points.get(forecast.question_id, []),
+            date_window_days=args.date_window_days,
         )
         rows.append(row)
+
+    # Write pinned forecast IDs so future runs can reproduce exactly this evaluation
+    forecast_ids_path = output_dir / "forecast_ids.txt"
+    if not forecast_ids_path.exists() or include_forecast_ids is None:
+        forecast_ids_path.write_text(
+            "\n".join(sorted(r["forecast_id"] for r in rows)) + "\n", encoding="utf-8"
+        )
 
     timestamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d_%H%M%S")
     stem = (
@@ -1306,16 +1522,20 @@ def main() -> None:
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "db": args.db,
         "include_ids": args.include_ids,
+        "include_forecast_ids": args.include_forecast_ids or str(forecast_ids_path),
         "match_threshold": args.match_threshold,
         "match_method": args.match_method,
+        "date_window_days": args.date_window_days,
         "top_k": args.top_k,
         "key_event_top_k": args.key_event_top_k,
         "key_event_min_score": args.key_event_min_score,
         "price_cache": args.price_cache,
         "market_window_days": args.market_window_days,
         "market_min_price_delta": args.market_min_price_delta,
+        "market_turning_point_min_change": args.market_turning_point_min_change,
         "models": args.model,
         "filter_knowledge_leakage": args.filter_knowledge_leakage,
+        "exclude_annotation_rejected": args.exclude_annotation_rejected,
         "knowledge_leakage_excluded": knowledge_leakage_excluded,
         "overall": aggregate(rows),
         "by_condition": {},

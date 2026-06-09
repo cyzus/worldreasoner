@@ -1,0 +1,178 @@
+.qft {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #f8f9fa;
+}
+
+/* ── Header ─────────────────────────────────────────── */
+.qft-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  border-bottom: 1px solid #dee2e6;
+  flex-shrink: 0;
+  background: #fff;
+}
+
+.qft-header-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.qft-run-btn {
+  padding: 4px 12px;
+  background: none;
+  border: 1px solid #ced4da;
+  border-radius: 5px;
+  color: #6c757d;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.qft-run-btn:hover {
+  color: #111;
+  border-color: #111;
+}
+
+/* ── Run popover ─────────────────────────────────────── */
+.qft-popover {
+  padding: 14px 20px;
+  border-bottom: 1px solid #dee2e6;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.qft-popover-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.qft-popover-row label {
+  font-size: 0.8125rem;
+  color: #6c757d;
+  width: 90px;
+  flex-shrink: 0;
+}
+
+.qft-input {
+  flex: 1;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  color: #212529;
+  background: #fff;
+  padding: 5px 10px;
+  font-size: 0.8125rem;
+}
+
+.qft-btn-group {
+  display: flex;
+  gap: 4px;
+}
+
+.qft-opt-btn {
+  padding: 4px 10px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background: #fff;
+  color: #495057;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.qft-opt-btn:hover { background: #f8f9fa; }
+.qft-opt-btn.active {
+  background: #111;
+  border-color: #111;
+  color: #fff;
+}
+
+/* Slot bar */
+.qft-slot-bar-wrap { display: flex; flex-direction: column; gap: 4px; }
+
+.qft-slot-bar {
+  height: 6px;
+  background: #e9ecef;
+  border-radius: 3px;
+  position: relative;
+}
+
+.qft-slot-fill {
+  height: 100%;
+  background: #111;
+  border-radius: 3px;
+  opacity: 0.35;
+}
+
+.qft-slot-marker {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 12px;
+  background: #111;
+  border-radius: 1px;
+  transform: translateX(-50%);
+}
+
+.qft-slot-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: #6c757d;
+}
+
+.qft-slot-sim { color: #111; font-weight: 600; }
+
+.qft-submit-msg {
+  font-size: 0.8125rem;
+  color: #333;
+}
+
+.qft-popover-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.qft-cancel-btn {
+  padding: 5px 14px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background: #fff;
+  color: #6c757d;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.qft-confirm-btn {
+  padding: 5px 14px;
+  border: none;
+  border-radius: 4px;
+  background: #111;
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.qft-confirm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Forecast list ───────────────────────────────────── */
+.qft-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}

@@ -196,7 +196,7 @@
 
 .month-bar {
   height: 100%;
-  background: linear-gradient(90deg, #4CAF50, #66BB6A);
+  background: linear-gradient(90deg, #111, #66BB6A);
   transition: width 0.3s ease;
 }
 
@@ -219,7 +219,7 @@
   align-items: center;
   gap: 12px;
   padding: 10px;
-  background-color: #fff3cd;
+  background-color: #f5f5f5;
   border-left: 4px solid #FFA726;
   border-radius: 4px;
 }
@@ -237,13 +237,13 @@
 
 .gap-dates {
   font-size: 13px;
-  color: #856404;
+  color: #555;
   font-weight: 500;
 }
 
 .gap-duration {
   font-size: 12px;
-  color: #856404;
+  color: #555;
   background-color: rgba(255, 167, 38, 0.2);
   padding: 3px 8px;
   border-radius: 3px;
@@ -265,7 +265,7 @@
 }
 
 .source-bullet {
-  color: #4CAF50;
+  color: #111;
   font-size: 16px;
   font-weight: bold;
 }
@@ -283,7 +283,7 @@
 }
 
 .recommendation-section {
-  background-color: #d1ecf1;
+  background-color: #f0f0f0;
   border-color: #bee5eb;
 }
 
