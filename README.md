@@ -13,6 +13,10 @@ The system builds on two core ideas:
 
 Benchmarking is an ablation from pure knowledge recall up to near resolution access, evaluated on a curated 120-question dataset sourced from Polymarket.
 
+<p align="center">
+  <img src="docs/images/forecasting_sandbox.png" width="90%" alt="Forecasting temporal gateway — the agent only sees evidence before simulated_date" />
+</p>
+
 ## Dataset
 
 The benchmark database is available as a GitHub release asset (~53MB, article full-text and LLM reasoning traces stripped):
@@ -87,6 +91,10 @@ See `wr --help` for the full command reference.
 | Real-Time | `real_time` | live | ✓ | |
 
 ## Architecture
+
+<p align="center">
+  <img src="docs/images/pipeline.png" width="100%" alt="Forward (question generation) and backward (evidence & hindsight) pipelines" />
+</p>
 
 ```
 worldreasoner/
