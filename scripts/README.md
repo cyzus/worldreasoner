@@ -122,6 +122,22 @@ to `docs/metrics.md`.
 uv run python scripts/analysis/compute_metrics_table.py
 ```
 
+### `analysis/final_numbers.py`
+Print the paper table numbers side-by-side from the two eval JSONs (original vs
+annotation-filtered). Useful for paper revision to verify numbers match.
+```bash
+uv run python scripts/analysis/final_numbers.py
+```
+
+### `analysis/sliding_window_results.py`
+Temporal ablation: per-model accuracy and Brier score across early/mid/late/
+near-resolution/real-time slots. Contains the DB queries for Table 3 and
+the knowledge-only gap analysis.
+```bash
+uv run python scripts/analysis/sliding_window_results.py --db combined.db
+uv run python scripts/analysis/sliding_window_results.py --db combined.db --latex
+```
+
 ---
 
 ## Screening
