@@ -146,13 +146,30 @@ curl http://localhost:8300/api/questions/<question_id>/forecasts
 curl http://localhost:8300/api/benchmark/results
 ```
 
-Each forecast record gets:
+Each forecast record gets the full metric set once both evaluation steps run:
+
+**Step A — outcome metrics** (written by `wr benchmark evaluate` / `POST /api/evaluation/run`):
 
 | Field | Description |
 |---|---|
 | `is_correct` | `true` / `false` — whether prediction matched ground truth |
 | `brier_score` | `(confidence − outcome)²` — 0 is perfect, 1 is worst |
 | `log_score` | `log(prob_of_correct_outcome)` — penalises confident wrong answers |
+
+**Step B — reasoning graph metrics** (written by `evaluate_reasoning_graphs.py` / dashboard "Re-evaluate" button):
+
+| Field | Description |
+|---|---|
+| `event_f1` | F1 between agent events and hindsight events |
+| `event_recall` / `event_precision` | Component scores |
+| `accessible_event_f1` | F1 using only events before `simulated_date` as denominator |
+| `exact_source_precision` | Fraction of agent-cited sources in hindsight evidence set |
+| `key_event_recall` / `key_event_precision` | Coverage of annotated key events |
+| `temporal_mae_days` | Mean absolute error in event date estimates |
+| `market_signal_recall` | Coverage of price-moving events |
+| `edge_recall` / `edge_precision` | Causal edge alignment with hindsight graph |
+
+Both are available on `GET /api/questions/{id}/forecasts` per forecast, and aggregated on `GET /api/evaluation/report` under `reasoning_metrics`.
 
 ### With contamination filtering
 

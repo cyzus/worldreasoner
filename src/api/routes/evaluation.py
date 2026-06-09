@@ -26,6 +26,9 @@ class EvaluationReportResponse(BaseModel):
     model_info: Dict[str, Any] = {}
     evaluation_timestamp: str = ""
     message: Optional[str] = None
+    # Reasoning graph metrics — populated after evaluate_reasoning_graphs.py runs
+    reasoning_metrics: Dict[str, Optional[float]] = {}
+    reasoning_metrics_n: int = 0
 
 
 class RunEvaluationRequest(BaseModel):
@@ -95,9 +98,38 @@ async def get_evaluation_report():
 
         report = evaluator.generate_evaluation_report(results)
 
-        # Ensure timestamp exists
         if "evaluation_timestamp" not in report:
             report["evaluation_timestamp"] = datetime.now().isoformat()
+
+        # Aggregate reasoning graph metrics from evaluation_metadata.reasoning_eval
+        # (written back by scripts/benchmark/evaluate_reasoning_graphs.py)
+        import json as _json
+        from statistics import mean as _mean
+
+        REASONING_KEYS = [
+            "event_f1", "event_recall", "event_precision",
+            "accessible_event_f1", "exact_source_precision",
+            "key_event_recall", "key_event_precision",
+            "temporal_mae_days", "market_signal_recall",
+            "edge_recall", "edge_precision",
+        ]
+        buckets: dict[str, list[float]] = {k: [] for k in REASONING_KEYS}
+        for f in final_forecasts:
+            try:
+                meta = _json.loads(f.evaluation_metadata) if isinstance(f.evaluation_metadata, str) else (f.evaluation_metadata or {})
+            except (ValueError, TypeError):
+                meta = {}
+            re = meta.get("reasoning_eval", {})
+            for k in REASONING_KEYS:
+                v = re.get(k)
+                if isinstance(v, (int, float)) and v == v:  # exclude NaN
+                    buckets[k].append(float(v))
+
+        report["reasoning_metrics"] = {
+            k: round(_mean(v), 4) if v else None
+            for k, v in buckets.items()
+        }
+        report["reasoning_metrics_n"] = min((len(v) for v in buckets.values() if v), default=0)
 
         return report
 

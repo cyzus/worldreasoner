@@ -1583,6 +1583,46 @@ def main() -> None:
     print(f"overall_event_f1={summary['overall']['event_f1']}")
     print(f"overall_edge_recall={summary['overall']['edge_recall']}")
 
+    # Write reasoning metrics back into forecasts.evaluation_metadata so the
+    # REST API (/api/questions/{id}/forecasts, /api/evaluation/report) can
+    # expose all paper metrics alongside is_correct / brier_score / log_score.
+    REASONING_METRIC_KEYS = [
+        "event_recall", "event_precision", "event_f1",
+        "accessible_event_recall", "accessible_event_precision", "accessible_event_f1",
+        "exact_source_recall", "exact_source_precision",
+        "key_event_recall", "key_event_precision",
+        "temporal_mae_days", "forecast_max_depth",
+        "market_signal_recall", "hindsight_market_direction_alignment",
+        "edge_recall", "edge_precision", "direction_accuracy",
+        "matched_events", "hindsight_events", "forecast_events",
+    ]
+    updated = 0
+    conn_wb = sqlite3.connect(args.db)
+    try:
+        for row in rows:
+            fid = row.get("forecast_id")
+            if not fid:
+                continue
+            existing = conn_wb.execute(
+                "SELECT evaluation_metadata FROM forecasts WHERE id = ?", (fid,)
+            ).fetchone()
+            if existing is None:
+                continue
+            try:
+                meta = json.loads(existing[0]) if existing[0] else {}
+            except (json.JSONDecodeError, TypeError):
+                meta = {}
+            meta["reasoning_eval"] = {k: row.get(k) for k in REASONING_METRIC_KEYS}
+            conn_wb.execute(
+                "UPDATE forecasts SET evaluation_metadata = ? WHERE id = ?",
+                (json.dumps(meta), fid),
+            )
+            updated += 1
+        conn_wb.commit()
+    finally:
+        conn_wb.close()
+    print(f"wrote reasoning metrics back to {updated} forecast rows in {args.db}")
+
 
 if __name__ == "__main__":
     main()

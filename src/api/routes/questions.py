@@ -894,6 +894,15 @@ async def get_question_forecasts(
             else:
                 expected_outcome = str(f.prediction) if f.prediction is not None else None
 
+            # Extract reasoning metrics written back by evaluate_reasoning_graphs.py
+            import json as _json
+            eval_meta_raw = getattr(f, "evaluation_metadata", None)
+            try:
+                eval_meta = _json.loads(eval_meta_raw) if isinstance(eval_meta_raw, str) else (eval_meta_raw or {})
+            except (ValueError, TypeError):
+                eval_meta = {}
+            reasoning_eval = eval_meta.get("reasoning_eval", {})
+
             forecast_dict = {
                 "id": f.id,
                 "question_id": f.question_id,
@@ -906,8 +915,23 @@ async def get_question_forecasts(
                 else str(f.mode)
                 if f.mode
                 else "container",
+                # Outcome metrics
                 "is_correct": is_correct,
                 "brier_score": getattr(f, "brier_score", None),
+                "log_score": getattr(f, "log_score", None),
+                # Reasoning graph metrics (present after evaluate_reasoning_graphs.py runs)
+                "event_f1": reasoning_eval.get("event_f1"),
+                "event_recall": reasoning_eval.get("event_recall"),
+                "event_precision": reasoning_eval.get("event_precision"),
+                "accessible_event_f1": reasoning_eval.get("accessible_event_f1"),
+                "exact_source_precision": reasoning_eval.get("exact_source_precision"),
+                "key_event_recall": reasoning_eval.get("key_event_recall"),
+                "key_event_precision": reasoning_eval.get("key_event_precision"),
+                "temporal_mae_days": reasoning_eval.get("temporal_mae_days"),
+                "market_signal_recall": reasoning_eval.get("market_signal_recall"),
+                "edge_recall": reasoning_eval.get("edge_recall"),
+                "edge_precision": reasoning_eval.get("edge_precision"),
+                # Context
                 "simulated_date": f.simulated_date.isoformat() if getattr(f, "simulated_date", None) else None,
                 "model_name": getattr(f, "model_name", None),
                 "model_version": getattr(f, "model_version", None),
