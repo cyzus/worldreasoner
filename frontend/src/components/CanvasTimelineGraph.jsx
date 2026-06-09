@@ -261,9 +261,13 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
         Math.max(Math.min(0, contW - totalW), Math.min(0, x))
     , [contW])
 
-    const clampY = useCallback((y, svgH) =>
-        Math.max(Math.min(0, contH - svgH), Math.min(0, y))
-    , [contH])
+    const clampY = useCallback((y, svgH) => {
+        // When svgH < contH the content is shorter than the viewport —
+        // allow positive panY so content can be centered.
+        const minY = Math.min(0, contH - svgH)  // negative: content taller than viewport
+        const maxY = Math.max(0, contH - svgH)  // positive: content shorter than viewport
+        return Math.max(minY, Math.min(maxY, y))
+    }, [contH])
 
     const onMouseDown = useCallback(e => {
         if (e.target.closest?.('[data-card]')) return
