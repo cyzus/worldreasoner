@@ -9,7 +9,8 @@ import { fetchQuestionEvents } from '../api/graphApi'
 export const useGraphTraversal = (questions) => {
     // Graph store
     const fullGraphData = useGraphStore(state => state.fullGraphData)
-    const setGraphData = useGraphStore(state => state.setGraphData)
+    const graphData     = useGraphStore(state => state.graphData)
+    const setGraphData  = useGraphStore(state => state.setGraphData)
     const setSelectedNode = useGraphStore(state => state.setSelectedNode)
     const setTimeFilter = useGraphStore(state => state.setTimeFilter)
 
@@ -170,8 +171,11 @@ export const useGraphTraversal = (questions) => {
 
     // Handle neighborhood view (client-side filtering)
     const handleShowNeighborhood = useCallback((nodeId, depth = 2) => {
-        // Find the center node
-        const centerNode = fullGraphData.nodes.find(n => n.id === nodeId)
+        // Use fullGraphData when populated (global graph view), otherwise
+        // fall back to the current graphData (per-question evidence graph).
+        const sourceGraph = (fullGraphData?.nodes?.length > 0) ? fullGraphData : graphData
+
+        const centerNode = sourceGraph.nodes.find(n => n.id === nodeId)
         if (!centerNode) return
 
         // BFS to find neighborhood
@@ -179,7 +183,7 @@ export const useGraphTraversal = (questions) => {
         const queue = [{ id: nodeId, depth: 0 }]
 
         // Only use real links, not synthetic ones
-        const realLinks = fullGraphData.links.filter(link => !link.isSynthetic && link.type !== 'potentially_relevant')
+        const realLinks = sourceGraph.links.filter(link => !link.isSynthetic && link.type !== 'potentially_relevant')
 
         while (queue.length > 0) {
             const { id: currentId, depth: currentDepth } = queue.shift()
@@ -205,12 +209,9 @@ export const useGraphTraversal = (questions) => {
         }
 
         // Filter nodes and links, clear outcome markers
-        const neighborhoodNodes = fullGraphData.nodes
+        const neighborhoodNodes = sourceGraph.nodes
             .filter(n => visited.has(n.id))
-            .map(node => ({
-                ...node,
-                isOutcome: false
-            }))
+            .map(node => ({ ...node, isOutcome: false }))
 
         const neighborhoodLinks = realLinks.filter(link => {
             const sourceId = typeof link.source === 'object' ? link.source.id : link.source
@@ -232,7 +233,7 @@ export const useGraphTraversal = (questions) => {
         // Clear time filter and question filter when showing neighborhood
         setTimeFilter(null)
         setSelectedQuestionId(null)
-    }, [fullGraphData, setGraphData, setTimeFilter, setSelectedQuestionId])
+    }, [fullGraphData, graphData, setGraphData, setTimeFilter, setSelectedQuestionId])
 
     // Handle question filter
     const handleQuestionFilter = useCallback(async (questionId, depth = 2) => {
