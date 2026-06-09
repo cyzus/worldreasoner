@@ -250,6 +250,72 @@ async def get_benchmark_result_filtered(run_id: str) -> Dict[str, Any]:
     }
 
 
+EVAL_DIRS = [
+    Path("experiments/evaluation/canonical_final"),
+    Path("experiments/evaluation/canonical_7d"),
+    Path("experiments/evaluation"),
+]
+
+# Metrics to expose from the reasoning eval (subset meaningful for the matrix)
+REASONING_METRICS = [
+    "accuracy", "brier_score", "log_score",
+    "exact_source_precision",
+    "event_f1", "event_recall", "event_precision",
+    "key_event_recall", "key_event_precision",
+    "accessible_event_f1",
+    "temporal_mae_days",
+]
+
+
+@router.get("/reasoning-eval")
+async def get_reasoning_eval() -> Dict[str, Any]:
+    """Return per-(condition, model) reasoning-graph evaluation metrics.
+
+    Reads the latest reasoning_graph_eval_filtered_latest.json from the
+    canonical evaluation directory. Returns a flat map keyed by
+    'condition::model' with all numeric metrics.
+    """
+    data = None
+    for d in EVAL_DIRS:
+        candidate = d / "reasoning_graph_eval_filtered_latest.json"
+        if candidate.exists():
+            try:
+                with open(candidate, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                break
+            except Exception as e:
+                logger.warning(f"Failed to read {candidate}: {e}")
+
+    if data is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No reasoning eval file found. Run scripts/analysis/compute_metrics_table.py first.",
+        )
+
+    by_cm = data.get("by_condition_model", {})
+    result: Dict[str, Any] = {}
+    for key, stats in by_cm.items():
+        if not isinstance(stats, dict):
+            continue
+        # Normalize model name in the key
+        parts = key.split("::", 1)
+        if len(parts) == 2:
+            cond, model = parts[0], _normalize_model_name(parts[1])
+            norm_key = f"{cond}::{model}"
+        else:
+            norm_key = key
+        result[norm_key] = {
+            k: stats.get(k) for k in REASONING_METRICS
+        }
+
+    return {
+        "generated_at": data.get("generated_at"),
+        "n_cells": len(result),
+        "metrics": REASONING_METRICS,
+        "by_condition_model": result,
+    }
+
+
 @router.get("/conditions")
 async def list_conditions() -> List[Dict[str, Any]]:
     """List available experiment conditions."""

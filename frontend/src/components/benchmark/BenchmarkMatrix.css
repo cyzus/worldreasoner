@@ -41,6 +41,18 @@
   align-items: center;
 }
 
+.bm-metric-select {
+  padding: 4px 8px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background: #fff;
+  color: #495057;
+  font-size: 0.75rem;
+  cursor: pointer;
+  max-width: 140px;
+}
+.bm-metric-select:focus { outline: none; border-color: #111; }
+
 .bm-metric-toggle {
   padding: 4px 10px;
   border: 1px solid #ced4da;
@@ -54,6 +66,16 @@
   background: #111;
   border-color: #111;
   color: #fff;
+}
+
+/* Cells sourced from reasoning eval (not autobench) */
+.bm-td-cell.reasoning-src .bm-cell-main {
+  color: #495057;
+}
+.bm-td-cell.reasoning-src.no-data {
+  background: repeating-linear-gradient(
+    45deg, transparent, transparent 4px, rgba(0,0,0,0.02) 4px, rgba(0,0,0,0.02) 8px
+  );
 }
 
 .bm-refresh-btn {
