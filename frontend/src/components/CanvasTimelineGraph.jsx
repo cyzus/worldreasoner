@@ -259,8 +259,11 @@ export default function CanvasTimelineGraph({ graphData, onNodeClick, selectedNo
     , [contW])
 
     const clampY = useCallback((y, svgH) => {
-        const minY = contH - svgH   // negative when svgH > contH (can scroll up)
-        const maxY = 0              // never push content below top of viewport
+        // Always allow at least ±(contH * 0.5) of drag travel so vertical
+        // panning works even when content fits within the viewport.
+        const slack = contH * 0.5
+        const minY = Math.min(contH - svgH, -slack)
+        const maxY = Math.max(0, slack)
         return Math.max(minY, Math.min(maxY, y))
     }, [contH])
 
