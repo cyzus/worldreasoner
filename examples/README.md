@@ -103,6 +103,72 @@ Remember: you can only see information published before the simulated_date.
 
 ---
 
+## Evaluating submitted forecasts
+
+`submit_forecast` saves the prediction to the database but **does not score it immediately** — evaluation happens separately once the question has resolved and `ground_truth` is set.
+
+### Step 1 — mark the question as resolved
+
+Once you know the outcome, set it via the REST API or CLI:
+
+```bash
+# Via CLI
+uv run wr db update question <question_id> ground_truth true   # or false
+
+# Via REST API (backend must be running)
+curl -X PATCH http://localhost:8300/api/questions/<question_id> \
+  -H "Content-Type: application/json" \
+  -d '{"ground_truth": true}'
+```
+
+### Step 2 — score all resolved forecasts
+
+```bash
+# Via CLI (writes per-condition JSON + Markdown to experiments/evaluation/)
+uv run wr benchmark evaluate --db combined.db
+
+# Via REST API (scores in background, updates is_correct + brier_score on each forecast)
+curl -X POST http://localhost:8300/api/evaluation/run \
+  -H "Content-Type: application/json" \
+  -d '{"update_forecasts": true}'
+```
+
+### Step 3 — retrieve results
+
+```bash
+# Aggregate accuracy/Brier across all evaluated forecasts
+curl http://localhost:8300/api/evaluation/report
+
+# Per-forecast scores for a specific question
+curl http://localhost:8300/api/questions/<question_id>/forecasts
+
+# Full benchmark matrix (all conditions × models)
+curl http://localhost:8300/api/benchmark/results
+```
+
+Each forecast record gets:
+
+| Field | Description |
+|---|---|
+| `is_correct` | `true` / `false` — whether prediction matched ground truth |
+| `brier_score` | `(confidence − outcome)²` — 0 is perfect, 1 is worst |
+| `log_score` | `log(prob_of_correct_outcome)` — penalises confident wrong answers |
+
+### With contamination filtering
+
+If you want scores that exclude questions where the agent's training cutoff predates the question start (i.e. the paper methodology):
+
+```bash
+uv run wr benchmark evaluate \
+  --db combined.db \
+  --include-ids include_ids.txt \
+  --filter-knowledge-leakage
+```
+
+Or toggle "Contam. filter" in the dashboard Benchmark tab.
+
+---
+
 ## Agent Skills
 
 The `skills/` directory contains [Agent Skills](https://agentskills.io) — reusable instruction

@@ -676,7 +676,14 @@ def submit_forecast(
         articles_accessed: List of article IDs used as evidence
 
     Returns:
-        Structured forecast submission confirmation
+        Structured forecast submission confirmation with forecast_id.
+
+    Note on evaluation:
+        Scoring (is_correct, brier_score, log_score) happens separately after
+        the question resolves and ground_truth is set. To score:
+          CLI:  uv run wr benchmark evaluate --db <db>
+          API:  POST /api/evaluation/run
+          View: GET  /api/questions/<question_id>/forecasts
     """
     try:
         # Get context
