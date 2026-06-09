@@ -137,6 +137,15 @@ A React/Vite dashboard for exploring results interactively:
 - **Data** — collection pipeline status, search index management
 - **Benchmark** — condition × model accuracy matrix with contamination filter toggle
 
+<p align="center">
+  <img src="docs/images/evidence-1.png" width="49%" alt="Causal explanation with executive summary and event timeline" />
+  <img src="docs/images/evidence-2.png" width="49%" alt="Causal events list and pressure chart" />
+</p>
+<p align="center">
+  <img src="docs/images/hindsight_graph.png" width="49%" alt="Evidence timeline graph with event detail popup" />
+  <img src="docs/images/market_fetch.png" width="49%" alt="Question collection from Polymarket" />
+</p>
+
 ```bash
 uv run worldreasoner --reload          # backend on port 8300
 cd frontend && npm run dev             # frontend on port 5173
