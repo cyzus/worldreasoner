@@ -8,7 +8,7 @@
 
 To forecast real-world events, LLM agents must reason from partial evidence under strict temporal constraints. A fundamental obstacle is **temporal data leakage**: an agent backed by a model trained through 2025 that answers a question about a 2022 election is not forecasting — it is recalling history. WorldReasoner addresses this by restricting all tool access to evidence available at the simulated forecast date, scoring the submission immediately while preserving the temporal boundary.
 
-A scalable agentic construction pipeline generates forecasting questions from prediction markets and news streams, collects time-stamped evidence, and builds post-resolution hindsight reference graphs automatically — yielding **345 resolved tasks** derived from **14,141 articles** with graphs covering **8,087 extracted events**.
+A scalable agentic construction pipeline generates forecasting questions from prediction markets and news streams, collects time-stamped evidence, and builds post-resolution hindsight reference graphs automatically — yielding **345 resolved tasks** derived from **14,141 articles** with graphs covering **8,087 extracted events** (paper snapshot; the public DB includes additional evidence collected since publication).
 
 <p align="center">
   <img src="docs/images/forecasting_sandbox.png" width="90%" alt="Forecasting temporal gateway — the agent only sees evidence before simulated_date" />
@@ -36,9 +36,11 @@ uv run wr db build-index --db worldreasoner_public.db
 | Resolved questions | 345 (120 curated in `include_ids.txt`) |
 | Question types | Binary (69%), MCQ (13.3%), Quantity (11.6%), Timeframe (6.1%) |
 | Domains | 10 (politics, culture, health, sports, finance, …) |
-| Articles collected | 14,141 |
-| Extracted events | 8,087 |
 | Sources | Polymarket (97) + news pipeline (248) |
+| Articles (DB) | 14,364 (metadata only; full text stripped) |
+| Events (DB) | 9,149 causal events with evidence graphs |
+| Causal edges (DB) | 9,858 hypothesis edges |
+| Forecasts (DB) | 11,566 records with accuracy, Brier score, log score |
 
 To regenerate from source: `uv run python scripts/benchmark/export_public_db.py --src combined.db --dst worldreasoner_public.db`
 
