@@ -28,8 +28,6 @@ gh release download v1.0.0 --pattern "worldreasoner_public.db"
 # Rebuild search index after download (needed for search/oracle benchmark conditions)
 uv run wr db build-index --db worldreasoner_public.db
 ```
-
-Contains: 345 questions · 9,149 events · 9,858 causal edges · article metadata · forecast scores.  
 To regenerate from source: `uv run python scripts/benchmark/export_public_db.py --src combined.db --dst worldreasoner_public.db`
 
 ## Installation
