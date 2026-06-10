@@ -2,20 +2,22 @@
 
 # WorldReasoner
 
-**WorldReasoner** is a temporal forecasting benchmark for large language models. It evaluates how well LLMs predict real-world outcomes when given structured, temporally-filtered evidence — measuring the contribution of causal reasoning, web search, and evidence quality across six experimental conditions.
+**WorldReasoner** is an evaluation framework for temporally valid event forecasting. Each task gives an agent a resolved forecasting question, a simulated forecast date, and access only to evidence available before that date. After resolution, the framework scores the submitted probability, cited evidence, and optional causal event graph across three complementary axes: **outcome quality** against resolved answers, **evidence quality** over cited sources, and **reasoning quality** against post-resolution hindsight graphs.
 
 ## Overview
 
-The system builds on two core ideas:
+To forecast real-world events, LLM agents must reason from partial evidence under strict temporal constraints. A fundamental obstacle is **temporal data leakage**: an agent backed by a model trained through 2025 that answers a question about a 2022 election is not forecasting — it is recalling history. WorldReasoner addresses this by restricting all tool access to evidence available at the simulated forecast date, scoring the submission immediately while preserving the temporal boundary.
 
-- **Temporal access control** — every model call is gated to evidence published before a configurable `simulated_date`, preventing future knowledge leakage.
-- **Causal evidence graphs** — a backward pipeline extracts events, builds causal chains, and quality-scores the graph against the known outcome, providing richer signal than raw article retrieval.
-
-Benchmarking is an ablation from pure knowledge recall up to near resolution access, evaluated on a curated 120-question dataset sourced from Polymarket.
+A scalable agentic construction pipeline generates forecasting questions from prediction markets and news streams, collects time-stamped evidence, and builds post-resolution hindsight reference graphs automatically — yielding **345 resolved tasks** derived from **14,141 articles** with graphs covering **8,087 extracted events**.
 
 <p align="center">
   <img src="docs/images/forecasting_sandbox.png" width="90%" alt="Forecasting temporal gateway — the agent only sees evidence before simulated_date" />
 </p>
+
+Key findings across six controlled agent settings:
+- Temporally valid retrieval is the **strongest driver of outcome accuracy**
+- Causal graph construction **improves key-event recovery**
+- Correct graph-enabled forecasts are more strongly grounded in key events and relevant sources — yet agents still struggle to convert grounded evidence into calibrated probabilities
 
 ## Dataset
 
@@ -29,7 +31,15 @@ gh release download v1.0.0 --pattern "worldreasoner_public.db"
 uv run wr db build-index --db worldreasoner_public.db
 ```
 
-Contains: 345 questions · 9,149 events · 9,858 causal edges · article metadata · forecast scores.  
+| | |
+|---|---|
+| Resolved questions | 345 (120 curated in `include_ids.txt`) |
+| Question types | Binary (69%), MCQ (13.3%), Quantity (11.6%), Timeframe (6.1%) |
+| Domains | 10 (politics, culture, health, sports, finance, …) |
+| Articles collected | 14,141 |
+| Extracted events | 8,087 |
+| Sources | Polymarket (97) + news pipeline (248) |
+
 To regenerate from source: `uv run python scripts/benchmark/export_public_db.py --src combined.db --dst worldreasoner_public.db`
 
 ## Installation
@@ -81,20 +91,24 @@ See `wr --help` for the full command reference.
 
 ## Experimental Conditions
 
-| Paper name | CLI name | Search | Causal tools | Near-resolution |
-|------------|----------|:------:|:------------:|:------:|
-| Vanilla LLM | `vanilla_llm` | | | |
-| Causal Simulation | `structured_scenario` | | ✓ | |
-| Search-Enabled | `search_enabled` | ✓ | | |
-| Search-Enabled Graph | `worldreasoner` | ✓ | ✓ | |
-| Near-Resolution | `oracle` | ✓ | ✓ | ✓ |
-| Real-Time | `real_time` | live | ✓ | |
+Six controlled agent settings form an ablation from pure knowledge recall to near-resolution access:
+
+| Paper name | CLI name | Search | Causal graph | Notes |
+|------------|----------|:------:|:------------:|-------|
+| Vanilla LLM | `vanilla_llm` | | | Training knowledge only |
+| Causal Simulation | `structured_scenario` | | ✓ | Knowledge + causal tools |
+| Search-Enabled | `search_enabled` | ✓ | | Temporally valid retrieval |
+| Search-Enabled Graph | `worldreasoner` | ✓ | ✓ | Full system |
+| Near-Resolution | `oracle` | ✓ | ✓ | Upper bound |
+| Real-Time | `real_time` | live | ✓ | Live internet access |
 
 ## Architecture
 
 <p align="center">
   <img src="docs/images/pipeline.png" width="100%" alt="Forward (question generation) and backward (evidence & hindsight) pipelines" />
 </p>
+
+The benchmark is built by two agentic pipelines. The **forward pipeline** generates forecasting questions from prediction markets and news streams. The **backward pipeline** runs after resolution: the Hindsight Agent collects post-resolution evidence, the Event Analyzer synthesizes it into a causal narrative, and GraphBuilder converts this into a structural event DAG used as the reference for reasoning quality scoring.
 
 ```
 worldreasoner/
@@ -131,24 +145,21 @@ Run `wr <group> --help` for options on any group.
 
 ## Research Dashboard
 
-A React/Vite dashboard for exploring results interactively:
+A React/Vite dashboard for exploring benchmark results interactively:
 
-- **Questions** — browse questions, causal event timeline, evidence articles, forecast results
-- **Data** — collection pipeline status, search index management
+- **Questions** — causal explanation, evidence timeline, pressure chart, forecast results
+- **Data** — question collection, evidence pipeline, search index management
 - **Benchmark** — condition × model accuracy matrix with contamination filter toggle
 
+### Example: Will Netflix close Warner Bros. acquisition by end of 2026?
 
+<p align="center"><img src="docs/images/evidence-1.png" width="100%" /><br/><em>Evidence tab — causal explanation with executive summary and key event timeline</em></p>
 
-### Example
+<p align="center"><img src="docs/images/evidence-2.png" width="100%" /><br/><em>Evidence tab — causal events list with impact direction and evidence accumulation chart</em></p>
 
-Question: Will Netflix close Warner Bros. acquisition by end of 2026?
+<p align="center"><img src="docs/images/hindsight_graph.png" width="100%" /><br/><em>Graph tab — SVG evidence timeline with event detail popup and causal links</em></p>
 
-
-<p align="center"><img src="docs/images/evidence-2.png" width="100%" /><br/><em>Evidence accumulation chart</em></p>
-
-<p align="center"><img src="docs/images/hindsight_graph.png" width="100%" /><br/><em>Hindsight graph with event detail popup and causal links</em></p>
-
-
+<p align="center"><img src="docs/images/market_fetch.png" width="100%" /><br/><em>Data tab — question collection from Polymarket with ground truth preview</em></p>
 
 ```bash
 uv run worldreasoner --reload          # backend on port 8300
