@@ -220,10 +220,12 @@ See [scripts/README.md](scripts/README.md) for the complete reproduction workflo
 ## Citation
 
 ```bibtex
-@software{worldreasoner2025,
-  title   = {WorldReasoner: Temporal Forecasting Benchmark for Large Language Models},
-  author  = {Chi, Yizhou},
-  year    = {2025},
-  url     = {https://github.com/cyzus/worldreasoner}
+@misc{worldreasoner2026,
+  title         = {WorldReasoner: Evaluating Whether Language Model Agents Forecast Events with Valid Reasoning},
+  author        = {Chi, Yizhou and Chamoun, Eric and Ding, Zifeng and Vlachos, Andreas},
+  year          = {2026},
+  eprint        = {2606.11816},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2606.11816}
 }
 ```
