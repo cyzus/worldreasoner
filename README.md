@@ -11,7 +11,8 @@ To forecast real-world events, LLM agents must reason from partial evidence unde
 A scalable agentic construction pipeline generates forecasting questions from prediction markets and news streams, collects time-stamped evidence, and builds post-resolution hindsight reference graphs automatically — yielding **345 resolved tasks** derived from **14,141 articles** with graphs covering **8,087 extracted events** (paper snapshot; the public DB includes additional evidence collected since publication).
 
 <p align="center">
-  <img src="docs/images/forecasting_sandbox.png" width="90%" alt="Forecasting temporal gateway — the agent only sees evidence before simulated_date" />
+  <img src="docs/images/forecasting_sandbox.png" width="100%" alt="An example forecasting task: Forecast Card, Temporal View (only evidence before the simulated date is visible), Agent Submission, and Post-Resolution Scoring across outcome, evidence, and reasoning." />
+  <br/><em>An example forecasting task. The agent sees only evidence available before the simulated date (Temporal View), submits a probability with cited evidence and an optional forecast graph, and is scored after resolution on outcome, evidence, and reasoning quality.</em>
 </p>
 
 Key findings across six controlled agent settings:
