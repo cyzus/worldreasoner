@@ -84,7 +84,25 @@ wr question goal
 wr question goal --goal config/my_goal.yaml
 wr question goal --no-news
 wr question goal --sequential
+
+# Collect a distribution-balanced experiment dataset
+wr question collect
+wr question collect --dry-run
+wr question collect --no-news --export dataset_summary.json
+wr question collect --db experiment.db --max-iterations 5
+
+# Add specific Polymarket questions by slug, URL, or numeric id
+wr question add-polymarket will-trump-win-2024 --db combined.db
+wr question add-polymarket https://polymarket.com/event/some-event
+wr question add-polymarket slug-a slug-b 12345 --dry-run
+
+# Select high-quality, domain-balanced questions for an annotation study
+wr question select --db combined.db --polymarket-n 100
 ```
+
+> `add-polymarket` fetches exactly the markets you name (no quality filtering or
+> target counts) and saves them to `--db`, skipping any that already exist. Use
+> `--dry-run` to resolve and preview without saving.
 
 ---
 

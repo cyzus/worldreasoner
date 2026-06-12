@@ -9,7 +9,7 @@ Interactive causal graph visualization and research dashboard for WorldReasoner.
 - **Evidence Collection Pipeline** — Run and monitor evidence collection jobs with real-time WebSocket progress
 - **Benchmark Dashboard** — Compare model performance across conditions with evaluation metrics
 - **Case Study View** — Deep analysis of outcomes: causal trajectories, market price movements, impact assessment
-- **Database Switcher** — Switch between multiple SQLite databases for different datasets
+- **Database Switcher** — Switch between, or create new, SQLite databases for different datasets
 - **Search Index Management** — Build and rebuild FTS5 + semantic embedding indexes
 
 ## Getting Started

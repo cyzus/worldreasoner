@@ -24,6 +24,14 @@ uv run wr question add \
 
 Note the question ID printed after creation (e.g. `manual_abc123`).
 
+Alternatively, to forecast an existing **Polymarket** market instead of a manual question, add it by slug, URL, or numeric id (the rest of the workflow is identical):
+
+```bash
+uv run wr question add-polymarket <event-slug-or-url> --db combined.db
+```
+
+This prints the resolved question ID (e.g. `polymarket_event_30829`); use that as `<question_id>` below.
+
 ## Step 2: Collect evidence
 
 ```bash

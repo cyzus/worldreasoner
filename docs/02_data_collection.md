@@ -10,6 +10,7 @@ This section describes how forecasting questions are sourced, the Polymarket API
 |--------|-------------------|----------------------|
 | Polymarket (Gamma API) | `PolymarketRunner.collect()` — bulk fetch from `/events` | Binary (Yes/No), MCQ |
 | Polymarket (search) | `PolymarketRunner.collect_from_search()` — keyword search | Binary, MCQ |
+| Polymarket (by identifier) | `PolymarketRunner.collect_by_identifiers()` — explicit slug/URL/id lookup | Binary, MCQ |
 | News pipeline | Goal-oriented orchestrator + web crawl | Quantity, Timeframe |
 
 All questions are stored in a SQLite database (`worldreasoner.db` for development, `experiment.db` for the benchmark dataset). The goal-oriented orchestrator (`wr question goal`) runs both sources in parallel and tracks distribution gaps across domains, types, and time horizons.
@@ -177,13 +178,17 @@ Polymarket access is split into two separate files with distinct responsibilitie
 | `fetch_markets()` | `GET /markets` | Pipeline ground-truth collection |
 | `search_markets()` | `GET /public-search` | Pipeline search collection + frontend search endpoint |
 | `get_tag_id()` | `GET /tags/slug/{slug}` | Internal; resolves tag slugs to numeric IDs; results cached per process |
-| `call_api()` | (generic GET) | Internal helper used by `fetch_markets()` |
+| `fetch_events_by_slug()` | `GET /events?slug=` | Identifier-based collection (resolve event by slug) |
+| `fetch_event_by_id()` | `GET /events/{id}` | Identifier-based collection (resolve event by numeric id) |
+| `fetch_markets_by_slug()` | `GET /markets?slug=` | Identifier-based collection (resolve market by slug) |
+| `fetch_market_by_id()` | `GET /markets/{id}` | Identifier-based collection (resolve market by numeric id) |
+| `call_api()` | (generic GET) | Internal helper used by `fetch_markets()` and the slug lookups |
 
 ### 2.3.3 PolymarketRunner
 
 **File:** `src/pipelines/collection/runner_polymarket.py`
 
-`PolymarketRunner` is the collection pipeline's entry point for all Polymarket question ingestion. It owns a `PolymarketClient` instance and a `MarketParser`, and exposes two collection modes.
+`PolymarketRunner` is the collection pipeline's entry point for all Polymarket question ingestion. It owns a `PolymarketClient` instance and a `MarketParser`, and exposes three collection modes.
 
 **Mode 1: Bulk Collection (`collect()`)**
 
@@ -220,6 +225,10 @@ Called by the orchestrator to fill the question database.
 **Mode 2: Search Collection (`collect_from_search()`)**
 
 Called by the gap-filler with a keyword query. Calls `search_markets()` on `/public-search` with `events_status=resolved|active` and `sort=closed_time`. Parses returned events identically to Mode 1.
+
+**Mode 3: Identifier Collection (`collect_by_identifiers()`)**
+
+Fetches exactly the markets the caller names — no quality filtering, no target counts. Used by the `wr question add-polymarket` CLI command. Each identifier may be an event/market slug, a `polymarket.com` URL, or a numeric id. `_parse_identifier()` normalizes the input, then `_resolve_identifier_to_events()` tries, in order: event-by-slug → event-by-id → market-by-slug → market-by-id, wrapping a lone market in a synthetic single-market event. Resolved events are parsed by `_parse_event_structure()` and mapped via `_map_to_question()` — identical Question construction to Modes 1 and 2 (MCQ aggregation, ground-truth extraction, tag-based domain inference). Unresolvable identifiers are reported in `CollectionResult.error_message` without aborting the batch.
 
 **`require_ground_truth` Flag**
 
@@ -330,6 +339,21 @@ wr question goal --goal config/collection_goal_experiment.yaml --db experiment.d
 # Run sources sequentially; skip auto-indexing
 wr question goal --goal config/collection_goal_experiment.yaml --db experiment.db --sequential --skip-indexing
 ```
+
+To add **specific, hand-picked** Polymarket questions (by slug, URL, or numeric id) rather than goal-driven collection, use `add-polymarket`:
+
+```bash
+# Add by event slug
+wr question add-polymarket democratic-presidential-nominee-2028 --db combined.db
+
+# Add by URL, or multiple identifiers at once
+wr question add-polymarket https://polymarket.com/event/some-event slug-b 12345
+
+# Resolve and preview without saving
+wr question add-polymarket some-event-slug --dry-run
+```
+
+It fetches exactly what you name (no quality filtering or target counts) and skips questions already present in `--db`.
 
 The following are only available via the script (no CLI equivalent):
 
