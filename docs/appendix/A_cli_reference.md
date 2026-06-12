@@ -18,6 +18,9 @@ wr [OPTIONS] COMMAND [ARGS]...
 ### 1. Database Management (`wr db`)
 
 ```bash
+# Create / initialize a database (creates the file if absent, builds all tables)
+wr db init --db mydataset.db
+
 # Show database statistics
 wr db stats
 wr db stats --db experiment.db
