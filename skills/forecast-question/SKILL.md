@@ -12,6 +12,16 @@ metadata:
 
 End-to-end workflow: add a question → collect evidence → build causal graph → run forecast → evaluate.
 
+## Step 0 (optional): Create a fresh database
+
+The workflow defaults to the existing `combined.db` / `worldreasoner.db`. To start from a new, empty dataset instead, create and initialize one — this creates the file (if absent) and builds all tables:
+
+```bash
+uv run wr db init --db mydataset.db
+```
+
+Then pass `--db mydataset.db` to the commands below. (Note: `wr question add` and `wr question add-polymarket` also create the db on the fly if `--db` points to a new path, so this step is only needed when you want an explicit empty dataset up front.)
+
 ## Step 1: Add the question
 
 ```bash
