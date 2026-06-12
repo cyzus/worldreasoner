@@ -79,6 +79,10 @@ wr question search "election"
 wr question search "bitcoin" --domain finance
 wr question search "climate" --limit 10
 
+# Add a manually-authored question
+wr question add --text "Will X happen by 2026?" --resolution-date 2026-12-31 --domain politics
+wr question add --text "..." --resolution-date 2026-06-30 --type mcq --options "A,B,C"
+
 # Run goal-oriented collection
 wr question goal
 wr question goal --goal config/my_goal.yaml

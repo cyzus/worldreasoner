@@ -496,6 +496,110 @@ def select(
     )
 
 
+@app.command("add")
+def add(
+    text: str = typer.Option(
+        ..., "--text", help="Question text (must be at least 20 characters)"
+    ),
+    resolution_date: str = typer.Option(
+        ...,
+        "--resolution-date",
+        help="Resolution date (YYYY-MM-DD or ISO datetime)",
+    ),
+    domain: str = typer.Option(
+        "general",
+        "--domain",
+        "-d",
+        help="Domain: politics, finance, tech, health, climate, culture, business, science, sports, general",
+    ),
+    question_type: str = typer.Option(
+        "binary",
+        "--type",
+        help="Question type: binary, mcq, quantity, timeframe",
+    ),
+    source: str = typer.Option("manual", "--source", help="Question source label"),
+    difficulty: int = typer.Option(
+        3, "--difficulty", min=1, max=5, help="Difficulty rating 1-5"
+    ),
+    options: Optional[str] = typer.Option(
+        None, "--options", help="Comma-separated options (required for mcq)"
+    ),
+    resolution_criteria: Optional[str] = typer.Option(
+        None, "--resolution-criteria", help="How the question resolves"
+    ),
+    ground_truth: Optional[str] = typer.Option(
+        None, "--ground-truth", help="Known outcome, if already resolved"
+    ),
+    db_path: str = db_option(),
+):
+    """Add a manually-authored question to a dataset.
+
+    Examples:
+        wr question add --text "Will X happen by 2025?" --resolution-date 2025-12-31 --domain politics
+        wr question add --text "..." --resolution-date 2025-06-30 --type mcq --options "A,B,C"
+    """
+    from src.domain.models import Question
+    from src.domain.models.domain import Domain
+    from src.domain.models.question import QuestionType
+    from src.domain.models.id_generator import generate_timestamped_id
+    from src.utils.date_utils import parse_flexible_datetime
+
+    if len(text.strip()) < 20:
+        console.print(
+            "[red]Question text must be at least 20 characters.[/red]"
+        )
+        raise typer.Exit(1)
+
+    try:
+        domain_enum = Domain(domain.lower())
+    except ValueError:
+        console.print(
+            f"[red]Invalid domain '{domain}'.[/red] Valid: "
+            f"{', '.join(d.value for d in Domain)}"
+        )
+        raise typer.Exit(1)
+
+    try:
+        type_enum = QuestionType(question_type.lower())
+    except ValueError:
+        console.print(
+            f"[red]Invalid type '{question_type}'.[/red] Valid: "
+            f"{', '.join(t.value for t in QuestionType)}"
+        )
+        raise typer.Exit(1)
+
+    options_list = None
+    if options:
+        options_list = [o.strip() for o in options.split(",") if o.strip()]
+    if type_enum == QuestionType.MCQ and not options_list:
+        console.print("[red]--options is required for mcq questions.[/red]")
+        raise typer.Exit(1)
+
+    db, _ = get_db_and_manager(db_path)
+    # Ensure the target database has its schema (the global callback only
+    # initializes the configured default db, not an arbitrary --db).
+    db.initialize_all_tables()
+
+    question = Question(
+        id=generate_timestamped_id("q_manual"),
+        question_text=text.strip(),
+        question_type=type_enum,
+        domain=domain_enum,
+        source=source,
+        difficulty=difficulty,
+        resolution_date=parse_flexible_datetime(resolution_date),
+        resolution_criteria=resolution_criteria,
+        ground_truth=ground_truth,
+        options=options_list,
+    )
+
+    db.save(Question, question)
+    console.print(
+        f"[green]Added question[/green] [cyan]{question.id}[/cyan] "
+        f"to [cyan]{db_path}[/cyan]"
+    )
+
+
 @app.command("add-polymarket")
 def add_polymarket(
     identifiers: List[str] = typer.Argument(

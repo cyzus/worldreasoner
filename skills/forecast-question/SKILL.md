@@ -22,7 +22,7 @@ uv run wr question add \
   --domain politics
 ```
 
-Note the question ID printed after creation (e.g. `manual_abc123`).
+Note the question ID printed after creation (e.g. `q_manual_1781264253_cd27431c`).
 
 Alternatively, to forecast an existing **Polymarket** market instead of a manual question, add it by slug, URL, or numeric id (the rest of the workflow is identical):
 
