@@ -7,12 +7,16 @@ import './DatabaseDropdown.css'
  */
 const DatabaseDropdown = ({ onDatabaseChange }) => {
   const [isOpen, setIsOpen] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)
+  const [newDbName, setNewDbName] = useState('')
+  const [createError, setCreateError] = useState(null)
 
   const {
     databases,
     currentDatabase,
     loading,
-    switchDatabase
+    switchDatabase,
+    createDatabase
   } = useDatabase(onDatabaseChange)
 
   const handleDatabaseSwitch = async (dbPath) => {
@@ -24,6 +28,26 @@ const DatabaseDropdown = ({ onDatabaseChange }) => {
     const result = await switchDatabase(dbPath)
     if (result.success) {
       setIsOpen(false)
+    }
+  }
+
+  const handleCreateDatabase = async (e) => {
+    e.preventDefault()
+    setCreateError(null)
+
+    const name = newDbName.trim()
+    if (!name) {
+      setCreateError('Enter a name')
+      return
+    }
+
+    const result = await createDatabase(name, { switchTo: true })
+    if (result.success) {
+      setNewDbName('')
+      setIsCreating(false)
+      setIsOpen(false)
+    } else {
+      setCreateError(result.message)
     }
   }
 
@@ -63,6 +87,53 @@ const DatabaseDropdown = ({ onDatabaseChange }) => {
                   {!db.exists && <span className="db-missing-badge">Missing</span>}
                 </button>
               ))
+            )}
+
+            <div className="db-dropdown-divider" />
+
+            {isCreating ? (
+              <form className="db-create-form" onSubmit={handleCreateDatabase}>
+                <input
+                  className="db-create-input"
+                  type="text"
+                  placeholder="new-database"
+                  value={newDbName}
+                  onChange={(e) => setNewDbName(e.target.value)}
+                  autoFocus
+                  disabled={loading}
+                />
+                <div className="db-create-actions">
+                  <button
+                    type="submit"
+                    className="db-create-confirm"
+                    disabled={loading || !newDbName.trim()}
+                  >
+                    Create
+                  </button>
+                  <button
+                    type="button"
+                    className="db-create-cancel"
+                    onClick={() => {
+                      setIsCreating(false)
+                      setNewDbName('')
+                      setCreateError(null)
+                    }}
+                    disabled={loading}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {createError && <div className="db-create-error">{createError}</div>}
+              </form>
+            ) : (
+              <button
+                className="db-dropdown-item db-create-trigger"
+                onClick={() => setIsCreating(true)}
+                disabled={loading}
+              >
+                <span className="db-check">＋</span>
+                <span className="db-item-name">New database…</span>
+              </button>
             )}
           </div>
         </>

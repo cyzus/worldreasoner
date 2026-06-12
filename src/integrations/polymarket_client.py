@@ -363,6 +363,74 @@ class PolymarketClient:
 
                 return market_list
 
+    async def fetch_events_by_slug(self, slug: str) -> List[Dict[str, Any]]:
+        """Fetch event(s) by their slug from the Gamma API.
+
+        Args:
+            slug: Event slug (e.g., 'will-trump-win-2024')
+
+        Returns:
+            List of matching event dicts (each contains nested 'markets')
+        """
+        url = f"{self.API_BASE}/events"
+        return await self.call_api(url, params={"slug": slug})
+
+    async def fetch_event_by_id(self, event_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch a single event by its numeric id from the Gamma API.
+
+        Args:
+            event_id: Numeric event id
+
+        Returns:
+            Event dict (with nested 'markets'), or None if not found
+        """
+        url = f"{self.API_BASE}/events/{event_id}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url, timeout=aiohttp.ClientTimeout(total=30)
+            ) as response:
+                if response.status != 200:
+                    logger.warning(
+                        f"Polymarket events/{event_id} returned {response.status}"
+                    )
+                    return None
+                data = await response.json()
+                return data if isinstance(data, dict) else None
+
+    async def fetch_markets_by_slug(self, slug: str) -> List[Dict[str, Any]]:
+        """Fetch market(s) by their slug from the Gamma API.
+
+        Args:
+            slug: Market slug
+
+        Returns:
+            List of matching market dicts
+        """
+        url = f"{self.API_BASE}/markets"
+        return await self.call_api(url, params={"slug": slug})
+
+    async def fetch_market_by_id(self, market_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch a single market by its numeric id from the Gamma API.
+
+        Args:
+            market_id: Numeric market id
+
+        Returns:
+            Market dict, or None if not found
+        """
+        url = f"{self.API_BASE}/markets/{market_id}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url, timeout=aiohttp.ClientTimeout(total=30)
+            ) as response:
+                if response.status != 200:
+                    logger.warning(
+                        f"Polymarket markets/{market_id} returned {response.status}"
+                    )
+                    return None
+                data = await response.json()
+                return data if isinstance(data, dict) else None
+
     def _get_lookback_days(
         self, quality_requirements: Optional[QualityRequirements]
     ) -> int:

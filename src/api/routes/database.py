@@ -365,6 +365,13 @@ class DatabaseSwitchRequest(BaseModel):
     db_path: str
 
 
+class DatabaseCreateRequest(BaseModel):
+    """Request to create a new database file."""
+
+    name: str
+    switch: bool = True
+
+
 class DatabaseSwitchResponse(BaseModel):
     """Response for database switch operation."""
 
@@ -482,6 +489,90 @@ async def get_mcp_status():
         return status
     except Exception as e:
         logger.error(f"Failed to get MCP server status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/create", response_model=DatabaseSwitchResponse)
+async def create_database(request: DatabaseCreateRequest):
+    """Create a new (empty, fully-initialized) database file.
+
+    The file is created in the current working directory, the same place
+    ``/list`` scans for ``.db`` files. All tables are initialized so the new
+    database is immediately usable. Optionally switches to it.
+
+    Args:
+        request: Database create request with name and switch flag
+
+    Returns:
+        Success status, message, and the path of the (possibly switched) database
+    """
+    try:
+        # Sanitize the requested name: keep only the file name, no directories
+        raw_name = (request.name or "").strip()
+        if not raw_name:
+            return DatabaseSwitchResponse(
+                success=False,
+                message="Database name is required",
+                db_path=db_state.current_db_path,
+            )
+
+        # Reject path separators / traversal to keep files in the cwd
+        if any(sep in raw_name for sep in ("/", "\\", "..")):
+            return DatabaseSwitchResponse(
+                success=False,
+                message="Database name must not contain path separators",
+                db_path=db_state.current_db_path,
+            )
+
+        # Ensure a .db extension
+        if not raw_name.endswith(".db"):
+            raw_name = f"{raw_name}.db"
+
+        # Validate the remaining name is a sensible file name
+        stem = raw_name[:-3]
+        if not stem or not all(
+            c.isalnum() or c in ("_", "-", " ") for c in stem
+        ):
+            return DatabaseSwitchResponse(
+                success=False,
+                message=(
+                    "Invalid database name. Use letters, numbers, spaces, "
+                    "hyphens, and underscores only."
+                ),
+                db_path=db_state.current_db_path,
+            )
+
+        db_path = (Path.cwd() / raw_name).resolve()
+
+        if db_path.exists():
+            return DatabaseSwitchResponse(
+                success=False,
+                message=f"Database already exists: {db_path.name}",
+                db_path=db_state.current_db_path,
+            )
+
+        # Create the file and initialize the full schema
+        db = GenericDatabase(str(db_path))
+        tables_count = db.initialize_all_tables()
+        logger.info(f"Created database {db_path} with {tables_count} tables")
+
+        # Optionally switch to the newly created database
+        if request.switch:
+            db_state.current_db_path = str(db_path)
+            logger.info(f"Switched to newly created database: {db_path}")
+            message = f"Created and switched to database: {db_path.name}"
+            current_path = str(db_path)
+        else:
+            message = f"Created database: {db_path.name}"
+            current_path = db_state.current_db_path
+
+        return DatabaseSwitchResponse(
+            success=True,
+            message=message,
+            db_path=current_path,
+        )
+    except Exception as e:
+        logger.error(f"Failed to create database: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

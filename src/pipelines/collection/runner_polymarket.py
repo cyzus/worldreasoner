@@ -393,6 +393,151 @@ class PolymarketRunner(QuestionSourceRunner):
                 error_message=str(e),
             )
 
+    @staticmethod
+    def _parse_identifier(identifier: str) -> Dict[str, str]:
+        """Normalize a user-supplied Polymarket identifier.
+
+        Accepts:
+        - Event URLs: https://polymarket.com/event/<event-slug>[/<market-slug>]
+        - Bare slugs: <event-slug> or <market-slug>
+        - Numeric ids: 12345 (treated as both event-id and market-id candidates)
+
+        Returns:
+            Dict with optional keys 'event_slug', 'market_slug', 'numeric_id', 'raw'.
+        """
+        raw = identifier.strip()
+        result: Dict[str, str] = {"raw": raw}
+
+        if raw.startswith("http://") or raw.startswith("https://"):
+            # Strip query/fragment, then split the path
+            path = raw.split("?", 1)[0].split("#", 1)[0]
+            parts = [p for p in path.split("/") if p]
+            if "event" in parts:
+                idx = parts.index("event")
+                slugs = parts[idx + 1 :]
+                if len(slugs) >= 1:
+                    result["event_slug"] = slugs[0]
+                if len(slugs) >= 2:
+                    result["market_slug"] = slugs[1]
+            elif "market" in parts:
+                idx = parts.index("market")
+                if idx + 1 < len(parts):
+                    result["market_slug"] = parts[idx + 1]
+            return result
+
+        if raw.isdigit():
+            result["numeric_id"] = raw
+            return result
+
+        # Bare slug — could be an event or market slug; try event first.
+        result["event_slug"] = raw
+        result["market_slug"] = raw
+        return result
+
+    async def _resolve_identifier_to_events(
+        self, identifier: str
+    ) -> List[Dict[str, Any]]:
+        """Resolve a single identifier to one or more event-shaped dicts.
+
+        Markets resolved on their own are wrapped in a synthetic single-market
+        event so they can flow through ``_parse_event_structure`` unchanged.
+        """
+        parsed = self._parse_identifier(identifier)
+
+        # 1. Try event by slug
+        if parsed.get("event_slug"):
+            events = await self.client.fetch_events_by_slug(parsed["event_slug"])
+            if events:
+                return events
+
+        # 2. Try event by numeric id
+        if parsed.get("numeric_id"):
+            event = await self.client.fetch_event_by_id(parsed["numeric_id"])
+            if event and event.get("markets"):
+                return [event]
+
+        # 3. Try market by slug -> wrap in synthetic event
+        if parsed.get("market_slug"):
+            markets = await self.client.fetch_markets_by_slug(parsed["market_slug"])
+            if markets:
+                return [{"title": markets[0].get("question"), "markets": markets}]
+
+        # 4. Try market by numeric id -> wrap in synthetic event
+        if parsed.get("numeric_id"):
+            market = await self.client.fetch_market_by_id(parsed["numeric_id"])
+            if market:
+                return [{"title": market.get("question"), "markets": [market]}]
+
+        logger.warning(f"Could not resolve Polymarket identifier: {identifier}")
+        return []
+
+    async def collect_by_identifiers(
+        self,
+        identifiers: List[str],
+        existing_question_ids: Optional[set] = None,
+    ) -> CollectionResult:
+        """Collect specific Polymarket questions by slug, URL, or numeric id.
+
+        Unlike the goal/search collectors, this fetches exactly the markets the
+        caller names — no quality filtering or target counts.
+
+        Args:
+            identifiers: Event/market slugs, polymarket.com URLs, or numeric ids
+            existing_question_ids: Set of existing IDs to skip
+
+        Returns:
+            CollectionResult with the resolved questions
+        """
+        questions: List[Question] = []
+        errors: List[str] = []
+        seen_ids: set = set()
+
+        # No quality filtering — the user picked these explicitly.
+        quality = QualityRequirements()
+        quality.min_resolution_days = -36500  # ~100y lookback, effectively unbounded
+
+        for identifier in identifiers:
+            try:
+                events = await self._resolve_identifier_to_events(identifier)
+                if not events:
+                    errors.append(f"Not found: {identifier}")
+                    continue
+
+                for event in events:
+                    mqs = self._parse_event_structure(event, quality)
+                    # Infer domain from event tags when available
+                    for mq in mqs:
+                        if not (mq.metadata and mq.metadata.get("known_domain")):
+                            inferred = self._infer_domain_from_tags(event)
+                            if inferred:
+                                mq.metadata["known_domain"] = inferred.value
+                    for mq in mqs:
+                        try:
+                            question = self._map_to_question(mq)
+                        except Exception as e:
+                            errors.append(f"{identifier}: map failed ({e})")
+                            continue
+                        if question.id in seen_ids:
+                            continue
+                        seen_ids.add(question.id)
+                        questions.append(question)
+
+            except Exception as e:
+                logger.error(f"Failed to resolve identifier '{identifier}': {e}")
+                errors.append(f"{identifier}: {e}")
+
+        if existing_question_ids:
+            questions = [q for q in questions if q.id not in existing_question_ids]
+
+        return CollectionResult(
+            source_name=self.source_name,
+            questions=questions,
+            requested_count=len(identifiers),
+            actual_count=len(questions),
+            success=len(questions) > 0,
+            error_message="; ".join(errors) if errors else None,
+        )
+
     async def collect(
         self,
         count: int,

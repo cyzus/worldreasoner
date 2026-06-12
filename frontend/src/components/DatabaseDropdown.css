@@ -123,3 +123,81 @@
   border-radius: 3px;
   font-weight: 500;
 }
+
+.db-dropdown-divider {
+  height: 1px;
+  background: #e9ecef;
+  margin: 0.25rem 0;
+}
+
+.db-create-trigger {
+  color: #495057;
+}
+
+.db-create-trigger .db-check {
+  color: #495057;
+  font-weight: 600;
+}
+
+.db-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.625rem 0.875rem;
+}
+
+.db-create-input {
+  width: 100%;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  color: #212529;
+  box-sizing: border-box;
+}
+
+.db-create-input:focus {
+  outline: none;
+  border-color: #adb5bd;
+}
+
+.db-create-actions {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.db-create-confirm,
+.db-create-cancel {
+  flex: 1;
+  padding: 0.375rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid #dee2e6;
+}
+
+.db-create-confirm {
+  background: #212529;
+  color: #fff;
+  border-color: #212529;
+}
+
+.db-create-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.db-create-cancel {
+  background: #f8f9fa;
+  color: #495057;
+}
+
+.db-create-cancel:hover:not(:disabled) {
+  background: #e9ecef;
+}
+
+.db-create-error {
+  font-size: 0.75rem;
+  color: #c0392b;
+}

@@ -132,6 +132,47 @@
   font-style: italic;
 }
 
+.create-db-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.create-db-input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #333;
+}
+
+.create-db-input:focus {
+  outline: none;
+  border-color: #2196F3;
+}
+
+.create-db-btn {
+  padding: 8px 16px;
+  background: #2196F3;
+  color: #fff;
+  border: 1px solid #2196F3;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.create-db-btn:hover:not(:disabled) {
+  background: #1976D2;
+}
+
+.create-db-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .current-db-footer {
   padding: 8px 12px;
   background: #f8f9fa;

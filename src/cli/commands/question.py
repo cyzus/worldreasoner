@@ -7,7 +7,7 @@ list/show/search/status commands for querying stored questions.
 
 import asyncio
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import typer
 from rich.console import Console
@@ -493,4 +493,93 @@ def select(
         out_overlap=out_overlap,
         dry_run=dry_run,
         log=console.print,
+    )
+
+
+@app.command("add-polymarket")
+def add_polymarket(
+    identifiers: List[str] = typer.Argument(
+        ...,
+        help="Polymarket event/market slugs, polymarket.com URLs, or numeric ids",
+    ),
+    db_path: str = db_option(),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Resolve and preview without saving"
+    ),
+):
+    """Add specific Polymarket questions to a dataset by slug, URL, or id.
+
+    Fetches exactly the markets you name (no quality filtering or target counts)
+    and saves them to the given database, skipping any that already exist.
+
+    Examples:
+        wr question add-polymarket will-trump-win-2024 --db combined.db
+        wr question add-polymarket https://polymarket.com/event/some-event
+        wr question add-polymarket slug-a slug-b 12345 --dry-run
+    """
+    from src.pipelines.collection import PolymarketRunner
+    from src.domain.models import Question
+
+    db, _ = get_db_and_manager(db_path)
+    # Ensure the target database has its schema (the global callback only
+    # initializes the configured default db, not an arbitrary --db).
+    db.initialize_all_tables()
+
+    # require_ground_truth=False so both resolved and active markets resolve;
+    # ground truth is still extracted from the market data when present.
+    runner = PolymarketRunner(require_ground_truth=False)
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+        transient=True,
+    ) as progress:
+        progress.add_task(
+            f"Resolving {len(identifiers)} Polymarket identifier(s)...", total=None
+        )
+        result = asyncio.run(runner.collect_by_identifiers(identifiers))
+
+    if result.error_message:
+        console.print(f"[yellow]Warnings:[/yellow] {result.error_message}")
+
+    if not result.questions:
+        console.print("[red]No questions resolved.[/red]")
+        raise typer.Exit(1)
+
+    # Preview table
+    table = Table(title=f"Resolved {len(result.questions)} question(s)")
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("Type")
+    table.add_column("Domain")
+    table.add_column("Question")
+    for q in result.questions:
+        table.add_row(
+            q.id,
+            q.question_type.value
+            if hasattr(q.question_type, "value")
+            else str(q.question_type),
+            q.domain.value if hasattr(q.domain, "value") else str(q.domain),
+            (q.question_text[:80] + "…")
+            if len(q.question_text) > 80
+            else q.question_text,
+        )
+    console.print(table)
+
+    if dry_run:
+        console.print("[dim]Dry run — nothing saved.[/dim]")
+        return
+
+    saved = 0
+    skipped = 0
+    for q in result.questions:
+        if db.get(Question, q.id):
+            skipped += 1
+            continue
+        db.save(Question, q)
+        saved += 1
+
+    console.print(
+        f"[green]Saved {saved}[/green], skipped {skipped} duplicate(s) "
+        f"into [cyan]{db_path}[/cyan]"
     )

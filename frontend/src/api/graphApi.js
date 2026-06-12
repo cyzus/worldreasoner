@@ -205,6 +205,17 @@ export async function switchDatabase(dbPath) {
 }
 
 /**
+ * Create a new database file (optionally switching to it)
+ */
+export async function createDatabase(name, { switchTo = true } = {}) {
+  const response = await axios.post(`${API_BASE_URL}/database/create`, {
+    name,
+    switch: switchTo
+  })
+  return response.data
+}
+
+/**
  * Fetch search index status
  */
 export async function fetchSearchIndexStatus() {

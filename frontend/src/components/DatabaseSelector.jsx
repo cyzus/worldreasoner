@@ -4,6 +4,8 @@ import './DatabaseSelector.css'
 
 const DatabaseSelector = ({ onDatabaseChange }) => {
   const [message, setMessage] = useState(null)
+  const [newDbName, setNewDbName] = useState('')
+  const [createError, setCreateError] = useState(null)
 
   const {
     databases,
@@ -11,7 +13,8 @@ const DatabaseSelector = ({ onDatabaseChange }) => {
     loading,
     error,
     loadDatabases,
-    switchDatabase
+    switchDatabase,
+    createDatabase
   } = useDatabase(onDatabaseChange)
 
   const handleDatabaseSwitch = async (dbPath) => {
@@ -20,6 +23,26 @@ const DatabaseSelector = ({ onDatabaseChange }) => {
 
     if (result.success) {
       setMessage(result.message)
+    }
+  }
+
+  const handleCreateDatabase = async (e) => {
+    e.preventDefault()
+    setMessage(null)
+    setCreateError(null)
+
+    const name = newDbName.trim()
+    if (!name) {
+      setCreateError('Enter a database name')
+      return
+    }
+
+    const result = await createDatabase(name, { switchTo: true })
+    if (result.success) {
+      setNewDbName('')
+      setMessage(result.message)
+    } else {
+      setCreateError(result.message)
     }
   }
 
@@ -78,6 +101,25 @@ const DatabaseSelector = ({ onDatabaseChange }) => {
           )}
         </div>
       )}
+
+      <form className="create-db-form" onSubmit={handleCreateDatabase}>
+        <input
+          className="create-db-input"
+          type="text"
+          placeholder="new-database"
+          value={newDbName}
+          onChange={(e) => setNewDbName(e.target.value)}
+          disabled={loading}
+        />
+        <button
+          type="submit"
+          className="create-db-btn"
+          disabled={loading || !newDbName.trim()}
+        >
+          Create
+        </button>
+      </form>
+      {createError && <div className="error-message">{createError}</div>}
 
       <div className="current-db-footer">
         <strong>Current:</strong> {currentDatabase || 'None'}
