@@ -59,6 +59,30 @@ async def lifespan(app: FastAPI):
             logger.warning(f"Failed to initialize database tables on startup: {e}")
 
         import os
+
+        # Backfill ground truth for Polymarket questions that have resolved since
+        # ingestion. Non-fatal; skip with POLYMARKET_REFRESH_ON_STARTUP=false.
+        refresh_enabled = os.getenv(
+            "POLYMARKET_REFRESH_ON_STARTUP", "true"
+        ).lower() in ("true", "1", "yes")
+        if refresh_enabled:
+            try:
+                from src.pipelines.collection import refresh_polymarket_ground_truth
+                from .routes.database import get_current_db_path
+
+                refresh_db = GenericDatabase(get_current_db_path())
+                logger.info("Refreshing Polymarket ground truth on startup...")
+                refresh_result = await refresh_polymarket_ground_truth(refresh_db)
+                logger.info(
+                    f"Polymarket refresh: {refresh_result.updated} resolved, "
+                    f"{refresh_result.still_unresolved} still open "
+                    f"(of {refresh_result.candidates} unresolved)."
+                )
+            except Exception as e:
+                logger.warning(f"Polymarket ground-truth refresh on startup failed: {e}")
+        else:
+            logger.info("Polymarket startup refresh disabled (POLYMARKET_REFRESH_ON_STARTUP=false)")
+
         from .routes.database import mcp_manager, get_current_db_path
 
         # Check if auto-start is enabled (default: True)

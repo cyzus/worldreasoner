@@ -11,6 +11,7 @@ This section describes how forecasting questions are sourced, the Polymarket API
 | Polymarket (Gamma API) | `PolymarketRunner.collect()` — bulk fetch from `/events` | Binary (Yes/No), MCQ |
 | Polymarket (search) | `PolymarketRunner.collect_from_search()` — keyword search | Binary, MCQ |
 | Polymarket (by identifier) | `PolymarketRunner.collect_by_identifiers()` — explicit slug/URL/id lookup | Binary, MCQ |
+| Polymarket (ground-truth backfill) | `refresh_polymarket_ground_truth()` — re-fetch unresolved questions for resolved outcomes | Binary, MCQ |
 | News pipeline | Goal-oriented orchestrator + web crawl | Quantity, Timeframe |
 
 All questions are stored in a SQLite database (`worldreasoner.db` for development, `experiment.db` for the benchmark dataset). The goal-oriented orchestrator (`wr question goal`) runs both sources in parallel and tracks distribution gaps across domains, types, and time horizons.
@@ -228,7 +229,7 @@ Called by the gap-filler with a keyword query. Calls `search_markets()` on `/pub
 
 **Mode 3: Identifier Collection (`collect_by_identifiers()`)**
 
-Fetches exactly the markets the caller names — no quality filtering, no target counts. Used by the `wr question add-polymarket` CLI command. Each identifier may be an event/market slug, a `polymarket.com` URL, or a numeric id. `_parse_identifier()` normalizes the input, then `_resolve_identifier_to_events()` tries, in order: event-by-slug → event-by-id → market-by-slug → market-by-id, wrapping a lone market in a synthetic single-market event. Resolved events are parsed by `_parse_event_structure()` and mapped via `_map_to_question()` — identical Question construction to Modes 1 and 2 (MCQ aggregation, ground-truth extraction, tag-based domain inference). Unresolvable identifiers are reported in `CollectionResult.error_message` without aborting the batch.
+Fetches exactly the markets the caller names — no quality filtering, no target counts. Used by the `wr question add-polymarket` CLI command and by the ground-truth backfill (`refresh_polymarket_ground_truth()`, see Section 2.4 → Backfilling ground truth). Each identifier may be an event/market slug, a `polymarket.com` URL, or a numeric id. `_parse_identifier()` normalizes the input, then `_resolve_identifier_to_events()` tries, in order: event-by-slug → event-by-id → market-by-slug → market-by-id, wrapping a lone market in a synthetic single-market event. Resolved events are parsed by `_parse_event_structure()` and mapped via `_map_to_question()` — identical Question construction to Modes 1 and 2 (MCQ aggregation, ground-truth extraction, tag-based domain inference). Unresolvable identifiers are reported in `CollectionResult.error_message` without aborting the batch.
 
 **`require_ground_truth` Flag**
 
@@ -354,6 +355,18 @@ wr question add-polymarket some-event-slug --dry-run
 ```
 
 It fetches exactly what you name (no quality filtering or target counts) and skips questions already present in `--db`.
+
+### Backfilling ground truth
+
+A Polymarket question added while its market is still open is stored with `ground_truth=None`. Once that market resolves, backfill the outcome:
+
+```bash
+wr question refresh-polymarket --db combined.db
+```
+
+This re-fetches each stored Polymarket question that has no ground truth (matching by its saved `market_slug`, falling back to the market id in the question id), and copies over `ground_truth` / `resolution_reasoning` / `resolution_date` for any whose market has since resolved (`PolymarketRunner.collect_by_identifiers()` with `require_ground_truth=True`). It is idempotent — questions that already have ground truth, or whose markets are still open, are left untouched.
+
+The API server runs this same backfill automatically on startup (set `POLYMARKET_REFRESH_ON_STARTUP=false` to disable). Nothing else re-resolves questions; there is no polling loop.
 
 The following are only available via the script (no CLI equivalent):
 

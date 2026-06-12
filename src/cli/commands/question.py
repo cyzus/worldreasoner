@@ -664,14 +664,14 @@ def add_polymarket(
             if hasattr(q.question_type, "value")
             else str(q.question_type),
             q.domain.value if hasattr(q.domain, "value") else str(q.domain),
-            (q.question_text[:80] + "…")
+            (q.question_text[:80] + "...")
             if len(q.question_text) > 80
             else q.question_text,
         )
     console.print(table)
 
     if dry_run:
-        console.print("[dim]Dry run — nothing saved.[/dim]")
+        console.print("[dim]Dry run - nothing saved.[/dim]")
         return
 
     saved = 0
@@ -687,3 +687,50 @@ def add_polymarket(
         f"[green]Saved {saved}[/green], skipped {skipped} duplicate(s) "
         f"into [cyan]{db_path}[/cyan]"
     )
+
+
+@app.command("refresh-polymarket")
+def refresh_polymarket(
+    db_path: str = db_option(),
+    limit: Optional[int] = typer.Option(
+        None, "--limit", "-n", help="Max unresolved questions to check"
+    ),
+):
+    """Backfill ground truth for previously-unresolved Polymarket questions.
+
+    Re-fetches each stored Polymarket question that has no ground truth yet and
+    copies the outcome over for any whose market has since resolved.
+
+    Examples:
+        wr question refresh-polymarket --db combined.db
+        wr question refresh-polymarket -n 50
+    """
+    from src.pipelines.collection import refresh_polymarket_ground_truth
+
+    db, _ = get_db_and_manager(db_path)
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+        transient=True,
+    ) as progress:
+        progress.add_task("Checking unresolved Polymarket questions...", total=None)
+        result = asyncio.run(refresh_polymarket_ground_truth(db, limit=limit))
+
+    if result.candidates == 0:
+        console.print("[dim]No unresolved Polymarket questions found.[/dim]")
+        return
+
+    console.print(
+        f"Checked [cyan]{result.candidates}[/cyan] unresolved question(s): "
+        f"[green]{result.updated} resolved[/green], "
+        f"{result.still_unresolved} still open."
+    )
+    if result.updated_ids:
+        for qid in result.updated_ids:
+            console.print(f"  [green]resolved[/green] {qid}")
+    if result.errors:
+        console.print(f"[yellow]{len(result.errors)} error(s):[/yellow]")
+        for err in result.errors[:10]:
+            console.print(f"  [yellow]-[/yellow] {err}")

@@ -14,6 +14,7 @@ from .stage_articles import (
 )
 from .stage_news_questions import NewsQuestionGenerationStage
 from .stage_quality import QuestionQualityRankingStage
+from .refresh_polymarket import refresh_polymarket_ground_truth, RefreshResult
 
 __all__ = [
     "QuestionCollectionOrchestrator",
@@ -27,4 +28,6 @@ __all__ = [
     "ArticleCollectionStage",
     "NewsQuestionGenerationStage",
     "QuestionQualityRankingStage",
+    "refresh_polymarket_ground_truth",
+    "RefreshResult",
 ]

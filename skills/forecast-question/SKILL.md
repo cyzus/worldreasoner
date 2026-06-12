@@ -88,8 +88,12 @@ uv run wr forecast run \
 ## Step 5: Evaluate (if ground truth is known)
 
 ```bash
-# Once the question has resolved, set ground truth
+# For a manual question: set ground truth by hand once it resolves
 uv run wr db update question <question_id> ground_truth true
+
+# For a Polymarket question: backfill outcomes that have resolved since ingestion
+# (the API server also does this automatically on startup)
+uv run wr question refresh-polymarket --db combined.db
 
 # Score the forecast
 uv run wr benchmark evaluate \

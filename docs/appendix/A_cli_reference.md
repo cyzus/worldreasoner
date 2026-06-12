@@ -105,11 +105,20 @@ wr question add-polymarket slug-a slug-b 12345 --dry-run
 
 # Select high-quality, domain-balanced questions for an annotation study
 wr question select --db combined.db --polymarket-n 100
+
+# Backfill ground truth for Polymarket questions that have since resolved
+wr question refresh-polymarket --db combined.db
+wr question refresh-polymarket -n 50
 ```
 
 > `add-polymarket` fetches exactly the markets you name (no quality filtering or
 > target counts) and saves them to `--db`, skipping any that already exist. Use
 > `--dry-run` to resolve and preview without saving.
+>
+> `refresh-polymarket` re-fetches stored Polymarket questions that have no ground
+> truth yet and copies the outcome over for any whose market has since resolved.
+> The API server also runs this automatically on startup (disable with
+> `POLYMARKET_REFRESH_ON_STARTUP=false`).
 
 ---
 
