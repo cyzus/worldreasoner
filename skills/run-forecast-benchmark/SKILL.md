@@ -99,3 +99,4 @@ flag applies this filter; omitting it shows unfiltered numbers.
 - **`Search index missing`**: Run `wr db build-index --db combined.db`
 - **`MCP server not running`**: Start with `uv run worldreasoner-mcp-forecast` before search/oracle conditions
 - **`0.0% accuracy`**: Likely using wrong DB — verify questions are in `combined.db`
+- **`failed to remove file ... Scripts\worldreasoner.exe ... (os error 32)` (Windows)**: A running server locks the binary so `uv run`'s sync can't reinstall. Use `uv run --no-sync wr <command>`, or stop the server first.

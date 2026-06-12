@@ -314,3 +314,4 @@ python examples/visualize_benchmarks.py
 | Missing events | Check question has evidence: `wr question show <id>` |
 | Review errors | Reset events: `wr evidence reset` |
 | Import errors | Reinstall: `uv pip install -e .` |
+| `failed to remove file ... Scripts\worldreasoner.exe ... (os error 32)` on Windows | The API server is running and locks the binary, so `uv run`'s pre-run sync can't reinstall. Run without syncing: `uv run --no-sync wr <command>`. Or stop the server first (`wr` and `worldreasoner` are separate entry points; the server is `worldreasoner.exe` plus its `mcp_forecasting_server` children). |

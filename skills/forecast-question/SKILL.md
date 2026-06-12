@@ -116,3 +116,7 @@ Available MCP tools: `get_question`, `temporal_search_articles`, `fetch_article`
 `propose_forecast_subgraph`, `submit_forecast`.
 
 See `src/api/mcp_forecasting_server.py` for full tool documentation.
+
+## Troubleshooting
+
+- **`failed to remove file ... Scripts\worldreasoner.exe ... (os error 32)` (Windows):** the API server is running and locks the binary, so `uv run`'s pre-run sync can't reinstall the project. Run the CLI without syncing — `uv run --no-sync wr <command>` — or stop the running server first. (`wr` and `worldreasoner` are separate entry points; only the server binary is locked.)
