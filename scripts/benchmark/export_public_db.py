@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Export a sanitized version of combined.db for public release.
 
+Default mode strips article full-text and forecast reasoning for the public
+GitHub release (copyright + size). Pass --with-content to retain them and
+produce a local-only full DB whose search index can be rebuilt, so the
+search/oracle benchmark conditions can be reproduced. Do NOT publish the
+--with-content output (it republishes copyrighted full article text).
+
 What is kept:
   - questions: all columns (public Polymarket questions, no PII)
   - events: all columns (extracted event graph)
@@ -29,7 +35,7 @@ import sqlite3
 from pathlib import Path
 
 
-def export_public_db(src: str, dst: str) -> None:
+def export_public_db(src: str, dst: str, with_content: bool = False) -> None:
     src_conn = sqlite3.connect(src)
     dst_conn = sqlite3.connect(dst)
     src_conn.row_factory = sqlite3.Row
@@ -78,21 +84,32 @@ def export_public_db(src: str, dst: str) -> None:
     copy_table("causal_hypotheses")
     copy_table("event_outcome_impacts")
 
-    # Articles: no content column
-    copy_table("articles", [
+    # Articles: drop full text (copyright) for the public release. With
+    # --with-content, retain content so the search index can be rebuilt and
+    # search/oracle benchmark conditions reproduced (local-only DB; not the
+    # public GitHub release asset).
+    article_cols = [
         "id", "title", "url", "source", "author", "published_date",
         "domain", "tags", "is_synthetic", "word_count", "reading_time_minutes",
         "event_ids", "collected_for_question_id", "created_at", "updated_at",
-    ])
+    ]
+    if with_content:
+        article_cols.insert(2, "content")
+    copy_table("articles", article_cols)
 
-    # Forecasts: no reasoning/searches/articles_accessed
-    copy_table("forecasts", [
+    # Forecasts: drop large LLM text for the public release. With --with-content,
+    # keep reasoning/session_id so the full DB loads through the ORM and supports
+    # live re-evaluation.
+    forecast_cols = [
         "id", "question_id", "model_name", "model_version", "mode",
         "simulated_date", "prediction", "confidence",
         "is_correct", "brier_score", "log_score",
         "evaluation_metadata", "enabled_tools",
         "created_at", "updated_at",
-    ])
+    ]
+    if with_content:
+        forecast_cols[1:1] = ["session_id", "reasoning"]
+    copy_table("forecasts", forecast_cols)
 
     # Forecast events/hypotheses: key fields only
     copy_table("forecast_events", [
@@ -123,6 +140,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--src", default="combined.db", help="Source database")
     parser.add_argument("--dst", default="worldreasoner_public.db", help="Output database")
+    parser.add_argument(
+        "--with-content",
+        action="store_true",
+        help="Retain article content and forecast reasoning so the search index can be "
+        "rebuilt and search/oracle conditions reproduced. Produces a local-only full DB; "
+        "do NOT use for the public GitHub release (republishes copyrighted full text).",
+    )
     args = parser.parse_args()
 
     src = Path(args.src)
@@ -131,4 +155,4 @@ if __name__ == "__main__":
         raise SystemExit(f"Source DB not found: {src}")
     if dst.exists():
         dst.unlink()
-    export_public_db(str(src), str(dst))
+    export_public_db(str(src), str(dst), with_content=args.with_content)

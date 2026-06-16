@@ -22,14 +22,23 @@ Key findings across six controlled agent settings:
 
 ## Dataset
 
-The benchmark database is available as a GitHub release asset (~53MB, article full-text and LLM reasoning traces stripped):
+The benchmark database is available as a GitHub release asset (~60MB, article full-text and LLM reasoning traces stripped):
 
 ```bash
 # Download
 gh release download v1.0.0 --pattern "worldreasoner_public.db"
+```
 
-# Rebuild search index after download (needed for search/oracle benchmark conditions)
-uv run wr db build-index --db worldreasoner_public.db
+The public DB ships **without article full-text** (copyright), so it reproduces the stored
+outcome scores (accuracy, Brier, log score) and the hindsight event graph, but the search
+index cannot be rebuilt from it. To reproduce the **search/oracle conditions** (which need
+live retrieval over article text), build the full local DB from `combined.db`:
+
+```bash
+# Full DB with article content + forecast reasoning (local-only; not the public release)
+uv run python scripts/benchmark/export_public_db.py \
+  --src combined.db --dst worldreasoner_full.db --with-content
+uv run wr db build-index --db worldreasoner_full.db
 ```
 
 | | |
