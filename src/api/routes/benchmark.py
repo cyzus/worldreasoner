@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 
-from src.config.settings import get_config
+from src.api.routes.database import get_current_db_path
 from src.core.llm import get_knowledge_cutoff_date
 from src.domain.evaluation.conditions import EXPERIMENT_CONDITIONS
 from src.utils.logging import logger
@@ -141,8 +141,7 @@ async def get_benchmark_result_filtered(run_id: str) -> Dict[str, Any]:
     # Load question estimated_start_time from DB
     try:
         import sqlite3
-        cfg = get_config()
-        conn = sqlite3.connect(str(cfg.database.db_path))
+        conn = sqlite3.connect(get_current_db_path())
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
             "SELECT id, estimated_start_time FROM questions"
