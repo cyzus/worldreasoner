@@ -135,7 +135,7 @@ const QuestionCard = memo(({
 
                 {/* Extended details often used in Preview */}
                 {q.ground_truth !== undefined && q.ground_truth !== null && (
-                    <div style={{ marginTop: '8px', fontSize: '0.9rem', color: '#166534', backgroundColor: '#dcfce7', padding: '4px 8px', borderRadius: '4px', border: '1px solid #bbf7d0', display: 'inline-block' }}>
+                    <div style={{ marginTop: '3px', fontSize: '0.8rem', color: '#166534', backgroundColor: '#dcfce7', padding: '1px 8px', borderRadius: '4px', border: '1px solid #bbf7d0', display: 'inline-block' }}>
                         <strong>✓ Ground Truth:</strong> <span style={{ fontWeight: 600, marginLeft: '4px' }}>
                             {String(q.ground_truth)}
                         </span>
@@ -143,7 +143,7 @@ const QuestionCard = memo(({
                 )}
 
                 {q.resolution_criteria && (
-                    <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#666' }}>
+                    <div style={{ marginTop: '4px', fontSize: '0.8rem', color: '#666' }}>
                         <strong>Criteria:</strong> <span style={{ fontStyle: 'italic' }}>{q.resolution_criteria.substring(0, 100)}{q.resolution_criteria.length > 100 ? '...' : ''}</span>
                     </div>
                 )}

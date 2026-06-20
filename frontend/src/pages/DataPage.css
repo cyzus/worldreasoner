@@ -8,14 +8,14 @@
 .data-page-tabs {
   display: flex;
   gap: 2px;
-  padding: 8px 16px 0;
+  padding: 0 16px;
   border-bottom: 1px solid #dee2e6;
   background: #fff;
   flex-shrink: 0;
 }
 
 .data-tab-btn {
-  padding: 7px 18px;
+  padding: 6px 18px;
   background: none;
   border: none;
   border-bottom: 2px solid transparent;

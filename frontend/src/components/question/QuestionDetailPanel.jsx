@@ -32,9 +32,13 @@ const QuestionDetailPanel = ({
     <div className="qdp">
       {/* Question header */}
       <div className="qdp-header">
+        <h2 className="qdp-title">{question.question_text}</h2>
         <div className="qdp-meta">
           <span className="qdp-source">{question.source}</span>
           <span className="qdp-domain">{question.domain}</span>
+          {question.difficulty != null && (
+            <span className="qdp-chip">Difficulty: {question.difficulty}</span>
+          )}
           {question.ground_truth != null && (
             <span className="qdp-gt">GT: {String(question.ground_truth)}</span>
           )}
@@ -43,8 +47,10 @@ const QuestionDetailPanel = ({
               {new Date(question.resolution_date).toLocaleDateString()}
             </span>
           )}
+          {question.forecast_count > 0 && (
+            <span className="qdp-chip">🎯 {question.forecast_count} forecasts</span>
+          )}
         </div>
-        <h2 className="qdp-title">{question.question_text}</h2>
       </div>
 
       {/* Sub-tab bar */}

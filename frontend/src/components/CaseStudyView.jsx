@@ -8,19 +8,6 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import './CaseStudyView.css'
 
-const formatDate = (value) => {
-  if (!value) return 'N/A'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return String(value)
-  return parsed.toLocaleDateString()
-}
-
-const formatValue = (value) => {
-  if (value === null || value === undefined || value === '') return 'N/A'
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
-  return String(value)
-}
-
 function CaseStudyView({ graphData, selectedQuestion }) {
   const {
     articles,
@@ -43,20 +30,6 @@ function CaseStudyView({ graphData, selectedQuestion }) {
 
   return (
     <div className="case-study-view">
-      <section className="cs-section cs-section-panel cs-question-overview">
-        <div className="cs-readable">
-          <h2 className="cs-question-title">{selectedQuestion.question_text}</h2>
-          <div className="cs-meta-grid">
-            <span className="cs-meta-chip"><strong>Source:</strong> {formatValue(selectedQuestion.source)}</span>
-            <span className="cs-meta-chip"><strong>Domain:</strong> {formatValue(selectedQuestion.domain)}</span>
-            <span className="cs-meta-chip"><strong>Difficulty:</strong> {formatValue(selectedQuestion.difficulty)}</span>
-            <span className="cs-meta-chip"><strong>Ground Truth:</strong> {formatValue(selectedQuestion.ground_truth)}</span>
-            <span className="cs-meta-chip"><strong>Resolution:</strong> {formatDate(selectedQuestion.resolution_date)}</span>
-            <span className="cs-meta-chip"><strong>Forecasts:</strong> {formatValue(selectedQuestion.forecast_count)}</span>
-          </div>
-        </div>
-      </section>
-
       {hasExplanation && (
         <section className="cs-section cs-section-panel">
           <div className="cs-readable">

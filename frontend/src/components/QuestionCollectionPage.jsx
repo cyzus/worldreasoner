@@ -46,13 +46,6 @@ function QuestionCollectionPage({
 
   return (
     <div className="collection-page page-container">
-      <div className="collection-header">
-        <h2>🔍 Question Collection</h2>
-        <p className="collection-subtitle">
-          Fetch questions from various sources and manually select which ones to add to your database
-        </p>
-      </div>
-
       {/* Source tabs */}
       <div className="source-tabs">
         <button

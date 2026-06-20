@@ -9,7 +9,7 @@
 
 /* ── Header ─────────────────────────────────────────── */
 .qdp-header {
-  padding: 14px 20px 10px;
+  padding: 8px 20px;
   border-bottom: 1px solid #dee2e6;
   flex-shrink: 0;
   background: #fff;
@@ -17,35 +17,42 @@
 
 .qdp-meta {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
-  margin-bottom: 6px;
+  margin-top: 5px;
   flex-wrap: wrap;
 }
 
 .qdp-source,
 .qdp-domain,
 .qdp-gt,
-.qdp-date {
+.qdp-date,
+.qdp-chip {
   font-size: 0.72rem;
   padding: 2px 8px;
   border-radius: 10px;
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.qdp-source,
+.qdp-domain,
+.qdp-gt {
+  text-transform: uppercase;
 }
 
 .qdp-source { background: #e0e0e0; color: #222; }
 .qdp-domain { background: #f0f0f0; color: #333; }
-.qdp-gt     { background: #f5f5f5; color: #555; }
+.qdp-gt     { background: #dcfce7; color: #166534; }
 .qdp-date   { background: #f8f9fa; color: #6c757d; border: 1px solid #dee2e6; }
+.qdp-chip   { background: #f5f5f5; color: #555; }
 
 .qdp-title {
   margin: 0;
   font-size: 1rem;
   font-weight: 600;
   color: #212529;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 /* ── Sub-tab bar ─────────────────────────────────────── */

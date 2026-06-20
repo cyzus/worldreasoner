@@ -1006,35 +1006,6 @@
   max-width: 78ch;
 }
 
-.cs-question-overview {
-  background: linear-gradient(180deg, #ffffff 0%, #fbfcfd 100%);
-}
-
-.cs-question-title {
-  margin: 0 0 12px 0;
-  font-size: 1.45rem;
-  line-height: 1.35;
-  color: #1f2933;
-}
-
-.cs-meta-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.cs-meta-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid #d9e2ec;
-  background: #f8fafc;
-  color: #334e68;
-  font-size: 0.8rem;
-}
-
 .cs-section-panel {
   margin-bottom: 16px;
 }

@@ -2,31 +2,6 @@
   /* No layout properties needed */
 }
 
-.collection-header {
-  padding: 6px 20px;
-  background: white;
-  border-bottom: 1px solid #dee2e6;
-  flex-shrink: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.collection-header h2 {
-  font-size: 0.95rem;
-  margin: 0;
-  color: #333;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.collection-subtitle {
-  font-size: 0.78rem;
-  color: #888;
-  margin: 0;
-}
-
 /* Source tabs */
 .source-tabs {
   display: flex;
@@ -39,7 +14,7 @@
 }
 
 .source-tab {
-  padding: 10px 20px;
+  padding: 6px 18px;
   background: none;
   border: none;
   color: #666;
@@ -48,7 +23,7 @@
   border-bottom: 3px solid transparent;
   transition: all 0.2s;
   position: relative;
-  top: 2px;
+  top: 1px;
 }
 
 .source-tab:hover {
@@ -86,9 +61,6 @@
 /* Global page-sidebar and page-main handle the layout now */
 
 @media (max-width: 768px) {
-  .collection-header {
-    padding: 8px 12px 4px;
-  }
   .source-tabs {
     padding: 0 8px;
   }

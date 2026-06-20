@@ -22,7 +22,6 @@ function ManualQuestionForm({ onQuestionCreated }) {
 
   // Form state
   const [formData, setFormData] = useState({
-    id: '',
     question_text: '',
     question_type: 'binary',
     domain: 'general',
@@ -72,9 +71,6 @@ function ManualQuestionForm({ onQuestionCreated }) {
     const newErrors = {}
 
     // Required fields
-    if (!formData.id.trim()) {
-      newErrors.id = 'ID is required'
-    }
     if (!formData.question_text.trim()) {
       newErrors.question_text = 'Question text is required'
     } else if (formData.question_text.trim().length < 20) {
@@ -123,9 +119,12 @@ function ManualQuestionForm({ onQuestionCreated }) {
     setLoading(true)
 
     try {
+      // Auto-generate a unique question ID
+      const generatedId = `q_manual_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+
       // Prepare question data
       const questionData = {
-        id: formData.id.trim(),
+        id: generatedId,
         question_text: formData.question_text.trim(),
         question_type: formData.question_type,
         domain: formData.domain,
@@ -191,7 +190,6 @@ function ManualQuestionForm({ onQuestionCreated }) {
 
         // Reset form
         setFormData({
-          id: '',
           question_text: '',
           question_type: 'binary',
           domain: 'general',
@@ -224,16 +222,6 @@ function ManualQuestionForm({ onQuestionCreated }) {
     }
   }
 
-  /**
-   * Auto-generate ID
-   */
-  const generateId = () => {
-    const timestamp = Date.now()
-    const random = Math.random().toString(36).substring(2, 7)
-    const id = `q_manual_${timestamp}_${random}`
-    setFormData(prev => ({ ...prev, id }))
-  }
-
   return (
     <div className="manual-question-form">
       <div className="form-header">
@@ -256,36 +244,8 @@ function ManualQuestionForm({ onQuestionCreated }) {
       )}
 
       <form onSubmit={handleSubmit} className="question-form">
-        {/* ID */}
-        <div className="form-group">
-          <label htmlFor="id">
-            Question ID <span className="required">*</span>
-          </label>
-          <div className="input-with-button">
-            <input
-              type="text"
-              id="id"
-              name="id"
-              value={formData.id}
-              onChange={handleChange}
-              placeholder="e.g., q_manual_2024_001"
-              className={errors.id ? 'error' : ''}
-              disabled={loading}
-            />
-            <button
-              type="button"
-              onClick={generateId}
-              className="btn-generate"
-              disabled={loading}
-            >
-              Generate
-            </button>
-          </div>
-          {errors.id && <span className="error-text">{errors.id}</span>}
-        </div>
-
         {/* Question Text */}
-        <div className="form-group">
+        <div className="form-group full-width">
           <label htmlFor="question_text">
             Question Text <span className="required">*</span>
           </label>
@@ -473,7 +433,7 @@ function ManualQuestionForm({ onQuestionCreated }) {
         )}
 
         {/* Resolution Criteria */}
-        <div className="form-group">
+        <div className="form-group full-width">
           <label htmlFor="resolution_criteria">Resolution Criteria (optional)</label>
           <textarea
             id="resolution_criteria"
@@ -488,7 +448,7 @@ function ManualQuestionForm({ onQuestionCreated }) {
         </div>
 
         {/* Context */}
-        <div className="form-group">
+        <div className="form-group full-width">
           <label htmlFor="context">Context (optional)</label>
           <textarea
             id="context"

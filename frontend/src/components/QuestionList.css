@@ -15,7 +15,7 @@
 .pipeline-status-filter {
   display: flex;
   gap: 4px;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
   flex-wrap: wrap;
 }
 
@@ -78,7 +78,7 @@
   border: 1px solid #d0d0d0;
   border-radius: 6px;
   font-size: 12px;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
   box-sizing: border-box;
   transition: border-color 0.2s;
 }
@@ -91,8 +91,12 @@
 .filter-row {
   display: flex;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 5px;
   min-width: 0;
+}
+
+.filter-row:last-child {
+  margin-bottom: 0;
 }
 
 .filter-select {
@@ -136,8 +140,8 @@
 }
 
 .question-list-item {
-  padding: 8px 10px;
-  margin-bottom: 4px;
+  padding: 5px 10px;
+  margin-bottom: 3px;
   border: 1px solid #e0e0e0;
   border-radius: 8px;
   cursor: pointer;
@@ -181,7 +185,7 @@
   justify-content: flex-start;
   flex-wrap: wrap;
   align-items: flex-start;
-  margin-bottom: 8px;
+  margin-bottom: 3px;
   min-width: 0;
   gap: 6px;
 }
@@ -195,9 +199,9 @@
 }
 
 .badge {
-  padding: 3px 8px;
-  border-radius: 12px;
-  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 10px;
   font-weight: 500;
   text-transform: uppercase;
 }
@@ -231,9 +235,9 @@
 
 .question-item-text {
   font-size: 12px;
-  line-height: 1.3;
+  line-height: 1.25;
   color: #333;
-  margin-bottom: 3px;
+  margin-bottom: 0;
   overflow-wrap: break-word;
   word-break: break-word;
   min-width: 0;
@@ -242,9 +246,10 @@
 .question-item-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  font-size: 12px;
+  gap: 2px 10px;
+  font-size: 11px;
   color: #666;
+  margin-top: 3px;
 }
 
 .meta-item {
@@ -307,14 +312,14 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 12px 20px;
+  padding: 6px 12px;
   border-bottom: 1px solid #e0e0e0;
   background: #f5f5f5;
   align-items: center;
 }
 
 .selection-btn {
-  padding: 6px 12px;
+  padding: 5px 12px;
   border: 1px solid #d0d0d0;
   border-radius: 6px;
   background: white;
@@ -336,7 +341,7 @@
   font-size: 12px;
   font-weight: 600;
   color: #111;
-  padding: 6px 12px;
+  padding: 5px 12px;
   background: white;
   border: 1px solid #111;
   border-radius: 6px;
@@ -471,17 +476,19 @@
 
 /* Options display */
 .question-item-options {
-  margin-top: 8px;
+  margin-top: 3px;
   font-size: 0.85rem;
   color: #666;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 6px;
 }
 
 .options-label {
   font-weight: 500;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   text-transform: uppercase;
   color: #888;
 }
@@ -489,15 +496,15 @@
 .options-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
 }
 
 .option-badge {
   background-color: #f5f5f5;
   border: 1px solid #dce4eb;
   border-radius: 4px;
-  padding: 2px 6px;
-  font-size: 0.8rem;
+  padding: 1px 6px;
+  font-size: 0.78rem;
   color: #334155;
   white-space: nowrap;
   max-width: 200px;

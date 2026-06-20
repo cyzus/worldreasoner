@@ -28,10 +28,6 @@ const PipelinePage = ({ questions, onJobComplete, databasePath }) => {
 
   return (
     <div className="pipeline-page page-container">
-      <div className="pipeline-page-header page-header">
-        <h2>Evidence Automation</h2>
-      </div>
-
       <div className="page-content" style={{ display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           {/* Left Sidebar: Pipeline Controls + Jobs */}
