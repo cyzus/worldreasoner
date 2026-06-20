@@ -144,6 +144,16 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
                 ),
             )
 
+            # forward() returns an ArticleOutput even when it could not store
+            # the article (web fetch failed, content too short, duplicate).
+            # Only count it as collected if it was actually stored.
+            status = getattr(summary, "status", "") or ""
+            if status.startswith("error") or status.startswith("duplicate"):
+                logger.info(
+                    f"[RSS] Not collected ({status}): {item.get('link', 'unknown')}"
+                )
+                return False
+
             logger.debug(f"[RSS] Collected: {summary}")
             return True
 
