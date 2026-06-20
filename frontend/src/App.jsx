@@ -83,45 +83,41 @@ function App() {
       <header className="app-header">
         <div className="header-left">
           <h1>WorldReasoner</h1>
-          <div className="header-info-bar">
-            <DatabaseDropdown onDatabaseChange={handleDatabaseChange} />
-            {statistics && (
-              <>
-                <div className="header-divider"></div>
-                <div className="stats-bar">
-                  <span>{statistics.total_nodes} events</span>
-                  <span>{statistics.total_edges} causal links</span>
-                  <span>Avg degree: {statistics.average_out_degree?.toFixed(2)}</span>
-                </div>
-              </>
-            )}
-          </div>
+          <DatabaseDropdown onDatabaseChange={handleDatabaseChange} />
+          <div className="header-divider"></div>
+          <nav className="top-tabs">
+            <button
+              className={`top-tab-btn ${leftPanelTab === 'questions' ? 'active' : ''}`}
+              onClick={() => setLeftPanelTab('questions')}
+            >
+              Questions
+            </button>
+            <button
+              className={`top-tab-btn ${leftPanelTab === 'data' ? 'active' : ''}`}
+              onClick={() => setLeftPanelTab('data')}
+            >
+              Data
+            </button>
+            <button
+              className={`top-tab-btn ${leftPanelTab === 'benchmark' ? 'active' : ''}`}
+              onClick={() => setLeftPanelTab('benchmark')}
+            >
+              Benchmark
+            </button>
+          </nav>
         </div>
-        <div className="header-right" />
+        <div className="stats-bar">
+          <span>{questions.length} questions</span>
+          {statistics && (
+            <>
+              <span>{statistics.total_nodes} events</span>
+              <span>{statistics.total_articles ?? 0} articles</span>
+            </>
+          )}
+        </div>
       </header>
 
       <div className="app-content">
-        <div className="top-tabs">
-          <button
-            className={`top-tab-btn ${leftPanelTab === 'questions' ? 'active' : ''}`}
-            onClick={() => setLeftPanelTab('questions')}
-          >
-            Questions
-          </button>
-          <button
-            className={`top-tab-btn ${leftPanelTab === 'data' ? 'active' : ''}`}
-            onClick={() => setLeftPanelTab('data')}
-          >
-            Data
-          </button>
-          <button
-            className={`top-tab-btn ${leftPanelTab === 'benchmark' ? 'active' : ''}`}
-            onClick={() => setLeftPanelTab('benchmark')}
-          >
-            Benchmark
-          </button>
-        </div>
-
         <Suspense fallback={<div className="loading-fallback">Loading...</div>}>
           {leftPanelTab === 'questions' ? (
             <QuestionsPage

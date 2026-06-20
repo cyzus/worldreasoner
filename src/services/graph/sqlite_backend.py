@@ -11,6 +11,7 @@ from collections import deque
 
 from src.core.database import GenericDatabase
 from src.domain.models import Event, CausalHypothesis
+from src.domain.models.article import Article
 from src.domain.models.event_outcome_impact import EventOutcomeImpact
 from src.utils.logging import logger
 from .interface import (
@@ -235,6 +236,12 @@ class SQLiteGraphService(GraphService):
         events = self.db.get_many(Event, filters={})
         hypotheses = self._get_hypotheses()
 
+        try:
+            self.db.create_table(Article)
+            total_articles = len(self.db.get_many(Article))
+        except Exception:
+            total_articles = 0
+
         # Count hypotheses by type
         edge_type_counts = {}
         for h in hypotheses:
@@ -262,6 +269,7 @@ class SQLiteGraphService(GraphService):
         return {
             "total_nodes": len(events),
             "total_edges": len(hypotheses),
+            "total_articles": total_articles,
             "node_type_counts": node_types,
             "edge_type_counts": edge_type_counts,
             "average_out_degree": len(hypotheses) / len(events) if events else 0,
