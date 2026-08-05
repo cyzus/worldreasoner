@@ -1429,6 +1429,11 @@ def main() -> None:
         action="store_true",
         help="Exclude hindsight events with review_status='rejected' (annotation-filtered graph).",
     )
+    parser.add_argument(
+        "--no-writeback",
+        action="store_true",
+        help="Write output files only; do not update forecasts.evaluation_metadata in the DB.",
+    )
     parser.add_argument("--condition", nargs="*", default=None)
     parser.add_argument(
         "--model",
@@ -1536,6 +1541,7 @@ def main() -> None:
         "models": args.model,
         "filter_knowledge_leakage": args.filter_knowledge_leakage,
         "exclude_annotation_rejected": args.exclude_annotation_rejected,
+        "writeback": not args.no_writeback,
         "knowledge_leakage_excluded": knowledge_leakage_excluded,
         "overall": aggregate(rows),
         "by_condition": {},
@@ -1582,6 +1588,10 @@ def main() -> None:
     print(f"latest={output_dir / f'{latest_stem}.md'}")
     print(f"overall_event_f1={summary['overall']['event_f1']}")
     print(f"overall_edge_recall={summary['overall']['edge_recall']}")
+
+    if args.no_writeback:
+        print("skipped DB writeback (--no-writeback)")
+        return
 
     # Write reasoning metrics back into forecasts.evaluation_metadata so the
     # REST API (/api/questions/{id}/forecasts, /api/evaluation/report) can
