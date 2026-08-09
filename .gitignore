@@ -223,6 +223,7 @@ temporal_analysis/
 # Test artifacts
 test-dbs/
 test-output/
+/tmp/
 config/collection_goal.yaml
 logs/
 
@@ -239,6 +240,12 @@ meeting_*.md
 roadmap.md
 *_cleanup_plan.md
 Chi_slide.pdf
+/annotation/
+/research/planning/
+/research/rebuttal/
+/research/executive/
+/research/literature/
+/research/presentations/
 annotation_*.tsv
 annotation_*.md
 annotation_pilot_summary.md
