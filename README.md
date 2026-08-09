@@ -138,6 +138,8 @@ worldreasoner/
 ├── scripts/             # Paper reproduction scripts
 ├── experiments/         # Saved benchmark runs and evaluation outputs
 ├── config/              # YAML config + LLM cutoff dates
+├── data/                # Local versioned datasets, manifests, and selections
+├── research/            # Planning and private paper-development artifacts
 ├── include_ids.txt      # 120 canonical benchmark question IDs
 └── docs/                # Extended documentation
 ```
@@ -151,6 +153,7 @@ wr evidence     evidence pipeline (run, rerun, auto-review)
 wr graph        causal graph building and audit
 wr forecast     run individual forecasts
 wr benchmark    benchmark runner and evaluator (run, evaluate, status, conditions)
+wr dataset      versioned dataset creation and evidence-quality passes
 ```
 
 Run `wr <group> --help` for options on any group.

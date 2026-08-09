@@ -1,7 +1,7 @@
 """Article collection tool using web search for scraping."""
 
 import hashlib
-from typing import Optional
+from typing import Optional, Protocol
 from urllib.parse import urlparse
 
 from src.config import get_config
@@ -14,6 +14,13 @@ from src.tools.base.schema_helper import pydantic_to_output_schema
 from src.tools.collectors.web_fetch import WebFetchTool
 from src.tools.base.base import CollectorAwareTool
 from src.tools.base.output_models import ArticleOutput
+
+
+class ArticleQualityProcessor(Protocol):
+    """Optional post-collection hook for versioned quality processing."""
+
+    def process_article(self, article: Article) -> object:
+        """Persist derived quality records for a collected article."""
 
 
 class ArticleCollectorTool(CollectorAwareTool[Article]):
@@ -77,6 +84,7 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         db_path: str = None,
         collector=None,
         question_id: Optional[str] = None,
+        quality_processor: Optional[ArticleQualityProcessor] = None,
     ):
         """Initialize the article collector.
 
@@ -86,12 +94,14 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
             collector: Optional ResultCollector[Article] for storing results.
                       If provided, articles are added to the collector instead of internal storage.
             question_id: Question ID for provenance tracking (sets collected_for_question_id)
+            quality_processor: Optional deterministic v2 quality-pass hook
         """
         super().__init__(collector)
         self.config = None
         self.seen_hashes = set()  # For in-memory deduplication within this run
         self.web_visitor = WebFetchTool()  # Internal tool for fetching content
         self.question_id = question_id  # Provenance context
+        self.quality_processor = quality_processor
 
         logger.info(
             f"ArticleCollectorTool initialized with collector: {collector is not None}, question_id: {question_id}"
@@ -309,6 +319,10 @@ class ArticleCollectorTool(CollectorAwareTool[Article]):
         if self.db:
             self.db.save(Article, article)
             logger.debug(f"Article {article.id} persisted to database")
+
+        if self.quality_processor is not None:
+            self.quality_processor.process_article(article)
+            logger.debug(f"Article {article.id} passed deterministic quality checks")
 
         # Return ArticleOutput Pydantic model with summary metadata
         # Note: We don't include full content to save tokens

@@ -16,7 +16,7 @@ Usage:
 import typer
 from rich.console import Console
 
-from src.cli.commands import benchmark, db, evidence, forecast, graph, question
+from src.cli.commands import benchmark, dataset, db, evidence, forecast, graph, question
 from src.core.database import GenericDatabase
 from src.config import get_config
 
@@ -39,6 +39,7 @@ app.add_typer(evidence.app, name="evidence", help="Evidence pipeline commands")
 app.add_typer(forecast.app, name="forecast", help="Forecasting commands")
 app.add_typer(graph.app, name="graph", help="Graph building and audit commands")
 app.add_typer(benchmark.app, name="benchmark", help="LLM benchmark research commands")
+app.add_typer(dataset.app, name="dataset", help="Versioned dataset quality commands")
 
 
 @app.callback()
