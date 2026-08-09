@@ -1,0 +1,85 @@
+{
+  "annotation_version": null,
+  "code_dirty": true,
+  "code_revision": "5505f13a5a3a76edc274fd010d8cc9fa4d8b1640",
+  "code_revision_kind": "git_head_base",
+  "counts": {
+    "archived_forecast_events": 642,
+    "archived_forecast_hypotheses": 478,
+    "archived_forecasts": 215,
+    "article_embeddings": 0,
+    "article_quality_records": 3189,
+    "articles": 14364,
+    "articles_fts": 15626,
+    "articles_fts_config": 1,
+    "articles_fts_content": 15626,
+    "articles_fts_data": 27299,
+    "articles_fts_docsize": 15626,
+    "articles_fts_idx": 22847,
+    "audit_article_flags": 2250,
+    "audit_cleaning_actions": 617,
+    "audit_event_flags": 170,
+    "audit_forecast_flags": 13029,
+    "audit_impact_flags": 2801,
+    "audit_question_flags": 593,
+    "causal_hypotheses": 9858,
+    "dataset_repair_records": 3,
+    "event_evidence_extractions": 3,
+    "event_evidence_verifications": 3,
+    "event_outcome_impacts": 9828,
+    "events": 9149,
+    "forecast_events": 41131,
+    "forecast_hypotheses": 28141,
+    "forecasts": 11566,
+    "questions": 345
+  },
+  "created_at": "2026-08-06T16:27:29.839575+00:00",
+  "database_file": "worldreasoner.db",
+  "database_sha256": "915a49b1576a8d2b9fd283590a7a3c6fd803c73da83463a4cd6c85b7ddb35a3e",
+  "dataset_version": "v2.0",
+  "llm_passes": [
+    {
+      "completed_records": 2,
+      "model": "gemini/gemini-3.1-pro-preview",
+      "pass": "article_markdown_cleanup",
+      "prompt_version": "article-cleaner-v1"
+    },
+    {
+      "completed_model_calls": 3,
+      "model": "gemini/gemini-3.1-pro-preview",
+      "pass": "event_evidence_extraction",
+      "prompt_version": "event-evidence-extractor-v1",
+      "unique_event_source_pairs": 2
+    },
+    {
+      "completed_model_calls": 2,
+      "model": "gemini/gemini-3.5-flash",
+      "pass": "event_evidence_verification",
+      "prompt_version": "event-evidence-verifier-v1",
+      "unique_event_source_pairs": 2
+    },
+    {
+      "blocked_records": 1,
+      "model": "deterministic/traceability-gate",
+      "pass": "traceability_gate",
+      "versions": [
+        "markdown-visible-v1",
+        "markdown-visible-v2"
+      ]
+    }
+  ],
+  "manifest_schema_version": "2",
+  "metric_eligibility_policy": null,
+  "operations": [
+    "initialized v2.0 from immutable v1",
+    "normalized 3189 event-linked article snapshots with article-normalizer-v1",
+    "flagged 84 exact duplicate article snapshots",
+    "live cleanup smoke test on 2 event-linked articles",
+    "live two-model grounding smoke test on 2 event-source pairs",
+    "added markdown-visible-v2 traceability and cleanup fidelity checks"
+  ],
+  "parent_version": "v1",
+  "question_id_sha256": "5c7dde426ec4bb8cb1588ca2545f0df80fed553ed313af30e022fcd86f0886ab",
+  "source_database": "data/versions/v1/worldreasoner.db",
+  "updated_at": "2026-08-09T11:17:21.334570+00:00"
+}
