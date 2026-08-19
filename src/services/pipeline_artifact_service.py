@@ -9,6 +9,8 @@ from src.domain.models import (
     AliasEntityKind,
     AliasScopeType,
     ApprovedEvidenceDossier,
+    Article,
+    ArticleQualityRecord,
     ArtifactStatus,
     ExplanationArtifact,
     GraphRevision,
@@ -45,6 +47,7 @@ class PipelineArtifactService(ServiceBase):
         StageAttempt,
         SearchDossier,
         ApprovedEvidenceDossier,
+        ArticleQualityRecord,
         ExplanationArtifact,
         GraphRevision,
         AgentAlias,
@@ -57,7 +60,7 @@ class PipelineArtifactService(ServiceBase):
 
     def start_run(
         self,
-        question_id: str,
+        question_id: Optional[str],
         dataset_version: str,
         workflow_version: str,
         model_configuration: Optional[Dict[str, object]] = None,
@@ -76,6 +79,150 @@ class PipelineArtifactService(ServiceBase):
         )
         self.db.save(PipelineRun, run)
         return run
+
+    def bind_question(self, run_id: str, question_id: str) -> PipelineRun:
+        """Attach a generated question to a run that began before question creation."""
+        run = self._require_run(run_id)
+        if run.question_id and run.question_id != question_id:
+            raise PipelineStateError(
+                f"Pipeline run '{run_id}' is already bound to {run.question_id}"
+            )
+        run.question_id = question_id
+        self.db.save(PipelineRun, run)
+        return run
+
+    def complete_run(self, run_id: str) -> PipelineRun:
+        """Complete a run only when it has no unfinished or failed attempts."""
+        run = self._require_run(run_id)
+        attempts = self.db.get_many(StageAttempt, filters={"run_id": run_id})
+        latest: Dict[str, StageAttempt] = {}
+        for item in attempts:
+            previous = latest.get(item.stage_name)
+            if previous is None or item.attempt_number > previous.attempt_number:
+                latest[item.stage_name] = item
+        current_attempts = list(latest.values())
+        running = [
+            item.stage_name
+            for item in current_attempts
+            if item.status == StageAttemptStatus.RUNNING
+        ]
+        failed = [
+            item.stage_name
+            for item in current_attempts
+            if item.status
+            in {
+                StageAttemptStatus.TERMINAL_FAILURE,
+                StageAttemptStatus.NEEDS_REVIEW,
+            }
+        ]
+        if running or failed:
+            raise PipelineStateError(
+                "Cannot complete run with unfinished or failed stages: "
+                + ", ".join(running + failed)
+            )
+        if run.question_id is None:
+            raise PipelineStateError(
+                "Cannot complete a run without a generated question"
+            )
+        run.status = PipelineRunStatus.COMPLETE
+        run.current_stage = "complete"
+        run.completed_at = datetime.now(timezone.utc)
+        self.db.save(PipelineRun, run)
+        return run
+
+    def reopen_run(self, run_id: str, stage_name: str) -> PipelineRun:
+        """Reopen a failed or review run for an explicit resumable stage."""
+        run = self._require_run(run_id)
+        if run.status == PipelineRunStatus.COMPLETE:
+            raise PipelineStateError("A completed run cannot be reopened")
+        run.status = PipelineRunStatus.RUNNING
+        run.current_stage = stage_name
+        run.error_summary = None
+        run.completed_at = None
+        self.db.save(PipelineRun, run)
+        return run
+
+    def save_approved_dossier(
+        self, dossier: ApprovedEvidenceDossier
+    ) -> ApprovedEvidenceDossier:
+        """Validate and persist the closed evidence set for downstream agents."""
+        if self.db.get(ApprovedEvidenceDossier, dossier.id) is not None:
+            raise PipelineStateError(
+                f"Approved evidence dossier already exists: {dossier.id}"
+            )
+        errors: List[str] = []
+        if dossier.readiness_decision != "ready":
+            errors.append("Approved evidence dossier readiness decision is not ready")
+        if not dossier.article_version_ids:
+            errors.append("Approved evidence dossier contains no article versions")
+        for version_id in dossier.article_version_ids:
+            record = self.db.get(ArticleQualityRecord, version_id)
+            if record is None:
+                errors.append(f"Unknown article-quality version: {version_id}")
+                continue
+            if record.dataset_version != dossier.dataset_version:
+                errors.append(
+                    f"Article version {version_id} belongs to another dataset version"
+                )
+            if record.status.value != "complete" or not record.clean_markdown:
+                errors.append(
+                    f"Article version {version_id} is not approved and cleaned"
+                )
+        if errors:
+            raise ArtifactValidationError(errors)
+        dossier.status = ArtifactStatus.VALIDATED
+        self.db.save(ApprovedEvidenceDossier, dossier)
+        return dossier
+
+    def read_approved_evidence(
+        self,
+        run_id: str,
+        dossier_id: str,
+        article_alias: str,
+    ) -> Dict[str, object]:
+        """Resolve an alias and return only its approved cleaned article version."""
+        dossier = self.db.get(ApprovedEvidenceDossier, dossier_id)
+        if dossier is None or dossier.run_id != run_id:
+            raise AliasResolutionError(f"Unknown evidence dossier: {dossier_id}")
+        if dossier.status != ArtifactStatus.VALIDATED:
+            raise ArtifactValidationError(["Evidence dossier is not validated"])
+        version_id = self.resolve_alias(
+            run_id,
+            dossier_id,
+            article_alias,
+            AliasEntityKind.ARTICLE,
+        )
+        if version_id not in dossier.article_version_ids:
+            raise AliasResolutionError(
+                f"Alias '{article_alias}' resolves outside dossier '{dossier_id}'"
+            )
+        record = self.db.get(ArticleQualityRecord, version_id)
+        if (
+            record is None
+            or record.status.value != "complete"
+            or not record.clean_markdown
+        ):
+            raise ArtifactValidationError(
+                [f"Resolved article version is not approved: {version_id}"]
+            )
+        article = self.db.get(Article, record.article_id)
+        if article is None:
+            raise ArtifactValidationError(
+                [f"Approved article version has no source article: {record.article_id}"]
+            )
+        return {
+            "alias": article_alias,
+            "article_version_id": record.id,
+            "article_id": article.id,
+            "title": article.title,
+            "source": article.source,
+            "published_date": article.published_date.isoformat()
+            if article.published_date
+            else None,
+            "url": article.url,
+            "content_hash": record.normalized_content_hash,
+            "clean_markdown": record.clean_markdown,
+        }
 
     def start_stage_attempt(
         self,
@@ -238,7 +385,8 @@ class PipelineArtifactService(ServiceBase):
         if dossier is None:
             raise ArtifactValidationError(
                 [
-                    f"Unknown approved evidence dossier: {explanation.evidence_dossier_id}"
+                    "Unknown approved evidence dossier: "
+                    f"{explanation.evidence_dossier_id}"
                 ]
             )
         errors: List[str] = []
@@ -287,7 +435,8 @@ class PipelineArtifactService(ServiceBase):
                     )
                 if reference.article_version_id not in approved_versions:
                     errors.append(
-                        f"Event {event.alias} cites an article version outside the dossier"
+                        f"Event {event.alias} cites an article version outside "
+                        "the dossier"
                     )
 
         if errors:

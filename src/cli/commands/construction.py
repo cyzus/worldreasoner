@@ -1,0 +1,93 @@
+"""Commands for the versioned benchmark-construction workflow."""
+
+import asyncio
+import json
+import sys
+from pathlib import Path
+from typing import List
+
+import typer
+from rich.console import Console
+
+from src.pipelines.construction.orchestrator import ConstructionPipeline
+from src.pipelines.construction.sdk_runtime import AgentsSDKRuntime
+
+app = typer.Typer(no_args_is_help=True)
+console = Console()
+
+
+@app.command("run")
+def run_construction(
+    topic: str = typer.Option(
+        ...,
+        "--topic",
+        help="Resolved event topic used to generate the question.",
+    ),
+    db_path: Path = typer.Option(
+        ...,
+        "--db",
+        help="Path to a new SQLite database for this construction run.",
+    ),
+    model: str = typer.Option(
+        "gemini/gemini-3.1-pro-preview",
+        "--model",
+        help="LiteLLM model identifier used by all bounded specialists.",
+    ),
+    dataset_version: str = typer.Option("v2-live", "--dataset-version"),
+    max_search_results: int = typer.Option(5, min=1, max=10),
+    min_approved_articles: int = typer.Option(3, min=1, max=10),
+    cleaner_concurrency: int = typer.Option(3, min=1, max=8),
+    allow_model_content: bool = typer.Option(
+        False,
+        "--allow-model-content",
+        help="Acknowledge that fetched article snapshots are sent to the model.",
+    ),
+    source_url: List[str] = typer.Option(
+        [],
+        "--source-url",
+        help="Repeatable live source URL used for seeding and evidence recovery.",
+    ),
+) -> None:
+    """Build one question, evidence dossier, explanation, and graph end to end."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="replace")
+    if db_path.exists() and db_path.stat().st_size > 0:
+        raise typer.BadParameter(
+            f"Refusing to use non-empty database: {db_path}. Choose a new path."
+        )
+    if not allow_model_content:
+        raise typer.BadParameter(
+            "Pass --allow-model-content to permit article cleanup and synthesis."
+        )
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    runtime = AgentsSDKRuntime(model_id=model)
+    pipeline = ConstructionPipeline(
+        db_path=db_path,
+        runtime=runtime,
+        dataset_version=dataset_version,
+        max_search_results=max_search_results,
+        min_approved_articles=min_approved_articles,
+        cleaner_concurrency=cleaner_concurrency,
+        source_urls=source_url,
+    )
+    result = asyncio.run(pipeline.run(topic))
+    console.print(json.dumps(result.model_dump(), indent=2))
+
+
+@app.command("resume-graph")
+def resume_graph(
+    db_path: Path = typer.Option(..., "--db", help="Existing construction database."),
+    run_id: str = typer.Option(..., "--run-id"),
+    model: str = typer.Option(
+        "gemini/gemini-3.1-pro-preview", "--model"
+    ),
+) -> None:
+    """Resume graph construction from a validated dossier and explanation."""
+    if not db_path.exists():
+        raise typer.BadParameter(f"Database does not exist: {db_path}")
+    runtime = AgentsSDKRuntime(model_id=model)
+    pipeline = ConstructionPipeline(db_path=db_path, runtime=runtime)
+    result = asyncio.run(pipeline.resume_graph(run_id))
+    console.print(json.dumps(result.model_dump(), indent=2))

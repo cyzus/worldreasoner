@@ -74,7 +74,7 @@ class PipelineRun(BaseModel):
     """Persistent state and provenance for one construction workflow."""
 
     id: str = Field(default_factory=lambda: str(uuid4()))
-    question_id: str
+    question_id: Optional[str] = None
     dataset_version: str
     workflow_version: str
     status: PipelineRunStatus = PipelineRunStatus.PENDING
@@ -212,6 +212,8 @@ class GraphNodeProposal(BaseModel):
     alias: str
     title: str
     description: str
+    domain: str
+    event_type: str = "milestone"
     occurred_date: Optional[datetime] = None
     evidence_aliases: List[str] = Field(default_factory=list)
     is_outcome: bool = False
@@ -226,6 +228,7 @@ class GraphEdgeProposal(BaseModel):
     reasoning: str
     strength: float = Field(ge=0.0, le=1.0)
     confidence: float = Field(ge=0.0, le=1.0)
+    evidence_aliases: List[str] = Field(default_factory=list)
 
 
 class OutcomeImpactProposal(BaseModel):
@@ -235,7 +238,9 @@ class OutcomeImpactProposal(BaseModel):
     outcome_alias: str
     direction: str
     magnitude: float = Field(ge=0.0, le=1.0)
+    confidence: float = Field(ge=0.0, le=1.0)
     reasoning: str
+    evidence_aliases: List[str] = Field(default_factory=list)
 
 
 @register_model(
