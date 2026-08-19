@@ -1,6 +1,8 @@
 """Small structured-LLM interface shared by dataset quality passes."""
 
-from typing import Any, Dict, List, Protocol
+from typing import Any, Dict, List, Optional, Protocol, Type
+
+from pydantic import BaseModel
 
 from src.core.llm import LiteLLMClient, parse_json_response
 
@@ -14,6 +16,7 @@ class StructuredLLM(Protocol):
         self,
         system_prompt: str,
         user_prompt: str,
+        response_model: Optional[Type[BaseModel]] = None,
     ) -> Dict[str, Any]:
         """Return one JSON object."""
 
@@ -29,6 +32,7 @@ class LiteLLMStructuredClient:
         self,
         system_prompt: str,
         user_prompt: str,
+        response_model: Optional[Type[BaseModel]] = None,
     ) -> Dict[str, Any]:
         messages: List[Dict[str, str]] = [
             {"role": "system", "content": system_prompt},
@@ -36,7 +40,7 @@ class LiteLLMStructuredClient:
         ]
         response = await self.client.acomplete(
             messages=messages,
-            response_format={"type": "json_object"},
+            response_format=response_model or {"type": "json_object"},
         )
         result = parse_json_response(response)
         if (
@@ -50,4 +54,6 @@ class LiteLLMStructuredClient:
                 "Quality pass must return a JSON object or a single-object list; "
                 f"received {type(result).__name__}"
             )
+        if response_model is not None:
+            return response_model.model_validate(result).model_dump()
         return result

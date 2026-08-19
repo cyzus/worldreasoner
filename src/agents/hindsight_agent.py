@@ -20,6 +20,8 @@ from src.tools.generators.question_articles import QuestionArticlesTool
 from src.pipelines.prompts.hindsight_causal_analysis import (
     EVIDENCE_AGENT_DESCRIPTION,
 )
+from src.core.database import GenericDatabase
+from src.services.evidence_quality import EvidenceQualityService
 
 
 class HindsightAgent(BaseAgent):
@@ -42,6 +44,7 @@ class HindsightAgent(BaseAgent):
         db_path: str = "worldreasoner.db",
         question_id: Optional[str] = None,
         target_event_id: Optional[str] = None,
+        dataset_version: str = "v2.0",
     ):
         """Initialize the HindsightAgent.
 
@@ -53,12 +56,17 @@ class HindsightAgent(BaseAgent):
             db_path: Path to the database
             question_id: Question ID for provenance tracking (passed to all tools)
             target_event_id: Target event ID for causal graph building
+            dataset_version: Version namespace for derived quality records
         """
         if config is None:
             config = get_config()
 
         self.question_id = question_id
         self.target_event_id = target_event_id
+        quality_processor = EvidenceQualityService(
+            GenericDatabase(db_path),
+            dataset_version=dataset_version,
+        )
 
         llm_model = create_llm_model(config)
 
@@ -74,7 +82,9 @@ class HindsightAgent(BaseAgent):
             model=llm_model,
             tools=[
                 ArticleCollectorTool(
-                    db_path=db_path, question_id=question_id
+                    db_path=db_path,
+                    question_id=question_id,
+                    quality_processor=quality_processor,
                 ),  # Provenance-aware
                 ArticleInspectorTool(
                     db_path=db_path, question_id=question_id
@@ -97,7 +107,9 @@ class HindsightAgent(BaseAgent):
 
         tools = tools + [
                 ArticleCollectorTool(
-                    db_path=db_path, question_id=question_id
+                    db_path=db_path,
+                    question_id=question_id,
+                    quality_processor=quality_processor,
                 ),  # Provenance-aware
                 ArticleInspectorTool(
                     db_path=db_path, question_id=question_id

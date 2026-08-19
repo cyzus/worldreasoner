@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Set
 
@@ -13,7 +15,10 @@ from src.core.database import GenericDatabase
 from src.core.llm import LiteLLMClient
 from src.domain.models import Article, Event, EventEvidenceVerification
 from src.services.dataset_versioning import DatasetVersionService
-from src.services.evidence_quality.article_cleaner import ArticleMarkdownCleaner
+from src.services.evidence_quality.article_cleaner import (
+    CLEANER_PROMPT_VERSION,
+    ArticleMarkdownCleaner,
+)
 from src.services.evidence_quality.event_grounding import (
     EventEvidenceExtractor,
     EventEvidenceVerifier,
@@ -101,12 +106,35 @@ def clean_articles(
     ),
     dataset_version: str = typer.Option("v2.0", "--version"),
     model: Optional[str] = typer.Option(None, "--model"),
+    timeout: int = typer.Option(
+        300,
+        "--timeout",
+        min=1,
+        help="Per-request model timeout in seconds",
+    ),
+    concurrency: int = typer.Option(
+        3,
+        "--concurrency",
+        min=1,
+        max=200,
+        help="Maximum articles cleaned concurrently",
+    ),
     event_linked_only: bool = typer.Option(
         True, "--event-linked-only/--all-articles"
     ),
     limit: int = typer.Option(10, "--limit", min=1),
     force: bool = typer.Option(
         False, "--force", help="Re-clean records that already have Markdown"
+    ),
+    selection_file: Optional[Path] = typer.Option(
+        None,
+        "--selection-file",
+        help="Process article IDs from a newline-delimited selection file",
+    ),
+    usage_report: Optional[Path] = typer.Option(
+        None,
+        "--usage-report",
+        help="Write token counts, estimated cost, and timing as JSON",
     ),
     allow_model_content: bool = typer.Option(
         False,
@@ -124,9 +152,13 @@ def clean_articles(
             db_path=db_path,
             dataset_version=dataset_version,
             model=model,
+            timeout=timeout,
+            concurrency=concurrency,
             event_linked_only=event_linked_only,
             limit=limit,
             force=force,
+            selection_file=selection_file,
+            usage_report=usage_report,
         )
     )
     if failures:
@@ -180,45 +212,134 @@ async def _clean_articles(
     db_path: Path,
     dataset_version: str,
     model: Optional[str],
+    timeout: int,
+    concurrency: int,
     event_linked_only: bool,
     limit: int,
     force: bool,
+    selection_file: Optional[Path] = None,
+    usage_report: Optional[Path] = None,
 ) -> int:
     db = GenericDatabase(str(db_path))
     config = get_config().llm
+    config_updates = {"timeout": timeout}
     if model:
-        config = config.model_copy(update={"model": model})
-    llm = LiteLLMStructuredClient(LiteLLMClient(config))
+        config_updates["model"] = model
+    config = config.model_copy(update=config_updates)
+    raw_llm = LiteLLMClient(config)
+    llm = LiteLLMStructuredClient(raw_llm)
     service = EvidenceQualityService(
         db,
         dataset_version,
         cleaner=ArticleMarkdownCleaner(llm),
     )
-    articles = _select_articles(db, event_linked_only, None)
+    if selection_file:
+        selected_ids = [
+            line.strip()
+            for line in selection_file.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        if len(selected_ids) != len(set(selected_ids)):
+            raise ValueError("Selection contains duplicate article IDs")
+        articles_by_id = {
+            article.id: article
+            for article in _select_articles(db, event_linked_only, None)
+        }
+        missing_ids = [
+            article_id
+            for article_id in selected_ids
+            if article_id not in articles_by_id
+        ]
+        if missing_ids:
+            raise ValueError(
+                "Selection contains unknown or out-of-scope article IDs: "
+                + ", ".join(missing_ids[:10])
+            )
+        articles = [articles_by_id[article_id] for article_id in selected_ids]
+    else:
+        articles = _select_articles(db, event_linked_only, None)
+    records = {
+        article.id: service.ensure_article_record(article) for article in articles
+    }
     if not force:
         articles = [
             article
             for article in articles
-            if not (
-                (record := service.get_article_record(article.id))
-                and record.clean_markdown
-            )
+            if not records[article.id].cleaner_model
         ]
+    eligible_articles: List[Article] = []
+    skipped = 0
+    for article in articles:
+        record = records[article.id]
+        if not service.article_is_eligible_for_cleanup(record):
+            skipped += 1
+            continue
+        eligible_articles.append(article)
+    articles = eligible_articles
     articles = articles[:limit]
+    if skipped:
+        console.print(
+            f"Skipped {skipped} snapshots blocked by deterministic quality gates."
+        )
     if not articles:
         console.print("No articles require cleanup for this selection.")
         return 0
-    failures = 0
-    for index, article in enumerate(articles, 1):
-        try:
-            await service.clean_article(article)
-            console.print(f"[{index}/{len(articles)}] cleaned {article.id}")
-        except Exception as error:
-            failures += 1
-            console.print(
-                f"[{index}/{len(articles)}] [red]failed[/red] {article.id}: "
-                f"{type(error).__name__}: {error}"
-            )
+    started_at = datetime.now(timezone.utc)
+    started = time.perf_counter()
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async def clean_one(index: int, article: Article) -> bool:
+        async with semaphore:
+            try:
+                await service.clean_article(article)
+                console.print(f"[{index}/{len(articles)}] cleaned {article.id}")
+                return True
+            except Exception as error:
+                console.print(
+                    f"[{index}/{len(articles)}] [red]failed[/red] {article.id}: "
+                    f"{type(error).__name__}: {error}"
+                )
+                return False
+
+    results = await asyncio.gather(
+        *(clean_one(index, article) for index, article in enumerate(articles, 1))
+    )
+    failures = results.count(False)
+    usage = raw_llm.get_usage_report()
+    elapsed = time.perf_counter() - started
+    report = {
+        "artifact": "article-cleanup-run-report",
+        "started_at": started_at.isoformat(),
+        "finished_at": datetime.now(timezone.utc).isoformat(),
+        "wall_seconds": round(elapsed, 3),
+        "dataset_version": dataset_version,
+        "model": llm.model_name,
+        "cleaner_prompt_version": CLEANER_PROMPT_VERSION,
+        "concurrency": concurrency,
+        "execution_mode": "bounded_async",
+        "selected_articles": len(articles),
+        "succeeded_articles": results.count(True),
+        "failed_articles": failures,
+        "throughput_articles_per_minute": round(
+            len(articles) * 60 / max(elapsed, 0.001),
+            3,
+        ),
+        "usage": usage,
+    }
+    if usage_report:
+        usage_report.parent.mkdir(parents=True, exist_ok=True)
+        usage_report.write_text(
+            json.dumps(report, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        console.print(f"Usage report: {usage_report}")
+    console.print(
+        "Usage: "
+        f"{usage['prompt_tokens']:,} prompt + "
+        f"{usage['completion_tokens']:,} completion tokens; "
+        f"estimated ${usage['estimated_cost_usd']:.6f}; "
+        f"{usage['calls']} calls; {report['wall_seconds']:.1f}s wall time"
+    )
     if failures:
         console.print(f"[yellow]Cleanup completed with {failures} failure(s).[/yellow]")
     return failures

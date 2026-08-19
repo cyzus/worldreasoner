@@ -70,6 +70,7 @@ class GraphBuilderAgentFactory(AgentFactory):
 
         # Shared components
         alias_registry = AliasRegistry()
+        dataset_version = kwargs.get("dataset_version")
 
         # We need instances of base tools to pass to propose_subgraph
         evt_tool = EventIdentifierTool(
@@ -84,8 +85,12 @@ class GraphBuilderAgentFactory(AgentFactory):
                 db_path=db_path,
                 question_id=question_id,
                 alias_registry=alias_registry,
+                dataset_version=dataset_version,
             ),
-            ArticleRetrievalTool(db_path=db_path),
+            ArticleRetrievalTool(
+                db_path=db_path,
+                dataset_version=dataset_version,
+            ),
             ProposeSubgraphTool(
                 event_identifier_tool=evt_tool,
                 causal_reasoner_tool=reason_tool,

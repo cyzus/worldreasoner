@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from src.core.alias_registry import AliasRegistry
 from src.tools.base.database_mixin import DatabaseAwareTool
 from src.tools.base.output_models import QuestionArticlesOutput
-from src.domain.models import Article
+from src.domain.models import Article, ArticleQualityRecord, QualityStatus
 from src.utils.logging import logger
 from src.tools.base.schema_helper import pydantic_to_output_schema
 
@@ -55,6 +55,7 @@ class QuestionArticlesTool(DatabaseAwareTool):
         db_path: str = None,
         question_id: Optional[str] = None,
         alias_registry: Optional[AliasRegistry] = None,
+        dataset_version: Optional[str] = None,
     ):
         """Initialize the tool.
 
@@ -62,10 +63,15 @@ class QuestionArticlesTool(DatabaseAwareTool):
             db_path: Path to the database
             question_id: Question ID to get articles for (injected at init)
             alias_registry: Optional alias registry for generating article aliases
+            dataset_version: Use completed cleaned Markdown when available
         """
-        super().__init__(db_path=db_path, ensure_tables=[Article])
+        super().__init__(
+            db_path=db_path,
+            ensure_tables=[Article, ArticleQualityRecord],
+        )
         self.question_id = question_id
         self.alias_registry = alias_registry
+        self.dataset_version = dataset_version
 
     def forward(
         self, limit: int = 20, offset: int = 0, sort: str = "date_desc"
@@ -111,6 +117,29 @@ class QuestionArticlesTool(DatabaseAwareTool):
             f"Found {len(question_articles)} total articles for question {self.question_id}"
         )
 
+        content_by_id = {article.id: article.content for article in question_articles}
+        if self.dataset_version:
+            quality_by_article = {
+                record.article_id: record
+                for record in self.db.get_many(
+                    ArticleQualityRecord,
+                    filters={"dataset_version": self.dataset_version},
+                )
+            }
+            filtered_articles = []
+            for article in question_articles:
+                quality = quality_by_article.get(article.id)
+                if quality is None:
+                    filtered_articles.append(article)
+                    continue
+                if (
+                    quality.status == QualityStatus.COMPLETE
+                    and quality.clean_markdown
+                ):
+                    content_by_id[article.id] = quality.clean_markdown
+                    filtered_articles.append(article)
+            question_articles = filtered_articles
+
         # Sort articles
         reverse_sort = sort != "date_asc"  # Default to desc (newest first)
         question_articles.sort(
@@ -127,6 +156,8 @@ class QuestionArticlesTool(DatabaseAwareTool):
         # Format response with essential info
         articles_data = []
         for article in paginated_articles:
+            content = content_by_id[article.id]
+
             # Generate article alias if registry is provided
             alias = None
             if self.alias_registry:
@@ -143,10 +174,10 @@ class QuestionArticlesTool(DatabaseAwareTool):
                     "published_date": article.published_date.isoformat()
                     if article.published_date
                     else None,
-                    "content_preview": article.content[:300] + "..."
-                    if len(article.content) > 300
-                    else article.content,
-                    "word_count": article.word_count,
+                    "content_preview": content[:300] + "..."
+                    if len(content) > 300
+                    else content,
+                    "word_count": len(content.split()),
                 }
             )
 

@@ -22,6 +22,9 @@ class ArticleQualityFlag(str, Enum):
     LINK_HEAVY = "link_heavy"
     RAW_HTML = "raw_html"
     EXACT_DUPLICATE = "exact_duplicate"
+    ERROR_PAGE = "error_page"
+    ACCESS_BLOCK = "access_block"
+    LIKELY_WRONG_PAGE = "likely_wrong_page"
 
 
 class QualityStatus(str, Enum):

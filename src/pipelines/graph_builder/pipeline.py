@@ -9,6 +9,7 @@ from src.agents.graph_builder_agent import GraphBuilderAgentFactory
 from src.pipelines.prompts import graph_builder as graph_builder_prompts
 from src.config.pipeline import SATISFACTION_DEFAULTS
 from src.services.question_monitor_service import QuestionMonitorService
+from src.services.evidence_quality import EvidenceQualityService
 from src.utils.logging import logger
 
 
@@ -22,6 +23,7 @@ class GraphBuilderPipeline:
         temperature: float = 0.2,
         min_graph_depth: int = SATISFACTION_DEFAULTS.min_graph_depth,
         min_events: int = SATISFACTION_DEFAULTS.min_graph_events,
+        dataset_version: str = "v2.0",
     ):
         """Initialize the pipeline."""
         self.db_path = db_path
@@ -30,13 +32,35 @@ class GraphBuilderPipeline:
         self.temperature = temperature
         self.min_graph_depth = min_graph_depth
         self.min_events = min_events
+        self.dataset_version = dataset_version
+        self.quality_service = EvidenceQualityService(
+            self.db,
+            dataset_version=dataset_version,
+        )
+
+    def _clean_evidence_block(self, question: Question) -> Optional[str]:
+        """Return a reason when a quality-managed question is not ready."""
+        readiness = self.quality_service.question_readiness(question.id)
+        # Databases created before the quality pipeline remain supported. Once
+        # any linked article is quality-managed, the cleanup barrier is strict.
+        if not readiness.is_quality_managed or readiness.is_ready:
+            return None
+        return (
+            f"Cleaned-evidence barrier not satisfied for {self.dataset_version}: "
+            f"{readiness.blocking_reason()}. Run article cleanup before graph build."
+        )
 
     def _load_pending_questions(self) -> List[Question]:
         """Find graph-eligible questions waiting for graph building."""
         all_questions = self.db.get_many(Question)
         pending = [q for q in all_questions if q.causal_explanation and not q.graph_built]
         monitor = QuestionMonitorService(self.db)
-        eligible = [q for q in pending if monitor.has_evidence_articles(q.id)]
+        eligible = [
+            q
+            for q in pending
+            if monitor.has_evidence_articles(q.id)
+            and self._clean_evidence_block(q) is None
+        ]
 
         skipped = len(pending) - len(eligible)
         if skipped > 0:
@@ -84,6 +108,15 @@ class GraphBuilderPipeline:
                 self.db.save(Question, question)
                 return False
 
+            quality_block = self._clean_evidence_block(question)
+            if quality_block:
+                logger.warning(
+                    f"Skipping graph build for {question.id}: {quality_block}"
+                )
+                question.graph_build_error = quality_block
+                self.db.save(Question, question)
+                return False
+
             # 1. Find actual outcome event
             events = self.db.get_many(Event)
             actual_outcome_id = "unknown"
@@ -126,6 +159,7 @@ class GraphBuilderPipeline:
                 temperature=self.temperature,
                 db_path=self.db_path,
                 question_id=question.id,
+                dataset_version=self.dataset_version,
             )
 
             # 4. Run Agent
