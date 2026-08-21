@@ -72,6 +72,17 @@ class ConstructionGraphService(ServiceBase):
             revision.id,
             AliasEntityKind.OUTCOME,
         )
+        outcome_events = {
+            alias: self.db.get(Event, event_id)
+            for alias, event_id in outcome_aliases.items()
+        }
+        actual_outcome_aliases = {
+            alias
+            for alias, event in outcome_events.items()
+            if event is not None and event.is_actual_outcome
+        }
+        if not actual_outcome_aliases:
+            errors.append("missing_actual_outcome")
         node_map = {node.alias: node for node in revision.nodes}
         if len(node_map) != len(revision.nodes):
             errors.append("duplicate_node_alias")
@@ -103,7 +114,7 @@ class ConstructionGraphService(ServiceBase):
                 )
 
         adjacency: Dict[str, Set[str]] = {alias: set() for alias in node_map}
-        targets_outcome: Set[str] = set()
+        targets_actual_outcome: Set[str] = set()
         for edge in revision.edges:
             if edge.source_alias not in node_map:
                 errors.append(f"unknown_edge_source:{edge.source_alias}")
@@ -124,7 +135,8 @@ class ConstructionGraphService(ServiceBase):
                     )
                 adjacency[edge.source_alias].add(edge.target_alias)
             elif edge.target_alias in outcome_aliases:
-                targets_outcome.add(edge.source_alias)
+                if edge.target_alias in actual_outcome_aliases:
+                    targets_actual_outcome.add(edge.source_alias)
             else:
                 errors.append(f"unknown_edge_target:{edge.target_alias}")
             errors.extend(
@@ -140,17 +152,22 @@ class ConstructionGraphService(ServiceBase):
             errors.append("cycle_detected")
 
         impact_pairs: Set[tuple[str, str]] = set()
+        impact_directions: Dict[tuple[str, str], str] = {}
         for impact in revision.outcome_impacts:
             if impact.event_alias not in node_map:
                 errors.append(f"unknown_impact_event:{impact.event_alias}")
             if impact.outcome_alias not in outcome_aliases:
                 errors.append(f"unknown_impact_outcome:{impact.outcome_alias}")
-            impact_pairs.add((impact.event_alias, impact.outcome_alias))
-            if (
-                impact.event_alias in node_map
-                and impact.outcome_alias in outcome_aliases
-            ):
-                targets_outcome.add(impact.event_alias)
+            impact_pair = (impact.event_alias, impact.outcome_alias)
+            if impact_pair in impact_pairs:
+                errors.append(
+                    "duplicate_outcome_impact:"
+                    f"{impact.event_alias}:{impact.outcome_alias}"
+                )
+            impact_pairs.add(impact_pair)
+            impact_directions[(impact.event_alias, impact.outcome_alias)] = (
+                impact.direction
+            )
             errors.extend(
                 self._unknown_evidence(
                     impact.evidence_aliases, evidence_aliases, "impact"
@@ -158,17 +175,43 @@ class ConstructionGraphService(ServiceBase):
             )
             if impact.direction not in {item.value for item in ImpactDirection}:
                 errors.append(f"invalid_impact_direction:{impact.direction}")
+        for event_alias in node_map:
+            for outcome_alias in outcome_aliases:
+                if (event_alias, outcome_alias) not in impact_pairs:
+                    errors.append(
+                        f"missing_outcome_impact:{event_alias}:{outcome_alias}"
+                    )
+        if len(outcome_aliases) == 2:
+            first, second = sorted(outcome_aliases)
+            opposites = {
+                "positive": "negative",
+                "negative": "positive",
+                "neutral": "neutral",
+                "mixed": "mixed",
+            }
+            for event_alias in node_map:
+                first_direction = impact_directions.get((event_alias, first))
+                second_direction = impact_directions.get((event_alias, second))
+                if (
+                    first_direction in opposites
+                    and second_direction != opposites[first_direction]
+                ):
+                    errors.append(
+                        "non_complementary_binary_impacts:"
+                        f"{event_alias}:{first}:{second}"
+                    )
         for alias in node_map:
-            if not any(event_alias == alias for event_alias, _ in impact_pairs):
-                errors.append(f"missing_outcome_impact:{alias}")
-        for alias in node_map:
-            if not self._reaches_outcome(alias, adjacency, targets_outcome):
-                errors.append(f"disconnected_from_outcome:{alias}")
+            if not self._reaches_outcome(
+                alias, adjacency, targets_actual_outcome
+            ):
+                errors.append(f"disconnected_from_actual_outcome:{alias}")
 
         graph_depth = (
             0
             if has_cycle
-            else self._max_depth_to_outcome(adjacency, targets_outcome)
+            else self._max_depth_to_outcome(
+                adjacency, targets_actual_outcome
+            )
         )
         total_event_count = len(node_map) + 1
         errors.extend(

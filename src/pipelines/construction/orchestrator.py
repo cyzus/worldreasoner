@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Protocol, Type
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from smolagents import WebSearchTool as SmolWebSearchTool
 
 from src.config import get_config
@@ -103,6 +103,14 @@ class ConstructionRunResult(BaseModel):
     cost_usd: float
 
 
+class ConstructionBatchResult(BaseModel):
+    """Per-question outcomes for a failure-isolated construction batch."""
+
+    processed: List[ConstructionRunResult] = Field(default_factory=list)
+    failed: List[Dict[str, str]] = Field(default_factory=list)
+    skipped: List[Dict[str, str]] = Field(default_factory=list)
+
+
 class ConstructionPipeline:
     """Orchestrate bounded specialists around deterministic persistence gates."""
 
@@ -183,6 +191,96 @@ class ConstructionPipeline:
                 active.error_summary = str(exc)
                 self.db.save(PipelineRun, active)
             raise
+
+    async def run_question(self, question_id: str) -> ConstructionRunResult:
+        """Run the backward construction workflow for an existing question."""
+        question = self.db.get(Question, question_id)
+        if question is None:
+            raise RuntimeError(f"Unknown question: {question_id}")
+        if question.ground_truth is None:
+            raise RuntimeError(f"Question is unresolved: {question_id}")
+        if question.resolution_date > datetime.now(timezone.utc):
+            raise RuntimeError(f"Question has not reached resolution: {question_id}")
+        if question.skip_evidence:
+            raise RuntimeError(f"Question is marked to skip evidence: {question_id}")
+
+        outcomes = OutcomeEventService(self.db)
+        if not outcomes.get_outcome_events_for_question(question.id):
+            outcomes.auto_create_outcome_events(question)
+        outcomes.ensure_actual_outcome_alignment(question)
+
+        run = self.artifacts.start_run(
+            question_id=question.id,
+            dataset_version=self.dataset_version,
+            workflow_version=WORKFLOW_VERSION,
+            model_configuration={
+                "model": self.runtime.model_id,
+                "requirements": self.requirements.model_dump(),
+                "max_evidence_rounds": self.max_evidence_rounds,
+                "entrypoint": "existing_question",
+            },
+            prompt_bundle_version=PROMPT_BUNDLE_VERSION,
+        )
+        try:
+            dossier = await self._collect_evidence(run, question)
+            explanation = await self._synthesize_explanation(
+                run, question, dossier
+            )
+            revision = await self._build_graph(
+                run, question, dossier, explanation
+            )
+            completed = self.artifacts.complete_run(run.id)
+            return ConstructionRunResult(
+                run_id=run.id,
+                question_id=question.id,
+                evidence_dossier_id=dossier.id,
+                explanation_id=explanation.id,
+                graph_revision_id=revision.id,
+                article_count=len(dossier.article_version_ids),
+                event_count=len(revision.nodes),
+                edge_count=len(revision.edges),
+                impact_count=len(revision.outcome_impacts),
+                token_usage=completed.token_usage,
+                cost_usd=completed.cost_usd,
+            )
+        except Exception as exc:
+            active = self.db.get(PipelineRun, run.id)
+            if active is not None and active.status.value == "running":
+                active.status = "failed"
+                active.error_summary = str(exc)
+                self.db.save(PipelineRun, active)
+            raise
+
+    async def run_questions(
+        self,
+        question_ids: List[str],
+    ) -> ConstructionBatchResult:
+        """Process existing questions sequentially without aborting the batch."""
+        result = ConstructionBatchResult()
+        for question_id in question_ids:
+            question = self.db.get(Question, question_id)
+            if question is None:
+                result.failed.append(
+                    {"question_id": question_id, "error": "Question not found"}
+                )
+                continue
+            if question.graph_built:
+                result.skipped.append(
+                    {
+                        "question_id": question_id,
+                        "reason": "Graph already built",
+                    }
+                )
+                continue
+            try:
+                item = await self.run_question(question_id)
+            except Exception as exc:
+                result.failed.append(
+                    {"question_id": question_id, "error": str(exc)}
+                )
+                continue
+            result.processed.append(item)
+        return result
 
     async def resume_graph(self, run_id: str) -> ConstructionRunResult:
         """Resume only graph construction from validated prior artifacts."""
@@ -279,10 +377,17 @@ class ConstructionPipeline:
         )
         total_usage = AgentUsage()
         try:
+            market_analysis = await self._market_analysis(question)
             plan, usage = await self.runtime.run_structured(
                 "EvidenceSearchPlanner",
                 SEARCH_PLANNER_INSTRUCTIONS,
-                json.dumps(self._question_payload(question), default=str),
+                json.dumps(
+                    {
+                        "question": self._question_payload(question),
+                        "market_analysis": market_analysis,
+                    },
+                    default=str,
+                ),
                 SearchPlanDraft,
             )
             assert isinstance(plan, SearchPlanDraft)
@@ -298,7 +403,70 @@ class ConstructionPipeline:
             missing_requirements: List[str] = []
             coverage: Optional[CoverageAssessmentDraft] = None
 
+            existing_articles = self._existing_question_articles(question)
+            eligible_existing: List[Article] = []
+            for article in existing_articles:
+                if article.url:
+                    seen_urls.add(article.url)
+                if self._article_is_temporally_eligible(article, question):
+                    eligible_existing.append(article)
+                    all_articles[article.id] = article
+                else:
+                    rejected[article.id] = ["published_after_resolution"]
+
+            existing_records = await self._clean_articles(eligible_existing)
+            for record in existing_records:
+                if record.status == QualityStatus.COMPLETE and record.clean_markdown:
+                    approved_by_id[record.id] = record
+
+            if approved_by_id:
+                missing_requirements = self.monitor.evaluate_article_count_requirement(
+                    len(approved_by_id)
+                )
+                if not missing_requirements:
+                    temporary_aliases = {
+                        f"A{index:02d}": record.id
+                        for index, record in enumerate(approved_by_id.values(), 1)
+                    }
+                    assessment, usage = await self.runtime.run_structured(
+                        "EvidenceCoverageAssessor",
+                        COVERAGE_ASSESSOR_INSTRUCTIONS,
+                        json.dumps(
+                            {
+                                "question": self._question_payload(question),
+                                "evidence": self._render_evidence(
+                                    temporary_aliases,
+                                    list(approved_by_id.values()),
+                                ),
+                                "requirements": self.requirements.model_dump(),
+                            },
+                            default=str,
+                        ),
+                        CoverageAssessmentDraft,
+                    )
+                    assert isinstance(assessment, CoverageAssessmentDraft)
+                    coverage = assessment
+                    total_usage = self._add_usage(total_usage, usage)
+                    if not coverage.ready:
+                        missing_requirements = coverage.missing_evidence_needs or [
+                            "coverage assessor rejected the existing evidence"
+                        ]
+
+                round_statistics.append(
+                    {
+                        "round": 0,
+                        "source": "existing_question_evidence",
+                        "fetched_new": 0,
+                        "approved_new": len(approved_by_id),
+                        "approved_total": len(approved_by_id),
+                        "rejected_total": len(rejected),
+                        "missing_requirements": missing_requirements,
+                    }
+                )
+
             for round_number in range(1, self.max_evidence_rounds + 1):
+                if coverage is not None and coverage.ready:
+                    break
                 queries_used.extend(item.query for item in plan.queries)
                 intended_coverage.extend(plan.intended_coverage)
                 articles, round_rejected = await self._collect_search_results(
@@ -456,6 +624,27 @@ class ConstructionPipeline:
             self._finish_failure(attempt.id, "evidence_collection_failed", exc)
             raise
 
+    def _existing_question_articles(self, question: Question) -> List[Article]:
+        """Load linked snapshots across current and legacy provenance fields."""
+        articles_by_id: Dict[str, Article] = {}
+        for article_id in question.related_article_ids:
+            article = self.db.get(Article, article_id)
+            if article is not None:
+                articles_by_id[article.id] = article
+
+        for article in self.db.get_many(
+            Article,
+            filters={"collected_for_question_id": question.id},
+        ):
+            articles_by_id[article.id] = article
+
+        for article in self.db.get_many(Article):
+            related_ids = article.metadata.get("related_question_ids", [])
+            if question.id in related_ids:
+                articles_by_id[article.id] = article
+
+        return list(articles_by_id.values())
+
     async def _synthesize_explanation(
         self,
         run: PipelineRun,
@@ -577,6 +766,20 @@ class ConstructionPipeline:
                             "alias": alias,
                             "title": next(
                                 item.title for item in outcomes if item.id == target_id
+                            ),
+                            "scenario": next(
+                                (
+                                    item.outcome_scenario.value
+                                    if item.outcome_scenario
+                                    else None
+                                )
+                                for item in outcomes
+                                if item.id == target_id
+                            ),
+                            "is_actual_outcome": next(
+                                bool(item.is_actual_outcome)
+                                for item in outcomes
+                                if item.id == target_id
                             ),
                         }
                         for alias, target_id in outcome_aliases.items()
@@ -727,7 +930,25 @@ class ConstructionPipeline:
             self.db.get(Article, item_id)
             for item_id in dict.fromkeys(article_ids)
         ]
-        return [item for item in articles if item is not None], rejected
+        eligible: List[Article] = []
+        for article in articles:
+            if article is None:
+                continue
+            if not self._article_is_temporally_eligible(article, question):
+                rejected[article.url or article.id] = [
+                    "published_after_resolution"
+                ]
+                continue
+            eligible.append(article)
+        return eligible, rejected
+
+    @staticmethod
+    def _article_is_temporally_eligible(
+        article: Article,
+        question: Question,
+    ) -> bool:
+        """Allow only evidence published by the question's resolution day."""
+        return article.published_date.date() <= question.resolution_date.date()
 
     async def _seed_sources(self, topic: str) -> List[Dict[str, object]]:
         """Fetch explicit live sources, falling back to web discovery."""
@@ -750,6 +971,46 @@ class ConstructionPipeline:
         if sources:
             return sources
         return await asyncio.to_thread(self._search, topic)
+
+    async def _market_analysis(
+        self,
+        question: Question,
+    ) -> Dict[str, List[Dict[str, object]]]:
+        """Return optional market turning points that guide evidence search."""
+        empty: Dict[str, List[Dict[str, object]]] = {
+            "turning_points": [],
+            "lead_changes": [],
+        }
+        if question.source != "polymarket" or not question.metadata:
+            return empty
+        token_ids = question.metadata.get("clob_token_ids") or []
+        if not token_ids:
+            return empty
+        try:
+            from src.integrations.polymarket import (
+                analyze_price_curve,
+                get_price_history_for_market,
+            )
+
+            histories = await get_price_history_for_market(
+                token_ids,
+                interval="max",
+                fidelity=720,
+            )
+            history = histories.get(token_ids[0], []) if histories else []
+            if not history:
+                return empty
+            analysis = analyze_price_curve(
+                history,
+                min_turning_point_change=5.0,
+                min_sharp_movement_change=10.0,
+            )
+        except Exception:
+            return empty
+        return {
+            "turning_points": list(analysis.get("turning_points", []))[:5],
+            "lead_changes": list(analysis.get("lead_changes", [])),
+        }
 
     @staticmethod
     def _title_from_url(url: str) -> str:

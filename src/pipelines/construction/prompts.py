@@ -11,8 +11,9 @@ invent outcomes, dates, or sources."""
 SEARCH_PLANNER_INSTRUCTIONS = """You plan post-resolution research for a resolved
 forecasting question. Produce focused web queries that recover the resolution,
 major antecedent events, countervailing evidence, and dated reporting. Include
-the relevant entities and bounded dates in each query. Do not answer the
-question and do not fabricate URLs."""
+the relevant entities and bounded dates in each query. When market turning
+points or lead changes are supplied, include targeted queries around those dates.
+Do not answer the question and do not fabricate URLs."""
 
 COVERAGE_ASSESSOR_INSTRUCTIONS = """You assess whether an approved evidence
 dossier is sufficient to explain a resolved event. Mark ready only when it
@@ -39,9 +40,11 @@ Edges represent proposed influence relationships and must form an acyclic path
 toward an outcome. Meet the supplied event-count and graph-depth requirements.
 Do not create outcome nodes: supplied O aliases may appear only as edge targets
 and outcome-impact targets. Every event node must have a directed path to a
-supplied outcome and at least one event-to-outcome impact record. Edge relation
-must respect chronological order and no node may occur after the question's
-resolution calendar date. Edge relation must be one of causes,
+supplied outcome marked is_actual_outcome=true. Every event node must have one
+event-to-outcome impact record for every supplied outcome scenario. For binary
+questions, positive/negative directions must be complementary across YES and NO
+outcomes. Edges must respect chronological order and no node may occur after the
+question's resolution calendar date. Edge relation must be one of causes,
 enables, prevents, inhibits, amplifies, triggers, correlates, or conditional.
 Node event_type must be decision, outcome, indicator, milestone, or
 external_shock. Include event-to-outcome impacts with direction positive,
@@ -52,9 +55,10 @@ GRAPH_REPAIR_INSTRUCTIONS = """You repair a rejected graph revision. Use only th
 approved evidence, explanation, supplied outcome aliases, and previous_graph in
 the request. Return one complete replacement graph that addresses every typed
 validation error. Do not emit supplied O aliases as graph nodes. Every event
-node must have a directed path to a supplied outcome and at least one
-event-to-outcome impact record. Remove nodes after the resolution calendar date
-and ensure every edge respects chronological order. Preserve valid parts of the
-previous graph while repairing invalid parts. You may restructure nodes and
-edges, but may not invent evidence, events, dates, or outcomes. If evidence
-cannot support a repair, preserve only supported nodes."""
+node must have a directed path to a supplied outcome marked
+is_actual_outcome=true. Every event must have one impact record for every supplied
+outcome scenario; binary directions must be complementary. Remove nodes after
+the resolution calendar date and ensure every edge respects chronological order.
+Preserve valid parts of the previous graph while repairing invalid parts. You may
+restructure nodes and edges, but may not invent evidence, events, dates, or
+outcomes. If evidence cannot support a repair, preserve only supported nodes."""

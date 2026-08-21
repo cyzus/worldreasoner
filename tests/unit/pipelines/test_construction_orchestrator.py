@@ -15,6 +15,7 @@ from src.domain.models import (
     Domain,
     Event,
     GraphRevision,
+    ImpactDirection,
     PipelineRun,
     QualityStatus,
     Question,
@@ -29,6 +30,7 @@ from src.pipelines.construction.models import (
     SearchPlanDraft,
 )
 from src.pipelines.construction.orchestrator import ConstructionPipeline
+from src.services.question_monitor_service import QuestionMonitorService
 
 
 class FakeRuntime:
@@ -115,7 +117,11 @@ class FakeRuntime:
                 ],
             )
         elif output_type is GraphDraft:
-            outcome_alias = payload["outcomes"][0]["alias"]
+            actual_outcome_alias = next(
+                item["alias"]
+                for item in payload["outcomes"]
+                if item["is_actual_outcome"]
+            )
             output = GraphDraft(
                 nodes=[
                     {
@@ -153,7 +159,7 @@ class FakeRuntime:
                     },
                     {
                         "source_alias": "E02",
-                        "target_alias": outcome_alias,
+                        "target_alias": actual_outcome_alias,
                         "relation": "causes",
                         "reasoning": "Confirmation established the outcome.",
                         "strength": 0.9,
@@ -164,14 +170,19 @@ class FakeRuntime:
                 outcome_impacts=[
                     {
                         "event_alias": alias,
-                        "outcome_alias": outcome_alias,
-                        "direction": "positive",
+                        "outcome_alias": outcome["alias"],
+                        "direction": (
+                            "positive"
+                            if outcome["is_actual_outcome"]
+                            else "negative"
+                        ),
                         "magnitude": 0.6,
                         "confidence": 0.8,
                         "reasoning": "This development supported the resolved outcome.",
                         "evidence_aliases": [article_alias],
                     }
                     for alias, article_alias in (("E01", "A01"), ("E02", "A02"))
+                    for outcome in payload["outcomes"]
                 ],
             )
         else:
@@ -237,7 +248,10 @@ class GraphRepairingFakeRuntime(FakeRuntime):
                 output.outcome_impacts = output.outcome_impacts[:1]
             else:
                 assert payload["previous_graph"] is not None
-                assert "missing_outcome_impact:E02" in payload["validation_errors"]
+                assert any(
+                    error.startswith("missing_outcome_impact:E02:")
+                    for error in payload["validation_errors"]
+                )
                 assert name == "GraphRepairer"
         return output, usage
 
@@ -278,6 +292,41 @@ class TemporalGraphRepairingFakeRuntime(FakeRuntime):
                 assert "non_chronological_edge:E01->E02" in payload[
                     "validation_errors"
                 ]
+        return output, usage
+
+
+class ComplementRepairingFakeRuntime(FakeRuntime):
+    """Return inconsistent binary impacts before correcting them."""
+
+    def __init__(self) -> None:
+        self.graph_calls = 0
+
+    async def run_structured(
+        self,
+        name: str,
+        instructions: str,
+        user_input: str,
+        output_type: Type[BaseModel],
+        max_turns: int = 4,
+    ) -> tuple[BaseModel, AgentUsage]:
+        output, usage = await super().run_structured(
+            name,
+            instructions,
+            user_input,
+            output_type,
+            max_turns,
+        )
+        if output_type is GraphDraft:
+            self.graph_calls += 1
+            payload = json.loads(user_input)
+            if self.graph_calls == 1:
+                assert isinstance(output, GraphDraft)
+                output.outcome_impacts[1].direction = ImpactDirection.POSITIVE
+            else:
+                assert any(
+                    error.startswith("non_complementary_binary_impacts:E01")
+                    for error in payload["validation_errors"]
+                )
         return output, usage
 
 
@@ -406,6 +455,234 @@ async def test_constructs_question_evidence_and_graph_in_fresh_database(
 
 
 @pytest.mark.asyncio
+async def test_constructs_backward_artifacts_for_existing_question(
+    tmp_path: Path,
+) -> None:
+    pipeline = StubConstructionPipeline(
+        db_path=tmp_path / "existing.db",
+        runtime=FakeRuntime(),
+        requirements=EvidenceSatisfactionConfig(
+            min_articles=3,
+            min_graph_events=3,
+            min_graph_depth=2,
+        ),
+    )
+    question = Question(
+        id="existing-question",
+        question_text="Did the test organization publish the resolved result?",
+        question_type="binary",
+        domain=Domain.GENERAL,
+        source="polymarket",
+        difficulty=2,
+        estimated_start_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        resolution_date=datetime(2024, 2, 1, tzinfo=timezone.utc),
+        ground_truth=True,
+    )
+    pipeline.db.save(Question, question)
+
+    result = await pipeline.run_question(question.id)
+
+    stored = pipeline.db.get(Question, question.id)
+    run = pipeline.db.get(PipelineRun, result.run_id)
+    outcomes = [
+        event
+        for event in pipeline.db.get_many(
+            Event, filters={"extracted_for_question_id": question.id}
+        )
+        if event.is_outcome
+    ]
+    assert result.question_id == question.id
+    assert result.impact_count == 4
+    assert stored is not None and stored.graph_built is True
+    assert run is not None
+    assert run.model_configuration["entrypoint"] == "existing_question"
+    assert len(outcomes) == 2
+    assert sum(bool(event.is_actual_outcome) for event in outcomes) == 1
+    monitor = QuestionMonitorService(pipeline.db, pipeline.requirements)
+    assert monitor.check_satisfaction(question.id).is_satisfied
+    assert monitor.check_graph_satisfaction(question.id).is_satisfied
+
+
+@pytest.mark.asyncio
+async def test_existing_question_reuses_eligible_snapshots_before_search(
+    tmp_path: Path,
+) -> None:
+    pipeline = StubConstructionPipeline(
+        db_path=tmp_path / "existing-evidence.db",
+        runtime=FakeRuntime(),
+        requirements=EvidenceSatisfactionConfig(
+            min_articles=3,
+            min_graph_events=3,
+            min_graph_depth=2,
+        ),
+    )
+    question = Question(
+        id="existing-evidence-question",
+        question_text="Did the test organization publish the resolved result?",
+        question_type="binary",
+        domain=Domain.GENERAL,
+        source="polymarket",
+        difficulty=2,
+        estimated_start_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        resolution_date=datetime(2024, 2, 1, tzinfo=timezone.utc),
+        ground_truth=True,
+    )
+    pipeline.db.save(Question, question)
+    for index in range(3):
+        pipeline.db.save(
+            Article,
+            Article(
+                id=f"existing-article-{index}",
+                title=f"Existing evidence article {index}",
+                content="Substantive existing evidence sentence. " * 20,
+                url=f"https://example.test/existing/{index}",
+                source="example.test",
+                published_date=datetime(2024, 1, 10 + index, tzinfo=timezone.utc),
+                domain=Domain.GENERAL,
+                collected_for_question_id=question.id,
+            ),
+        )
+    pipeline.db.save(
+        Article,
+        Article(
+            id="post-resolution-article",
+            title="Post resolution retrospective article",
+            content="Substantive retrospective evidence sentence. " * 20,
+            url="https://example.test/existing/retrospective",
+            source="example.test",
+            published_date=datetime(2024, 2, 2, tzinfo=timezone.utc),
+            domain=Domain.GENERAL,
+            collected_for_question_id=question.id,
+        ),
+    )
+
+    result = await pipeline.run_question(question.id)
+
+    dossier = pipeline.db.get_many(SearchDossier)[0]
+    assert result.article_count == 3
+    assert getattr(pipeline, "collection_rounds", 0) == 0
+    assert dossier.rejected_articles["post-resolution-article"] == [
+        "published_after_resolution"
+    ]
+    assert dossier.coverage_statistics["rounds"][0]["round"] == 0
+
+
+@pytest.mark.asyncio
+async def test_existing_question_batch_isolates_question_failures(
+    tmp_path: Path,
+) -> None:
+    pipeline = StubConstructionPipeline(
+        db_path=tmp_path / "batch.db",
+        runtime=FakeRuntime(),
+        requirements=EvidenceSatisfactionConfig(
+            min_articles=3,
+            min_graph_events=3,
+            min_graph_depth=2,
+        ),
+    )
+    question = Question(
+        id="batch-question",
+        question_text="Did the test organization publish the resolved result?",
+        question_type="binary",
+        domain=Domain.GENERAL,
+        source="polymarket",
+        difficulty=2,
+        estimated_start_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        resolution_date=datetime(2024, 2, 1, tzinfo=timezone.utc),
+        ground_truth=True,
+    )
+    pipeline.db.save(Question, question)
+
+    result = await pipeline.run_questions(
+        ["missing-question", question.id]
+    )
+
+    assert [item.question_id for item in result.processed] == [question.id]
+    assert result.failed == [
+        {
+            "question_id": "missing-question",
+            "error": "Question not found",
+        }
+    ]
+
+
+def test_article_temporal_eligibility_uses_resolution_day() -> None:
+    question = Question(
+        id="temporal-question",
+        question_text="Did the test organization publish the resolved result?",
+        question_type="binary",
+        domain=Domain.GENERAL,
+        source="test",
+        difficulty=2,
+        estimated_start_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        resolution_date=datetime(2024, 2, 1, 12, tzinfo=timezone.utc),
+        ground_truth=True,
+    )
+    article = Article(
+        id="article-after-resolution",
+        title="Retrospective article",
+        content="Substantive retrospective article content. " * 10,
+        url="https://example.test/retrospective",
+        source="example.test",
+        published_date=datetime(2024, 2, 2, tzinfo=timezone.utc),
+        domain=Domain.GENERAL,
+    )
+
+    assert not ConstructionPipeline._article_is_temporally_eligible(
+        article, question
+    )
+    article.published_date = datetime(2024, 2, 1, 23, tzinfo=timezone.utc)
+    assert ConstructionPipeline._article_is_temporally_eligible(
+        article, question
+    )
+
+
+@pytest.mark.asyncio
+async def test_polymarket_analysis_is_available_to_search_planning(
+    monkeypatch,
+) -> None:
+    async def fake_history(token_ids, **kwargs):
+        del kwargs
+        return {token_ids[0]: [{"t": 1, "p": 0.4}]}
+
+    def fake_analysis(history, **kwargs):
+        del history, kwargs
+        return {
+            "turning_points": [{"timestamp": 1, "type": "peak"}],
+            "lead_changes": [{"timestamp": 2, "direction": "above"}],
+        }
+
+    monkeypatch.setattr(
+        "src.integrations.polymarket.get_price_history_for_market",
+        fake_history,
+    )
+    monkeypatch.setattr(
+        "src.integrations.polymarket.analyze_price_curve",
+        fake_analysis,
+    )
+    pipeline = object.__new__(ConstructionPipeline)
+    question = Question(
+        id="market-question",
+        question_text="Did the test organization publish the resolved result?",
+        question_type="binary",
+        domain=Domain.GENERAL,
+        source="polymarket",
+        difficulty=2,
+        estimated_start_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        resolution_date=datetime(2024, 2, 1, tzinfo=timezone.utc),
+        ground_truth=True,
+        metadata={"clob_token_ids": ["token-1"]},
+    )
+
+    result = await pipeline._market_analysis(question)
+
+    assert result["turning_points"] == [{"timestamp": 1, "type": "peak"}]
+    assert result["lead_changes"] == [
+        {"timestamp": 2, "direction": "above"}
+    ]
+
+
+@pytest.mark.asyncio
 async def test_repairs_undersized_explanation_before_graph_build(
     tmp_path: Path,
 ) -> None:
@@ -444,7 +721,7 @@ async def test_graph_repair_receives_rejected_graph(
     result = await pipeline.run("resolved test event")
 
     assert runtime.graph_calls == 2
-    assert result.impact_count == 2
+    assert result.impact_count == 4
 
 
 @pytest.mark.asyncio
@@ -466,6 +743,27 @@ async def test_graph_repair_enforces_resolution_date_and_edge_order(
 
     assert runtime.graph_calls == 2
     assert result.event_count == 2
+
+
+@pytest.mark.asyncio
+async def test_graph_repair_enforces_complementary_binary_impacts(
+    tmp_path: Path,
+) -> None:
+    runtime = ComplementRepairingFakeRuntime()
+    pipeline = StubConstructionPipeline(
+        db_path=tmp_path / "complement-graph-repair.db",
+        runtime=runtime,
+        requirements=EvidenceSatisfactionConfig(
+            min_articles=3,
+            min_graph_events=3,
+            min_graph_depth=2,
+        ),
+    )
+
+    result = await pipeline.run("resolved test event")
+
+    assert runtime.graph_calls == 2
+    assert result.impact_count == 4
 
 
 @pytest.mark.asyncio
