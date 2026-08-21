@@ -112,6 +112,7 @@ class WebSearchTool(Tool):
 
         # Set up search backend
         self.searxng_base_url = os.getenv("SEARXNG_BASE_URL")
+        self.searxng_engines = os.getenv("SEARXNG_ENGINES")
         self.use_searxng = bool(self.searxng_base_url)
 
         if self.use_searxng:
@@ -191,6 +192,8 @@ class WebSearchTool(Tool):
                 "format": "json",
                 "page": page or 1,
             }
+            if self.searxng_engines:
+                params["engines"] = self.searxng_engines
 
             # Add optional parameters if provided
             if categories:
