@@ -5,7 +5,7 @@ import json
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set
 
 import typer
 from rich.console import Console
@@ -13,7 +13,12 @@ from rich.console import Console
 from src.config import get_config
 from src.core.database import GenericDatabase
 from src.core.llm import LiteLLMClient
-from src.domain.models import Article, Event, EventEvidenceVerification
+from src.domain.models import (
+    Article,
+    ArticleQualityRecord,
+    Event,
+    EventEvidenceVerification,
+)
 from src.services.dataset_versioning import DatasetVersionService
 from src.services.evidence_quality.article_cleaner import (
     CLEANER_PROMPT_VERSION,
@@ -231,7 +236,10 @@ async def _clean_articles(
     service = EvidenceQualityService(
         db,
         dataset_version,
-        cleaner=ArticleMarkdownCleaner(llm),
+        cleaner=ArticleMarkdownCleaner(
+            llm,
+            request_concurrency=concurrency,
+        ),
     )
     if selection_file:
         selected_ids = [
@@ -258,9 +266,14 @@ async def _clean_articles(
         articles = [articles_by_id[article_id] for article_id in selected_ids]
     else:
         articles = _select_articles(db, event_linked_only, None)
-    records = {
-        article.id: service.ensure_article_record(article) for article in articles
-    }
+    existing_records = db.get_many(
+        ArticleQualityRecord,
+        filters={"dataset_version": dataset_version},
+    )
+    records = {record.article_id: record for record in existing_records}
+    for article in articles:
+        if article.id not in records:
+            records[article.id] = service.ensure_article_record(article)
     if not force:
         articles = [
             article
@@ -287,6 +300,7 @@ async def _clean_articles(
     started_at = datetime.now(timezone.utc)
     started = time.perf_counter()
     semaphore = asyncio.Semaphore(concurrency)
+    failure_details: List[Dict[str, str]] = []
 
     async def clean_one(index: int, article: Article) -> bool:
         async with semaphore:
@@ -295,6 +309,18 @@ async def _clean_articles(
                 console.print(f"[{index}/{len(articles)}] cleaned {article.id}")
                 return True
             except Exception as error:
+                if (
+                    isinstance(error, RuntimeError)
+                    and "returned no usable content" in str(error)
+                ):
+                    service.record_terminal_cleanup_failure(article, error)
+                failure_details.append(
+                    {
+                        "article_id": article.id,
+                        "error_type": type(error).__name__,
+                        "error": str(error),
+                    }
+                )
                 console.print(
                     f"[{index}/{len(articles)}] [red]failed[/red] {article.id}: "
                     f"{type(error).__name__}: {error}"
@@ -320,6 +346,7 @@ async def _clean_articles(
         "selected_articles": len(articles),
         "succeeded_articles": results.count(True),
         "failed_articles": failures,
+        "failure_details": failure_details,
         "throughput_articles_per_minute": round(
             len(articles) * 60 / max(elapsed, 0.001),
             3,

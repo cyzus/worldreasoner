@@ -1,5 +1,6 @@
 """LLM readability pass for normalized article snapshots."""
 
+import asyncio
 import re
 from enum import Enum
 from typing import Any, Dict, List
@@ -69,9 +70,15 @@ def measure_cleaning_fidelity(source: str, cleaned: str) -> Dict[str, Any]:
 class ArticleMarkdownCleaner:
     """Remove page furniture while preserving the article's factual content."""
 
-    def __init__(self, llm: StructuredLLM, chunk_chars: int = 24_000) -> None:
+    def __init__(
+        self,
+        llm: StructuredLLM,
+        chunk_chars: int = 24_000,
+        request_concurrency: int = 1,
+    ) -> None:
         self.llm = llm
         self.chunk_chars = chunk_chars
+        self.request_semaphore = asyncio.Semaphore(request_concurrency)
 
     async def clean(
         self,
@@ -80,23 +87,27 @@ class ArticleMarkdownCleaner:
     ) -> ArticleCleanupResult:
         """Assess and clean an article in bounded paragraph-aligned chunks."""
         chunks = self._split_chunks(content)
-        cleaned: List[str] = []
-        assessments: List[CleanMarkdownResponse] = []
-        for index, chunk in enumerate(chunks, 1):
-            result = await self.llm.complete_json(
-                system_prompt=self._system_prompt(),
-                user_prompt=(
-                    f"Expected article title: {expected_title or '[unknown]'}\n"
-                    f"Document chunk {index} of {len(chunks)}:\n\n{chunk}\n\n"
-                    "Return article_validity, validity_reason, and "
-                    "clean_markdown in one JSON object."
-                ),
-                response_model=CleanMarkdownResponse,
-            )
+        async def clean_chunk(
+            index: int,
+            chunk: str,
+        ) -> CleanMarkdownResponse:
+            async with self.request_semaphore:
+                result = await self.llm.complete_json(
+                    system_prompt=self._system_prompt(),
+                    user_prompt=(
+                        f"Expected article title: {expected_title or '[unknown]'}\n"
+                        f"Document chunk {index} of {len(chunks)}:\n\n{chunk}\n\n"
+                        "Return article_validity, validity_reason, and "
+                        "clean_markdown in one JSON object."
+                    ),
+                    response_model=CleanMarkdownResponse,
+                )
+            result["validity_reason"] = result.get("validity_reason") or ""
+            result["clean_markdown"] = result.get("clean_markdown") or ""
             assessment = CleanMarkdownResponse.model_validate(result)
             if (
                 assessment.article_validity == ArticleValidity.VALID
-                and not assessment.clean_markdown.strip()
+                and not (assessment.clean_markdown or "").strip()
             ):
                 assessment = assessment.model_copy(
                     update={
@@ -106,9 +117,19 @@ class ArticleMarkdownCleaner:
                         ),
                     }
                 )
-            assessments.append(assessment)
-            if assessment.article_validity == ArticleValidity.VALID:
-                cleaned.append(assessment.clean_markdown.strip())
+            return assessment
+
+        assessments = await asyncio.gather(
+            *(
+                clean_chunk(index, chunk)
+                for index, chunk in enumerate(chunks, 1)
+            )
+        )
+        cleaned = [
+            (assessment.clean_markdown or "").strip()
+            for assessment in assessments
+            if assessment.article_validity == ArticleValidity.VALID
+        ]
 
         validities = {item.article_validity for item in assessments}
         if ArticleValidity.VALID in validities:
@@ -119,9 +140,9 @@ class ArticleMarkdownCleaner:
             article_validity = ArticleValidity.INVALID
         reasons = list(
             dict.fromkeys(
-                item.validity_reason.strip()
+                (item.validity_reason or "").strip()
                 for item in assessments
-                if item.validity_reason.strip()
+                if (item.validity_reason or "").strip()
             )
         )
         return ArticleCleanupResult(

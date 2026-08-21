@@ -323,6 +323,27 @@ class EvidenceQualityService:
         self.db.save(ArticleQualityRecord, record)
         return record
 
+    def record_terminal_cleanup_failure(
+        self,
+        article: Article,
+        error: Exception,
+    ) -> ArticleQualityRecord:
+        """Persist a bounded model failure without claiming cleaned content."""
+        if self.cleaner is None:
+            raise RuntimeError("No article cleaner configured")
+        record = self.ensure_article_record(article)
+        record.cleaner_model = self.cleaner.llm.model_name
+        record.cleaner_prompt_version = CLEANER_PROMPT_VERSION
+        record.status = QualityStatus.NEEDS_REPAIR
+        record.metadata["cleaner_failure"] = {
+            "error_type": type(error).__name__,
+            "error": str(error),
+            "terminal": True,
+        }
+        record.updated_at = datetime.now(timezone.utc)
+        self.db.save(ArticleQualityRecord, record)
+        return record
+
     @staticmethod
     def article_is_eligible_for_cleanup(record: ArticleQualityRecord) -> bool:
         """Return whether a snapshot may be sent to the cleanup model."""

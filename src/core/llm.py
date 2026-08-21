@@ -48,22 +48,27 @@ class LiteLLMClient:
         for attempt in range(_EMPTY_CHOICES_MAX_RETRIES + 1):
             import litellm
             response = await litellm.acompletion(**kwargs, messages=messages)
-            if response["choices"]:
-                self._record_usage(response, litellm)
-                return response["choices"][0]["message"]["content"]
-            # Empty choices — transient API hiccup
+            self._record_usage(response, litellm)
+            choices = response.get("choices") or []
+            if choices:
+                content = choices[0].get("message", {}).get("content")
+                if isinstance(content, str) and content.strip():
+                    return content
+            # Empty choices or null/blank content are transient API hiccups.
             if attempt < _EMPTY_CHOICES_MAX_RETRIES:
                 wait = _EMPTY_CHOICES_BACKOFF_BASE**attempt
                 from src.utils.logging import logger
 
                 logger.warning(
-                    f"LLM returned empty choices (attempt {attempt + 1}/{_EMPTY_CHOICES_MAX_RETRIES}), "
+                    f"LLM returned an empty response "
+                    f"(attempt {attempt + 1}/{_EMPTY_CHOICES_MAX_RETRIES}), "
                     f"retrying in {wait:.1f}s..."
                 )
                 await asyncio.sleep(wait)
 
         raise RuntimeError(
-            f"LLM returned empty choices after {_EMPTY_CHOICES_MAX_RETRIES} retries. "
+            f"LLM returned no usable content after "
+            f"{_EMPTY_CHOICES_MAX_RETRIES} retries. "
             "This is likely a transient API issue."
         )
 

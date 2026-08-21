@@ -538,6 +538,46 @@ async def test_empty_cleanup_is_recorded_as_completed_attempt(
 
 
 @pytest.mark.asyncio
+async def test_cleanup_normalizes_null_text_fields() -> None:
+    cleaner = ArticleMarkdownCleaner(
+        FakeStructuredLLM(
+            "cleaner-model",
+            [
+                {
+                    "article_validity": "invalid",
+                    "validity_reason": None,
+                    "clean_markdown": None,
+                }
+            ],
+        )
+    )
+
+    result = await cleaner.clean("Navigation and page furniture only.")
+
+    assert result.article_validity.value == "invalid"
+    assert result.validity_reasons == []
+    assert result.clean_markdown == ""
+
+
+def test_terminal_cleanup_failure_is_persisted(tmp_path: Path) -> None:
+    article = _article("Substantive article text. " * 10)
+    cleaner = ArticleMarkdownCleaner(FakeStructuredLLM("cleaner-model", []))
+    db = GenericDatabase(str(tmp_path / "quality.db"))
+    service = EvidenceQualityService(db, "v2.0", cleaner=cleaner)
+
+    record = service.record_terminal_cleanup_failure(
+        article,
+        RuntimeError("LLM returned no usable content after 3 retries."),
+    )
+
+    assert record.cleaner_model == "cleaner-model"
+    assert record.clean_markdown is None
+    assert record.status == QualityStatus.NEEDS_REPAIR
+    assert record.metadata["cleaner_failure"]["terminal"] is True
+    assert service.article_is_eligible_for_cleanup(record) is False
+
+
+@pytest.mark.asyncio
 async def test_valid_cleanup_is_recorded_and_remains_llm_eligible(
     tmp_path: Path,
 ) -> None:
