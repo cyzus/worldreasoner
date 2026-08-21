@@ -264,6 +264,38 @@ class StalledConstructionPipeline(StubConstructionPipeline):
         return [article], {}
 
 
+def test_search_simplifies_backend_incompatible_date_operators(
+    monkeypatch,
+) -> None:
+    calls = []
+
+    class FakeWebSearchTool:
+        def _get_structured_results(self, query, **kwargs):
+            del kwargs
+            calls.append(query)
+            if "after:" in query:
+                return []
+            return [{"url": "https://example.test/result", "title": "Result"}]
+
+    monkeypatch.setattr(
+        "src.pipelines.construction.orchestrator.WebSearchTool",
+        FakeWebSearchTool,
+    )
+    pipeline = object.__new__(ConstructionPipeline)
+    pipeline.max_search_results = 1
+
+    results = pipeline._search(
+        '"Donald Trump" AND "2024 election" '
+        "after:2024-11-05 before:2024-11-08"
+    )
+
+    assert [item["url"] for item in results] == [
+        "https://example.test/result"
+    ]
+    assert len(calls) == 2
+    assert "after:" not in calls[1]
+
+
 @pytest.mark.asyncio
 async def test_constructs_question_evidence_and_graph_in_fresh_database(
     tmp_path: Path,

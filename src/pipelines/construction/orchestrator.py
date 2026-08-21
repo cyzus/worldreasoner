@@ -775,25 +775,70 @@ class ConstructionPipeline:
         return list(await asyncio.gather(*(clean(article) for article in articles)))
 
     def _search(self, query: str) -> List[Dict[str, object]]:
-        results = WebSearchTool()._get_structured_results(
-            query=query, categories="news", language="en"
-        )
-        if results:
-            return results
+        search = WebSearchTool()
+        results: List[Dict[str, object]] = []
+        seen_urls: set[str] = set()
+        candidates = self._search_query_candidates(query)
+        for candidate in candidates:
+            candidate_results = search._get_structured_results(
+                query=candidate,
+                categories="news",
+                language="en",
+            )
+            for result in candidate_results:
+                url = str(result.get("url") or "")
+                if not url or url in seen_urls:
+                    continue
+                seen_urls.add(url)
+                results.append(result)
+            if len(results) >= self.max_search_results:
+                return results
+
         fallback = SmolWebSearchTool()
-        candidates = [
-            query,
-            re.sub(r"\b(?:after|before):\d{4}-\d{2}-\d{2}\b", "", query).strip(),
-        ]
-        for candidate in dict.fromkeys(item for item in candidates if item):
+        for candidate in candidates:
             try:
                 markdown = fallback.forward(query=candidate)
             except Exception:
                 continue
             parsed = self._parse_markdown_search_results(markdown)
-            if parsed:
-                return parsed
-        return []
+            for result in parsed:
+                url = str(result.get("url") or "")
+                if not url or url in seen_urls:
+                    continue
+                seen_urls.add(url)
+                results.append(result)
+            if len(results) >= self.max_search_results:
+                break
+        return results
+
+    @staticmethod
+    def _search_query_candidates(query: str) -> List[str]:
+        """Return progressively simpler queries for heterogeneous search backends."""
+        without_dates = re.sub(
+            r"\b(?:after|before):\d{4}-\d{2}-\d{2}\b",
+            " ",
+            query,
+            flags=re.IGNORECASE,
+        )
+        without_boolean_syntax = re.sub(
+            r"\b(?:AND|OR)\b|[()]",
+            " ",
+            without_dates,
+            flags=re.IGNORECASE,
+        )
+        without_quotes = without_boolean_syntax.replace('"', " ")
+        return list(
+            dict.fromkeys(
+                normalized
+                for candidate in (
+                    query,
+                    without_dates,
+                    without_boolean_syntax,
+                    without_quotes,
+                )
+                if (normalized := " ".join(candidate.split()))
+            )
+        )
 
     @staticmethod
     def _parse_markdown_search_results(markdown: str) -> List[Dict[str, object]]:
