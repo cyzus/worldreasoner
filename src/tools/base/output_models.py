@@ -39,7 +39,8 @@ class OutputModelBase(BaseModel):
     def keys(self):
         return self.model_dump().keys()
 
-    def items(self):
+    def model_items(self):
+        """Return serialized field pairs without colliding with output fields."""
         return self.model_dump().items()
 
     def values(self):
