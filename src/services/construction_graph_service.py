@@ -58,6 +58,9 @@ class ConstructionGraphService(ServiceBase):
             raise ArtifactValidationError(errors)
         if explanation.status != ArtifactStatus.VALIDATED:
             errors.append("explanation_not_validated")
+        question = self.db.get(Question, revision.question_id)
+        if question is None:
+            errors.append("unknown_question")
 
         evidence_aliases = self._alias_map(
             revision.run_id,
@@ -80,6 +83,11 @@ class ConstructionGraphService(ServiceBase):
                 errors.append(f"agent_defined_outcome:{node.alias}")
             if node.occurred_date is None:
                 errors.append(f"missing_event_date:{node.alias}")
+            elif (
+                question is not None
+                and node.occurred_date.date() > question.resolution_date.date()
+            ):
+                errors.append(f"event_after_resolution:{node.alias}")
             if not node.evidence_aliases:
                 errors.append(f"missing_node_evidence:{node.alias}")
             errors.extend(
@@ -103,6 +111,17 @@ class ConstructionGraphService(ServiceBase):
             if edge.target_alias in node_map:
                 if edge.source_alias == edge.target_alias:
                     errors.append(f"self_loop:{edge.source_alias}")
+                source_date = node_map[edge.source_alias].occurred_date
+                target_date = node_map[edge.target_alias].occurred_date
+                if (
+                    source_date is not None
+                    and target_date is not None
+                    and source_date.date() > target_date.date()
+                ):
+                    errors.append(
+                        "non_chronological_edge:"
+                        f"{edge.source_alias}->{edge.target_alias}"
+                    )
                 adjacency[edge.source_alias].add(edge.target_alias)
             elif edge.target_alias in outcome_aliases:
                 targets_outcome.add(edge.source_alias)

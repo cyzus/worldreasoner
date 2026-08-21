@@ -242,6 +242,45 @@ class GraphRepairingFakeRuntime(FakeRuntime):
         return output, usage
 
 
+class TemporalGraphRepairingFakeRuntime(FakeRuntime):
+    """Return a temporally invalid graph before correcting it."""
+
+    def __init__(self) -> None:
+        self.graph_calls = 0
+
+    async def run_structured(
+        self,
+        name: str,
+        instructions: str,
+        user_input: str,
+        output_type: Type[BaseModel],
+        max_turns: int = 4,
+    ) -> tuple[BaseModel, AgentUsage]:
+        output, usage = await super().run_structured(
+            name,
+            instructions,
+            user_input,
+            output_type,
+            max_turns,
+        )
+        if output_type is GraphDraft:
+            self.graph_calls += 1
+            payload = json.loads(user_input)
+            if self.graph_calls == 1:
+                assert isinstance(output, GraphDraft)
+                output.nodes[0].occurred_date = datetime(
+                    2024, 3, 1, tzinfo=timezone.utc
+                )
+            else:
+                assert "event_after_resolution:E01" in payload[
+                    "validation_errors"
+                ]
+                assert "non_chronological_edge:E01->E02" in payload[
+                    "validation_errors"
+                ]
+        return output, usage
+
+
 class StubConstructionPipeline(ConstructionPipeline):
     """Replace network collection while retaining real quality artifacts."""
 
@@ -406,6 +445,27 @@ async def test_graph_repair_receives_rejected_graph(
 
     assert runtime.graph_calls == 2
     assert result.impact_count == 2
+
+
+@pytest.mark.asyncio
+async def test_graph_repair_enforces_resolution_date_and_edge_order(
+    tmp_path: Path,
+) -> None:
+    runtime = TemporalGraphRepairingFakeRuntime()
+    pipeline = StubConstructionPipeline(
+        db_path=tmp_path / "temporal-graph-repair.db",
+        runtime=runtime,
+        requirements=EvidenceSatisfactionConfig(
+            min_articles=3,
+            min_graph_events=3,
+            min_graph_depth=2,
+        ),
+    )
+
+    result = await pipeline.run("resolved test event")
+
+    assert runtime.graph_calls == 2
+    assert result.event_count == 2
 
 
 @pytest.mark.asyncio
