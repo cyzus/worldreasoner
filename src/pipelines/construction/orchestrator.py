@@ -977,6 +977,7 @@ class ConstructionPipeline:
             StageAttemptStatus.SUCCEEDED,
             output_artifact_ids=artifact_ids,
             token_usage=usage.total_tokens,
+            cost_usd=usage.cost_usd,
         )
 
     def _finish_failure(self, attempt_id: str, code: str, exc: Exception) -> None:
@@ -994,4 +995,5 @@ class ConstructionPipeline:
             output_tokens=left.output_tokens + right.output_tokens,
             total_tokens=left.total_tokens + right.total_tokens,
             requests=left.requests + right.requests,
+            cost_usd=left.cost_usd + right.cost_usd,
         )

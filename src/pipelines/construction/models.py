@@ -114,6 +114,7 @@ class AgentUsage(BaseModel):
     output_tokens: int = 0
     total_tokens: int = 0
     requests: int = 0
+    cost_usd: float = 0.0
 
 
 class AgentResult(BaseModel):

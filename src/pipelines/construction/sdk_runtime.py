@@ -53,8 +53,7 @@ class AgentsSDKRuntime:
             output = output_type.model_validate(output)
         return output, self._extract_usage(result)
 
-    @staticmethod
-    def _extract_usage(result: Any) -> AgentUsage:
+    def _extract_usage(self, result: Any) -> AgentUsage:
         """Read usage across SDK versions without coupling pipeline behavior to it."""
         context = getattr(result, "context_wrapper", None)
         usage = getattr(context, "usage", None)
@@ -70,6 +69,7 @@ class AgentsSDKRuntime:
             or getattr(usage, "completion_tokens", 0)
             or 0
         )
+        cost_usd = self._estimate_cost(usage, input_tokens, output_tokens)
         return AgentUsage(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
@@ -78,4 +78,36 @@ class AgentsSDKRuntime:
                 or input_tokens + output_tokens
             ),
             requests=int(getattr(usage, "requests", 0) or 0),
+            cost_usd=cost_usd,
         )
+
+    def _estimate_cost(
+        self,
+        usage: Any,
+        input_tokens: int,
+        output_tokens: int,
+    ) -> float:
+        """Estimate provider cost using LiteLLM's installed model-price table."""
+        import litellm
+
+        entries = list(getattr(usage, "request_usage_entries", None) or [])
+        if not entries:
+            entries = [usage]
+        total = 0.0
+        try:
+            for entry in entries:
+                prompt_cost, completion_cost = litellm.cost_per_token(
+                    model=self.model_id,
+                    prompt_tokens=int(
+                        getattr(entry, "input_tokens", input_tokens) or 0
+                    ),
+                    completion_tokens=int(
+                        getattr(entry, "output_tokens", output_tokens) or 0
+                    ),
+                )
+                total += float(prompt_cost or 0.0) + float(
+                    completion_cost or 0.0
+                )
+        except Exception:
+            return 0.0
+        return total
