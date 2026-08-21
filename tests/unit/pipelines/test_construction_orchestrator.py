@@ -208,6 +208,40 @@ class RepairingFakeRuntime(FakeRuntime):
         return output, usage
 
 
+class GraphRepairingFakeRuntime(FakeRuntime):
+    """Require the rejected graph to be supplied to the repair call."""
+
+    def __init__(self) -> None:
+        self.graph_calls = 0
+
+    async def run_structured(
+        self,
+        name: str,
+        instructions: str,
+        user_input: str,
+        output_type: Type[BaseModel],
+        max_turns: int = 4,
+    ) -> tuple[BaseModel, AgentUsage]:
+        output, usage = await super().run_structured(
+            name,
+            instructions,
+            user_input,
+            output_type,
+            max_turns,
+        )
+        if output_type is GraphDraft:
+            self.graph_calls += 1
+            payload = json.loads(user_input)
+            if self.graph_calls == 1:
+                assert isinstance(output, GraphDraft)
+                output.outcome_impacts = output.outcome_impacts[:1]
+            else:
+                assert payload["previous_graph"] is not None
+                assert "missing_outcome_impact:E02" in payload["validation_errors"]
+                assert name == "GraphRepairer"
+        return output, usage
+
+
 class StubConstructionPipeline(ConstructionPipeline):
     """Replace network collection while retaining real quality artifacts."""
 
@@ -351,6 +385,27 @@ async def test_repairs_undersized_explanation_before_graph_build(
 
     assert runtime.explanation_calls == 2
     assert result.event_count == 2
+
+
+@pytest.mark.asyncio
+async def test_graph_repair_receives_rejected_graph(
+    tmp_path: Path,
+) -> None:
+    runtime = GraphRepairingFakeRuntime()
+    pipeline = StubConstructionPipeline(
+        db_path=tmp_path / "graph-repair.db",
+        runtime=runtime,
+        requirements=EvidenceSatisfactionConfig(
+            min_articles=3,
+            min_graph_events=3,
+            min_graph_depth=2,
+        ),
+    )
+
+    result = await pipeline.run("resolved test event")
+
+    assert runtime.graph_calls == 2
+    assert result.impact_count == 2
 
 
 @pytest.mark.asyncio

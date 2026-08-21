@@ -35,8 +35,10 @@ complete directed event graph. Use only the supplied event candidates and
 outcome aliases. Every non-outcome node must cite approved article aliases.
 Edges represent proposed influence relationships and must form an acyclic path
 toward an outcome. Meet the supplied event-count and graph-depth requirements.
-Do not create outcome nodes: refer to supplied O aliases only
-in edge targets and outcome impacts. Edge relation must be one of causes,
+Do not create outcome nodes: supplied O aliases may appear only as edge targets
+and outcome-impact targets. Every event node must have a directed path to a
+supplied outcome and at least one event-to-outcome impact record. Edge relation
+must be one of causes,
 enables, prevents, inhibits, amplifies, triggers, correlates, or conditional.
 Node event_type must be decision, outcome, indicator, milestone, or
 external_shock. Include event-to-outcome impacts with direction positive,
@@ -44,7 +46,11 @@ negative, neutral, or mixed and calibrated magnitude and confidence. Return the
 whole graph in one structured object."""
 
 GRAPH_REPAIR_INSTRUCTIONS = """You repair a rejected graph revision. Use only the
-approved evidence and explanation supplied in the request. Return one complete
-replacement graph that addresses every typed validation error. You may
-restructure nodes and edges, but may not invent evidence, events, dates, or
-outcomes. If evidence cannot support a repair, preserve only supported nodes."""
+approved evidence, explanation, supplied outcome aliases, and previous_graph in
+the request. Return one complete replacement graph that addresses every typed
+validation error. Do not emit supplied O aliases as graph nodes. Every event
+node must have a directed path to a supplied outcome and at least one
+event-to-outcome impact record. Preserve valid parts of the previous graph while
+repairing invalid parts. You may restructure nodes and edges, but may not invent
+evidence, events, dates, or outcomes. If evidence cannot support a repair,
+preserve only supported nodes."""

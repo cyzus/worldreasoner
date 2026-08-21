@@ -544,6 +544,7 @@ class ConstructionPipeline:
         total_usage = AgentUsage()
         parent_id: Optional[str] = None
         validation_errors: List[str] = []
+        previous_graph: Optional[Dict[str, object]] = None
         evidence = self._read_dossier(run.id, dossier)
         try:
             for revision_number in range(self.max_graph_repairs + 1):
@@ -581,6 +582,7 @@ class ConstructionPipeline:
                         for alias, target_id in outcome_aliases.items()
                     ],
                     "validation_errors": validation_errors,
+                    "previous_graph": previous_graph,
                 }
                 draft, usage = await self.runtime.run_structured(
                     "GraphRepairer" if validation_errors else "GraphBuilder",
@@ -613,6 +615,7 @@ class ConstructionPipeline:
                 except ArtifactValidationError as exc:
                     validation_errors = exc.errors
                     parent_id = revision.id
+                    previous_graph = draft.model_dump(mode="json")
                     if revision_number >= self.max_graph_repairs:
                         raise
             raise RuntimeError("Graph repair budget exhausted")
