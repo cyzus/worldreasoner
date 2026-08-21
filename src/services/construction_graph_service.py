@@ -1,8 +1,9 @@
 """Deterministic validation and atomic commit for staged construction graphs."""
 
-from typing import Dict, List, Set
+from typing import Dict, List, Optional, Set
 from uuid import uuid4
 
+from src.config.pipeline import EvidenceSatisfactionConfig
 from src.core.database import GenericDatabase
 from src.domain.models import (
     AgentAlias,
@@ -21,14 +22,21 @@ from src.domain.models import (
     Question,
 )
 from src.services.pipeline_artifact_service import ArtifactValidationError
+from src.services.question_monitor_service import QuestionMonitorService
 from src.services.service_base import ServiceBase
 
 
 class ConstructionGraphService(ServiceBase):
     """Keep agent graph proposals isolated until deterministic checks pass."""
 
-    def __init__(self, db: GenericDatabase) -> None:
+    def __init__(
+        self,
+        db: GenericDatabase,
+        requirements: Optional[EvidenceSatisfactionConfig] = None,
+    ) -> None:
         super().__init__(db)
+        self.requirements = requirements or EvidenceSatisfactionConfig()
+        self.monitor = QuestionMonitorService(db, self.requirements)
         for model in (
             GraphRevision,
             AgentAlias,
@@ -108,7 +116,8 @@ class ConstructionGraphService(ServiceBase):
             if edge.relation not in {item.value for item in CausalRelationType}:
                 errors.append(f"invalid_edge_relation:{edge.relation}")
 
-        if self._has_cycle(adjacency):
+        has_cycle = self._has_cycle(adjacency)
+        if has_cycle:
             errors.append("cycle_detected")
 
         impact_pairs: Set[tuple[str, str]] = set()
@@ -137,6 +146,20 @@ class ConstructionGraphService(ServiceBase):
             if not self._reaches_outcome(alias, adjacency, targets_outcome):
                 errors.append(f"disconnected_from_outcome:{alias}")
 
+        graph_depth = (
+            0
+            if has_cycle
+            else self._max_depth_to_outcome(adjacency, targets_outcome)
+        )
+        total_event_count = len(node_map) + 1
+        errors.extend(
+            self.monitor.evaluate_graph_requirements(
+                max_depth=graph_depth,
+                event_count=total_event_count,
+                hypothesis_count=len(revision.edges),
+            )
+        )
+
         if errors:
             revision.status = ArtifactStatus.REJECTED
             revision.validation_results = {"valid": False, "errors": errors}
@@ -147,6 +170,8 @@ class ConstructionGraphService(ServiceBase):
             "node_count": len(node_map),
             "edge_count": len(revision.edges),
             "impact_count": len(revision.outcome_impacts),
+            "graph_depth": graph_depth,
+            "total_event_count": total_event_count,
         }
         revision.status = ArtifactStatus.VALIDATED
         revision.validation_results = results
@@ -322,3 +347,20 @@ class ConstructionGraphService(ServiceBase):
             visited.add(node)
             pending.extend(adjacency[node])
         return False
+
+    @staticmethod
+    def _max_depth_to_outcome(
+        adjacency: Dict[str, Set[str]], targets_outcome: Set[str]
+    ) -> int:
+        """Return the longest edge count from a proposal node to an outcome."""
+        memo: Dict[str, int] = {}
+
+        def depth(node: str) -> int:
+            if node in memo:
+                return memo[node]
+            child_depths = [depth(child) for child in adjacency[node]]
+            direct_depth = 1 if node in targets_outcome else 0
+            memo[node] = max([direct_depth, *[1 + item for item in child_depths]])
+            return memo[node]
+
+        return max((depth(node) for node in adjacency), default=0)

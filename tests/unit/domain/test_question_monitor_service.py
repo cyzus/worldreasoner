@@ -96,6 +96,9 @@ def skipped_question(test_db):
 @pytest.fixture
 def question_with_evidence(test_db, resolved_question):
     """Create a question with sufficient evidence."""
+    resolved_question.causal_explanation = (
+        "The collected evidence supports a complete causal explanation."
+    )
     # Create target event
     event = Event(
         id="evt_target_001",
@@ -270,6 +273,17 @@ class TestCheckSatisfaction:
         # Check that articles is mentioned as missing
         missing_str = str(satisfaction.missing_requirements)
         assert "articles" in missing_str
+
+    def test_shared_requirement_evaluators_include_hypotheses(self, service):
+        """Pure evaluators expose the canonical article and graph policy."""
+        assert service.evaluate_article_count_requirement(4) == [
+            "articles (4 < 5)"
+        ]
+        assert service.evaluate_graph_requirements(1, 2, 0) == [
+            "graph_depth (1 < 2)",
+            "events (2 < 10)",
+            "hypotheses (0 < 1)",
+        ]
 
 
 class TestGetForecastReadiness:

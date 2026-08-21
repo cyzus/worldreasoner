@@ -9,6 +9,7 @@ from typing import List
 import typer
 from rich.console import Console
 
+from src.config.pipeline import SATISFACTION_DEFAULTS, EvidenceSatisfactionConfig
 from src.pipelines.construction.orchestrator import ConstructionPipeline
 from src.pipelines.construction.sdk_runtime import AgentsSDKRuntime
 
@@ -35,8 +36,30 @@ def run_construction(
     ),
     dataset_version: str = typer.Option("v2-live", "--dataset-version"),
     max_search_results: int = typer.Option(5, min=1, max=10),
-    min_approved_articles: int = typer.Option(3, min=1, max=10),
+    min_approved_articles: int = typer.Option(
+        SATISFACTION_DEFAULTS.min_articles,
+        "--min-approved-articles",
+        min=1,
+        help="Minimum cleaned, approved articles required before synthesis.",
+    ),
+    min_graph_events: int = typer.Option(
+        SATISFACTION_DEFAULTS.min_graph_events,
+        "--min-graph-events",
+        min=2,
+    ),
+    min_graph_depth: int = typer.Option(
+        SATISFACTION_DEFAULTS.min_graph_depth,
+        "--min-graph-depth",
+        min=1,
+    ),
     cleaner_concurrency: int = typer.Option(3, min=1, max=8),
+    max_evidence_rounds: int = typer.Option(
+        3,
+        "--max-evidence-rounds",
+        min=1,
+        max=10,
+        help="Bounded collect-clean-reassess rounds before evidence failure.",
+    ),
     allow_model_content: bool = typer.Option(
         False,
         "--allow-model-content",
@@ -68,8 +91,13 @@ def run_construction(
         runtime=runtime,
         dataset_version=dataset_version,
         max_search_results=max_search_results,
-        min_approved_articles=min_approved_articles,
+        requirements=EvidenceSatisfactionConfig(
+            min_articles=min_approved_articles,
+            min_graph_events=min_graph_events,
+            min_graph_depth=min_graph_depth,
+        ),
         cleaner_concurrency=cleaner_concurrency,
+        max_evidence_rounds=max_evidence_rounds,
         source_urls=source_url,
     )
     result = asyncio.run(pipeline.run(topic))

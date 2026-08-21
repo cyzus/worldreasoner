@@ -110,14 +110,23 @@ class QuestionMonitorService(ServiceBase):
         Both check_satisfaction (DB-querying) and get_processed_question_ids (bulk)
         delegate here, as do the inspector tools.
         """
-        missing = []
-        if article_count < self.config.min_articles:
-            missing.append(f"articles ({article_count} < {self.config.min_articles})")
+        missing = self.evaluate_article_count_requirement(article_count)
         if not causal_explanation:
             missing.append("causal_explanation missing")
         return missing
 
-    def evaluate_graph_requirements(self, max_depth: int, event_count: int) -> List[str]:
+    def evaluate_article_count_requirement(self, article_count: int) -> List[str]:
+        """Evaluate article volume without requiring a completed explanation."""
+        if article_count < self.config.min_articles:
+            return [f"articles ({article_count} < {self.config.min_articles})"]
+        return []
+
+    def evaluate_graph_requirements(
+        self,
+        max_depth: int,
+        event_count: int,
+        hypothesis_count: Optional[int] = None,
+    ) -> List[str]:
         """Return missing graph requirements given pre-computed stats.
 
         Single source of truth for graph-level satisfaction checks.
@@ -131,6 +140,14 @@ class QuestionMonitorService(ServiceBase):
         if event_count < self.config.min_graph_events:
             missing.append(
                 f"events ({event_count} < {self.config.min_graph_events})"
+            )
+        if (
+            hypothesis_count is not None
+            and hypothesis_count < self.config.min_hypotheses
+        ):
+            missing.append(
+                "hypotheses "
+                f"({hypothesis_count} < {self.config.min_hypotheses})"
             )
         return missing
 
@@ -264,7 +281,11 @@ class QuestionMonitorService(ServiceBase):
             event_ids.add(h.target_event_id)
         event_count = len(event_ids)
 
-        missing = self.evaluate_graph_requirements(max_depth, event_count)
+        missing = self.evaluate_graph_requirements(
+            max_depth,
+            event_count,
+            hypothesis_count=len(hypotheses),
+        )
         return EvidenceSatisfaction(
             is_satisfied=not missing,
             graph_depth=max_depth,

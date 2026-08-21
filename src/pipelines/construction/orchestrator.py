@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from smolagents import WebSearchTool as SmolWebSearchTool
 
 from src.config import get_config
+from src.config.pipeline import EvidenceSatisfactionConfig
 from src.core.database import GenericDatabase
 from src.core.llm import LiteLLMClient
 from src.domain.models import (
@@ -62,6 +63,7 @@ from src.services.pipeline_artifact_service import (
     ArtifactValidationError,
     PipelineArtifactService,
 )
+from src.services.question_monitor_service import QuestionMonitorService
 from src.tools.collectors.article_collector import ArticleCollectorTool
 from src.tools.collectors.web_fetch import WebFetchTool
 from src.tools.collectors.web_search import WebSearchTool
@@ -110,9 +112,11 @@ class ConstructionPipeline:
         runtime: StructuredRuntime,
         dataset_version: str = "v2-live",
         max_search_results: int = 5,
-        min_approved_articles: int = 3,
+        requirements: Optional[EvidenceSatisfactionConfig] = None,
         cleaner_concurrency: int = 3,
+        max_evidence_rounds: int = 3,
         max_graph_repairs: int = 2,
+        max_explanation_repairs: int = 2,
         source_urls: Optional[List[str]] = None,
     ) -> None:
         self.db = GenericDatabase(db_path)
@@ -120,11 +124,13 @@ class ConstructionPipeline:
         self.runtime = runtime
         self.dataset_version = dataset_version
         self.max_search_results = max_search_results
-        self.min_approved_articles = min_approved_articles
+        self.requirements = requirements or EvidenceSatisfactionConfig()
+        self.max_evidence_rounds = max_evidence_rounds
         self.max_graph_repairs = max_graph_repairs
+        self.max_explanation_repairs = max_explanation_repairs
         self.source_urls = source_urls or []
         self.artifacts = PipelineArtifactService(self.db)
-        self.graphs = ConstructionGraphService(self.db)
+        self._configure_requirements(self.requirements)
         config = get_config()
         cleaner = ArticleMarkdownCleaner(
             LiteLLMStructuredClient(LiteLLMClient(config.llm)),
@@ -142,7 +148,11 @@ class ConstructionPipeline:
             question_id=None,
             dataset_version=self.dataset_version,
             workflow_version=WORKFLOW_VERSION,
-            model_configuration={"model": self.runtime.model_id},
+            model_configuration={
+                "model": self.runtime.model_id,
+                "requirements": self.requirements.model_dump(),
+                "max_evidence_rounds": self.max_evidence_rounds,
+            },
             prompt_bundle_version=PROMPT_BUNDLE_VERSION,
         )
         try:
@@ -178,6 +188,11 @@ class ConstructionPipeline:
         """Resume only graph construction from validated prior artifacts."""
         run = self.artifacts.reopen_run(run_id, "graph_construction")
         self.dataset_version = run.dataset_version
+        stored_requirements = run.model_configuration.get("requirements")
+        if stored_requirements:
+            self._configure_requirements(
+                EvidenceSatisfactionConfig.model_validate(stored_requirements)
+            )
         if run.question_id is None:
             raise RuntimeError("Cannot resume graph construction without a question")
         question = self.db.get(Question, run.question_id)
@@ -210,6 +225,14 @@ class ConstructionPipeline:
             token_usage=completed.token_usage,
             cost_usd=completed.cost_usd,
         )
+
+    def _configure_requirements(
+        self, requirements: EvidenceSatisfactionConfig
+    ) -> None:
+        """Bind all deterministic gates to one canonical requirement policy."""
+        self.requirements = requirements
+        self.monitor = QuestionMonitorService(self.db, requirements)
+        self.graphs = ConstructionGraphService(self.db, requirements)
 
     async def _generate_question(
         self, run: PipelineRun, topic: str
@@ -264,33 +287,139 @@ class ConstructionPipeline:
             )
             assert isinstance(plan, SearchPlanDraft)
             total_usage = self._add_usage(total_usage, usage)
-            articles, rejected = await self._collect_search_results(question, plan)
-            records = await self._clean_articles(articles)
-            approved = [
-                record
-                for record in records
-                if record.status == QualityStatus.COMPLETE and record.clean_markdown
-            ]
+
+            approved_by_id: Dict[str, ArticleQualityRecord] = {}
+            all_articles: Dict[str, Article] = {}
+            rejected: Dict[str, List[str]] = {}
+            seen_urls: set[str] = set()
+            queries_used: List[str] = []
+            intended_coverage: List[str] = []
+            round_statistics: List[Dict[str, object]] = []
+            missing_requirements: List[str] = []
+            coverage: Optional[CoverageAssessmentDraft] = None
+
+            for round_number in range(1, self.max_evidence_rounds + 1):
+                queries_used.extend(item.query for item in plan.queries)
+                intended_coverage.extend(plan.intended_coverage)
+                articles, round_rejected = await self._collect_search_results(
+                    question,
+                    plan,
+                    seen_urls=seen_urls,
+                    include_source_urls=round_number == 1,
+                )
+                rejected.update(round_rejected)
+                all_articles.update({item.id: item for item in articles})
+                records = await self._clean_articles(articles)
+                for record in records:
+                    if (
+                        record.status == QualityStatus.COMPLETE
+                        and record.clean_markdown
+                    ):
+                        approved_by_id[record.id] = record
+
+                approved = list(approved_by_id.values())
+                missing_requirements = (
+                    self.monitor.evaluate_article_count_requirement(len(approved))
+                )
+                coverage = None
+                if not missing_requirements:
+                    temporary_aliases = {
+                        f"A{index:02d}": record.id
+                        for index, record in enumerate(approved, 1)
+                    }
+                    evidence = self._render_evidence(temporary_aliases, approved)
+                    assessment, usage = await self.runtime.run_structured(
+                        "EvidenceCoverageAssessor",
+                        COVERAGE_ASSESSOR_INSTRUCTIONS,
+                        json.dumps(
+                            {
+                                "question": self._question_payload(question),
+                                "evidence": evidence,
+                                "requirements": self.requirements.model_dump(),
+                            },
+                            default=str,
+                        ),
+                        CoverageAssessmentDraft,
+                    )
+                    assert isinstance(assessment, CoverageAssessmentDraft)
+                    coverage = assessment
+                    total_usage = self._add_usage(total_usage, usage)
+                    if not coverage.ready:
+                        missing_requirements = coverage.missing_evidence_needs or [
+                            "coverage assessor rejected the evidence dossier"
+                        ]
+
+                round_statistics.append(
+                    {
+                        "round": round_number,
+                        "fetched_new": len(articles),
+                        "approved_new": sum(
+                            1
+                            for record in records
+                            if record.id in approved_by_id
+                        ),
+                        "approved_total": len(approved),
+                        "rejected_total": len(rejected),
+                        "missing_requirements": missing_requirements,
+                    }
+                )
+                if not missing_requirements:
+                    break
+                if round_number == self.max_evidence_rounds:
+                    break
+
+                plan, usage = await self.runtime.run_structured(
+                    "EvidenceRecoveryPlanner",
+                    SEARCH_PLANNER_INSTRUCTIONS,
+                    json.dumps(
+                        {
+                            "question": self._question_payload(question),
+                            "approved_count": len(approved),
+                            "minimum_approved": self.requirements.min_articles,
+                            "missing_evidence_needs": missing_requirements,
+                            "prior_queries": queries_used,
+                            "instruction": (
+                                "Produce new targeted queries; do not repeat prior "
+                                "queries. Recover missing dates, perspectives, and "
+                                "outcome evidence."
+                            ),
+                        },
+                        default=str,
+                    ),
+                    SearchPlanDraft,
+                )
+                assert isinstance(plan, SearchPlanDraft)
+                total_usage = self._add_usage(total_usage, usage)
+
+            approved = list(approved_by_id.values())
             search_dossier = SearchDossier(
                 run_id=run.id,
                 question_id=question.id,
                 dataset_version=self.dataset_version,
-                queries=[item.query for item in plan.queries],
+                queries=list(dict.fromkeys(queries_used)),
                 selected_article_ids=[item.article_id for item in approved],
                 rejected_articles=rejected,
-                intended_coverage=plan.intended_coverage,
+                intended_coverage=list(dict.fromkeys(intended_coverage)),
+                unresolved_gaps=missing_requirements,
                 coverage_statistics={
-                    "fetched": len(articles),
+                    "fetched": len(all_articles),
                     "approved": len(approved),
-                    "minimum_required": self.min_approved_articles,
+                    "minimum_required": self.requirements.min_articles,
+                    "rounds_completed": len(round_statistics),
+                    "rounds": round_statistics,
                 },
-                status=ArtifactStatus.VALIDATED,
+                status=(
+                    ArtifactStatus.VALIDATED
+                    if not missing_requirements
+                    else ArtifactStatus.REJECTED
+                ),
             )
             self.db.save(SearchDossier, search_dossier)
-            if len(approved) < self.min_approved_articles:
+            if missing_requirements:
                 raise RuntimeError(
-                    f"Only {len(approved)} cleaned articles passed; "
-                    f"need {self.min_approved_articles}"
+                    "Evidence requirements not met after "
+                    f"{len(round_statistics)} collection rounds: "
+                    + ", ".join(missing_requirements)
                 )
             provisional = ApprovedEvidenceDossier(
                 run_id=run.id,
@@ -307,26 +436,7 @@ class ConstructionPipeline:
                 AliasEntityKind.ARTICLE,
                 provisional.article_version_ids,
             )
-            evidence = self._render_evidence(alias_map, approved)
-            coverage, usage = await self.runtime.run_structured(
-                "EvidenceCoverageAssessor",
-                COVERAGE_ASSESSOR_INSTRUCTIONS,
-                json.dumps(
-                    {
-                        "question": self._question_payload(question),
-                        "evidence": evidence,
-                    },
-                    default=str,
-                ),
-                CoverageAssessmentDraft,
-            )
-            assert isinstance(coverage, CoverageAssessmentDraft)
-            total_usage = self._add_usage(total_usage, usage)
-            if not coverage.ready:
-                raise RuntimeError(
-                    "Evidence coverage rejected: "
-                    + ", ".join(coverage.missing_evidence_needs)
-                )
+            assert coverage is not None and coverage.ready
             provisional.readiness_decision = "ready"
             provisional.coverage_summary = {
                 "covered_aspects": coverage.covered_aspects,
@@ -357,19 +467,43 @@ class ConstructionPipeline:
         )
         try:
             evidence = self._read_dossier(run.id, dossier)
-            draft, usage = await self.runtime.run_structured(
-                "HindsightExplanationSynthesizer",
-                EXPLANATION_INSTRUCTIONS,
-                json.dumps(
-                    {
-                        "question": self._question_payload(question),
-                        "evidence": evidence,
-                    },
-                    default=str,
-                ),
-                ExplanationDraft,
-            )
-            assert isinstance(draft, ExplanationDraft)
+            total_usage = AgentUsage()
+            validation_errors: List[str] = []
+            draft: Optional[ExplanationDraft] = None
+            required_candidates = max(self.requirements.min_graph_events - 1, 1)
+            for _ in range(self.max_explanation_repairs + 1):
+                candidate, usage = await self.runtime.run_structured(
+                    "HindsightExplanationRepairer"
+                    if validation_errors
+                    else "HindsightExplanationSynthesizer",
+                    EXPLANATION_INSTRUCTIONS,
+                    json.dumps(
+                        {
+                            "question": self._question_payload(question),
+                            "evidence": evidence,
+                            "requirements": self.requirements.model_dump(),
+                            "validation_errors": validation_errors,
+                        },
+                        default=str,
+                    ),
+                    ExplanationDraft,
+                )
+                assert isinstance(candidate, ExplanationDraft)
+                total_usage = self._add_usage(total_usage, usage)
+                if len(candidate.event_candidates) >= required_candidates:
+                    draft = candidate
+                    break
+                validation_errors = [
+                    (
+                        "event_candidates "
+                        f"({len(candidate.event_candidates)} < {required_candidates})"
+                    )
+                ]
+            if draft is None:
+                raise RuntimeError(
+                    "Explanation requirements not met: "
+                    + ", ".join(validation_errors)
+                )
             explanation = ExplanationArtifact(
                 run_id=run.id,
                 question_id=question.id,
@@ -385,7 +519,7 @@ class ConstructionPipeline:
                 explanation, evidence
             )
             self.db.save(Question, question)
-            self._finish_success(attempt.id, [explanation.id], usage)
+            self._finish_success(attempt.id, [explanation.id], total_usage)
             return explanation
         except Exception as exc:
             self._finish_failure(attempt.id, "explanation_synthesis_failed", exc)
@@ -436,6 +570,7 @@ class ConstructionPipeline:
                     "question": self._question_payload(question),
                     "approved_evidence": evidence,
                     "explanation": explanation.model_dump(mode="json"),
+                    "requirements": self.requirements.model_dump(),
                     "outcomes": [
                         {
                             "alias": alias,
@@ -486,7 +621,11 @@ class ConstructionPipeline:
             raise
 
     async def _collect_search_results(
-        self, question: Question, plan: SearchPlanDraft
+        self,
+        question: Question,
+        plan: SearchPlanDraft,
+        seen_urls: Optional[set[str]] = None,
+        include_source_urls: bool = True,
     ) -> tuple[List[Article], Dict[str, List[str]]]:
         collector = ArticleCollectorTool(
             db=self.db,
@@ -495,8 +634,9 @@ class ConstructionPipeline:
         )
         article_ids: List[str] = []
         rejected: Dict[str, List[str]] = {}
-        seen_urls: set[str] = set()
-        for url in self.source_urls:
+        seen_urls = seen_urls if seen_urls is not None else set()
+        source_urls = self.source_urls if include_source_urls else []
+        for url in source_urls:
             normalized_url = url.strip()
             if not normalized_url or normalized_url in seen_urls:
                 continue
@@ -518,7 +658,11 @@ class ConstructionPipeline:
             else:
                 article_ids.append(output.id)
         for query in plan.queries:
-            results = await asyncio.to_thread(self._search, query.query)
+            try:
+                results = await asyncio.to_thread(self._search, query.query)
+            except Exception as exc:
+                rejected[f"query:{query.query}"] = [f"search_error: {exc}"]
+                continue
             for result in results[: self.max_search_results]:
                 url = str(result.get("url") or "")
                 if not url or url in seen_urls:
@@ -528,21 +672,29 @@ class ConstructionPipeline:
                     result.get("publishedDate")
                     or question.resolution_date.isoformat()
                 )
-                output = await asyncio.to_thread(
-                    collector.forward,
-                    url=url,
-                    title=str(result.get("title") or "Untitled article"),
-                    source=urlparse(url).netloc or "web",
-                    published_date=str(published),
-                    domain=question.domain.value,
-                )
+                try:
+                    output = await asyncio.to_thread(
+                        collector.forward,
+                        url=url,
+                        title=str(result.get("title") or "Untitled article"),
+                        source=urlparse(url).netloc or "web",
+                        published_date=str(published),
+                        domain=question.domain.value,
+                    )
+                except Exception as exc:
+                    rejected[url] = [f"collection_error: {exc}"]
+                    continue
                 if output.id in {"error", "duplicate"}:
                     rejected[url] = [output.status]
                 else:
                     article_ids.append(output.id)
-        if len(set(article_ids)) < self.min_approved_articles * 2:
+        if len(set(article_ids)) < self.requirements.min_articles:
             recovery_query = f"{question.question_text} result timeline key events"
-            results = await asyncio.to_thread(self._search, recovery_query)
+            try:
+                results = await asyncio.to_thread(self._search, recovery_query)
+            except Exception as exc:
+                rejected[f"query:{recovery_query}"] = [f"search_error: {exc}"]
+                results = []
             for result in results[: max(self.max_search_results, 4)]:
                 url = str(result.get("url") or "")
                 if not url or url in seen_urls:
@@ -552,14 +704,18 @@ class ConstructionPipeline:
                     result.get("publishedDate")
                     or question.resolution_date.isoformat()
                 )
-                output = await asyncio.to_thread(
-                    collector.forward,
-                    url=url,
-                    title=str(result.get("title") or "Untitled article"),
-                    source=urlparse(url).netloc or "web",
-                    published_date=str(published),
-                    domain=question.domain.value,
-                )
+                try:
+                    output = await asyncio.to_thread(
+                        collector.forward,
+                        url=url,
+                        title=str(result.get("title") or "Untitled article"),
+                        source=urlparse(url).netloc or "web",
+                        published_date=str(published),
+                        domain=question.domain.value,
+                    )
+                except Exception as exc:
+                    rejected[url] = [f"collection_error: {exc}"]
+                    continue
                 if output.id in {"error", "duplicate"}:
                     rejected[url] = [output.status]
                 else:

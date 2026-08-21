@@ -6,7 +6,11 @@ across CLI and backend API.
 
 from src.config import Config
 from src.config.database import DatabaseConfig
-from src.config.pipeline import EvidencePipelineConfig, EvidenceSatisfactionConfig
+from src.config.pipeline import (
+    SATISFACTION_DEFAULTS,
+    EvidencePipelineConfig,
+    EvidenceSatisfactionConfig,
+)
 from src.pipelines.types import PipelineType
 
 
@@ -46,7 +50,9 @@ class PipelineFactory:
                 database_config=database_config,
                 enable_persistence=True,
                 agent_max_steps=kwargs.get("agent_max_steps", 30),
-                min_graph_depth=kwargs.get("min_graph_depth", 3),
+                min_graph_depth=kwargs.get(
+                    "min_graph_depth", SATISFACTION_DEFAULTS.min_graph_depth
+                ),
                 min_quality_score=kwargs.get("min_quality_score"),
             )
         else:

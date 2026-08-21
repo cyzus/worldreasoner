@@ -25,14 +25,17 @@ using only the approved evidence dossier. Every material claim must cite one or
 more supplied article aliases. Return human-readable sections and an event
 candidate inventory. Each event must be a concrete dated occurrence, use an E01
 style alias, and include evidence_refs whose article alias and version ID exactly
-match the dossier. Distinguish direct support from contextual support. Do not
-claim unique causal truth and do not use outside knowledge."""
+match the dossier. Meet the supplied event-count requirement without inventing,
+duplicating, or splitting events artificially. Distinguish direct support from
+contextual support. Do not claim unique causal truth and do not use outside
+knowledge."""
 
 GRAPH_BUILDER_INSTRUCTIONS = """You convert a source-grounded explanation into a
 complete directed event graph. Use only the supplied event candidates and
 outcome aliases. Every non-outcome node must cite approved article aliases.
 Edges represent proposed influence relationships and must form an acyclic path
-toward an outcome. Do not create outcome nodes: refer to supplied O aliases only
+toward an outcome. Meet the supplied event-count and graph-depth requirements.
+Do not create outcome nodes: refer to supplied O aliases only
 in edge targets and outcome impacts. Edge relation must be one of causes,
 enables, prevents, inhibits, amplifies, triggers, correlates, or conditional.
 Node event_type must be decision, outcome, indicator, milestone, or
