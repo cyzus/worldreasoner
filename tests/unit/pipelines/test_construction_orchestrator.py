@@ -12,8 +12,10 @@ from src.config.pipeline import EvidenceSatisfactionConfig
 from src.domain.models import (
     Article,
     ArticleQualityRecord,
+    CausalHypothesis,
     Domain,
     Event,
+    EventOutcomeImpact,
     GraphRevision,
     ImpactDirection,
     PipelineRun,
@@ -30,6 +32,7 @@ from src.pipelines.construction.models import (
     SearchPlanDraft,
 )
 from src.pipelines.construction.orchestrator import ConstructionPipeline
+from src.services.pipeline_artifact_service import ArtifactValidationError
 from src.services.question_monitor_service import QuestionMonitorService
 
 
@@ -491,6 +494,16 @@ async def test_constructs_backward_artifacts_for_existing_question(
         )
         if event.is_outcome
     ]
+    hypotheses = pipeline.db.get_many(
+        CausalHypothesis,
+        filters={
+            "discovered_by_question_ids__like": f'%"{question.id}"%'
+        },
+    )
+    impacts = pipeline.db.get_many(
+        EventOutcomeImpact,
+        filters={"question_id": question.id},
+    )
     assert result.question_id == question.id
     assert result.impact_count == 4
     assert stored is not None and stored.graph_built is True
@@ -498,6 +511,11 @@ async def test_constructs_backward_artifacts_for_existing_question(
     assert run.model_configuration["entrypoint"] == "existing_question"
     assert len(outcomes) == 2
     assert sum(bool(event.is_actual_outcome) for event in outcomes) == 1
+    assert len(hypotheses) == 2
+    assert len(impacts) == 4
+    assert {impact.outcome_event_id for impact in impacts} == {
+        outcome.id for outcome in outcomes
+    }
     monitor = QuestionMonitorService(pipeline.db, pipeline.requirements)
     assert monitor.check_satisfaction(question.id).is_satisfied
     assert monitor.check_graph_satisfaction(question.id).is_satisfied
@@ -526,6 +544,7 @@ async def test_existing_question_reuses_eligible_snapshots_before_search(
         estimated_start_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
         resolution_date=datetime(2024, 2, 1, tzinfo=timezone.utc),
         ground_truth=True,
+        related_article_ids=["existing-article-0"],
     )
     pipeline.db.save(Question, question)
     for index in range(3):
@@ -559,7 +578,10 @@ async def test_existing_question_reuses_eligible_snapshots_before_search(
     result = await pipeline.run_question(question.id)
 
     dossier = pipeline.db.get_many(SearchDossier)[0]
+    stored = pipeline.db.get(Question, question.id)
     assert result.article_count == 3
+    assert stored is not None
+    assert stored.related_article_ids == ["existing-article-0"]
     assert getattr(pipeline, "collection_rounds", 0) == 0
     assert dossier.rejected_articles["post-resolution-article"] == [
         "published_after_resolution"
@@ -764,6 +786,30 @@ async def test_graph_repair_enforces_complementary_binary_impacts(
 
     assert runtime.graph_calls == 2
     assert result.impact_count == 4
+
+
+@pytest.mark.asyncio
+async def test_terminal_graph_failure_is_visible_on_question(
+    tmp_path: Path,
+) -> None:
+    pipeline = StubConstructionPipeline(
+        db_path=tmp_path / "terminal-graph-failure.db",
+        runtime=GraphRepairingFakeRuntime(),
+        requirements=EvidenceSatisfactionConfig(
+            min_articles=3,
+            min_graph_events=3,
+            min_graph_depth=2,
+        ),
+        max_graph_repairs=0,
+    )
+
+    with pytest.raises(ArtifactValidationError, match="missing_outcome_impact"):
+        await pipeline.run("resolved test event")
+
+    question = pipeline.db.get_many(Question)[0]
+    assert question.graph_built is False
+    assert question.graph_build_error is not None
+    assert "missing_outcome_impact" in question.graph_build_error
 
 
 @pytest.mark.asyncio

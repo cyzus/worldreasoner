@@ -612,8 +612,7 @@ class ConstructionPipeline:
             }
             provisional.remaining_gaps = coverage.missing_evidence_needs
             dossier = self.artifacts.save_approved_dossier(provisional)
-            question.related_article_ids = [item.article_id for item in approved]
-            self.db.save(Question, question)
+            self._link_approved_evidence(question.id, approved)
             self._finish_success(
                 attempt.id,
                 [search_dossier.id, dossier.id],
@@ -644,6 +643,28 @@ class ConstructionPipeline:
                 articles_by_id[article.id] = article
 
         return list(articles_by_id.values())
+
+    def _link_approved_evidence(
+        self,
+        question_id: str,
+        records: List[ArticleQualityRecord],
+    ) -> None:
+        """Persist evidence provenance without changing question-source links."""
+        with self.db.batch():
+            for record in records:
+                article = self.db.get(Article, record.article_id)
+                if article is None:
+                    continue
+                if article.collected_for_question_id is None:
+                    article.collected_for_question_id = question_id
+                elif article.collected_for_question_id != question_id:
+                    related_ids = list(
+                        article.metadata.get("related_question_ids", [])
+                    )
+                    if question_id not in related_ids:
+                        related_ids.append(question_id)
+                    article.metadata["related_question_ids"] = related_ids
+                self.db.save(Article, article)
 
     async def _synthesize_explanation(
         self,
@@ -823,6 +844,11 @@ class ConstructionPipeline:
                         raise
             raise RuntimeError("Graph repair budget exhausted")
         except Exception as exc:
+            failed_question = self.db.get(Question, question.id)
+            if failed_question is not None:
+                failed_question.graph_built = False
+                failed_question.graph_build_error = str(exc)
+                self.db.save(Question, failed_question)
             self._finish_failure(attempt.id, "graph_construction_failed", exc)
             raise
 

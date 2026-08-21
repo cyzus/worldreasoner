@@ -87,19 +87,17 @@ class QuestionMonitorService(ServiceBase):
         Checks the primary provenance field first, then falls back to legacy
         metadata-based provenance for backward compatibility.
         """
-        direct_articles = self.db.get_many(
-            Article, filters={"collected_for_question_id": question_id}
-        )
-        if direct_articles:
-            return True
+        return bool(self._linked_evidence_article_ids(question_id))
 
-        # Backward-compatible fallback for legacy metadata-only provenance.
-        all_articles = self.db.get_many(Article)
-        for article in all_articles:
-            if question_id in article.metadata.get("related_question_ids", []):
-                return True
-
-        return False
+    def _linked_evidence_article_ids(self, question_id: str) -> set[str]:
+        """Resolve current and legacy evidence provenance without double counting."""
+        linked: set[str] = set()
+        for article in self.db.get_many(Article):
+            if article.collected_for_question_id == question_id:
+                linked.add(article.id)
+            elif question_id in article.metadata.get("related_question_ids", []):
+                linked.add(article.id)
+        return linked
 
     def evaluate_article_requirements(
         self, article_count: int, causal_explanation: Optional[str]
@@ -169,16 +167,19 @@ class QuestionMonitorService(ServiceBase):
             Set of question IDs that are fully processed
         """
         all_articles = self.db.get_many(Article)
-        article_counts: Dict[str, int] = {}
+        article_ids: Dict[str, set[str]] = {question.id: set() for question in questions}
         for a in all_articles:
             qid = getattr(a, "collected_for_question_id", None)
-            if qid:
-                article_counts[qid] = article_counts.get(qid, 0) + 1
+            if qid in article_ids:
+                article_ids[qid].add(a.id)
+            for related_id in a.metadata.get("related_question_ids", []):
+                if related_id in article_ids:
+                    article_ids[related_id].add(a.id)
 
         return {
             q.id
             for q in questions
-            if self._is_evidence_complete(q, article_counts.get(q.id, 0))
+            if self._is_evidence_complete(q, len(article_ids.get(q.id, set())))
         }
 
     def get_evidence_needs(
@@ -238,9 +239,7 @@ class QuestionMonitorService(ServiceBase):
     def check_satisfaction(self, question_id: str) -> EvidenceSatisfaction:
         """Check if a question's evidence meets satisfaction requirements."""
         question = self.db.get(Question, question_id)
-        article_count = self.db.count(
-            Article, filters={"collected_for_question_id": question_id}
-        )
+        article_count = len(self._linked_evidence_article_ids(question_id))
         missing = self.evaluate_article_requirements(
             article_count, question.causal_explanation if question else None
         )
