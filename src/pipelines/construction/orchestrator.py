@@ -3,10 +3,10 @@
 import asyncio
 import json
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Protocol, Type
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlsplit, urlunsplit
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -44,6 +44,7 @@ from src.pipelines.construction.models import (
     ExplanationDraft,
     GeneratedQuestionDraft,
     GraphDraft,
+    SearchQuery,
     SearchPlanDraft,
 )
 from src.pipelines.construction.prompts import (
@@ -55,6 +56,7 @@ from src.pipelines.construction.prompts import (
     SEARCH_PLANNER_INSTRUCTIONS,
 )
 from src.services.construction_graph_service import ConstructionGraphService
+from src.services.evidence_coverage_service import EvidenceCoverageService
 from src.services.evidence_quality.article_cleaner import ArticleMarkdownCleaner
 from src.services.evidence_quality.llm_client import LiteLLMStructuredClient
 from src.services.evidence_quality.service import EvidenceQualityService
@@ -108,7 +110,21 @@ class ConstructionBatchResult(BaseModel):
 
     processed: List[ConstructionRunResult] = Field(default_factory=list)
     failed: List[Dict[str, str]] = Field(default_factory=list)
+    abstained: List[Dict[str, str]] = Field(default_factory=list)
     skipped: List[Dict[str, str]] = Field(default_factory=list)
+
+
+class EvidenceAbstentionError(RuntimeError):
+    """Raised when bounded collection cannot support benchmark construction."""
+
+    def __init__(self, missing_requirements: List[str], rounds: int) -> None:
+        self.missing_requirements = missing_requirements
+        self.rounds = rounds
+        super().__init__(
+            "Evidence requirements not met after "
+            f"{rounds} collection rounds: "
+            + ", ".join(missing_requirements)
+        )
 
 
 class ConstructionPipeline:
@@ -120,6 +136,7 @@ class ConstructionPipeline:
         runtime: StructuredRuntime,
         dataset_version: str = "v2-live",
         max_search_results: int = 5,
+        max_search_queries_per_round: int = 3,
         requirements: Optional[EvidenceSatisfactionConfig] = None,
         cleaner_concurrency: int = 3,
         max_evidence_rounds: int = 3,
@@ -132,6 +149,7 @@ class ConstructionPipeline:
         self.runtime = runtime
         self.dataset_version = dataset_version
         self.max_search_results = max_search_results
+        self.max_search_queries_per_round = max_search_queries_per_round
         self.requirements = requirements or EvidenceSatisfactionConfig()
         self.max_evidence_rounds = max_evidence_rounds
         self.max_graph_repairs = max_graph_repairs
@@ -160,6 +178,7 @@ class ConstructionPipeline:
                 "model": self.runtime.model_id,
                 "requirements": self.requirements.model_dump(),
                 "max_evidence_rounds": self.max_evidence_rounds,
+                "max_search_queries_per_round": self.max_search_queries_per_round,
             },
             prompt_bundle_version=PROMPT_BUNDLE_VERSION,
         )
@@ -274,6 +293,11 @@ class ConstructionPipeline:
                 continue
             try:
                 item = await self.run_question(question_id)
+            except EvidenceAbstentionError as exc:
+                result.abstained.append(
+                    {"question_id": question_id, "reason": str(exc)}
+                )
+                continue
             except Exception as exc:
                 result.failed.append(
                     {"question_id": question_id, "error": str(exc)}
@@ -304,6 +328,7 @@ class ConstructionPipeline:
         )
         if question is None or not dossiers or not explanations:
             raise RuntimeError("Validated graph inputs are missing")
+        OutcomeEventService(self.db).ensure_actual_outcome_alignment(question)
         dossier = max(dossiers, key=lambda item: item.created_at)
         explanation = max(explanations, key=lambda item: item.created_at)
         revision = await self._build_graph(
@@ -330,6 +355,7 @@ class ConstructionPipeline:
         """Bind all deterministic gates to one canonical requirement policy."""
         self.requirements = requirements
         self.monitor = QuestionMonitorService(self.db, requirements)
+        self.coverage_policy = EvidenceCoverageService(self.db, requirements)
         self.graphs = ConstructionGraphService(self.db, requirements)
 
     async def _generate_question(
@@ -385,6 +411,7 @@ class ConstructionPipeline:
                     {
                         "question": self._question_payload(question),
                         "market_analysis": market_analysis,
+                        "search_policy": self._search_policy_payload(question),
                     },
                     default=str,
                 ),
@@ -402,17 +429,18 @@ class ConstructionPipeline:
             round_statistics: List[Dict[str, object]] = []
             missing_requirements: List[str] = []
             coverage: Optional[CoverageAssessmentDraft] = None
+            evidence_profile = self.coverage_policy.profile_for(question)
 
             existing_articles = self._existing_question_articles(question)
             eligible_existing: List[Article] = []
             for article in existing_articles:
                 if article.url:
-                    seen_urls.add(article.url)
-                if self._article_is_temporally_eligible(article, question):
+                    seen_urls.add(self._normalize_url(article.url))
+                if self.coverage_policy.is_hindsight_eligible(question, article):
                     eligible_existing.append(article)
                     all_articles[article.id] = article
                 else:
-                    rejected[article.id] = ["published_after_resolution"]
+                    rejected[article.id] = ["outside_hindsight_reporting_window"]
 
             existing_records = await self._clean_articles(eligible_existing)
             for record in existing_records:
@@ -420,8 +448,9 @@ class ConstructionPipeline:
                     approved_by_id[record.id] = record
 
             if approved_by_id:
-                missing_requirements = self.monitor.evaluate_article_count_requirement(
-                    len(approved_by_id)
+                missing_requirements = self.coverage_policy.deterministic_gaps(
+                    question,
+                    list(approved_by_id.values()),
                 )
                 if not missing_requirements:
                     temporary_aliases = {
@@ -439,6 +468,7 @@ class ConstructionPipeline:
                                     list(approved_by_id.values()),
                                 ),
                                 "requirements": self.requirements.model_dump(),
+                                "evidence_profile": evidence_profile.model_dump(),
                             },
                             default=str,
                         ),
@@ -447,10 +477,13 @@ class ConstructionPipeline:
                     assert isinstance(assessment, CoverageAssessmentDraft)
                     coverage = assessment
                     total_usage = self._add_usage(total_usage, usage)
-                    if not coverage.ready:
-                        missing_requirements = coverage.missing_evidence_needs or [
-                            "coverage assessor rejected the existing evidence"
-                        ]
+                    semantic_gaps = self.coverage_policy.semantic_gaps(coverage)
+                    if not coverage.ready or semantic_gaps:
+                        missing_requirements = (
+                            semantic_gaps
+                            or coverage.missing_evidence_needs
+                            or ["coverage assessor rejected the existing evidence"]
+                        )
 
                 round_statistics.append(
                     {
@@ -465,9 +498,12 @@ class ConstructionPipeline:
                 )
 
             for round_number in range(1, self.max_evidence_rounds + 1):
-                if coverage is not None and coverage.ready:
+                if coverage is not None and coverage.ready and not missing_requirements:
                     break
-                queries_used.extend(item.query for item in plan.queries)
+                queries_used.extend(
+                    self._build_search_query(question, item)
+                    for item in self._bounded_search_queries(plan)
+                )
                 intended_coverage.extend(plan.intended_coverage)
                 articles, round_rejected = await self._collect_search_results(
                     question,
@@ -486,8 +522,9 @@ class ConstructionPipeline:
                         approved_by_id[record.id] = record
 
                 approved = list(approved_by_id.values())
-                missing_requirements = (
-                    self.monitor.evaluate_article_count_requirement(len(approved))
+                missing_requirements = self.coverage_policy.deterministic_gaps(
+                    question,
+                    approved,
                 )
                 coverage = None
                 if not missing_requirements:
@@ -504,6 +541,7 @@ class ConstructionPipeline:
                                 "question": self._question_payload(question),
                                 "evidence": evidence,
                                 "requirements": self.requirements.model_dump(),
+                                "evidence_profile": evidence_profile.model_dump(),
                             },
                             default=str,
                         ),
@@ -512,10 +550,13 @@ class ConstructionPipeline:
                     assert isinstance(assessment, CoverageAssessmentDraft)
                     coverage = assessment
                     total_usage = self._add_usage(total_usage, usage)
-                    if not coverage.ready:
-                        missing_requirements = coverage.missing_evidence_needs or [
-                            "coverage assessor rejected the evidence dossier"
-                        ]
+                    semantic_gaps = self.coverage_policy.semantic_gaps(coverage)
+                    if not coverage.ready or semantic_gaps:
+                        missing_requirements = (
+                            semantic_gaps
+                            or coverage.missing_evidence_needs
+                            or ["coverage assessor rejected the evidence dossier"]
+                        )
 
                 round_statistics.append(
                     {
@@ -543,9 +584,10 @@ class ConstructionPipeline:
                         {
                             "question": self._question_payload(question),
                             "approved_count": len(approved),
-                            "minimum_approved": self.requirements.min_articles,
+                            "minimum_approved": evidence_profile.article_target,
                             "missing_evidence_needs": missing_requirements,
                             "prior_queries": queries_used,
+                            "search_policy": self._search_policy_payload(question),
                             "instruction": (
                                 "Produce new targeted queries; do not repeat prior "
                                 "queries. Recover missing dates, perspectives, and "
@@ -572,7 +614,9 @@ class ConstructionPipeline:
                 coverage_statistics={
                     "fetched": len(all_articles),
                     "approved": len(approved),
-                    "minimum_required": self.requirements.min_articles,
+                    "minimum_required": evidence_profile.article_target,
+                    "minimum_unique_sources": evidence_profile.min_unique_sources,
+                    "horizon_days": evidence_profile.horizon_days,
                     "rounds_completed": len(round_statistics),
                     "rounds": round_statistics,
                 },
@@ -584,10 +628,9 @@ class ConstructionPipeline:
             )
             self.db.save(SearchDossier, search_dossier)
             if missing_requirements:
-                raise RuntimeError(
-                    "Evidence requirements not met after "
-                    f"{len(round_statistics)} collection rounds: "
-                    + ", ".join(missing_requirements)
+                raise EvidenceAbstentionError(
+                    missing_requirements,
+                    len(round_statistics),
                 )
             provisional = ApprovedEvidenceDossier(
                 run_id=run.id,
@@ -619,6 +662,14 @@ class ConstructionPipeline:
                 total_usage,
             )
             return dossier
+        except EvidenceAbstentionError as exc:
+            self._finish_needs_review(
+                attempt.id,
+                "evidence_requirements_unmet",
+                exc,
+                total_usage,
+            )
+            raise
         except Exception as exc:
             self._finish_failure(attempt.id, "evidence_collection_failed", exc)
             raise
@@ -679,7 +730,7 @@ class ConstructionPipeline:
             evidence = self._read_dossier(run.id, dossier)
             total_usage = AgentUsage()
             validation_errors: List[str] = []
-            draft: Optional[ExplanationDraft] = None
+            explanation: Optional[ExplanationArtifact] = None
             required_candidates = max(self.requirements.min_graph_events - 1, 1)
             for _ in range(self.max_explanation_repairs + 1):
                 candidate, usage = await self.runtime.run_structured(
@@ -700,31 +751,39 @@ class ConstructionPipeline:
                 )
                 assert isinstance(candidate, ExplanationDraft)
                 total_usage = self._add_usage(total_usage, usage)
-                if len(candidate.event_candidates) >= required_candidates:
-                    draft = candidate
+                if len(candidate.event_candidates) < required_candidates:
+                    validation_errors = [
+                        (
+                            "event_candidates "
+                            f"({len(candidate.event_candidates)} < "
+                            f"{required_candidates})"
+                        )
+                    ]
+                    continue
+                candidate = self._canonicalize_explanation_references(
+                    candidate,
+                    evidence,
+                )
+                proposed = ExplanationArtifact(
+                    run_id=run.id,
+                    question_id=question.id,
+                    dataset_version=self.dataset_version,
+                    evidence_dossier_id=dossier.id,
+                    sections=candidate.sections,
+                    event_candidates=candidate.event_candidates,
+                    model=self.runtime.model_id,
+                    prompt_version=PROMPT_BUNDLE_VERSION,
+                )
+                try:
+                    explanation = self.artifacts.save_validated_explanation(proposed)
                     break
-                validation_errors = [
-                    (
-                        "event_candidates "
-                        f"({len(candidate.event_candidates)} < {required_candidates})"
-                    )
-                ]
-            if draft is None:
+                except ArtifactValidationError as exc:
+                    validation_errors = exc.errors
+            if explanation is None:
                 raise RuntimeError(
                     "Explanation requirements not met: "
                     + ", ".join(validation_errors)
                 )
-            explanation = ExplanationArtifact(
-                run_id=run.id,
-                question_id=question.id,
-                dataset_version=self.dataset_version,
-                evidence_dossier_id=dossier.id,
-                sections=draft.sections,
-                event_candidates=draft.event_candidates,
-                model=self.runtime.model_id,
-                prompt_version=PROMPT_BUNDLE_VERSION,
-            )
-            explanation = self.artifacts.save_validated_explanation(explanation)
             question.causal_explanation = self._render_explanation(
                 explanation, evidence
             )
@@ -869,17 +928,23 @@ class ConstructionPipeline:
         seen_urls = seen_urls if seen_urls is not None else set()
         source_urls = self.source_urls if include_source_urls else []
         for url in source_urls:
-            normalized_url = url.strip()
+            fetch_url = url.strip()
+            normalized_url = self._normalize_url(fetch_url)
             if not normalized_url or normalized_url in seen_urls:
                 continue
             seen_urls.add(normalized_url)
+            published, provenance = self._publication_metadata(
+                {"url": fetch_url},
+                question,
+                explicit_source=True,
+            )
             try:
                 output = await asyncio.to_thread(
                     collector.forward,
-                    url=normalized_url,
-                    title=self._title_from_url(normalized_url),
-                    source=urlparse(normalized_url).netloc or "web",
-                    published_date=question.resolution_date.isoformat(),
+                    url=fetch_url,
+                    title=self._title_from_url(fetch_url),
+                    source=urlparse(fetch_url).netloc or "web",
+                    published_date=published,
                     domain=question.domain.value,
                 )
             except Exception as exc:
@@ -888,21 +953,27 @@ class ConstructionPipeline:
             if output.id in {"error", "duplicate"}:
                 rejected[normalized_url] = [output.status]
             else:
+                self._set_publication_date_provenance(
+                    output.id,
+                    provenance,
+                )
                 article_ids.append(output.id)
-        for query in plan.queries:
+        for query in self._bounded_search_queries(plan):
+            targeted_query = self._build_search_query(question, query)
             try:
-                results = await asyncio.to_thread(self._search, query.query)
+                results = await asyncio.to_thread(self._search, targeted_query)
             except Exception as exc:
-                rejected[f"query:{query.query}"] = [f"search_error: {exc}"]
+                rejected[f"query:{targeted_query}"] = [f"search_error: {exc}"]
                 continue
             for result in results[: self.max_search_results]:
                 url = str(result.get("url") or "")
-                if not url or url in seen_urls:
+                normalized_url = self._normalize_url(url)
+                if not normalized_url or normalized_url in seen_urls:
                     continue
-                seen_urls.add(url)
-                published = (
-                    result.get("publishedDate")
-                    or question.resolution_date.isoformat()
+                seen_urls.add(normalized_url)
+                published, provenance = self._publication_metadata(
+                    result,
+                    question,
                 )
                 try:
                     output = await asyncio.to_thread(
@@ -914,43 +985,15 @@ class ConstructionPipeline:
                         domain=question.domain.value,
                     )
                 except Exception as exc:
-                    rejected[url] = [f"collection_error: {exc}"]
+                    rejected[normalized_url] = [f"collection_error: {exc}"]
                     continue
                 if output.id in {"error", "duplicate"}:
-                    rejected[url] = [output.status]
+                    rejected[normalized_url] = [output.status]
                 else:
-                    article_ids.append(output.id)
-        if len(set(article_ids)) < self.requirements.min_articles:
-            recovery_query = f"{question.question_text} result timeline key events"
-            try:
-                results = await asyncio.to_thread(self._search, recovery_query)
-            except Exception as exc:
-                rejected[f"query:{recovery_query}"] = [f"search_error: {exc}"]
-                results = []
-            for result in results[: max(self.max_search_results, 4)]:
-                url = str(result.get("url") or "")
-                if not url or url in seen_urls:
-                    continue
-                seen_urls.add(url)
-                published = (
-                    result.get("publishedDate")
-                    or question.resolution_date.isoformat()
-                )
-                try:
-                    output = await asyncio.to_thread(
-                        collector.forward,
-                        url=url,
-                        title=str(result.get("title") or "Untitled article"),
-                        source=urlparse(url).netloc or "web",
-                        published_date=str(published),
-                        domain=question.domain.value,
+                    self._set_publication_date_provenance(
+                        output.id,
+                        provenance,
                     )
-                except Exception as exc:
-                    rejected[url] = [f"collection_error: {exc}"]
-                    continue
-                if output.id in {"error", "duplicate"}:
-                    rejected[url] = [output.status]
-                else:
                     article_ids.append(output.id)
         articles = [
             self.db.get(Article, item_id)
@@ -960,21 +1003,146 @@ class ConstructionPipeline:
         for article in articles:
             if article is None:
                 continue
-            if not self._article_is_temporally_eligible(article, question):
+            if not self.coverage_policy.is_hindsight_eligible(question, article):
                 rejected[article.url or article.id] = [
-                    "published_after_resolution"
+                    "outside_hindsight_reporting_window"
                 ]
                 continue
             eligible.append(article)
         return eligible, rejected
 
+    def _set_publication_date_provenance(
+        self,
+        article_id: str,
+        provenance: str,
+    ) -> None:
+        """Persist whether the collection date was observed or assumed."""
+        article = self.db.get(Article, article_id)
+        if article is None:
+            return
+        article.metadata["publication_date_provenance"] = provenance
+        self.db.save(Article, article)
+
     @staticmethod
+    def _publication_metadata(
+        result: Dict[str, object],
+        question: Question,
+        explicit_source: bool = False,
+    ) -> tuple[str, str]:
+        """Resolve a reported date without hiding archive-date uncertainty."""
+        reported = result.get("publishedDate")
+        if reported:
+            return str(reported), "search_result"
+        url = str(result.get("url") or "")
+        archive_match = re.search(
+            r"web\.archive\.org/web/(\d{14})",
+            url,
+            flags=re.IGNORECASE,
+        )
+        if archive_match:
+            captured = datetime.strptime(
+                archive_match.group(1),
+                "%Y%m%d%H%M%S",
+            ).replace(tzinfo=timezone.utc)
+            return captured.isoformat(), "archive_capture"
+        provenance = (
+            "assumed_resolution_explicit_source"
+            if explicit_source
+            else "assumed_resolution_missing_date"
+        )
+        return question.resolution_date.isoformat(), provenance
+
+    def _bounded_search_queries(
+        self,
+        plan: SearchPlanDraft,
+    ) -> List[SearchQuery]:
+        """Apply a deterministic per-round query budget."""
+        return plan.queries[: self.max_search_queries_per_round]
+
     def _article_is_temporally_eligible(
+        self,
         article: Article,
         question: Question,
     ) -> bool:
-        """Allow only evidence published by the question's resolution day."""
-        return article.published_date.date() <= question.resolution_date.date()
+        """Backward-compatible alias for the hindsight reporting policy."""
+        return self.coverage_policy.is_hindsight_eligible(question, article)
+
+    def _search_policy_payload(self, question: Question) -> Dict[str, object]:
+        """Describe the bounded hindsight-search interval to planning agents."""
+        latest = question.resolution_date + timedelta(
+            days=self.requirements.hindsight_reporting_delay_days
+        )
+        return {
+            "date_start": (
+                question.estimated_start_time or question.resolution_date
+            ).date(),
+            "date_end": latest.date(),
+            "resolution_date": question.resolution_date.date(),
+            "ground_truth": question.ground_truth,
+            "required_query_fields": [
+                "evidence_need",
+                "required_entities",
+                "date_start",
+                "date_end",
+                "preferred_source_types",
+            ],
+        }
+
+    def _build_search_query(
+        self,
+        question: Question,
+        query: SearchQuery,
+    ) -> str:
+        """Enforce entity and date constraints on one model-proposed query."""
+        terms = query.query.strip()
+        lowered = terms.lower()
+        for entity in query.required_entities:
+            entity = entity.strip()
+            if entity and entity.lower() not in lowered:
+                terms += f' "{entity}"'
+                lowered = terms.lower()
+        policy_start = (question.estimated_start_time or question.resolution_date).date()
+        policy_end = (
+            question.resolution_date
+            + timedelta(days=self.requirements.hindsight_reporting_delay_days)
+        ).date()
+        date_start = max(query.date_start or policy_start, policy_start)
+        date_end = min(query.date_end or policy_end, policy_end)
+        if date_start > date_end:
+            date_start, date_end = policy_start, policy_end
+        return " ".join(
+            f"{terms} after:{date_start.isoformat()} before:{date_end.isoformat()}".split()
+        )
+
+    @staticmethod
+    def _normalize_url(url: str) -> str:
+        """Canonicalize URL identity before crawl and failure caching."""
+        raw = url.strip()
+        if not raw:
+            return ""
+        parsed = urlsplit(raw)
+        tracking = {
+            "fbclid",
+            "gclid",
+            "mc_cid",
+            "mc_eid",
+            "ref",
+        }
+        query = [
+            (key, value)
+            for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+            if not key.lower().startswith("utm_") and key.lower() not in tracking
+        ]
+        path = parsed.path.rstrip("/") or "/"
+        return urlunsplit(
+            (
+                parsed.scheme.lower(),
+                parsed.netloc.lower(),
+                path,
+                urlencode(sorted(query)),
+                "",
+            )
+        )
 
     async def _seed_sources(self, topic: str) -> List[Dict[str, object]]:
         """Fetch explicit live sources, falling back to web discovery."""
@@ -1077,9 +1245,10 @@ class ConstructionPipeline:
             )
             for result in candidate_results:
                 url = str(result.get("url") or "")
-                if not url or url in seen_urls:
+                normalized_url = self._normalize_url(url)
+                if not normalized_url or normalized_url in seen_urls:
                     continue
-                seen_urls.add(url)
+                seen_urls.add(normalized_url)
                 results.append(result)
             if len(results) >= self.max_search_results:
                 return results
@@ -1093,9 +1262,10 @@ class ConstructionPipeline:
             parsed = self._parse_markdown_search_results(markdown)
             for result in parsed:
                 url = str(result.get("url") or "")
-                if not url or url in seen_urls:
+                normalized_url = self._normalize_url(url)
+                if not normalized_url or normalized_url in seen_urls:
                     continue
-                seen_urls.add(url)
+                seen_urls.add(normalized_url)
                 results.append(result)
             if len(results) >= self.max_search_results:
                 break
@@ -1191,6 +1361,9 @@ class ConstructionPipeline:
                     "title": article.title,
                     "source": article.source,
                     "published_date": article.published_date.isoformat(),
+                    "publication_date_provenance": article.metadata.get(
+                        "publication_date_provenance", "stored_article"
+                    ),
                     "clean_markdown": record.clean_markdown,
                 }
             )
@@ -1274,6 +1447,40 @@ class ConstructionPipeline:
             failure_code=code,
             diagnostic=str(exc),
         )
+
+    def _finish_needs_review(
+        self,
+        attempt_id: str,
+        code: str,
+        exc: Exception,
+        usage: AgentUsage,
+    ) -> None:
+        self.artifacts.finish_stage_attempt(
+            attempt_id,
+            StageAttemptStatus.NEEDS_REVIEW,
+            failure_code=code,
+            diagnostic=str(exc),
+            token_usage=usage.total_tokens,
+            cost_usd=usage.cost_usd,
+        )
+
+    @staticmethod
+    def _canonicalize_explanation_references(
+        draft: ExplanationDraft,
+        evidence: List[Dict[str, object]],
+    ) -> ExplanationDraft:
+        """Resolve redundant version IDs from approved article aliases."""
+        version_by_alias = {
+            str(item["alias"]): str(item["article_version_id"])
+            for item in evidence
+        }
+        canonical = draft.model_copy(deep=True)
+        for event in canonical.event_candidates:
+            for reference in event.evidence_refs:
+                version_id = version_by_alias.get(reference.article_alias)
+                if version_id is not None:
+                    reference.article_version_id = version_id
+        return canonical
 
     @staticmethod
     def _add_usage(left: AgentUsage, right: AgentUsage) -> AgentUsage:

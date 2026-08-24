@@ -1,6 +1,6 @@
 """Structured outputs exchanged with construction agents."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
@@ -37,6 +37,11 @@ class SearchQuery(BaseModel):
 
     query: str
     rationale: str
+    evidence_need: str = "general"
+    required_entities: List[str] = Field(default_factory=list)
+    date_start: Optional[date] = None
+    date_end: Optional[date] = None
+    preferred_source_types: List[str] = Field(default_factory=list)
 
 
 class SearchPlanDraft(BaseModel):
@@ -46,10 +51,24 @@ class SearchPlanDraft(BaseModel):
     intended_coverage: List[str] = Field(default_factory=list)
 
 
+class EvidenceCoverageLedgerDraft(BaseModel):
+    """Semantic coverage dimensions assessed over an approved dossier."""
+
+    outcome_resolution_supported: bool = False
+    timeline_covered: bool = False
+    key_developments_supported: bool = False
+    counterevidence_considered: bool = False
+    citations_traceable: bool = False
+    critical_gaps: List[str] = Field(default_factory=list)
+
+
 class CoverageAssessmentDraft(BaseModel):
     """Model assessment consumed alongside deterministic readiness gates."""
 
     ready: bool
+    ledger: EvidenceCoverageLedgerDraft = Field(
+        default_factory=EvidenceCoverageLedgerDraft
+    )
     covered_aspects: List[str] = Field(default_factory=list)
     missing_evidence_needs: List[str] = Field(default_factory=list)
     rationale: str

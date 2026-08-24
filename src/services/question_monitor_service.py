@@ -6,6 +6,7 @@ This service monitors:
 3. LLM model usage statistics
 """
 
+import sqlite3
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -238,11 +239,35 @@ class QuestionMonitorService(ServiceBase):
 
     def check_satisfaction(self, question_id: str) -> EvidenceSatisfaction:
         """Check if a question's evidence meets satisfaction requirements."""
-        question = self.db.get(Question, question_id)
-        article_count = len(self._linked_evidence_article_ids(question_id))
-        missing = self.evaluate_article_requirements(
-            article_count, question.causal_explanation if question else None
+        from src.domain.models.pipeline_artifact import (
+            ApprovedEvidenceDossier,
+            ArtifactStatus,
         )
+
+        question = self.db.get(Question, question_id)
+        try:
+            validated_dossiers = self.db.get_many(
+                ApprovedEvidenceDossier,
+                filters={
+                    "question_id": question_id,
+                    "status": ArtifactStatus.VALIDATED.value,
+                },
+            )
+        except sqlite3.OperationalError as exc:
+            if "no such table" not in str(exc):
+                raise
+            validated_dossiers = []
+        if validated_dossiers:
+            dossier = max(validated_dossiers, key=lambda item: item.created_at)
+            article_count = len(dossier.article_version_ids)
+            missing = [] if question and question.causal_explanation else [
+                "causal_explanation missing"
+            ]
+        else:
+            article_count = len(self._linked_evidence_article_ids(question_id))
+            missing = self.evaluate_article_requirements(
+                article_count, question.causal_explanation if question else None
+            )
         return EvidenceSatisfaction(
             is_satisfied=not missing,
             graph_depth=0,

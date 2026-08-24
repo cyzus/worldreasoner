@@ -18,6 +18,14 @@ app = typer.Typer(no_args_is_help=True)
 console = Console()
 
 
+def _configure_utf8_streams() -> None:
+    """Prevent Unicode crawler logs from aborting collection on Windows."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="replace")
+
+
 @app.command("run")
 def run_construction(
     topic: str = typer.Option(
@@ -37,6 +45,8 @@ def run_construction(
     ),
     dataset_version: str = typer.Option("v2-live", "--dataset-version"),
     max_search_results: int = typer.Option(5, min=1, max=10),
+    max_search_queries: int = typer.Option(3, min=1, max=6),
+    provider_timeout_seconds: int = typer.Option(480, min=30, max=1800),
     min_approved_articles: int = typer.Option(
         SATISFACTION_DEFAULTS.min_articles,
         "--min-approved-articles",
@@ -73,10 +83,7 @@ def run_construction(
     ),
 ) -> None:
     """Build one question, evidence dossier, explanation, and graph end to end."""
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None:
-            reconfigure(encoding="utf-8", errors="replace")
+    _configure_utf8_streams()
     if db_path.exists() and db_path.stat().st_size > 0:
         raise typer.BadParameter(
             f"Refusing to use non-empty database: {db_path}. Choose a new path."
@@ -86,12 +93,16 @@ def run_construction(
             "Pass --allow-model-content to permit article cleanup and synthesis."
         )
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    runtime = AgentsSDKRuntime(model_id=model)
+    runtime = AgentsSDKRuntime(
+        model_id=model,
+        provider_call_timeout_seconds=provider_timeout_seconds,
+    )
     pipeline = ConstructionPipeline(
         db_path=db_path,
         runtime=runtime,
         dataset_version=dataset_version,
         max_search_results=max_search_results,
+        max_search_queries_per_round=max_search_queries,
         requirements=EvidenceSatisfactionConfig(
             min_articles=min_approved_articles,
             min_graph_events=min_graph_events,
@@ -114,6 +125,7 @@ def resume_graph(
     ),
 ) -> None:
     """Resume graph construction from a validated dossier and explanation."""
+    _configure_utf8_streams()
     if not db_path.exists():
         raise typer.BadParameter(f"Database does not exist: {db_path}")
     runtime = AgentsSDKRuntime(model_id=model)
@@ -146,6 +158,8 @@ def construct_existing_questions(
     ),
     dataset_version: str = typer.Option("v2-live", "--dataset-version"),
     max_search_results: int = typer.Option(5, min=1, max=10),
+    max_search_queries: int = typer.Option(3, min=1, max=6),
+    provider_timeout_seconds: int = typer.Option(480, min=30, max=1800),
     min_approved_articles: int = typer.Option(
         SATISFACTION_DEFAULTS.min_articles,
         "--min-approved-articles",
@@ -170,6 +184,7 @@ def construct_existing_questions(
     ),
 ) -> None:
     """Build evidence, explanation, and graphs for resolved DB questions."""
+    _configure_utf8_streams()
     if not db_path.exists():
         raise typer.BadParameter(f"Database does not exist: {db_path}")
     if not allow_model_content:
@@ -184,12 +199,16 @@ def construct_existing_questions(
         raise typer.BadParameter(
             "Provide --all-resolved or at least one --question value."
         )
-    runtime = AgentsSDKRuntime(model_id=model)
+    runtime = AgentsSDKRuntime(
+        model_id=model,
+        provider_call_timeout_seconds=provider_timeout_seconds,
+    )
     pipeline = ConstructionPipeline(
         db_path=db_path,
         runtime=runtime,
         dataset_version=dataset_version,
         max_search_results=max_search_results,
+        max_search_queries_per_round=max_search_queries,
         requirements=EvidenceSatisfactionConfig(
             min_articles=min_approved_articles,
             min_graph_events=min_graph_events,

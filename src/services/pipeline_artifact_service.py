@@ -219,6 +219,9 @@ class PipelineArtifactService(ServiceBase):
             "published_date": article.published_date.isoformat()
             if article.published_date
             else None,
+            "publication_date_provenance": article.metadata.get(
+                "publication_date_provenance", "stored_article"
+            ),
             "url": article.url,
             "content_hash": record.normalized_content_hash,
             "clean_markdown": record.clean_markdown,

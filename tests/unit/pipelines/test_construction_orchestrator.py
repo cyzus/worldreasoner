@@ -12,10 +12,12 @@ from src.config.pipeline import EvidenceSatisfactionConfig
 from src.domain.models import (
     Article,
     ArticleQualityRecord,
+    ApprovedEvidenceDossier,
     CausalHypothesis,
     Domain,
     Event,
     EventOutcomeImpact,
+    ExplanationArtifact,
     GraphRevision,
     ImpactDirection,
     PipelineRun,
@@ -29,9 +31,13 @@ from src.pipelines.construction.models import (
     ExplanationDraft,
     GeneratedQuestionDraft,
     GraphDraft,
+    SearchQuery,
     SearchPlanDraft,
 )
-from src.pipelines.construction.orchestrator import ConstructionPipeline
+from src.pipelines.construction.orchestrator import (
+    ConstructionPipeline,
+    EvidenceAbstentionError,
+)
 from src.services.pipeline_artifact_service import ArtifactValidationError
 from src.services.question_monitor_service import QuestionMonitorService
 
@@ -73,6 +79,13 @@ class FakeRuntime:
         elif output_type is CoverageAssessmentDraft:
             output = CoverageAssessmentDraft(
                 ready=True,
+                ledger={
+                    "outcome_resolution_supported": True,
+                    "timeline_covered": True,
+                    "key_developments_supported": True,
+                    "counterevidence_considered": True,
+                    "citations_traceable": True,
+                },
                 covered_aspects=["outcome", "timeline"],
                 rationale="Three independent snapshots cover both aspects.",
             )
@@ -222,6 +235,32 @@ class RepairingFakeRuntime(FakeRuntime):
         return output, usage
 
 
+class CitationRepairingFakeRuntime(FakeRuntime):
+    """Return a stale opaque version ID while retaining the correct alias."""
+
+    async def run_structured(
+        self,
+        name: str,
+        instructions: str,
+        user_input: str,
+        output_type: Type[BaseModel],
+        max_turns: int = 4,
+    ) -> tuple[BaseModel, AgentUsage]:
+        output, usage = await super().run_structured(
+            name,
+            instructions,
+            user_input,
+            output_type,
+            max_turns,
+        )
+        if output_type is ExplanationDraft:
+            assert isinstance(output, ExplanationDraft)
+            output.event_candidates[0].evidence_refs[0].article_version_id = (
+                "stale-version-id"
+            )
+        return output, usage
+
+
 class GraphRepairingFakeRuntime(FakeRuntime):
     """Require the rejected graph to be supplied to the repair call."""
 
@@ -349,8 +388,8 @@ class StubConstructionPipeline(ConstructionPipeline):
                 id=f"article-{index}",
                 title=f"Evidence article {index}",
                 content=("Substantive evidence sentence. " * 20),
-                url=f"https://example.test/{index}",
-                source="example.test",
+                url=f"https://source-{index % 3}.example.test/{index}",
+                source=f"source-{index % 3}.example.test",
                 published_date=datetime(2024, 1, 10 + index, tzinfo=timezone.utc),
                 domain=Domain.GENERAL,
                 collected_for_question_id=question.id,
@@ -419,6 +458,130 @@ def test_search_simplifies_backend_incompatible_date_operators(
     ]
     assert len(calls) == 2
     assert "after:" not in calls[1]
+
+
+def test_targeted_search_query_clamps_dates_and_requires_entities(
+    tmp_path: Path,
+) -> None:
+    pipeline = StubConstructionPipeline(
+        db_path=tmp_path / "targeted-query.db",
+        runtime=FakeRuntime(),
+        requirements=EvidenceSatisfactionConfig(
+            min_articles=8,
+            hindsight_reporting_delay_days=30,
+        ),
+    )
+    question = Question(
+        id="targeted-query-question",
+        question_text="Did the test organization publish the resolved result?",
+        question_type="binary",
+        domain=Domain.GENERAL,
+        source="test",
+        difficulty=2,
+        estimated_start_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        resolution_date=datetime(2024, 2, 1, tzinfo=timezone.utc),
+        ground_truth=True,
+    )
+    query = SearchQuery(
+        query="official result",
+        rationale="Fill the outcome-resolution gap.",
+        evidence_need="outcome resolution support",
+        required_entities=["Test Organization"],
+        date_start="2023-01-01",
+        date_end="2025-01-01",
+        preferred_source_types=["official"],
+    )
+
+    rendered = pipeline._build_search_query(question, query)
+
+    assert '"Test Organization"' in rendered
+    assert "after:2024-01-01" in rendered
+    assert "before:2024-03-02" in rendered
+
+
+def test_url_normalization_collapses_tracking_variants() -> None:
+    first = ConstructionPipeline._normalize_url(
+        "HTTPS://WWW.Example.com/story/?utm_source=newsletter&b=2&a=1#section"
+    )
+    second = ConstructionPipeline._normalize_url(
+        "https://www.example.com/story?a=1&b=2"
+    )
+
+    assert first == "https://www.example.com/story?a=1&b=2"
+    assert first == second
+
+
+def test_publication_date_provenance_is_persisted(tmp_path: Path) -> None:
+    pipeline = StubConstructionPipeline(
+        db_path=tmp_path / "publication-provenance.db",
+        runtime=FakeRuntime(),
+    )
+    article = Article(
+        id="article-with-assumed-date",
+        title="Article with unavailable publication metadata",
+        content="Substantive article content. " * 10,
+        url="https://example.test/article",
+        source="example.test",
+        published_date=datetime(2024, 2, 1, tzinfo=timezone.utc),
+        domain=Domain.GENERAL,
+    )
+    pipeline.db.save(Article, article)
+
+    pipeline._set_publication_date_provenance(
+        article.id,
+        "assumed_resolution_missing_date",
+    )
+
+    stored = pipeline.db.get(Article, article.id)
+    assert stored is not None
+    assert stored.metadata["publication_date_provenance"] == (
+        "assumed_resolution_missing_date"
+    )
+
+
+def test_archive_capture_timestamp_is_used_when_date_is_missing() -> None:
+    question = Question(
+        id="archive-date-question",
+        question_text="Did the documented event occur before resolution?",
+        question_type="binary",
+        domain=Domain.GENERAL,
+        source="test",
+        difficulty=2,
+        resolution_date=datetime(2026, 3, 2, tzinfo=timezone.utc),
+        ground_truth=True,
+    )
+
+    published, provenance = ConstructionPipeline._publication_metadata(
+        {
+            "url": (
+                "https://web.archive.org/web/20260821113426id_/"
+                "https://example.test/article"
+            )
+        },
+        question,
+    )
+
+    assert published == "2026-08-21T11:34:26+00:00"
+    assert provenance == "archive_capture"
+
+
+def test_search_plan_query_budget_is_deterministic(tmp_path: Path) -> None:
+    pipeline = StubConstructionPipeline(
+        db_path=tmp_path / "query-budget.db",
+        runtime=FakeRuntime(),
+        max_search_queries_per_round=2,
+    )
+    plan = SearchPlanDraft(
+        queries=[
+            {"query": f"query {index}", "rationale": "coverage"}
+            for index in range(4)
+        ]
+    )
+
+    assert [item.query for item in pipeline._bounded_search_queries(plan)] == [
+        "query 0",
+        "query 1",
+    ]
 
 
 @pytest.mark.asyncio
@@ -554,8 +717,8 @@ async def test_existing_question_reuses_eligible_snapshots_before_search(
                 id=f"existing-article-{index}",
                 title=f"Existing evidence article {index}",
                 content="Substantive existing evidence sentence. " * 20,
-                url=f"https://example.test/existing/{index}",
-                source="example.test",
+                url=f"https://source-{index}.example.test/existing/{index}",
+                source=f"source-{index}.example.test",
                 published_date=datetime(2024, 1, 10 + index, tzinfo=timezone.utc),
                 domain=Domain.GENERAL,
                 collected_for_question_id=question.id,
@@ -567,8 +730,8 @@ async def test_existing_question_reuses_eligible_snapshots_before_search(
             id="post-resolution-article",
             title="Post resolution retrospective article",
             content="Substantive retrospective evidence sentence. " * 20,
-            url="https://example.test/existing/retrospective",
-            source="example.test",
+            url="https://retrospective.example.test/existing/retrospective",
+            source="retrospective.example.test",
             published_date=datetime(2024, 2, 2, tzinfo=timezone.utc),
             domain=Domain.GENERAL,
             collected_for_question_id=question.id,
@@ -579,13 +742,11 @@ async def test_existing_question_reuses_eligible_snapshots_before_search(
 
     dossier = pipeline.db.get_many(SearchDossier)[0]
     stored = pipeline.db.get(Question, question.id)
-    assert result.article_count == 3
+    assert result.article_count == 4
     assert stored is not None
     assert stored.related_article_ids == ["existing-article-0"]
     assert getattr(pipeline, "collection_rounds", 0) == 0
-    assert dossier.rejected_articles["post-resolution-article"] == [
-        "published_after_resolution"
-    ]
+    assert "post-resolution-article" not in dossier.rejected_articles
     assert dossier.coverage_statistics["rounds"][0]["round"] == 0
 
 
@@ -628,7 +789,9 @@ async def test_existing_question_batch_isolates_question_failures(
     ]
 
 
-def test_article_temporal_eligibility_uses_resolution_day() -> None:
+def test_article_temporal_eligibility_uses_hindsight_reporting_window(
+    tmp_path: Path,
+) -> None:
     question = Question(
         id="temporal-question",
         question_text="Did the test organization publish the resolved result?",
@@ -650,13 +813,18 @@ def test_article_temporal_eligibility_uses_resolution_day() -> None:
         domain=Domain.GENERAL,
     )
 
-    assert not ConstructionPipeline._article_is_temporally_eligible(
-        article, question
+    pipeline = StubConstructionPipeline(
+        db_path=tmp_path / "temporal-policy.db",
+        runtime=FakeRuntime(),
+        requirements=EvidenceSatisfactionConfig(
+            min_articles=3,
+            hindsight_reporting_delay_days=30,
+        ),
     )
-    article.published_date = datetime(2024, 2, 1, 23, tzinfo=timezone.utc)
-    assert ConstructionPipeline._article_is_temporally_eligible(
-        article, question
-    )
+
+    assert pipeline._article_is_temporally_eligible(article, question)
+    article.published_date = datetime(2024, 3, 3, tzinfo=timezone.utc)
+    assert not pipeline._article_is_temporally_eligible(article, question)
 
 
 @pytest.mark.asyncio
@@ -723,6 +891,30 @@ async def test_repairs_undersized_explanation_before_graph_build(
 
     assert runtime.explanation_calls == 2
     assert result.event_count == 2
+
+
+@pytest.mark.asyncio
+async def test_canonicalizes_explanation_version_id_from_approved_alias(
+    tmp_path: Path,
+) -> None:
+    pipeline = StubConstructionPipeline(
+        db_path=tmp_path / "citation-repair.db",
+        runtime=CitationRepairingFakeRuntime(),
+        requirements=EvidenceSatisfactionConfig(
+            min_articles=3,
+            min_graph_events=3,
+            min_graph_depth=2,
+        ),
+    )
+
+    result = await pipeline.run("resolved test event")
+
+    explanation = pipeline.db.get_many(ExplanationArtifact)[0]
+    dossier = pipeline.db.get(ApprovedEvidenceDossier, result.evidence_dossier_id)
+    assert dossier is not None
+    assert explanation.event_candidates[0].evidence_refs[0].article_version_id in (
+        dossier.article_version_ids
+    )
 
 
 @pytest.mark.asyncio
@@ -840,6 +1032,31 @@ async def test_collects_more_evidence_before_continuing(
 
 
 @pytest.mark.asyncio
+async def test_validated_adaptive_dossier_satisfies_legacy_monitor(
+    tmp_path: Path,
+) -> None:
+    requirements = EvidenceSatisfactionConfig(
+        min_articles=20,
+        short_horizon_articles=8,
+        min_graph_events=3,
+        min_graph_depth=2,
+    )
+    pipeline = StubConstructionPipeline(
+        db_path=tmp_path / "adaptive-monitor.db",
+        runtime=FakeRuntime(),
+        requirements=requirements,
+    )
+
+    result = await pipeline.run("resolved test event")
+
+    monitor = QuestionMonitorService(pipeline.db, requirements)
+    satisfaction = monitor.check_satisfaction(result.question_id)
+    assert result.article_count == 9
+    assert satisfaction.is_satisfied
+    assert satisfaction.article_count == 9
+
+
+@pytest.mark.asyncio
 async def test_persists_exhausted_evidence_recovery(
     tmp_path: Path,
 ) -> None:
@@ -855,7 +1072,7 @@ async def test_persists_exhausted_evidence_recovery(
     )
 
     with pytest.raises(
-        RuntimeError,
+        EvidenceAbstentionError,
         match="Evidence requirements not met after 2 collection rounds",
     ):
         await pipeline.run("resolved test event")
@@ -863,4 +1080,44 @@ async def test_persists_exhausted_evidence_recovery(
     dossiers = pipeline.db.get_many(SearchDossier)
     assert pipeline.collection_rounds == 2
     assert dossiers[0].status.value == "rejected"
-    assert dossiers[0].unresolved_gaps == ["articles (1 < 3)"]
+    assert dossiers[0].unresolved_gaps == [
+        "articles (1 < 3)",
+        "unique_sources (1 < 3)",
+    ]
+    run = pipeline.db.get_many(PipelineRun)[0]
+    assert run.status.value == "needs_review"
+
+
+@pytest.mark.asyncio
+async def test_batch_reports_evidence_abstention_separately(
+    tmp_path: Path,
+) -> None:
+    pipeline = StalledConstructionPipeline(
+        db_path=tmp_path / "batch-abstention.db",
+        runtime=FakeRuntime(),
+        requirements=EvidenceSatisfactionConfig(
+            min_articles=3,
+            min_graph_events=3,
+            min_graph_depth=2,
+        ),
+        max_evidence_rounds=1,
+    )
+    question = Question(
+        id="resolved-question",
+        question_text="Did the test organization publish the resolved result?",
+        question_type="binary",
+        domain="general",
+        source="test",
+        difficulty=2,
+        resolution_date=datetime(2024, 2, 1, tzinfo=timezone.utc),
+        estimated_start_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        ground_truth="yes",
+        resolution_criteria="The official publication reports the result.",
+    )
+    pipeline.db.save(Question, question)
+
+    result = await pipeline.run_questions([question.id])
+
+    assert result.failed == []
+    assert result.processed == []
+    assert result.abstained[0]["question_id"] == question.id

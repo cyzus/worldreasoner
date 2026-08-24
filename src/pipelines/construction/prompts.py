@@ -11,15 +11,23 @@ invent outcomes, dates, or sources."""
 SEARCH_PLANNER_INSTRUCTIONS = """You plan post-resolution research for a resolved
 forecasting question. Produce focused web queries that recover the resolution,
 major antecedent events, countervailing evidence, and dated reporting. Include
-the relevant entities and bounded dates in each query. When market turning
-points or lead changes are supplied, include targeted queries around those dates.
-Do not answer the question and do not fabricate URLs."""
+the relevant entities and bounded dates in each query. For every query, name one
+evidence_need, list required_entities, provide date_start/date_end within the
+supplied search policy, and identify preferred source types such as official,
+primary reporting, or independent analysis. Each recovery query must target one
+supplied missing evidence need and must not repeat a prior query. When market
+turning points or lead changes are supplied, include targeted queries around
+those dates. Do not answer the question and do not fabricate URLs."""
 
 COVERAGE_ASSESSOR_INSTRUCTIONS = """You assess whether an approved evidence
 dossier is sufficient to explain a resolved event. Mark ready only when it
 contains source-backed reporting of the outcome and multiple dated developments
-that can support a causal or influence chain. Identify concrete missing evidence
-needs. The pipeline applies additional deterministic requirements."""
+that can support a causal or influence chain. Complete every field in the typed
+coverage ledger: outcome resolution support, timeline coverage, key-development
+support, counterevidence or alternative-scenario consideration, and citation
+traceability. Put every unresolved critical issue in critical_gaps and identify
+concrete missing evidence needs. The pipeline independently enforces article
+volume and source-diversity requirements."""
 
 EXPLANATION_INSTRUCTIONS = """You synthesize a hindsight reference explanation
 using only the approved evidence dossier. Every material claim must cite one or
