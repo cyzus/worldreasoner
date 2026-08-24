@@ -1,0 +1,689 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WORLDREASONER Pipeline</title>
+  <style>
+    :root {
+      --ink: #16202a;
+      --muted: #596775;
+      --line: #c9d2da;
+      --surface: #ffffff;
+      --page: #f3f5f6;
+      --forward: #176b64;
+      --forward-soft: #e6f2f0;
+      --hindsight: #9b4f32;
+      --hindsight-soft: #f8ece7;
+      --forecast: #315f9b;
+      --forecast-soft: #eaf0f8;
+      --evaluation: #7a641c;
+      --evaluation-soft: #f5f0dd;
+      --danger: #9d2b31;
+      --danger-soft: #f8e8e9;
+      --shadow: 0 8px 24px rgba(22, 32, 42, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--page);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    button, input { font: inherit; }
+
+    .shell {
+      width: min(1480px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 22px 0 44px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .brand-mark {
+      width: 48px;
+      height: 48px;
+      object-fit: contain;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(24px, 3vw, 38px);
+      line-height: 1.05;
+      font-weight: 760;
+    }
+
+    .subtitle {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .version {
+      color: var(--muted);
+      font-size: 12px;
+      border-left: 3px solid var(--forward);
+      padding-left: 10px;
+      max-width: 220px;
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 4px;
+      width: min(680px, 100%);
+      padding: 4px;
+      margin-bottom: 18px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #e7ebee;
+    }
+
+    .tab {
+      min-height: 38px;
+      border: 0;
+      border-radius: 5px;
+      color: #40505e;
+      background: transparent;
+      cursor: pointer;
+      font-weight: 650;
+    }
+
+    .tab[aria-selected="true"] {
+      color: var(--ink);
+      background: var(--surface);
+      box-shadow: 0 1px 4px rgba(22, 32, 42, 0.12);
+    }
+
+    .summary-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border: 1px solid var(--line);
+      background: var(--surface);
+      margin-bottom: 18px;
+    }
+
+    .summary-item {
+      min-height: 72px;
+      padding: 13px 16px;
+      border-right: 1px solid var(--line);
+    }
+
+    .summary-item:last-child { border-right: 0; }
+    .summary-item strong { display: block; font-size: 14px; margin-bottom: 5px; }
+    .summary-item span { color: var(--muted); font-size: 12px; line-height: 1.4; }
+
+    .view { display: none; }
+    .view.active { display: block; }
+
+    .band {
+      min-width: 0;
+      margin-bottom: 14px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .band-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .band-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0;
+      font-size: 15px;
+    }
+
+    .index {
+      display: inline-grid;
+      place-items: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+      background: var(--ink);
+    }
+
+    .band-note { color: var(--muted); font-size: 12px; text-align: right; }
+    .flow { padding: 18px; overflow-x: auto; }
+
+    .flow-row {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(145px, 1fr));
+      align-items: stretch;
+      min-width: 1120px;
+    }
+
+    .flow-row.five { grid-template-columns: repeat(5, minmax(170px, 1fr)); min-width: 900px; }
+    .flow-row.six { grid-template-columns: repeat(6, minmax(160px, 1fr)); min-width: 1020px; }
+
+    .stage-wrap {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 28px;
+      align-items: center;
+    }
+
+    .stage-wrap:last-child { grid-template-columns: 1fr; }
+
+    .arrow {
+      position: relative;
+      height: 2px;
+      background: #8a98a5;
+    }
+
+    .arrow::after {
+      content: "";
+      position: absolute;
+      right: -1px;
+      top: -4px;
+      border-left: 7px solid #8a98a5;
+      border-top: 5px solid transparent;
+      border-bottom: 5px solid transparent;
+    }
+
+    .stage {
+      width: 100%;
+      min-height: 128px;
+      padding: 13px;
+      text-align: left;
+      border: 1px solid var(--line);
+      border-top: 4px solid var(--ink);
+      border-radius: 6px;
+      color: var(--ink);
+      background: #fff;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+    }
+
+    .stage:hover, .stage:focus-visible {
+      transform: translateY(-2px);
+      box-shadow: 0 7px 18px rgba(22, 32, 42, 0.13);
+      outline: none;
+    }
+
+    .stage.forward { border-top-color: var(--forward); background: var(--forward-soft); }
+    .stage.hindsight { border-top-color: var(--hindsight); background: var(--hindsight-soft); }
+    .stage.forecast { border-top-color: var(--forecast); background: var(--forecast-soft); }
+    .stage.evaluation { border-top-color: var(--evaluation); background: var(--evaluation-soft); }
+
+    .stage-code {
+      display: block;
+      margin-bottom: 9px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .stage strong { display: block; font-size: 14px; line-height: 1.25; }
+    .stage small { display: block; margin-top: 7px; color: var(--muted); line-height: 1.4; }
+
+    .firewall {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 14px;
+      padding: 11px 16px;
+      margin: 14px 0;
+      color: var(--danger);
+      background: var(--danger-soft);
+      border: 1px solid #e5b6b9;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .firewall::before, .firewall::after {
+      content: "";
+      height: 1px;
+      background: #d78f94;
+    }
+
+    .timeline-panel {
+      padding: 16px 18px 20px;
+      border-top: 1px solid var(--line);
+      background: #f8fafb;
+    }
+
+    .timeline-controls {
+      display: grid;
+      grid-template-columns: 180px 1fr 110px;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .timeline-controls label { font-size: 13px; font-weight: 700; }
+    input[type="range"] { width: 100%; accent-color: var(--forecast); }
+    .date-readout { text-align: right; color: var(--forecast); font-weight: 800; }
+
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(90px, 1fr));
+      gap: 8px;
+    }
+
+    .time-event {
+      min-height: 86px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: #fff;
+      transition: opacity 150ms ease, background 150ms ease;
+    }
+
+    .time-event.future { opacity: 0.34; background: #e5e9ec; }
+    .time-event.resolution { border-color: #d4aa42; }
+    .time-event strong { display: block; font-size: 12px; }
+    .time-event span { display: block; margin-top: 6px; color: var(--muted); font-size: 11px; }
+
+    .detail-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 350px;
+      gap: 14px;
+    }
+
+    .detail-layout > * { min-width: 0; }
+
+    .detail-panel {
+      position: sticky;
+      top: 16px;
+      align-self: start;
+      min-height: 260px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-left: 5px solid var(--ink);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .detail-panel[data-tone="forward"] { border-left-color: var(--forward); }
+    .detail-panel[data-tone="hindsight"] { border-left-color: var(--hindsight); }
+    .detail-panel[data-tone="forecast"] { border-left-color: var(--forecast); }
+    .detail-panel[data-tone="evaluation"] { border-left-color: var(--evaluation); }
+    .detail-kicker { color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }
+    .detail-panel h2 { margin: 8px 0 10px; font-size: 21px; }
+    .detail-panel p { margin: 0 0 12px; color: var(--muted); line-height: 1.55; font-size: 13px; }
+    .detail-panel dl { margin: 0; }
+    .detail-panel dt { margin-top: 12px; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+    .detail-panel dd { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      padding: 18px;
+    }
+
+    .metric {
+      min-height: 170px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+    }
+
+    .metric .metric-id {
+      display: grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      margin-bottom: 12px;
+      border-radius: 50%;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 850;
+      background: var(--evaluation);
+    }
+
+    .metric h3 { margin: 0; font-size: 15px; }
+    .metric p { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .metric .uses { padding-top: 9px; border-top: 1px solid var(--line); color: #394957; }
+
+    .conditions {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(140px, 1fr));
+      gap: 8px;
+      min-width: 900px;
+    }
+
+    .condition {
+      min-height: 120px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: #fff;
+    }
+
+    .condition strong { display: block; font-size: 12px; }
+    .condition span { display: block; margin-top: 7px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+    .condition.upper { border-color: #d49b83; background: var(--hindsight-soft); }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 18px;
+      padding: 11px 14px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .swatch { width: 12px; height: 12px; border-radius: 2px; }
+
+    @media (max-width: 980px) {
+      .detail-layout { grid-template-columns: 1fr; }
+      .detail-panel { position: static; }
+      .summary-strip { grid-template-columns: repeat(2, 1fr); }
+      .summary-item:nth-child(2) { border-right: 0; }
+      .summary-item:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+      .metric-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      .shell { width: min(100% - 18px, 1480px); padding-top: 12px; }
+      header { grid-template-columns: auto 1fr; }
+      .version { grid-column: 1 / -1; }
+      .tabs { grid-template-columns: repeat(2, 1fr); }
+      .summary-strip { grid-template-columns: 1fr; }
+      .summary-item { border-right: 0; border-bottom: 1px solid var(--line); }
+      .summary-item:last-child { border-bottom: 0; }
+      .band-header { align-items: flex-start; flex-direction: column; }
+      .band-note { text-align: left; }
+      .timeline-controls { grid-template-columns: 1fr; gap: 8px; }
+      .date-readout { text-align: left; }
+      .timeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .firewall { grid-template-columns: 1fr; text-align: center; }
+      .firewall::before, .firewall::after { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <img class="brand-mark" src="images/logo.png" alt="WORLDREASONER logo">
+      <div>
+        <h1>WORLDREASONER Pipeline</h1>
+        <p class="subtitle">Reproducible event forecasting with time-valid evidence and structured reasoning evaluation</p>
+      </div>
+      <div class="version">Current architecture: versioned construction artifacts, Temporal Gateway replay, and separate outcome/evidence/reasoning scores.</div>
+    </header>
+
+    <nav class="tabs" aria-label="Pipeline view">
+      <button class="tab" data-view="overview" aria-selected="true">Whole System</button>
+      <button class="tab" data-view="construction" aria-selected="false">Construction</button>
+      <button class="tab" data-view="forecast" aria-selected="false">Forecast Replay</button>
+      <button class="tab" data-view="evaluation" aria-selected="false">Evaluation</button>
+    </nav>
+
+    <section class="summary-strip" aria-label="System principles">
+      <div class="summary-item"><strong>Resolved questions</strong><span>Objective outcomes anchor accuracy and calibration.</span></div>
+      <div class="summary-item"><strong>Sliding simulated date</strong><span>The same question can be replayed at different points before resolution.</span></div>
+      <div class="summary-item"><strong>Closed forecast sandbox</strong><span>Only evidence available by the simulated date reaches the agent.</span></div>
+      <div class="summary-item"><strong>Three evaluation axes</strong><span>Outcome quality, evidence quality, and key-event recovery remain separate.</span></div>
+    </section>
+
+    <div class="view active" id="overview">
+      <div class="detail-layout">
+        <div>
+          <section class="band">
+            <div class="band-header">
+              <h2 class="band-title"><span class="index">1</span> Benchmark construction</h2>
+              <span class="band-note">Build questions before resolution; build references after resolution</span>
+            </div>
+            <div class="flow">
+              <div class="flow-row seven">
+                <div class="stage-wrap"><button class="stage forward" data-detail="sources"><span class="stage-code">Input</span><strong>Markets + news</strong><small>Real-world questions, metadata, provenance, price histories</small></button><i class="arrow"></i></div>
+                <div class="stage-wrap"><button class="stage forward" data-detail="question"><span class="stage-code">Forward</span><strong>Question candidate</strong><small>Answer type, domain, dates, resolution criteria</small></button><i class="arrow"></i></div>
+                <div class="stage-wrap"><button class="stage forward" data-detail="question-gates"><span class="stage-code">Gate</span><strong>Question validation</strong><small>Resolvable, temporally valid, deduplicated, traceable</small></button><i class="arrow"></i></div>
+                <div class="stage-wrap"><button class="stage hindsight" data-detail="search"><span class="stage-code">After resolution</span><strong>Live evidence search</strong><small>Resolution reporting, antecedents, counterevidence</small></button><i class="arrow"></i></div>
+                <div class="stage-wrap"><button class="stage hindsight" data-detail="quality"><span class="stage-code">Quality</span><strong>Snapshot gate + cleanup</strong><small>Deterministic checks, clean Markdown, approved versions</small></button><i class="arrow"></i></div>
+                <div class="stage-wrap"><button class="stage hindsight" data-detail="explanation"><span class="stage-code">Synthesis</span><strong>Hindsight explanation</strong><small>Source-cited narrative and dated event candidates</small></button><i class="arrow"></i></div>
+                <div class="stage-wrap"><button class="stage hindsight" data-detail="graph"><span class="stage-code">Reference</span><strong>Validated event graph</strong><small>Staged DAG, impacts, repairs, atomic commit</small></button></div>
+              </div>
+            </div>
+          </section>
+
+          <div class="firewall">HINDSIGHT REFERENCES ARE LOCKED AWAY FROM FORECAST-TIME AGENTS</div>
+
+          <section class="band">
+            <div class="band-header">
+              <h2 class="band-title"><span class="index">2</span> Forecast-time replay</h2>
+              <span class="band-note">The agent acts inside a simulated historical information state</span>
+            </div>
+            <div class="flow">
+              <div class="flow-row five">
+                <div class="stage-wrap"><button class="stage forecast" data-detail="cutoff"><span class="stage-code">Filter 1</span><strong>Model cutoff filter</strong><small>Exclude model-question pairs at risk of training recall</small></button><i class="arrow"></i></div>
+                <div class="stage-wrap"><button class="stage forecast" data-detail="simdate"><span class="stage-code">Replay</span><strong>Choose simulated date</strong><small>Any valid point between forecast start and resolution</small></button><i class="arrow"></i></div>
+                <div class="stage-wrap"><button class="stage forecast" data-detail="gateway"><span class="stage-code">Firewall</span><strong>Temporal Gateway</strong><small>Question hidden ground truth; evidence filtered by time</small></button><i class="arrow"></i></div>
+                <div class="stage-wrap"><button class="stage forecast" data-detail="agent"><span class="stage-code">Agent</span><strong>Forecast condition</strong><small>Search and graph tools vary by controlled configuration</small></button><i class="arrow"></i></div>
+                <div class="stage-wrap"><button class="stage forecast" data-detail="submission"><span class="stage-code">Output</span><strong>Forecast artifact</strong><small>Answer, probability, citations, reasoning/event graph</small></button></div>
+              </div>
+            </div>
+            <div class="timeline-panel">
+              <div class="timeline-controls">
+                <label for="simulated-date">Simulated prediction date</label>
+                <input id="simulated-date" type="range" min="0" max="4" step="1" value="2">
+                <output class="date-readout" id="date-readout">15 Mar</output>
+              </div>
+              <div class="timeline" id="timeline">
+                <div class="time-event" data-time="0"><strong>Question opens</strong><span>10 Jan</span></div>
+                <div class="time-event" data-time="1"><strong>Early evidence</strong><span>02 Feb</span></div>
+                <div class="time-event" data-time="2"><strong>New development</strong><span>15 Mar</span></div>
+                <div class="time-event" data-time="3"><strong>Late evidence</strong><span>18 Apr</span></div>
+                <div class="time-event" data-time="4"><strong>Final pre-resolution signal</strong><span>03 May</span></div>
+                <div class="time-event resolution future" data-time="5"><strong>Outcome resolves</strong><span>05 May - always hidden</span></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="band">
+            <div class="band-header">
+              <h2 class="band-title"><span class="index">3</span> Post-forecast evaluation</h2>
+              <span class="band-note">Forecast and reference artifacts meet only inside the evaluator</span>
+            </div>
+            <div class="flow">
+              <div class="flow-row five">
+                <div class="stage-wrap"><button class="stage evaluation" data-detail="resolved"><span class="stage-code">Ground truth</span><strong>Resolved outcome</strong><small>Objective answer used for accuracy and calibration</small></button><i class="arrow"></i></div>
+                <div class="stage-wrap"><button class="stage evaluation" data-detail="forecast-artifact"><span class="stage-code">Agent output</span><strong>Forecast artifact</strong><small>Prediction, confidence, citations, event structure</small></button><i class="arrow"></i></div>
+                <div class="stage-wrap"><button class="stage evaluation" data-detail="reference-artifact"><span class="stage-code">Reference</span><strong>Hindsight artifacts</strong><small>Approved evidence and source-backed key events</small></button><i class="arrow"></i></div>
+                <div class="stage-wrap"><button class="stage evaluation" data-detail="matcher"><span class="stage-code">Scoring</span><strong>Outcome + source + event matching</strong><small>Independent metric computations with temporal controls</small></button><i class="arrow"></i></div>
+                <div class="stage-wrap"><button class="stage evaluation" data-detail="results"><span class="stage-code">Analysis</span><strong>Per-condition results</strong><small>Models, dates, horizons, domains, and ablations</small></button></div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <aside class="detail-panel" id="detail-panel" data-tone="forward" aria-live="polite">
+          <span class="detail-kicker" id="detail-kicker">System overview</span>
+          <h2 id="detail-title">Two timelines, one controlled evaluation</h2>
+          <p id="detail-body">Construction can use post-resolution research to create evaluation references. Forecasting is replayed separately behind the Temporal Gateway. The evaluator combines them only after the agent submits a prediction.</p>
+          <dl>
+            <dt>Consumes</dt><dd id="detail-input">Resolved real-world questions, timestamped evidence, and model cutoff metadata.</dd>
+            <dt>Produces</dt><dd id="detail-output">Reproducible forecasts and separate outcome, evidence, and reasoning measurements.</dd>
+            <dt>Control</dt><dd id="detail-control">Ground truth and hindsight artifacts never appear in forecast-time tool responses.</dd>
+          </dl>
+        </aside>
+      </div>
+    </div>
+
+    <div class="view" id="construction">
+      <section class="band">
+        <div class="band-header"><h2 class="band-title"><span class="index">A</span> Forward question construction</h2><span class="band-note">Creates the task and its objective resolution contract</span></div>
+        <div class="flow"><div class="flow-row five">
+          <div class="stage-wrap"><button class="stage forward" data-detail="sources"><span class="stage-code">Discover</span><strong>Prediction markets + news</strong><small>Candidate topics with provenance</small></button><i class="arrow"></i></div>
+          <div class="stage-wrap"><button class="stage forward" data-detail="question"><span class="stage-code">Represent</span><strong>QuestionCandidate</strong><small>Binary, MCQ, quantity, or timeframe</small></button><i class="arrow"></i></div>
+          <div class="stage-wrap"><button class="stage forward" data-detail="question-gates"><span class="stage-code">Validate</span><strong>Deterministic gates</strong><small>Dates, resolution, source, duplicates</small></button><i class="arrow"></i></div>
+          <div class="stage-wrap"><button class="stage forward" data-detail="promotion"><span class="stage-code">Decide</span><strong>Selection + promotion</strong><small>Distribution and quality controls</small></button><i class="arrow"></i></div>
+          <div class="stage-wrap"><button class="stage forward" data-detail="benchmark-question"><span class="stage-code">Persist</span><strong>Versioned benchmark question</strong><small>Replay window and hidden ground truth</small></button></div>
+        </div></div>
+      </section>
+
+      <section class="band">
+        <div class="band-header"><h2 class="band-title"><span class="index">B</span> Backward reference construction</h2><span class="band-note">Runs after the real-world outcome is resolved</span></div>
+        <div class="flow"><div class="flow-row seven">
+          <div class="stage-wrap"><button class="stage hindsight" data-detail="search"><span class="stage-code">Plan</span><strong>Question-aware search</strong><small>Outcome, timeline, competing evidence</small></button><i class="arrow"></i></div>
+          <div class="stage-wrap"><button class="stage hindsight" data-detail="snapshot"><span class="stage-code">Collect</span><strong>Raw snapshots</strong><small>Immutable article captures</small></button><i class="arrow"></i></div>
+          <div class="stage-wrap"><button class="stage hindsight" data-detail="quality"><span class="stage-code">Gate</span><strong>Validity + Markdown</strong><small>Blocked content cannot proceed</small></button><i class="arrow"></i></div>
+          <div class="stage-wrap"><button class="stage hindsight" data-detail="coverage"><span class="stage-code">Assess</span><strong>Evidence dossier</strong><small>Adaptive target, coverage, diversity</small></button><i class="arrow"></i></div>
+          <div class="stage-wrap"><button class="stage hindsight" data-detail="explanation"><span class="stage-code">Explain</span><strong>Cited event inventory</strong><small>Aliases resolve to approved versions</small></button><i class="arrow"></i></div>
+          <div class="stage-wrap"><button class="stage hindsight" data-detail="graph"><span class="stage-code">Structure</span><strong>Graph proposal</strong><small>Events, edges, outcome impacts</small></button><i class="arrow"></i></div>
+          <div class="stage-wrap"><button class="stage hindsight" data-detail="commit"><span class="stage-code">Commit</span><strong>Validated reference</strong><small>Bounded repair or abstention</small></button></div>
+        </div></div>
+      </section>
+
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--forward)"></i> Forward task construction</span>
+        <span><i class="swatch" style="background:var(--hindsight)"></i> Post-resolution reference construction</span>
+        <span><i class="swatch" style="background:var(--danger)"></i> Deterministic blocking boundary</span>
+      </div>
+    </div>
+
+    <div class="view" id="forecast">
+      <section class="band">
+        <div class="band-header"><h2 class="band-title"><span class="index">T</span> Sliding-window historical replay</h2><span class="band-note">The same resolved question can be evaluated at multiple simulated dates</span></div>
+        <div class="timeline-panel" style="border-top:0">
+          <div class="timeline-controls"><label for="forecast-date">Simulated prediction date</label><input id="forecast-date" type="range" min="0" max="4" step="1" value="2"><output class="date-readout" id="forecast-readout">15 Mar</output></div>
+          <div class="timeline" id="forecast-timeline">
+            <div class="time-event" data-time="0"><strong>Question start</strong><span>Replay becomes valid</span></div>
+            <div class="time-event" data-time="1"><strong>Published evidence</strong><span>Searchable</span></div>
+            <div class="time-event" data-time="2"><strong>Simulated now</strong><span>Gateway cutoff</span></div>
+            <div class="time-event" data-time="3"><strong>Future evidence</strong><span>Blocked</span></div>
+            <div class="time-event" data-time="4"><strong>Late evidence</strong><span>Blocked</span></div>
+            <div class="time-event resolution future" data-time="5"><strong>Resolved outcome</strong><span>Hidden</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="band">
+        <div class="band-header"><h2 class="band-title"><span class="index">6</span> Controlled agent conditions</h2><span class="band-note">Ablations reveal which capability changes the forecast</span></div>
+        <div class="flow"><div class="conditions">
+          <div class="condition"><strong>Vanilla LLM</strong><span>Model knowledge only; no retrieval or graph tools.</span></div>
+          <div class="condition"><strong>Causal Simulation</strong><span>Structured reasoning without evidence retrieval.</span></div>
+          <div class="condition"><strong>Search-Enabled</strong><span>Time-gated article retrieval without graph output.</span></div>
+          <div class="condition"><strong>Search-Enabled Graph</strong><span>Time-gated retrieval plus structured event reasoning.</span></div>
+          <div class="condition"><strong>Near-Resolution</strong><span>Replay close to resolution to measure evidence availability.</span></div>
+          <div class="condition upper"><strong>Real-Time</strong><span>Live-access contrast showing why the temporal sandbox matters.</span></div>
+        </div></div>
+      </section>
+
+      <div class="firewall">THE GATEWAY RETURNS NO GROUND TRUTH AND NO HINDSIGHT REFERENCE GRAPH</div>
+    </div>
+
+    <div class="view" id="evaluation">
+      <section class="band">
+        <div class="band-header"><h2 class="band-title"><span class="index">E</span> Independent evaluation axes</h2><span class="band-note">No single metric is asked to stand in for forecast quality</span></div>
+        <div class="metric-grid">
+          <article class="metric"><span class="metric-id">ACC</span><h3>Outcome quality</h3><p>Compares the submitted answer and probability with the objectively resolved outcome.</p><p class="uses"><strong>Measures:</strong> correctness and calibration.<br><strong>Metrics:</strong> Accuracy, Brier score, log score.</p></article>
+          <article class="metric"><span class="metric-id">SrcP</span><h3>Evidence quality</h3><p>Checks whether sources cited by the forecast are valid and align with the approved evidence set.</p><p class="uses"><strong>Measures:</strong> grounding and citation behavior.<br><strong>Metric:</strong> Source Precision.</p></article>
+          <article class="metric"><span class="metric-id">KER</span><h3>Reasoning quality</h3><p>Tests whether the agent identifies specific dated key events supported by the hindsight reference.</p><p class="uses"><strong>Measures:</strong> recovery of important event structure, not unique causal truth.<br><strong>Metrics:</strong> KER and event matching.</p></article>
+        </div>
+      </section>
+
+      <section class="band">
+        <div class="band-header"><h2 class="band-title"><span class="index">F</span> Evaluation filters and analyses</h2><span class="band-note">Aggregates remain traceable to model-question-condition runs</span></div>
+        <div class="flow"><div class="flow-row five">
+          <div class="stage-wrap"><button class="stage evaluation" data-detail="cutoff"><span class="stage-code">Validity</span><strong>Knowledge-cutoff filter</strong><small>Remove contaminated model-question pairs</small></button><i class="arrow"></i></div>
+          <div class="stage-wrap"><button class="stage evaluation" data-detail="resolved"><span class="stage-code">Outcome</span><strong>Ground-truth scoring</strong><small>Answer and probability</small></button><i class="arrow"></i></div>
+          <div class="stage-wrap"><button class="stage evaluation" data-detail="source-match"><span class="stage-code">Evidence</span><strong>Source matching</strong><small>Forecast citations vs approved evidence</small></button><i class="arrow"></i></div>
+          <div class="stage-wrap"><button class="stage evaluation" data-detail="matcher"><span class="stage-code">Reasoning</span><strong>Event matching</strong><small>Semantic event match plus temporal gate</small></button><i class="arrow"></i></div>
+          <div class="stage-wrap"><button class="stage evaluation" data-detail="results"><span class="stage-code">Report</span><strong>Comparative analysis</strong><small>Conditions, models, horizons, domains</small></button></div>
+        </div></div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const details = {
+      sources: ["Construction input", "Markets and news streams", "Prediction-market metadata provides concrete questions, outcomes, and price histories. News streams extend coverage to other answer formats and domains.", "Market metadata, timestamped reporting, and source provenance.", "Versioned source candidates for question construction.", "Source records are retained so every accepted question remains traceable."],
+      question: ["Forward pipeline", "Question candidate", "The forward pipeline turns source material into a resolved forecasting task with an answer format, domain, forecast start, resolution date, and explicit resolution criteria.", "Source candidates and market metadata.", "A typed QuestionCandidate artifact.", "The candidate is not canonical until deterministic validation and promotion."],
+      "question-gates": ["Deterministic gate", "Question validation", "Code checks temporal ordering, objective resolvability, required provenance, answer-format consistency, and duplicate risk before promotion.", "QuestionCandidate and source records.", "Accepted candidate or typed rejection reasons.", "An LLM proposal cannot bypass these requirements."],
+      promotion: ["Selection", "Promotion decision", "Validated candidates are selected under quality and distribution controls, then promoted to the versioned benchmark.", "Validated candidates and dataset distribution targets.", "Canonical question with recorded decision provenance.", "Promotion is explicit and idempotent."],
+      "benchmark-question": ["Persisted artifact", "Benchmark question", "The canonical question stores the replay interval and resolved answer. Forecast-time interfaces always hide the answer.", "Validated question candidate.", "A reusable task for multiple models, conditions, and simulated dates.", "Ground truth remains evaluation-only."],
+      search: ["Backward pipeline", "Post-resolution evidence search", "After the outcome resolves, focused live search gathers resolution reporting, antecedent developments, countervailing evidence, and dated context.", "Resolved question, market signals, and prior coverage gaps.", "Raw immutable article snapshots and a search dossier.", "Search notes are not evidence until their snapshots pass quality gates."],
+      snapshot: ["Collection", "Immutable snapshots", "Fetched content is persisted before cleanup so the source representation, retrieval history, and later transformations remain auditable.", "Candidate URLs discovered by focused search.", "Raw article snapshots with retrieval metadata.", "Failures and duplicate URLs are recorded rather than silently discarded."],
+      quality: ["Evidence quality", "Snapshot gate and Markdown cleanup", "Deterministic checks reject empty, blocked, consent-only, truncated, or malformed captures. Eligible content is converted to readable Markdown while preserving claims, dates, numbers, uncertainty, and negation.", "Raw snapshots.", "Versioned approved Markdown or typed rejection records.", "Blocked snapshots never enter explanation or graph agents."],
+      coverage: ["Evidence readiness", "Approved evidence dossier", "The dossier closes over approved article versions. A horizon-aware target and source-diversity gate are combined with a typed ledger for outcome support, timeline, key developments, counterevidence, and citation traceability.", "Approved article versions and question requirements.", "A validated dossier, a targeted search for a named gap, or evidence abstention.", "Unsupported questions do not receive fabricated graphs."],
+      explanation: ["Hindsight synthesis", "Source-cited explanation", "The explanation agent reads only the approved dossier and produces a human-readable account plus concrete dated event candidates. Article aliases are resolved back to exact approved versions.", "Closed evidence dossier.", "Immutable explanation artifact and event inventory.", "Citation mismatches are corrected deterministically or sent through bounded repair."],
+      graph: ["Graph construction", "Structured hindsight reference", "GraphBuilder converts the event inventory into staged nodes, influence edges, and event-to-outcome impact records. The structure is a source-backed reference artifact, not definitive causal ground truth.", "Validated explanation, approved evidence, and outcome aliases.", "A complete graph proposal.", "Temporal order, connectivity, impact completeness, and evidence references are checked in code."],
+      commit: ["Atomic persistence", "Validate, repair, or abstain", "A graph revision is committed only after deterministic validation. Typed failures can trigger bounded repair; unsupported evidence and exhausted repair budgets remain visible for review.", "Staged graph revision.", "Committed graph, rejected revision history, or needs-review state.", "Partial graph writes cannot become canonical."],
+      cutoff: ["Contamination control", "Per-model knowledge cutoff", "A forecast is excluded when a model may have learned the resolved event during training. Filtering is performed per model-question pair.", "Model cutoff metadata and question dates.", "A clean evaluation subset for each model.", "Different models can retain different question counts, which is reported."],
+      simdate: ["Replay control", "Simulated prediction date", "A date inside the valid forecast window defines what counts as the agent's present. Moving it supports controlled horizon experiments on the same resolved question.", "Question start, resolution date, and replay policy.", "A timestamped forecast context.", "The date must precede resolution."],
+      gateway: ["Temporal firewall", "Temporal Gateway", "All forecast-time search and fetch operations are filtered against the simulated date. Ground truth is withheld regardless of date.", "Question ID, simulated date, and agent tool request.", "Only time-valid question metadata and evidence.", "Hindsight graphs and post-cutoff evidence are outside the tool surface."],
+      agent: ["Controlled experiment", "Forecast agent condition", "Conditions vary retrieval, structured reasoning tools, and temporal position while keeping task and scoring contracts stable.", "Time-valid tool interface and condition configuration.", "Prediction, confidence, citations, and optionally a structured event graph.", "The agent cannot directly query evaluation services."],
+      submission: ["Forecast output", "Forecast artifact", "The complete submission is persisted with model, condition, simulated date, answer, probability, cited sources, and reasoning output.", "Agent response and run provenance.", "Immutable submission ready for scoring.", "Evaluation occurs only after submission."],
+      resolved: ["Objective target", "Resolved outcome", "The observed outcome provides objective and verifiable ground truth for outcome accuracy and calibration metrics.", "Canonical question resolution.", "Correct label or value for scoring.", "It is never exposed through forecast-time tools."],
+      "forecast-artifact": ["Evaluation input", "Forecast artifact", "The evaluator reads the submitted answer, confidence, sources, and event structure exactly as produced at the simulated date.", "Completed forecast submission.", "Metric-specific forecast representations.", "No post-hoc edits are made to the forecast."],
+      "reference-artifact": ["Evaluation input", "Hindsight artifacts", "Approved evidence versions and the validated event reference support evidence and reasoning evaluation after the forecast is frozen.", "Approved dossier and committed graph.", "Source and key-event reference sets.", "These artifacts never cross into the forecast sandbox."],
+      matcher: ["Reasoning scoring", "Event matching", "Agent events are compared with dated, source-backed reference events using semantic matching and a temporal proximity gate. KER asks whether important candidate events were recovered.", "Forecast event graph and eligible hindsight reference nodes.", "Event matches, KER, and related reasoning statistics.", "The metric measures reference alignment, not unique causal truth."],
+      "source-match": ["Evidence scoring", "Source matching", "Cited forecast sources are resolved and checked against approved evidence provenance to quantify grounding behavior.", "Forecast citations and approved evidence aliases.", "Source Precision and citation diagnostics.", "Unavailable or fabricated citations do not receive credit."],
+      results: ["Analysis", "Comparative benchmark results", "Scores remain attributable to model, question, condition, simulated date, domain, source, and horizon so aggregate findings can be audited.", "Per-run metric records and validity filters.", "Tables, figures, and controlled comparisons.", "Outcome, evidence, and reasoning axes are not collapsed into one score."],
+    };
+
+    const tabs = document.querySelectorAll(".tab");
+    const views = document.querySelectorAll(".view");
+    tabs.forEach((tab) => tab.addEventListener("click", () => {
+      tabs.forEach((item) => item.setAttribute("aria-selected", String(item === tab)));
+      views.forEach((view) => view.classList.toggle("active", view.id === tab.dataset.view));
+    }));
+
+    const panel = document.getElementById("detail-panel");
+    document.querySelectorAll("[data-detail]").forEach((stage) => {
+      stage.addEventListener("click", () => {
+        const item = details[stage.dataset.detail];
+        if (!item || !panel) return;
+        document.getElementById("detail-kicker").textContent = item[0];
+        document.getElementById("detail-title").textContent = item[1];
+        document.getElementById("detail-body").textContent = item[2];
+        document.getElementById("detail-input").textContent = item[3];
+        document.getElementById("detail-output").textContent = item[4];
+        document.getElementById("detail-control").textContent = item[5];
+        panel.dataset.tone = stage.classList.contains("hindsight") ? "hindsight" : stage.classList.contains("forecast") ? "forecast" : stage.classList.contains("evaluation") ? "evaluation" : "forward";
+      });
+    });
+
+    const dates = ["10 Jan", "02 Feb", "15 Mar", "18 Apr", "03 May"];
+    function bindTimeline(sliderId, readoutId, timelineId) {
+      const slider = document.getElementById(sliderId);
+      const readout = document.getElementById(readoutId);
+      const timeline = document.getElementById(timelineId);
+      if (!slider || !readout || !timeline) return;
+      const update = () => {
+        const cutoff = Number(slider.value);
+        readout.textContent = dates[cutoff];
+        timeline.querySelectorAll(".time-event").forEach((event) => {
+          event.classList.toggle("future", Number(event.dataset.time) > cutoff);
+        });
+      };
+      slider.addEventListener("input", update);
+      update();
+    }
+    bindTimeline("simulated-date", "date-readout", "timeline");
+    bindTimeline("forecast-date", "forecast-readout", "forecast-timeline");
+  </script>
+</body>
+</html>
