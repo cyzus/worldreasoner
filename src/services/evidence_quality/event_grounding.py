@@ -211,6 +211,7 @@ knowledge. Return JSON only."""
         article: Article,
         extraction: EventEvidenceExtraction,
     ) -> EventEvidenceVerification:
+        passages_were_untraceable = bool(extraction.traceability_failures)
         return EventEvidenceVerification(
             extraction_id=extraction.id,
             event_id=event.id,
@@ -221,8 +222,16 @@ knowledge. Return JSON only."""
             entity_match=EntityLabel.AMBIGUOUS,
             action=RepairAction.DEFER_UNVERIFIABLE,
             confidence=0.0,
-            reason_codes=["untraceable_extracted_passage"],
-            notes="Pass A returned text not found in the preserved snapshot.",
+            reason_codes=[
+                "untraceable_extracted_passage"
+                if passages_were_untraceable
+                else "no_evidence_extracted"
+            ],
+            notes=(
+                "Pass A returned text not found in the preserved snapshot."
+                if passages_were_untraceable
+                else "Pass A returned no supporting, contradicting, or date passages."
+            ),
             model=TRACEABILITY_GATE_MODEL,
             prompt_version=(
                 extraction.traceability_version or TRACEABILITY_VERSION

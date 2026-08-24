@@ -14,9 +14,9 @@ from src.domain.models import ArticleQualityFlag
 NORMALIZER_VERSION = "article-normalizer-v5"
 _LINK_PATTERN = re.compile(r"\[[^\]]*\]\([^)]*\)")
 _HTML_PATTERN = re.compile(r"<(?:html|body|div|p|script|style|article)\b", re.I)
-_HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
-_MARKDOWN_IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\([^)]*\)")
-_MARKDOWN_LINK_PATTERN = re.compile(r"\[([^\]]+)\]\([^)]*\)")
+_HTML_TAG_PATTERN = re.compile(r"</?[A-Za-z][^>\r\n]*>")
+_MARKDOWN_IMAGE_PATTERN = re.compile(r"!\[([^\]\r\n]*)\]\([^)\r\n]*\)")
+_MARKDOWN_LINK_PATTERN = re.compile(r"\[([^\]\r\n]+)\]\([^)\r\n]*\)")
 _MARKDOWN_HEADING_PATTERN = re.compile(r"(?m)^\s{0,3}#{1,6}\s+")
 _MARKDOWN_LIST_PATTERN = re.compile(r"(?m)^\s*[-+*]\s+")
 _CONSENT_PATTERN = re.compile(

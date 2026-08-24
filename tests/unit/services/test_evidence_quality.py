@@ -493,6 +493,20 @@ def test_traceability_compares_visible_markdown_text() -> None:
     assert passage_is_traceable(passage, snapshot) is True
 
 
+def test_traceability_does_not_treat_less_than_comparison_as_html() -> None:
+    snapshot = (
+        "The difference was significant (_P_ < 0.001). In summary, our study "
+        "indicates that early treatment substantially improves PFS and OS. "
+        "Registration: <span>NCT05549037</span>."
+    )
+    passage = (
+        "In summary, our study indicates that early treatment substantially "
+        "improves PFS and OS."
+    )
+
+    assert passage_is_traceable(passage, snapshot) is True
+
+
 def test_cleaning_fidelity_ignores_markdown_formatting() -> None:
     source = (
         "The company reported strong growth in the quarter. "
@@ -734,6 +748,45 @@ async def test_verifier_is_not_called_for_untraceable_passage() -> None:
     assert extraction.all_passages_traceable is False
     assert verification.action == RepairAction.DEFER_UNVERIFIABLE
     assert verification.model == "deterministic/traceability-gate"
+    assert verification.reason_codes == ["untraceable_extracted_passage"]
+    assert verifier_llm.responses == []
+
+
+@pytest.mark.asyncio
+async def test_empty_extraction_is_distinct_from_untraceable_passage() -> None:
+    article = _article(
+        "The article discusses a separate public meeting and provides no "
+        "evidence for the event under review. " * 3
+    )
+    event = _event()
+    extractor = EventEvidenceExtractor(
+        FakeStructuredLLM(
+            "extractor-model",
+            [
+                {
+                    "supporting_passages": [],
+                    "contradicting_passages": [],
+                    "date_passages": [],
+                }
+            ],
+        )
+    )
+    verifier_llm = FakeStructuredLLM("verifier-model", [])
+    extraction = await extractor.extract(
+        event,
+        article,
+        input_content=article.content,
+        traceability_snapshot=article.content,
+        dataset_version="v2.0",
+    )
+    verification = await EventEvidenceVerifier(verifier_llm).verify(
+        event, article, extraction
+    )
+
+    assert verification.reason_codes == ["no_evidence_extracted"]
+    assert verification.notes == (
+        "Pass A returned no supporting, contradicting, or date passages."
+    )
     assert verifier_llm.responses == []
 
 

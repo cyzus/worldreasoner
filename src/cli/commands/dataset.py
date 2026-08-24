@@ -25,6 +25,8 @@ from src.services.evidence_quality.article_cleaner import (
     ArticleMarkdownCleaner,
 )
 from src.services.evidence_quality.event_grounding import (
+    EXTRACTOR_PROMPT_VERSION,
+    VERIFIER_PROMPT_VERSION,
     EventEvidenceExtractor,
     EventEvidenceVerifier,
 )
@@ -183,9 +185,31 @@ def validate_events(
     event_id: Optional[str] = typer.Option(
         None, "--event", help="Validate one specific event ID"
     ),
+    selection_file: Optional[Path] = typer.Option(
+        None,
+        "--selection-file",
+        help="Validate event::article pairs from a newline-delimited file",
+    ),
+    all_sources: bool = typer.Option(
+        False,
+        "--all-sources",
+        help="Validate every cited source instead of only the primary source",
+    ),
     limit: int = typer.Option(10, "--limit", min=1),
+    concurrency: int = typer.Option(
+        3,
+        "--concurrency",
+        min=1,
+        max=50,
+        help="Maximum event-source pairs validated concurrently",
+    ),
+    usage_report: Optional[Path] = typer.Option(
+        None,
+        "--usage-report",
+        help="Write token counts, estimated cost, outcomes, and timing as JSON",
+    ),
     force: bool = typer.Option(
-        False, "--force", help="Revalidate events with existing v2 decisions"
+        False, "--force", help="Revalidate pairs with existing v2 decisions"
     ),
     allow_model_content: bool = typer.Option(
         False,
@@ -205,7 +229,11 @@ def validate_events(
             extractor_model=extractor_model,
             verifier_model=verifier_model,
             event_id=event_id,
+            selection_file=selection_file,
+            all_sources=all_sources,
             limit=limit,
+            concurrency=concurrency,
+            usage_report=usage_report,
             force=force,
         )
     )
@@ -378,7 +406,11 @@ async def _validate_events(
     extractor_model: Optional[str],
     verifier_model: str,
     event_id: Optional[str],
+    selection_file: Optional[Path],
+    all_sources: bool,
     limit: int,
+    concurrency: int,
+    usage_report: Optional[Path],
     force: bool,
 ) -> int:
     db = GenericDatabase(str(db_path))
@@ -387,8 +419,10 @@ async def _validate_events(
         update={"model": extractor_model or base_config.model}
     )
     verifier_config = base_config.model_copy(update={"model": verifier_model})
-    extractor_llm = LiteLLMStructuredClient(LiteLLMClient(extractor_config))
-    verifier_llm = LiteLLMStructuredClient(LiteLLMClient(verifier_config))
+    raw_extractor_llm = LiteLLMClient(extractor_config)
+    raw_verifier_llm = LiteLLMClient(verifier_config)
+    extractor_llm = LiteLLMStructuredClient(raw_extractor_llm)
+    verifier_llm = LiteLLMStructuredClient(raw_verifier_llm)
     service = EvidenceQualityService(
         db,
         dataset_version,
@@ -396,44 +430,199 @@ async def _validate_events(
         verifier=EventEvidenceVerifier(verifier_llm),
     )
 
-    processed = 0
-    failures = 0
-    events = [db.get(Event, event_id)] if event_id else db.get_many(Event)
-    events = [event for event in events if event is not None]
-    existing_event_ids = {
-        record.event_id
+    pairs = _select_event_article_pairs(
+        db,
+        event_id=event_id,
+        selection_file=selection_file,
+        all_sources=all_sources,
+    )
+    existing_pairs = {
+        (record.event_id, record.article_id)
         for record in db.get_many(EventEvidenceVerification)
         if record.dataset_version == dataset_version
     }
-    for event in events:
-        if event.is_outcome:
-            continue
-        if not force and event.id in existing_event_ids:
-            continue
-        article = _event_article(db, event)
-        if article is None:
-            continue
-        processed += 1
-        try:
-            _, verification = await service.validate_event(event, article)
-            console.print(
-                f"[{processed}/{limit}] {event.id}: {verification.action.value}"
+    requested_pairs = len(pairs)
+    already_validated_pairs = sum(
+        (event.id, article.id) in existing_pairs for event, article in pairs
+    )
+    if not force:
+        pairs = [
+            pair for pair in pairs if (pair[0].id, pair[1].id) not in existing_pairs
+        ]
+
+    skipped_details: List[Dict[str, str]] = []
+    eligible_pairs = []
+    for event, article in pairs:
+        record = service.ensure_article_record(article)
+        if not service.article_is_eligible_for_llm(record):
+            skipped_details.append(
+                {
+                    "event_id": event.id,
+                    "article_id": article.id,
+                    "reason": "deterministic_article_gate",
+                }
             )
-        except Exception as error:
-            failures += 1
-            console.print(
-                f"[{processed}/{limit}] [red]failed[/red] {event.id}: "
-                f"{type(error).__name__}: {error}"
-            )
-        if processed >= limit:
-            break
-    if processed == 0:
-        console.print("No events require validation for this selection.")
+            continue
+        eligible_pairs.append((event, article))
+    pairs = eligible_pairs[:limit]
+    if skipped_details:
+        console.print(
+            f"Skipped {len(skipped_details)} pairs blocked by deterministic gates."
+        )
+    if not pairs:
+        console.print("No event-source pairs require validation for this selection.")
+        return 0
+
+    started_at = datetime.now(timezone.utc)
+    started = time.perf_counter()
+    semaphore = asyncio.Semaphore(concurrency)
+    failure_details: List[Dict[str, str]] = []
+    action_counts: Dict[str, int] = {}
+
+    async def validate_one(index: int, event: Event, article: Article) -> bool:
+        async with semaphore:
+            try:
+                _, verification = await service.validate_event(event, article)
+                action = verification.action.value
+                action_counts[action] = action_counts.get(action, 0) + 1
+                console.print(
+                    f"[{index}/{len(pairs)}] {event.id}::{article.id}: {action}"
+                )
+                return True
+            except Exception as error:
+                failure_details.append(
+                    {
+                        "event_id": event.id,
+                        "article_id": article.id,
+                        "error_type": type(error).__name__,
+                        "error": str(error),
+                    }
+                )
+                console.print(
+                    f"[{index}/{len(pairs)}] [red]failed[/red] "
+                    f"{event.id}::{article.id}: {type(error).__name__}: {error}"
+                )
+                return False
+
+    results = await asyncio.gather(
+        *(
+            validate_one(index, event, article)
+            for index, (event, article) in enumerate(pairs, 1)
+        )
+    )
+    failures = results.count(False)
+    extractor_usage = raw_extractor_llm.get_usage_report()
+    verifier_usage = raw_verifier_llm.get_usage_report()
+    elapsed = time.perf_counter() - started
+    report = {
+        "artifact": "event-validation-run-report",
+        "started_at": started_at.isoformat(),
+        "finished_at": datetime.now(timezone.utc).isoformat(),
+        "wall_seconds": round(elapsed, 3),
+        "dataset_version": dataset_version,
+        "extractor_model": extractor_llm.model_name,
+        "verifier_model": verifier_llm.model_name,
+        "extractor_prompt_version": EXTRACTOR_PROMPT_VERSION,
+        "verifier_prompt_version": VERIFIER_PROMPT_VERSION,
+        "concurrency": concurrency,
+        "execution_mode": "bounded_async",
+        "requested_pairs": requested_pairs,
+        "already_validated_pairs": already_validated_pairs,
+        "selected_pairs": len(pairs),
+        "succeeded_pairs": results.count(True),
+        "failed_pairs": failures,
+        "skipped_pairs": len(skipped_details),
+        "action_counts": action_counts,
+        "failure_details": failure_details,
+        "skipped_details": skipped_details,
+        "extractor_usage": extractor_usage,
+        "verifier_usage": verifier_usage,
+        "estimated_cost_usd": round(
+            extractor_usage["estimated_cost_usd"]
+            + verifier_usage["estimated_cost_usd"],
+            6,
+        ),
+    }
+    if usage_report:
+        usage_report.parent.mkdir(parents=True, exist_ok=True)
+        usage_report.write_text(
+            json.dumps(report, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        console.print(f"Usage report: {usage_report}")
+    console.print(
+        "Usage: "
+        f"{extractor_usage['prompt_tokens'] + verifier_usage['prompt_tokens']:,} "
+        "prompt + "
+        f"{extractor_usage['completion_tokens'] + verifier_usage['completion_tokens']:,} "
+        f"completion tokens; estimated ${report['estimated_cost_usd']:.6f}; "
+        f"{report['wall_seconds']:.1f}s wall time"
+    )
     if failures:
         console.print(
             f"[yellow]Validation completed with {failures} failure(s).[/yellow]"
         )
     return failures
+
+
+def _select_event_article_pairs(
+    db: GenericDatabase,
+    event_id: Optional[str],
+    selection_file: Optional[Path],
+    all_sources: bool,
+) -> List[tuple[Event, Article]]:
+    if event_id and selection_file:
+        raise ValueError("Use either --event or --selection-file, not both")
+
+    if selection_file:
+        pair_ids = [
+            line.strip()
+            for line in selection_file.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        if len(pair_ids) != len(set(pair_ids)):
+            raise ValueError("Selection contains duplicate event-source pairs")
+        pairs = []
+        for pair_id in pair_ids:
+            if "::" not in pair_id:
+                raise ValueError(
+                    f"Invalid pair {pair_id!r}; expected event_id::article_id"
+                )
+            selected_event_id, article_id = pair_id.split("::", 1)
+            event = db.get(Event, selected_event_id)
+            article = db.get(Article, article_id)
+            if event is None or article is None:
+                raise ValueError(f"Unknown event-source pair: {pair_id}")
+            if article_id not in set(_event_article_ids(event)):
+                raise ValueError(f"Article is not cited by event: {pair_id}")
+            pairs.append((event, article))
+        return pairs
+
+    events = [db.get(Event, event_id)] if event_id else db.get_many(Event)
+    pairs = []
+    for event in events:
+        if event is None or event.is_outcome:
+            continue
+        articles = [
+            article
+            for article_id in _event_article_ids(event)
+            if (article := db.get(Article, article_id)) is not None
+        ]
+        if all_sources:
+            pairs.extend((event, article) for article in articles)
+        elif articles:
+            pairs.append((event, articles[0]))
+    return pairs
+
+
+def _event_article_ids(event: Event) -> List[str]:
+    seen: Set[str] = set()
+    article_ids = []
+    for article_id in [event.source_article_id, *event.article_ids]:
+        if article_id and article_id not in seen:
+            seen.add(article_id)
+            article_ids.append(article_id)
+    return article_ids
 
 
 def _select_articles(
@@ -454,14 +643,3 @@ def _select_articles(
         articles = [article for article in articles if article.id in article_ids]
     articles.sort(key=lambda article: article.id)
     return articles[:limit] if limit is not None else articles
-
-
-def _event_article(db: GenericDatabase, event: Event) -> Optional[Article]:
-    candidates = [event.source_article_id] + list(event.article_ids)
-    for article_id in candidates:
-        if not article_id:
-            continue
-        article = db.get(Article, article_id)
-        if article:
-            return article
-    return None
