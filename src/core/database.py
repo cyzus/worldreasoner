@@ -34,24 +34,23 @@ Usage:
 
 import json
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import (
+    Any,
+    Dict,
+    Generic,
     List,
     Optional,
-    Dict,
-    Any,
-    TypeVar,
-    Generic,
     Type,
+    TypeVar,
     Union,
     get_args,
     get_origin,
 )
-from contextlib import contextmanager
 
 from pydantic import BaseModel
-
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -399,6 +398,17 @@ class GenericDatabase(Generic[T]):
         """Serialize Python value for database storage."""
         from enum import Enum
 
+        def json_default(item: Any) -> Any:
+            if isinstance(item, datetime):
+                return item.isoformat()
+            if isinstance(item, Enum):
+                return item.value
+            if isinstance(item, BaseModel):
+                return item.model_dump()
+            raise TypeError(
+                f"Object of type {type(item).__name__} is not JSON serializable"
+            )
+
         if value is None:
             return None
 
@@ -412,9 +422,9 @@ class GenericDatabase(Generic[T]):
         elif python_type in ("json", "model"):
             # Handle Pydantic models and complex types
             if isinstance(value, BaseModel):
-                return json.dumps(value.model_dump())
+                return json.dumps(value.model_dump(), default=json_default)
             else:
-                return json.dumps(value)
+                return json.dumps(value, default=json_default)
         else:
             return value
 

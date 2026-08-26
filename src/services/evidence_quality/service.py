@@ -1,6 +1,7 @@
 """Orchestration and persistence for modular evidence-quality passes."""
 
 import hashlib
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
@@ -15,9 +16,57 @@ from src.domain.models import (
     EventEvidenceVerification,
     QualityStatus,
 )
+
+
+@dataclass(frozen=True)
+class QuestionEvidenceReadiness:
+    """Cleanup-barrier state for the articles linked to one question."""
+
+    question_id: str
+    dataset_version: str
+    total_articles: int
+    quality_managed_articles: int
+    cleaned_articles: int
+    pending_cleanup_articles: int
+    blocked_articles: int
+    missing_quality_records: int
+
+    @property
+    def is_quality_managed(self) -> bool:
+        """Return whether this question has entered the quality pipeline."""
+        return self.quality_managed_articles > 0
+
+    @property
+    def is_ready(self) -> bool:
+        """Return whether downstream reasoning may use the cleaned evidence."""
+        return (
+            self.is_quality_managed
+            and self.total_articles > 0
+            and self.cleaned_articles > 0
+            and self.pending_cleanup_articles == 0
+            and self.missing_quality_records == 0
+        )
+
+    def blocking_reason(self) -> str:
+        """Describe why the question has not crossed the cleanup barrier."""
+        if not self.is_quality_managed:
+            return "question has no versioned article-quality records"
+        problems = []
+        if self.missing_quality_records:
+            problems.append(
+                f"{self.missing_quality_records} article(s) lack quality records"
+            )
+        if self.pending_cleanup_articles:
+            problems.append(
+                f"{self.pending_cleanup_articles} eligible article(s) await cleanup"
+            )
+        if not self.cleaned_articles:
+            problems.append("no valid cleaned articles remain")
+        return "; ".join(problems) or "evidence cleanup is incomplete"
 from src.services.evidence_quality.article_cleaner import (
     CLEANER_PROMPT_VERSION,
     MIN_EXACT_SENTENCE_RATE,
+    ArticleValidity,
     ArticleMarkdownCleaner,
     measure_cleaning_fidelity,
 )
@@ -26,6 +75,9 @@ from src.services.evidence_quality.article_normalizer import (
     ArticleNormalizer,
 )
 from src.services.evidence_quality.event_grounding import (
+    EXTRACTOR_PROMPT_VERSION,
+    TERMINAL_VALIDATION_GATE_MODEL,
+    TERMINAL_VALIDATION_VERSION,
     EventEvidenceExtractor,
     EventEvidenceVerifier,
 )
@@ -64,7 +116,11 @@ class EvidenceQualityService:
 
     def process_article(self, article: Article) -> ArticleQualityRecord:
         """Run the deterministic pass and persist its derived representation."""
-        normalized = self.normalizer.normalize(article.content)
+        normalized = self.normalizer.normalize(
+            article.content,
+            expected_title=article.title,
+        )
+        current = self.get_article_record(article.id)
         repair_flags = {
             ArticleQualityFlag.EMPTY,
             ArticleQualityFlag.TOO_SHORT,
@@ -74,6 +130,9 @@ class EvidenceQualityService:
             ArticleQualityFlag.LINK_HEAVY,
             ArticleQualityFlag.RAW_HTML,
             ArticleQualityFlag.EXACT_DUPLICATE,
+            ArticleQualityFlag.ERROR_PAGE,
+            ArticleQualityFlag.ACCESS_BLOCK,
+            ArticleQualityFlag.LIKELY_WRONG_PAGE,
         }
         existing = self.db.get_many(
             ArticleQualityRecord,
@@ -98,7 +157,7 @@ class EvidenceQualityService:
             f"{self.dataset_version}:{article.id}:{NORMALIZER_VERSION}"
         ).encode("utf-8")
         record = ArticleQualityRecord(
-            id=hashlib.sha256(record_key).hexdigest(),
+            id=current.id if current else hashlib.sha256(record_key).hexdigest(),
             article_id=article.id,
             dataset_version=self.dataset_version,
             original_content_hash=normalized.original_content_hash,
@@ -107,8 +166,32 @@ class EvidenceQualityService:
             flags=normalized.flags,
             status=status,
             normalizer_version=NORMALIZER_VERSION,
-            metadata=normalized.metadata,
+            clean_markdown=current.clean_markdown if current else None,
+            cleaner_model=current.cleaner_model if current else None,
+            cleaner_prompt_version=(
+                current.cleaner_prompt_version if current else None
+            ),
+            metadata={
+                **(current.metadata if current else {}),
+                **normalized.metadata,
+            },
+            created_at=current.created_at if current else datetime.now(timezone.utc),
+            updated_at=current.updated_at if current else None,
         )
+        identity_blocking_flags = {
+            ArticleQualityFlag.EMPTY,
+            ArticleQualityFlag.TOO_SHORT,
+            ArticleQualityFlag.TRUNCATED,
+            ArticleQualityFlag.ERROR_PAGE,
+            ArticleQualityFlag.ACCESS_BLOCK,
+            ArticleQualityFlag.LIKELY_WRONG_PAGE,
+        }
+        if (
+            current
+            and current.clean_markdown
+            and not any(flag in identity_blocking_flags for flag in record.flags)
+        ):
+            record.status = current.status
         self.db.save(ArticleQualityRecord, record)
         return record
 
@@ -123,6 +206,65 @@ class EvidenceQualityService:
         )
         return records[0] if records else None
 
+    def ensure_article_record(self, article: Article) -> ArticleQualityRecord:
+        """Return an article record produced by the current normalizer."""
+        record = self.get_article_record(article.id)
+        if record is None or record.normalizer_version != NORMALIZER_VERSION:
+            return self.process_article(article)
+        return record
+
+    def question_readiness(self, question_id: str) -> QuestionEvidenceReadiness:
+        """Summarize whether a question can proceed to cleaned-evidence reasoning."""
+        articles = []
+        for article in self.db.get_many(Article):
+            related_ids = article.metadata.get("related_question_ids", [])
+            if (
+                article.collected_for_question_id == question_id
+                or question_id in related_ids
+            ):
+                articles.append(article)
+
+        records = {
+            record.article_id: record
+            for record in self.db.get_many(
+                ArticleQualityRecord,
+                filters={"dataset_version": self.dataset_version},
+            )
+            if record.article_id in {article.id for article in articles}
+        }
+        cleaned = 0
+        pending = 0
+        blocked = 0
+        missing = 0
+        for article in articles:
+            record = records.get(article.id)
+            if record is None:
+                missing += 1
+                continue
+            if not self.article_is_eligible_for_cleanup(record):
+                blocked += 1
+            elif (
+                record.cleaner_model
+                and record.clean_markdown
+                and record.status == QualityStatus.COMPLETE
+            ):
+                cleaned += 1
+            elif record.cleaner_model:
+                blocked += 1
+            else:
+                pending += 1
+
+        return QuestionEvidenceReadiness(
+            question_id=question_id,
+            dataset_version=self.dataset_version,
+            total_articles=len(articles),
+            quality_managed_articles=len(records),
+            cleaned_articles=cleaned,
+            pending_cleanup_articles=pending,
+            blocked_articles=blocked,
+            missing_quality_records=missing,
+        )
+
     async def clean_article(
         self,
         article: Article,
@@ -131,11 +273,34 @@ class EvidenceQualityService:
         """Create readable Markdown while retaining the normalized snapshot."""
         if self.cleaner is None:
             raise RuntimeError("No article cleaner configured")
-        record = record or self.get_article_record(article.id)
-        record = record or self.process_article(article)
-        record.clean_markdown = await self.cleaner.clean(record.normalized_content)
+        record = record or self.ensure_article_record(article)
+        if not self.article_is_eligible_for_cleanup(record):
+            identity = record.metadata.get("identity_check", {})
+            reasons = identity.get("reasons") or [
+                flag.value for flag in record.flags
+            ]
+            raise ValueError(
+                f"Article {article.id} is ineligible for LLM cleanup: "
+                f"{', '.join(reasons)}"
+            )
+        cleanup = await self.cleaner.clean(
+            record.normalized_content,
+            expected_title=article.title,
+        )
+        record.clean_markdown = cleanup.clean_markdown
         record.cleaner_model = self.cleaner.llm.model_name
         record.cleaner_prompt_version = CLEANER_PROMPT_VERSION
+        record.metadata["cleaner_validity"] = {
+            "article_validity": cleanup.article_validity.value,
+            "validity_reasons": cleanup.validity_reasons,
+            "chunk_assessments": [
+                {
+                    "article_validity": item.article_validity.value,
+                    "validity_reason": item.validity_reason,
+                }
+                for item in cleanup.chunk_assessments
+            ],
+        }
         fidelity = measure_cleaning_fidelity(
             record.normalized_content,
             record.clean_markdown,
@@ -147,19 +312,77 @@ class EvidenceQualityService:
             ArticleQualityFlag.TRUNCATED,
             ArticleQualityFlag.EXACT_DUPLICATE,
         }
-        fidelity_failed = (
-            fidelity["sentence_count"] > 0
-            and fidelity["exact_visible_sentence_rate"] < MIN_EXACT_SENTENCE_RATE
+        fidelity_failed = fidelity["sentence_count"] == 0 or (
+            fidelity["exact_visible_sentence_rate"] < MIN_EXACT_SENTENCE_RATE
         )
         record.status = (
             QualityStatus.NEEDS_REPAIR
-            if fidelity_failed
+            if cleanup.article_validity != ArticleValidity.VALID
+            or fidelity_failed
             or any(flag in blocking_flags for flag in record.flags)
             else QualityStatus.COMPLETE
         )
         record.updated_at = datetime.now(timezone.utc)
         self.db.save(ArticleQualityRecord, record)
         return record
+
+    def record_terminal_cleanup_failure(
+        self,
+        article: Article,
+        error: Exception,
+    ) -> ArticleQualityRecord:
+        """Persist a bounded model failure without claiming cleaned content."""
+        if self.cleaner is None:
+            raise RuntimeError("No article cleaner configured")
+        record = self.ensure_article_record(article)
+        record.cleaner_model = self.cleaner.llm.model_name
+        record.cleaner_prompt_version = CLEANER_PROMPT_VERSION
+        record.status = QualityStatus.NEEDS_REPAIR
+        record.metadata["cleaner_failure"] = {
+            "error_type": type(error).__name__,
+            "error": str(error),
+            "terminal": True,
+        }
+        record.updated_at = datetime.now(timezone.utc)
+        self.db.save(ArticleQualityRecord, record)
+        return record
+
+    @staticmethod
+    def article_is_eligible_for_cleanup(record: ArticleQualityRecord) -> bool:
+        """Return whether a snapshot may be sent to the cleanup model."""
+        return (
+            EvidenceQualityService.article_is_eligible_for_llm(record)
+            and ArticleQualityFlag.EXACT_DUPLICATE not in record.flags
+        )
+
+    @staticmethod
+    def article_is_eligible_for_llm(record: ArticleQualityRecord) -> bool:
+        """Return whether a snapshot may be sent to any validation model."""
+        blocking_flags = {
+            ArticleQualityFlag.EMPTY,
+            ArticleQualityFlag.TOO_SHORT,
+            ArticleQualityFlag.TRUNCATED,
+            ArticleQualityFlag.ERROR_PAGE,
+            ArticleQualityFlag.ACCESS_BLOCK,
+            ArticleQualityFlag.LIKELY_WRONG_PAGE,
+        }
+        deterministic_block = any(flag in blocking_flags for flag in record.flags)
+        failed_cleanup = bool(
+            record.cleaner_model
+            and (
+                record.status != QualityStatus.COMPLETE
+                or not record.clean_markdown
+            )
+        )
+        oversized_unclean = bool(
+            not record.clean_markdown
+            and len(record.normalized_content) > 50_000
+        )
+        return (
+            not deterministic_block
+            and not failed_cleanup
+            and not oversized_unclean
+        )
 
     async def validate_event(
         self,
@@ -170,8 +393,16 @@ class EvidenceQualityService:
         """Run exact evidence extraction followed by independent verification."""
         if self.extractor is None or self.verifier is None:
             raise RuntimeError("Both event extractor and verifier must be configured")
-        article_record = article_record or self.get_article_record(article.id)
-        article_record = article_record or self.process_article(article)
+        article_record = article_record or self.ensure_article_record(article)
+        if not self.article_is_eligible_for_llm(article_record):
+            identity = article_record.metadata.get("identity_check", {})
+            reasons = identity.get("reasons") or [
+                flag.value for flag in article_record.flags
+            ]
+            raise ValueError(
+                f"Article {article.id} is ineligible for event validation: "
+                f"{', '.join(reasons)}"
+            )
         input_content = (
             article_record.clean_markdown or article_record.normalized_content
         )
@@ -189,6 +420,44 @@ class EvidenceQualityService:
         )
         self.db.save(EventEvidenceExtraction, extraction)
         verification = await self.verifier.verify(event, article, extraction)
+        self.db.save(EventEvidenceVerification, verification)
+        self._record_repair_proposal(event, article, extraction, verification)
+        return extraction, verification
+
+    def record_terminal_validation_deferral(
+        self,
+        event: Event,
+        article: Article,
+        reason_code: str,
+        notes: str,
+    ) -> Tuple[EventEvidenceExtraction, EventEvidenceVerification]:
+        """Persist a reviewed terminal failure for later human adjudication."""
+        extraction = EventEvidenceExtraction(
+            event_id=event.id,
+            article_id=article.id,
+            dataset_version=self.dataset_version,
+            all_passages_traceable=False,
+            traceability_version=TERMINAL_VALIDATION_VERSION,
+            status=QualityStatus.FAILED,
+            model=TERMINAL_VALIDATION_GATE_MODEL,
+            prompt_version=EXTRACTOR_PROMPT_VERSION,
+        )
+        verification = EventEvidenceVerification(
+            extraction_id=extraction.id,
+            event_id=event.id,
+            article_id=article.id,
+            dataset_version=self.dataset_version,
+            support="none",
+            date_validity="unclear",
+            entity_match="ambiguous",
+            action="defer_unverifiable",
+            confidence=0.0,
+            reason_codes=[reason_code],
+            notes=notes,
+            model=TERMINAL_VALIDATION_GATE_MODEL,
+            prompt_version=TERMINAL_VALIDATION_VERSION,
+        )
+        self.db.save(EventEvidenceExtraction, extraction)
         self.db.save(EventEvidenceVerification, verification)
         self._record_repair_proposal(event, article, extraction, verification)
         return extraction, verification

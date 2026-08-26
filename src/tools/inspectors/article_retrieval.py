@@ -3,7 +3,7 @@
 from src.tools.base.database_mixin import DatabaseAwareTool
 from src.tools.base.base import ToolResponseMixin
 from src.tools.base.output_models import ArticleRetrievalOutput
-from src.domain.models import Article
+from src.domain.models import Article, ArticleQualityRecord, QualityStatus
 from src.tools.base.schema_helper import pydantic_to_output_schema
 
 
@@ -30,7 +30,12 @@ class ArticleRetrievalTool(DatabaseAwareTool, ToolResponseMixin):
     output_type = "object"
     output_schema = pydantic_to_output_schema(ArticleRetrievalOutput)
 
-    def __init__(self, db=None, db_path: str = None):
+    def __init__(
+        self,
+        db=None,
+        db_path: str = None,
+        dataset_version: str = None,
+    ):
         """Initialize the article retrieval tool.
 
         Args:
@@ -40,7 +45,12 @@ class ArticleRetrievalTool(DatabaseAwareTool, ToolResponseMixin):
         Note:
             If neither db nor db_path is provided, will use default database path
         """
-        super().__init__(db=db, db_path=db_path, ensure_tables=[Article])
+        super().__init__(
+            db=db,
+            db_path=db_path,
+            ensure_tables=[Article, ArticleQualityRecord],
+        )
+        self.dataset_version = dataset_version
 
     def forward(self, article_id: str) -> ArticleRetrievalOutput:
         """Retrieve article by ID.
@@ -74,15 +84,42 @@ class ArticleRetrievalTool(DatabaseAwareTool, ToolResponseMixin):
                 word_count=0
             )
 
+        content = article.content
+        if self.dataset_version:
+            records = self.db.get_many(
+                ArticleQualityRecord,
+                filters={
+                    "article_id": article.id,
+                    "dataset_version": self.dataset_version,
+                },
+            )
+            if records:
+                quality = records[0]
+                if (
+                    quality.status != QualityStatus.COMPLETE
+                    or not quality.clean_markdown
+                ):
+                    return ArticleRetrievalOutput(
+                        id="error",
+                        title=article.title,
+                        url=article.url or "",
+                        content=(
+                            "Error: this quality-managed article has not passed "
+                            "the cleaned-evidence barrier."
+                        ),
+                        word_count=0,
+                    )
+                content = quality.clean_markdown
+
         # Return Pydantic output model directly (smolagents passes through as-is)
         return ArticleRetrievalOutput(
             id=article.id,
             title=article.title,
             url=article.url,
-            content=article.content,  # Full content!
+            content=content,
             source=article.source,
             published_date=article.published_date.isoformat()
             if article.published_date
             else None,
-            word_count=article.word_count,
+            word_count=len(content.split()),
         )

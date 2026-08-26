@@ -19,9 +19,11 @@ from src.services.evidence_quality.llm_client import StructuredLLM
 
 
 EXTRACTOR_PROMPT_VERSION = "event-evidence-extractor-v1"
-VERIFIER_PROMPT_VERSION = "event-evidence-verifier-v1"
+VERIFIER_PROMPT_VERSION = "event-evidence-verifier-v2"
 TRACEABILITY_VERSION = "markdown-visible-v2"
 TRACEABILITY_GATE_MODEL = "deterministic/traceability-gate"
+TERMINAL_VALIDATION_VERSION = "event-validation-terminal-v1"
+TERMINAL_VALIDATION_GATE_MODEL = "deterministic/terminal-validation-gate"
 
 
 class EventEvidenceExtractor:
@@ -168,7 +170,11 @@ class EventEvidenceVerifier:
 provided exact passages. Assess source support, date validity, and entity match
 separately. Choose one repair action: accept, revise, relink, reject, or
 defer_unverifiable. Do not infer support from missing passages or use outside
-knowledge. Return JSON only."""
+knowledge. For date validity, use correct for the stated occurrence date or a
+clear one-day timezone shift; near_match only for the same event within two
+days due to delayed reporting or an imprecise stated date; incorrect for a
+materially different date; and unclear when occurrence timing is not
+established. Return JSON only."""
 
     @staticmethod
     def _user_prompt(
@@ -195,7 +201,7 @@ knowledge. Return JSON only."""
             },
             "response_schema": {
                 "support": "full|partial|none|contradictory",
-                "date_validity": "correct|incorrect|unclear",
+                "date_validity": "correct|near_match|incorrect|unclear",
                 "entity_match": "correct|ambiguous|incorrect",
                 "action": "accept|revise|relink|reject|defer_unverifiable",
                 "confidence": "number from 0 to 1",
@@ -211,6 +217,7 @@ knowledge. Return JSON only."""
         article: Article,
         extraction: EventEvidenceExtraction,
     ) -> EventEvidenceVerification:
+        passages_were_untraceable = bool(extraction.traceability_failures)
         return EventEvidenceVerification(
             extraction_id=extraction.id,
             event_id=event.id,
@@ -221,8 +228,16 @@ knowledge. Return JSON only."""
             entity_match=EntityLabel.AMBIGUOUS,
             action=RepairAction.DEFER_UNVERIFIABLE,
             confidence=0.0,
-            reason_codes=["untraceable_extracted_passage"],
-            notes="Pass A returned text not found in the preserved snapshot.",
+            reason_codes=[
+                "untraceable_extracted_passage"
+                if passages_were_untraceable
+                else "no_evidence_extracted"
+            ],
+            notes=(
+                "Pass A returned text not found in the preserved snapshot."
+                if passages_were_untraceable
+                else "Pass A returned no supporting, contradicting, or date passages."
+            ),
             model=TRACEABILITY_GATE_MODEL,
             prompt_version=(
                 extraction.traceability_version or TRACEABILITY_VERSION

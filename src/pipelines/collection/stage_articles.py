@@ -13,6 +13,8 @@ from src.core.collectors import ResultCollector
 from src.pipelines.prompts import article_collection as article_collection_prompts
 from src.utils.logging import logger
 from src.utils.usage_tracking import UsageTracker, log_usage
+from src.core.database import GenericDatabase
+from src.services.evidence_quality import EvidenceQualityService
 
 
 class ArticleSource(BaseModel):
@@ -34,6 +36,7 @@ class ArticleCollectionConfig(BaseModel):
     end_date: datetime
     max_articles_per_source: Optional[int] = None
     domains: List[str] = []  # Filter by domains
+    dataset_version: str = "v2.0"
 
 
 class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
@@ -57,8 +60,14 @@ class ArticleCollectionStage(PipelineStage[ArticleSource, Article]):
         self.collector = ResultCollector[Article]()
 
         # Create ArticleCollectorTool with collector and database for deduplication
+        quality_processor = EvidenceQualityService(
+            GenericDatabase(db_path),
+            dataset_version=config.dataset_version,
+        )
         self.article_tool = ArticleCollectorTool(
-            db_path=db_path, collector=self.collector
+            db_path=db_path,
+            collector=self.collector,
+            quality_processor=quality_processor,
         )
         # RSS fetch tool for direct RSS ingestion
         self.rss_tool = RssFetchTool()

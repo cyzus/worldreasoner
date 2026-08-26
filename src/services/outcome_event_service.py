@@ -208,6 +208,7 @@ class OutcomeEventService:
             and question.ground_truth is not None
         ):
             normalized_truth = self._normalize_text(question.ground_truth)
+            legacy_binary_truth = self._legacy_binary_mcq_truth(question)
 
             for event in outcome_events:
                 should_be_actual = False
@@ -231,6 +232,22 @@ class OutcomeEventService:
                             f"but question only has {len(question.options)} options"
                         )
                         should_be_actual = False
+                elif (
+                    legacy_binary_truth is not None
+                    and event.outcome_scenario
+                    in {
+                        OutcomeScenario.POSITIVE_RESOLUTION,
+                        OutcomeScenario.NEGATIVE_RESOLUTION,
+                    }
+                ):
+                    should_be_actual = (
+                        event.outcome_scenario
+                        == (
+                            OutcomeScenario.POSITIVE_RESOLUTION
+                            if legacy_binary_truth
+                            else OutcomeScenario.NEGATIVE_RESOLUTION
+                        )
+                    )
                 else:
                     # Fallback: parse from title "Option N: value"
                     title = event.title or ""
@@ -270,6 +287,16 @@ class OutcomeEventService:
             self.db.save(Question, question)
 
         return outcome_events
+
+    def _legacy_binary_mcq_truth(self, question: Question) -> Optional[bool]:
+        """Map two named market options onto legacy positive/negative outcomes."""
+        if not question.options or len(question.options) != 2:
+            return None
+        normalized_truth = self._normalize_text(question.ground_truth)
+        normalized_options = [self._normalize_text(item) for item in question.options]
+        if not normalized_truth or normalized_options.count(normalized_truth) != 1:
+            return None
+        return normalized_options.index(normalized_truth) == 0
 
     @staticmethod
     def _normalize_text(value) -> str:

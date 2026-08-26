@@ -1,8 +1,37 @@
 """Unit tests for LiteLLM client."""
 
+from unittest.mock import AsyncMock
+
+import litellm
 import pytest
-from src.core.llm import LiteLLMClient
+
 from src.config import get_config
+from src.core.llm import LiteLLMClient
+
+
+@pytest.mark.asyncio
+async def test_acomplete_retries_null_message_content(monkeypatch) -> None:
+    responses = iter(
+        [
+            {"choices": [{"message": {"content": None}}], "usage": {}},
+            {"choices": [{"message": {"content": "usable"}}], "usage": {}},
+        ]
+    )
+
+    async def fake_acompletion(**kwargs):
+        del kwargs
+        return next(responses)
+
+    sleep = AsyncMock()
+    monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
+    monkeypatch.setattr("src.core.llm.asyncio.sleep", sleep)
+    client = LiteLLMClient({"model": "fake-model"})
+
+    result = await client.acomplete([{"role": "user", "content": "test"}])
+
+    assert result == "usable"
+    assert client.get_usage_report()["calls"] == 2
+    sleep.assert_awaited_once_with(1.0)
 
 
 class TestLiteLLMClientIntegration:

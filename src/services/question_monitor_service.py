@@ -6,6 +6,7 @@ This service monitors:
 3. LLM model usage statistics
 """
 
+import sqlite3
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -87,19 +88,17 @@ class QuestionMonitorService(ServiceBase):
         Checks the primary provenance field first, then falls back to legacy
         metadata-based provenance for backward compatibility.
         """
-        direct_articles = self.db.get_many(
-            Article, filters={"collected_for_question_id": question_id}
-        )
-        if direct_articles:
-            return True
+        return bool(self._linked_evidence_article_ids(question_id))
 
-        # Backward-compatible fallback for legacy metadata-only provenance.
-        all_articles = self.db.get_many(Article)
-        for article in all_articles:
-            if question_id in article.metadata.get("related_question_ids", []):
-                return True
-
-        return False
+    def _linked_evidence_article_ids(self, question_id: str) -> set[str]:
+        """Resolve current and legacy evidence provenance without double counting."""
+        linked: set[str] = set()
+        for article in self.db.get_many(Article):
+            if article.collected_for_question_id == question_id:
+                linked.add(article.id)
+            elif question_id in article.metadata.get("related_question_ids", []):
+                linked.add(article.id)
+        return linked
 
     def evaluate_article_requirements(
         self, article_count: int, causal_explanation: Optional[str]
@@ -110,14 +109,23 @@ class QuestionMonitorService(ServiceBase):
         Both check_satisfaction (DB-querying) and get_processed_question_ids (bulk)
         delegate here, as do the inspector tools.
         """
-        missing = []
-        if article_count < self.config.min_articles:
-            missing.append(f"articles ({article_count} < {self.config.min_articles})")
+        missing = self.evaluate_article_count_requirement(article_count)
         if not causal_explanation:
             missing.append("causal_explanation missing")
         return missing
 
-    def evaluate_graph_requirements(self, max_depth: int, event_count: int) -> List[str]:
+    def evaluate_article_count_requirement(self, article_count: int) -> List[str]:
+        """Evaluate article volume without requiring a completed explanation."""
+        if article_count < self.config.min_articles:
+            return [f"articles ({article_count} < {self.config.min_articles})"]
+        return []
+
+    def evaluate_graph_requirements(
+        self,
+        max_depth: int,
+        event_count: int,
+        hypothesis_count: Optional[int] = None,
+    ) -> List[str]:
         """Return missing graph requirements given pre-computed stats.
 
         Single source of truth for graph-level satisfaction checks.
@@ -131,6 +139,14 @@ class QuestionMonitorService(ServiceBase):
         if event_count < self.config.min_graph_events:
             missing.append(
                 f"events ({event_count} < {self.config.min_graph_events})"
+            )
+        if (
+            hypothesis_count is not None
+            and hypothesis_count < self.config.min_hypotheses
+        ):
+            missing.append(
+                "hypotheses "
+                f"({hypothesis_count} < {self.config.min_hypotheses})"
             )
         return missing
 
@@ -152,16 +168,19 @@ class QuestionMonitorService(ServiceBase):
             Set of question IDs that are fully processed
         """
         all_articles = self.db.get_many(Article)
-        article_counts: Dict[str, int] = {}
+        article_ids: Dict[str, set[str]] = {question.id: set() for question in questions}
         for a in all_articles:
             qid = getattr(a, "collected_for_question_id", None)
-            if qid:
-                article_counts[qid] = article_counts.get(qid, 0) + 1
+            if qid in article_ids:
+                article_ids[qid].add(a.id)
+            for related_id in a.metadata.get("related_question_ids", []):
+                if related_id in article_ids:
+                    article_ids[related_id].add(a.id)
 
         return {
             q.id
             for q in questions
-            if self._is_evidence_complete(q, article_counts.get(q.id, 0))
+            if self._is_evidence_complete(q, len(article_ids.get(q.id, set())))
         }
 
     def get_evidence_needs(
@@ -220,13 +239,35 @@ class QuestionMonitorService(ServiceBase):
 
     def check_satisfaction(self, question_id: str) -> EvidenceSatisfaction:
         """Check if a question's evidence meets satisfaction requirements."""
+        from src.domain.models.pipeline_artifact import (
+            ApprovedEvidenceDossier,
+            ArtifactStatus,
+        )
+
         question = self.db.get(Question, question_id)
-        article_count = self.db.count(
-            Article, filters={"collected_for_question_id": question_id}
-        )
-        missing = self.evaluate_article_requirements(
-            article_count, question.causal_explanation if question else None
-        )
+        try:
+            validated_dossiers = self.db.get_many(
+                ApprovedEvidenceDossier,
+                filters={
+                    "question_id": question_id,
+                    "status": ArtifactStatus.VALIDATED.value,
+                },
+            )
+        except sqlite3.OperationalError as exc:
+            if "no such table" not in str(exc):
+                raise
+            validated_dossiers = []
+        if validated_dossiers:
+            dossier = max(validated_dossiers, key=lambda item: item.created_at)
+            article_count = len(dossier.article_version_ids)
+            missing = [] if question and question.causal_explanation else [
+                "causal_explanation missing"
+            ]
+        else:
+            article_count = len(self._linked_evidence_article_ids(question_id))
+            missing = self.evaluate_article_requirements(
+                article_count, question.causal_explanation if question else None
+            )
         return EvidenceSatisfaction(
             is_satisfied=not missing,
             graph_depth=0,
@@ -264,7 +305,11 @@ class QuestionMonitorService(ServiceBase):
             event_ids.add(h.target_event_id)
         event_count = len(event_ids)
 
-        missing = self.evaluate_graph_requirements(max_depth, event_count)
+        missing = self.evaluate_graph_requirements(
+            max_depth,
+            event_count,
+            hypothesis_count=len(hypotheses),
+        )
         return EvidenceSatisfaction(
             is_satisfied=not missing,
             graph_depth=max_depth,

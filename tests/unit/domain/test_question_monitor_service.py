@@ -96,6 +96,9 @@ def skipped_question(test_db):
 @pytest.fixture
 def question_with_evidence(test_db, resolved_question):
     """Create a question with sufficient evidence."""
+    resolved_question.causal_explanation = (
+        "The collected evidence supports a complete causal explanation."
+    )
     # Create target event
     event = Event(
         id="evt_target_001",
@@ -270,6 +273,48 @@ class TestCheckSatisfaction:
         # Check that articles is mentioned as missing
         missing_str = str(satisfaction.missing_requirements)
         assert "articles" in missing_str
+
+    def test_counts_legacy_many_question_article_provenance(
+        self, service, test_db, resolved_question
+    ):
+        """Metadata-linked evidence remains visible to readiness checks."""
+        resolved_question.causal_explanation = "A supported causal explanation."
+        test_db.save(Question, resolved_question)
+        for i in range(5):
+            test_db.save(
+                Article,
+                Article(
+                    id=f"shared_art_{i}",
+                    title=f"Shared evidence article number {i}",
+                    content="Shared evidence content. " * 10,
+                    source="test",
+                    published_date=datetime(2023, 12, i + 1, tzinfo=timezone.utc),
+                    domain=Domain.TECH,
+                    collected_for_question_id="another-question",
+                    metadata={
+                        "related_question_ids": [resolved_question.id]
+                    },
+                ),
+            )
+
+        satisfaction = service.check_satisfaction(resolved_question.id)
+
+        assert satisfaction.is_satisfied
+        assert satisfaction.article_count == 5
+        assert resolved_question.id in service.get_processed_question_ids(
+            [resolved_question]
+        )
+
+    def test_shared_requirement_evaluators_include_hypotheses(self, service):
+        """Pure evaluators expose the canonical article and graph policy."""
+        assert service.evaluate_article_count_requirement(4) == [
+            "articles (4 < 5)"
+        ]
+        assert service.evaluate_graph_requirements(1, 2, 0) == [
+            "graph_depth (1 < 2)",
+            "events (2 < 10)",
+            "hypotheses (0 < 1)",
+        ]
 
 
 class TestGetForecastReadiness:

@@ -1,7 +1,11 @@
 """LLM readability pass for normalized article snapshots."""
 
+import asyncio
 import re
+from enum import Enum
 from typing import Any, Dict, List
+
+from pydantic import BaseModel, Field
 
 from src.services.evidence_quality.article_normalizer import (
     normalize_for_traceability,
@@ -9,9 +13,34 @@ from src.services.evidence_quality.article_normalizer import (
 from src.services.evidence_quality.llm_client import StructuredLLM
 
 
-CLEANER_PROMPT_VERSION = "article-cleaner-v1"
+CLEANER_PROMPT_VERSION = "article-cleaner-v2"
 MIN_EXACT_SENTENCE_RATE = 0.7
 MIN_FIDELITY_SENTENCE_CHARS = 40
+
+
+class ArticleValidity(str, Enum):
+    """Whether a snapshot chunk contains substantive target-article text."""
+
+    VALID = "valid"
+    INVALID = "invalid"
+    UNCERTAIN = "uncertain"
+
+
+class CleanMarkdownResponse(BaseModel):
+    """Schema-constrained response for one cleaned article chunk."""
+
+    article_validity: ArticleValidity
+    validity_reason: str
+    clean_markdown: str
+
+
+class ArticleCleanupResult(BaseModel):
+    """Aggregated validity and Markdown from every bounded document chunk."""
+
+    article_validity: ArticleValidity
+    validity_reasons: List[str] = Field(default_factory=list)
+    clean_markdown: str
+    chunk_assessments: List[CleanMarkdownResponse] = Field(default_factory=list)
 
 
 def measure_cleaning_fidelity(source: str, cleaned: str) -> Dict[str, Any]:
@@ -41,27 +70,87 @@ def measure_cleaning_fidelity(source: str, cleaned: str) -> Dict[str, Any]:
 class ArticleMarkdownCleaner:
     """Remove page furniture while preserving the article's factual content."""
 
-    def __init__(self, llm: StructuredLLM, chunk_chars: int = 24_000) -> None:
+    def __init__(
+        self,
+        llm: StructuredLLM,
+        chunk_chars: int = 24_000,
+        request_concurrency: int = 1,
+    ) -> None:
         self.llm = llm
         self.chunk_chars = chunk_chars
+        self.request_semaphore = asyncio.Semaphore(request_concurrency)
 
-    async def clean(self, content: str) -> str:
-        """Clean an article in bounded paragraph-aligned chunks."""
+    async def clean(
+        self,
+        content: str,
+        expected_title: str = "",
+    ) -> ArticleCleanupResult:
+        """Assess and clean an article in bounded paragraph-aligned chunks."""
         chunks = self._split_chunks(content)
-        cleaned: List[str] = []
-        for index, chunk in enumerate(chunks, 1):
-            result = await self.llm.complete_json(
-                system_prompt=self._system_prompt(),
-                user_prompt=(
-                    f"Document chunk {index} of {len(chunks)}:\n\n{chunk}\n\n"
-                    'Return JSON with one string field: "clean_markdown".'
-                ),
+        async def clean_chunk(
+            index: int,
+            chunk: str,
+        ) -> CleanMarkdownResponse:
+            async with self.request_semaphore:
+                result = await self.llm.complete_json(
+                    system_prompt=self._system_prompt(),
+                    user_prompt=(
+                        f"Expected article title: {expected_title or '[unknown]'}\n"
+                        f"Document chunk {index} of {len(chunks)}:\n\n{chunk}\n\n"
+                        "Return article_validity, validity_reason, and "
+                        "clean_markdown in one JSON object."
+                    ),
+                    response_model=CleanMarkdownResponse,
+                )
+            result["validity_reason"] = result.get("validity_reason") or ""
+            result["clean_markdown"] = result.get("clean_markdown") or ""
+            assessment = CleanMarkdownResponse.model_validate(result)
+            if (
+                assessment.article_validity == ArticleValidity.VALID
+                and not (assessment.clean_markdown or "").strip()
+            ):
+                assessment = assessment.model_copy(
+                    update={
+                        "article_validity": ArticleValidity.UNCERTAIN,
+                        "validity_reason": (
+                            "Model marked the chunk valid but returned no article text."
+                        ),
+                    }
+                )
+            return assessment
+
+        assessments = await asyncio.gather(
+            *(
+                clean_chunk(index, chunk)
+                for index, chunk in enumerate(chunks, 1)
             )
-            text = result.get("clean_markdown")
-            if not isinstance(text, str):
-                raise ValueError("Cleaner response omitted clean_markdown")
-            cleaned.append(text.strip())
-        return "\n\n".join(part for part in cleaned if part).strip()
+        )
+        cleaned = [
+            (assessment.clean_markdown or "").strip()
+            for assessment in assessments
+            if assessment.article_validity == ArticleValidity.VALID
+        ]
+
+        validities = {item.article_validity for item in assessments}
+        if ArticleValidity.VALID in validities:
+            article_validity = ArticleValidity.VALID
+        elif ArticleValidity.UNCERTAIN in validities:
+            article_validity = ArticleValidity.UNCERTAIN
+        else:
+            article_validity = ArticleValidity.INVALID
+        reasons = list(
+            dict.fromkeys(
+                (item.validity_reason or "").strip()
+                for item in assessments
+                if (item.validity_reason or "").strip()
+            )
+        )
+        return ArticleCleanupResult(
+            article_validity=article_validity,
+            validity_reasons=reasons,
+            clean_markdown="\n\n".join(part for part in cleaned if part).strip(),
+            chunk_assessments=assessments,
+        )
 
     def _split_chunks(self, content: str) -> List[str]:
         if len(content) <= self.chunk_chars:
@@ -94,7 +183,15 @@ class ArticleMarkdownCleaner:
 
     @staticmethod
     def _system_prompt() -> str:
-        return """You clean archived web pages for human annotation.
+        return """You validate and clean archived web pages for human annotation.
+First decide whether the supplied chunk contains substantive text from the
+expected target article. Use "valid" when it contains target-article body text,
+"invalid" for consent pages, access challenges, error pages, navigation/listing
+pages, unrelated pages, or page furniture without article text, and "uncertain"
+when the identity cannot be established. A continuation chunk can be valid even
+if it does not repeat the title. For invalid or uncertain chunks, explain why
+briefly and return an empty clean_markdown.
+
 Remove navigation, cookie notices, advertisements, recommendations, repeated
 boilerplate, and unrelated page furniture. Preserve all substantive claims,
 names, dates, numbers, quotations, uncertainty, and negation. Use only text in

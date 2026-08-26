@@ -8,6 +8,7 @@ from typing import List, Dict
 from collections import defaultdict
 from datetime import datetime
 
+from src.config.pipeline import SATISFACTION_DEFAULTS
 from src.domain.models import Article
 
 
@@ -120,7 +121,10 @@ def identify_gaps(timeline_data: Dict, min_gap_days: int = 7) -> List[Dict]:
     return gaps
 
 
-def calculate_volume_score(article_count: int, min_articles: int = 20) -> float:
+def calculate_volume_score(
+    article_count: int,
+    min_articles: int = SATISFACTION_DEFAULTS.min_articles,
+) -> float:
     """Calculate quality score based on article count.
 
     Args:
@@ -263,7 +267,7 @@ def calculate_quality(
     source_data: Dict,
     gaps: List[Dict],
     coverage_start: datetime = None,
-    min_articles: int = 20,
+    min_articles: int = SATISFACTION_DEFAULTS.min_articles,
 ) -> Dict:
     """Calculate overall coverage quality score.
 
@@ -348,7 +352,7 @@ def get_recommendation(
     gaps: List[Dict],
     source_data: Dict,
     timeline_data: Dict,
-    min_articles: int = 20,
+    min_articles: int = SATISFACTION_DEFAULTS.min_articles,
 ) -> str:
     """Generate actionable recommendation based on coverage analysis.
 

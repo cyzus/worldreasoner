@@ -1,7 +1,9 @@
 from pydantic import BaseModel
 import asyncio
 from dotenv import load_dotenv
-from typing import Union
+from typing import Any, Union
+
+from src.utils.usage_tracking import UsageMetrics, UsageTracker
 
 load_dotenv()
 
@@ -16,8 +18,15 @@ class LiteLLMClient:
             self.llm_config = llm_config.model_dump(exclude_none=True)
         else:
             self.llm_config = llm_config
+        self.usage_tracker = UsageTracker(
+            model_name=str(self.llm_config.get("model", "unknown"))
+        )
 
-    async def acomplete(self, messages: list[dict], response_format: dict = None):
+    async def acomplete(
+        self,
+        messages: list[dict],
+        response_format: Any = None,
+    ):
         """Complete an LLM request.
 
         Args:
@@ -39,23 +48,81 @@ class LiteLLMClient:
         for attempt in range(_EMPTY_CHOICES_MAX_RETRIES + 1):
             import litellm
             response = await litellm.acompletion(**kwargs, messages=messages)
-            if response["choices"]:
-                return response["choices"][0]["message"]["content"]
-            # Empty choices — transient API hiccup
+            self._record_usage(response, litellm)
+            choices = response.get("choices") or []
+            if choices:
+                content = choices[0].get("message", {}).get("content")
+                if isinstance(content, str) and content.strip():
+                    return content
+            # Empty choices or null/blank content are transient API hiccups.
             if attempt < _EMPTY_CHOICES_MAX_RETRIES:
                 wait = _EMPTY_CHOICES_BACKOFF_BASE**attempt
                 from src.utils.logging import logger
 
                 logger.warning(
-                    f"LLM returned empty choices (attempt {attempt + 1}/{_EMPTY_CHOICES_MAX_RETRIES}), "
+                    f"LLM returned an empty response "
+                    f"(attempt {attempt + 1}/{_EMPTY_CHOICES_MAX_RETRIES}), "
                     f"retrying in {wait:.1f}s..."
                 )
                 await asyncio.sleep(wait)
 
         raise RuntimeError(
-            f"LLM returned empty choices after {_EMPTY_CHOICES_MAX_RETRIES} retries. "
+            f"LLM returned no usable content after "
+            f"{_EMPTY_CHOICES_MAX_RETRIES} retries. "
             "This is likely a transient API issue."
         )
+
+    def _record_usage(self, response: Any, litellm_module: Any) -> None:
+        """Capture token counts and LiteLLM's best available cost estimate."""
+        usage = response.get("usage") or {}
+        prompt_tokens = int(
+            usage.get("prompt_tokens")
+            or usage.get("input_tokens")
+            or 0
+        )
+        completion_tokens = int(
+            usage.get("completion_tokens")
+            or usage.get("output_tokens")
+            or 0
+        )
+        total_tokens = int(
+            usage.get("total_tokens") or prompt_tokens + completion_tokens
+        )
+        hidden = getattr(response, "_hidden_params", {}) or {}
+        estimated_cost = hidden.get("response_cost")
+        if not isinstance(estimated_cost, (int, float)):
+            estimated_cost = 0.0
+            if prompt_tokens or completion_tokens:
+                try:
+                    prompt_cost, completion_cost = litellm_module.cost_per_token(
+                        model=str(self.llm_config.get("model", "unknown")),
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                    )
+                    estimated_cost = prompt_cost + completion_cost
+                except Exception:
+                    estimated_cost = 0.0
+        self.usage_tracker.add_usage(
+            UsageMetrics(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                estimated_cost_usd=float(estimated_cost),
+                model=str(self.llm_config.get("model", "unknown")),
+            )
+        )
+
+    def get_usage_report(self) -> dict[str, Any]:
+        """Return aggregate and per-call usage for the current client."""
+        summary = self.usage_tracker.get_summary()
+        return {
+            **summary.to_dict(),
+            "calls": self.usage_tracker.total_calls,
+            "cost_source": "litellm_response_or_model_pricing",
+            "per_call": [
+                metrics.to_dict() for metrics in self.usage_tracker.usage_records
+            ],
+        }
 
     async def aembedding(self, inputs: list[str], model: str = None):
         """Generate embeddings for a list of texts.

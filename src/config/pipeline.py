@@ -115,6 +115,24 @@ class EvidenceSatisfactionConfig(BaseModel):
     min_graph_depth: int = Field(default=3, description="Minimum causal graph depth")
     min_graph_events: int = Field(default=10, description="Minimum events in the causal graph")
     min_articles: int = Field(default=20, description="Minimum evidence articles")
+    adaptive_article_targets: bool = Field(
+        default=True,
+        description=(
+            "Use question horizon and answer type to lower the article target for "
+            "narrow questions; min_articles remains the upper target."
+        ),
+    )
+    short_horizon_articles: int = Field(default=8, ge=3)
+    medium_horizon_articles: int = Field(default=12, ge=3)
+    long_horizon_articles: int = Field(default=16, ge=3)
+    min_unique_sources: int = Field(default=3, ge=1)
+    hindsight_reporting_delay_days: int = Field(
+        default=90,
+        ge=0,
+        description=(
+            "Maximum publication delay after resolution for hindsight reporting."
+        ),
+    )
     min_hypotheses: int = Field(default=1, description="Minimum causal hypotheses")
     min_confidence: float = Field(
         default=0.6, ge=0.0, le=1.0, description="Hypothesis confidence threshold"
