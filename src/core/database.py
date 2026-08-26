@@ -140,6 +140,7 @@ class GenericDatabase(Generic[T]):
         db_path: str = "worldreasoner.db",
         cutoff_date: Optional[datetime] = None,
         timeout: float = 30.0,
+        use_temporal_context: bool = True,
     ):
         """Initialize database connection.
 
@@ -149,6 +150,8 @@ class GenericDatabase(Generic[T]):
                         If provided, Articles and Events will be automatically filtered.
                         If not provided, checks for active TemporalContext.
             timeout: SQLite connection timeout in seconds (default: 30.0)
+            use_temporal_context: Whether to inherit the active forecasting cutoff.
+                Disable this for stores outside forecast-time evidence access.
 
         Raises:
             ValueError: If cutoff_date is not timezone-aware
@@ -167,7 +170,7 @@ class GenericDatabase(Generic[T]):
             from .temporal_gateway import TemporalGateway
 
             self.gateway = TemporalGateway(cutoff_date)
-        else:
+        elif use_temporal_context:
             # Check for active TemporalContext
             from .temporal_gateway import TemporalContext
 
@@ -179,6 +182,8 @@ class GenericDatabase(Generic[T]):
                 self.cutoff_date = context_cutoff
             else:
                 self.gateway = None
+        else:
+            self.gateway = None
 
         self._ensure_db_exists()
 

@@ -1,6 +1,12 @@
 """Data models for WorldReasoner."""
 
 from .article import Article
+from .annotation import (
+    AnnotationAssignment,
+    AnnotationAssignmentStatus,
+    AnnotationResponse,
+    AnnotationSubmission,
+)
 from .causal_hypothesis import CausalHypothesis
 from .dataset_quality import (
     ArticleQualityFlag,
@@ -53,6 +59,10 @@ __all__ = [
     "AliasEntityKind",
     "AliasScopeType",
     "ApprovedEvidenceDossier",
+    "AnnotationAssignment",
+    "AnnotationAssignmentStatus",
+    "AnnotationResponse",
+    "AnnotationSubmission",
     "Article",
     "ArticleQualityFlag",
     "ArticleQualityRecord",
