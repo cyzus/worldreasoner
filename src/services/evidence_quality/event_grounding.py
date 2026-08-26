@@ -22,6 +22,8 @@ EXTRACTOR_PROMPT_VERSION = "event-evidence-extractor-v1"
 VERIFIER_PROMPT_VERSION = "event-evidence-verifier-v2"
 TRACEABILITY_VERSION = "markdown-visible-v2"
 TRACEABILITY_GATE_MODEL = "deterministic/traceability-gate"
+TERMINAL_VALIDATION_VERSION = "event-validation-terminal-v1"
+TERMINAL_VALIDATION_GATE_MODEL = "deterministic/terminal-validation-gate"
 
 
 class EventEvidenceExtractor:

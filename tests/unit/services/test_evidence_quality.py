@@ -552,6 +552,52 @@ async def test_empty_cleanup_is_recorded_as_completed_attempt(
     assert service.article_is_eligible_for_llm(record) is False
 
 
+def test_inconsistent_completed_empty_cleanup_is_not_llm_eligible(
+    tmp_path: Path,
+) -> None:
+    article = _article("Substantive article text. " * 10)
+    db = GenericDatabase(str(tmp_path / "quality.db"))
+    service = EvidenceQualityService(db, "v2.0")
+    record = service.process_article(article)
+    record.status = QualityStatus.COMPLETE
+    record.cleaner_model = "cleaner-model"
+    record.clean_markdown = ""
+
+    assert service.article_is_eligible_for_llm(record) is False
+
+
+def test_oversized_unclean_article_is_not_llm_eligible(tmp_path: Path) -> None:
+    article = _article("Substantive article text. " * 2_500)
+    db = GenericDatabase(str(tmp_path / "quality.db"))
+    service = EvidenceQualityService(db, "v2.0")
+    record = service.process_article(article)
+
+    assert len(record.normalized_content) > 50_000
+    assert record.clean_markdown is None
+    assert service.article_is_eligible_for_llm(record) is False
+
+
+def test_terminal_validation_deferral_is_persisted(tmp_path: Path) -> None:
+    article = _article("Substantive article text. " * 10)
+    event = _event()
+    db = GenericDatabase(str(tmp_path / "quality.db"))
+    service = EvidenceQualityService(db, "v2.0")
+
+    extraction, verification = service.record_terminal_validation_deferral(
+        event,
+        article,
+        reason_code="model_endpoint_no_content",
+        notes="Two configured model families returned no usable content.",
+    )
+
+    assert extraction.status == QualityStatus.FAILED
+    assert verification.action == RepairAction.DEFER_UNVERIFIABLE
+    assert verification.confidence == 0.0
+    assert verification.reason_codes == ["model_endpoint_no_content"]
+    assert db.get(EventEvidenceExtraction, extraction.id) is not None
+    assert db.get(EventEvidenceVerification, verification.id) is not None
+
+
 @pytest.mark.asyncio
 async def test_cleanup_normalizes_null_text_fields() -> None:
     cleaner = ArticleMarkdownCleaner(

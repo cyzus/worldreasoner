@@ -28,6 +28,7 @@ from src.services.evidence_quality.article_cleaner import (
 )
 from src.services.evidence_quality.event_grounding import (
     EXTRACTOR_PROMPT_VERSION,
+    TERMINAL_VALIDATION_VERSION,
     TRACEABILITY_VERSION,
     VERIFIER_PROMPT_VERSION,
     EventEvidenceExtractor,
@@ -593,7 +594,11 @@ def _current_validation_pairs(
     dataset_version: str,
 ) -> Set[Tuple[str, str]]:
     """Return pairs decided by the current verifier or traceability gate."""
-    current_prompt_versions = {VERIFIER_PROMPT_VERSION, TRACEABILITY_VERSION}
+    current_prompt_versions = {
+        VERIFIER_PROMPT_VERSION,
+        TRACEABILITY_VERSION,
+        TERMINAL_VALIDATION_VERSION,
+    }
     return {
         (record.event_id, record.article_id)
         for record in records

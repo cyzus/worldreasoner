@@ -75,6 +75,9 @@ from src.services.evidence_quality.article_normalizer import (
     ArticleNormalizer,
 )
 from src.services.evidence_quality.event_grounding import (
+    EXTRACTOR_PROMPT_VERSION,
+    TERMINAL_VALIDATION_GATE_MODEL,
+    TERMINAL_VALIDATION_VERSION,
     EventEvidenceExtractor,
     EventEvidenceVerifier,
 )
@@ -365,9 +368,21 @@ class EvidenceQualityService:
         }
         deterministic_block = any(flag in blocking_flags for flag in record.flags)
         failed_cleanup = bool(
-            record.cleaner_model and record.status != QualityStatus.COMPLETE
+            record.cleaner_model
+            and (
+                record.status != QualityStatus.COMPLETE
+                or not record.clean_markdown
+            )
         )
-        return not deterministic_block and not failed_cleanup
+        oversized_unclean = bool(
+            not record.clean_markdown
+            and len(record.normalized_content) > 50_000
+        )
+        return (
+            not deterministic_block
+            and not failed_cleanup
+            and not oversized_unclean
+        )
 
     async def validate_event(
         self,
@@ -405,6 +420,44 @@ class EvidenceQualityService:
         )
         self.db.save(EventEvidenceExtraction, extraction)
         verification = await self.verifier.verify(event, article, extraction)
+        self.db.save(EventEvidenceVerification, verification)
+        self._record_repair_proposal(event, article, extraction, verification)
+        return extraction, verification
+
+    def record_terminal_validation_deferral(
+        self,
+        event: Event,
+        article: Article,
+        reason_code: str,
+        notes: str,
+    ) -> Tuple[EventEvidenceExtraction, EventEvidenceVerification]:
+        """Persist a reviewed terminal failure for later human adjudication."""
+        extraction = EventEvidenceExtraction(
+            event_id=event.id,
+            article_id=article.id,
+            dataset_version=self.dataset_version,
+            all_passages_traceable=False,
+            traceability_version=TERMINAL_VALIDATION_VERSION,
+            status=QualityStatus.FAILED,
+            model=TERMINAL_VALIDATION_GATE_MODEL,
+            prompt_version=EXTRACTOR_PROMPT_VERSION,
+        )
+        verification = EventEvidenceVerification(
+            extraction_id=extraction.id,
+            event_id=event.id,
+            article_id=article.id,
+            dataset_version=self.dataset_version,
+            support="none",
+            date_validity="unclear",
+            entity_match="ambiguous",
+            action="defer_unverifiable",
+            confidence=0.0,
+            reason_codes=[reason_code],
+            notes=notes,
+            model=TERMINAL_VALIDATION_GATE_MODEL,
+            prompt_version=TERMINAL_VALIDATION_VERSION,
+        )
+        self.db.save(EventEvidenceExtraction, extraction)
         self.db.save(EventEvidenceVerification, verification)
         self._record_repair_proposal(event, article, extraction, verification)
         return extraction, verification
