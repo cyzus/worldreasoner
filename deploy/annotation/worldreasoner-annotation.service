@@ -1,0 +1,25 @@
+[Unit]
+Description=WorldReasoner hosted annotation service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wr-annotation
+Group=wr-annotation
+WorkingDirectory=/srv/worldreasoner-annotation/app
+EnvironmentFile=/etc/worldreasoner-annotation.env
+Environment=PYTHONUNBUFFERED=1
+UMask=0077
+ExecStart=/srv/worldreasoner-annotation/venv/bin/python -m src.api.annotation_server --packet-dir /srv/worldreasoner-annotation/private/packet --db /srv/worldreasoner-annotation/state/annotations.db --host 127.0.0.1 --port 8011
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/worldreasoner-annotation/state
+
+[Install]
+WantedBy=multi-user.target

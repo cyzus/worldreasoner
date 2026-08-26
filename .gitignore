@@ -269,6 +269,7 @@ Chi_slide.pdf
 /research/executive/
 /research/literature/
 /research/presentations/
+deploy/annotation/worldreasoner-annotation.env
 annotation_*.tsv
 annotation_*.md
 annotation_pilot_summary.md

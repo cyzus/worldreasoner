@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+state_dir=/srv/worldreasoner-annotation/state
+backup_dir=/srv/worldreasoner-annotation/backups
+timestamp=$(date -u +%Y%m%dT%H%M%SZ)
+
+install -d -m 0700 -o wr-annotation -g wr-annotation "$backup_dir"
+sqlite3 "$state_dir/annotations.db" ".backup '$backup_dir/annotations-$timestamp.db'"
+chown wr-annotation:wr-annotation "$backup_dir/annotations-$timestamp.db"
+chmod 0600 "$backup_dir/annotations-$timestamp.db"
+find "$backup_dir" -type f -name 'annotations-*.db' -mtime +14 -delete

@@ -1,0 +1,7 @@
+[Unit]
+Description=Back up the WorldReasoner annotation database
+After=worldreasoner-annotation.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/backup-worldreasoner-annotation
