@@ -49,6 +49,7 @@ class DateLabel(str, Enum):
     """Validity of the event's claimed date."""
 
     CORRECT = "correct"
+    NEAR_MATCH = "near_match"
     INCORRECT = "incorrect"
     UNCLEAR = "unclear"
 

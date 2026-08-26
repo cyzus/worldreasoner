@@ -2,10 +2,12 @@
 
 import asyncio
 import json
+import random
 import time
+from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Deque, Dict, List, Optional, Set, Tuple
 
 import typer
 from rich.console import Console
@@ -26,6 +28,7 @@ from src.services.evidence_quality.article_cleaner import (
 )
 from src.services.evidence_quality.event_grounding import (
     EXTRACTOR_PROMPT_VERSION,
+    TRACEABILITY_VERSION,
     VERIFIER_PROMPT_VERSION,
     EventEvidenceExtractor,
     EventEvidenceVerifier,
@@ -196,6 +199,16 @@ def validate_events(
         help="Validate every cited source instead of only the primary source",
     ),
     limit: int = typer.Option(10, "--limit", min=1),
+    sampling: str = typer.Option(
+        "sequential",
+        "--sampling",
+        help="Pair selection: sequential or question-stratified",
+    ),
+    sample_seed: int = typer.Option(
+        20261003,
+        "--sample-seed",
+        help="Reproducible seed for question-stratified sampling",
+    ),
     concurrency: int = typer.Option(
         3,
         "--concurrency",
@@ -232,6 +245,8 @@ def validate_events(
             selection_file=selection_file,
             all_sources=all_sources,
             limit=limit,
+            sampling=sampling,
+            sample_seed=sample_seed,
             concurrency=concurrency,
             usage_report=usage_report,
             force=force,
@@ -409,6 +424,8 @@ async def _validate_events(
     selection_file: Optional[Path],
     all_sources: bool,
     limit: int,
+    sampling: str,
+    sample_seed: int,
     concurrency: int,
     usage_report: Optional[Path],
     force: bool,
@@ -436,11 +453,10 @@ async def _validate_events(
         selection_file=selection_file,
         all_sources=all_sources,
     )
-    existing_pairs = {
-        (record.event_id, record.article_id)
-        for record in db.get_many(EventEvidenceVerification)
-        if record.dataset_version == dataset_version
-    }
+    existing_pairs = _current_validation_pairs(
+        db.get_many(EventEvidenceVerification),
+        dataset_version,
+    )
     requested_pairs = len(pairs)
     already_validated_pairs = sum(
         (event.id, article.id) in existing_pairs for event, article in pairs
@@ -464,7 +480,12 @@ async def _validate_events(
             )
             continue
         eligible_pairs.append((event, article))
-    pairs = eligible_pairs[:limit]
+    pairs = _sample_validation_pairs(
+        eligible_pairs,
+        limit=limit,
+        sampling=sampling,
+        seed=sample_seed,
+    )
     if skipped_details:
         console.print(
             f"Skipped {len(skipped_details)} pairs blocked by deterministic gates."
@@ -524,6 +545,8 @@ async def _validate_events(
         "verifier_model": verifier_llm.model_name,
         "extractor_prompt_version": EXTRACTOR_PROMPT_VERSION,
         "verifier_prompt_version": VERIFIER_PROMPT_VERSION,
+        "sampling": sampling,
+        "sample_seed": sample_seed,
         "concurrency": concurrency,
         "execution_mode": "bounded_async",
         "requested_pairs": requested_pairs,
@@ -563,6 +586,77 @@ async def _validate_events(
             f"[yellow]Validation completed with {failures} failure(s).[/yellow]"
         )
     return failures
+
+
+def _current_validation_pairs(
+    records: List[EventEvidenceVerification],
+    dataset_version: str,
+) -> Set[Tuple[str, str]]:
+    """Return pairs decided by the current verifier or traceability gate."""
+    current_prompt_versions = {VERIFIER_PROMPT_VERSION, TRACEABILITY_VERSION}
+    return {
+        (record.event_id, record.article_id)
+        for record in records
+        if record.dataset_version == dataset_version
+        and record.prompt_version in current_prompt_versions
+    }
+
+
+def _sample_validation_pairs(
+    pairs: List[Tuple[Event, Article]],
+    limit: int,
+    sampling: str,
+    seed: int,
+) -> List[Tuple[Event, Article]]:
+    """Select validation pairs reproducibly, balancing domains and questions."""
+    if sampling == "sequential":
+        return pairs[:limit]
+    if sampling != "question-stratified":
+        raise ValueError(
+            "Unknown sampling mode "
+            f"{sampling!r}; expected 'sequential' or 'question-stratified'"
+        )
+
+    rng = random.Random(seed)
+    grouped: Dict[str, Dict[str, List[Tuple[Event, Article]]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    for event, article in pairs:
+        domain = (
+            event.domain.value
+            if hasattr(event.domain, "value")
+            else str(event.domain)
+        )
+        question = event.extracted_for_question_id or event.id
+        grouped[domain][question].append((event, article))
+
+    domain_queues: Dict[str, Deque[Deque[Tuple[Event, Article]]]] = {}
+    for domain, question_groups in grouped.items():
+        queues: List[Deque[Tuple[Event, Article]]] = []
+        for group_pairs in question_groups.values():
+            rng.shuffle(group_pairs)
+            queues.append(deque(group_pairs))
+        rng.shuffle(queues)
+        domain_queues[domain] = deque(queues)
+
+    domains = sorted(domain_queues)
+    rng.shuffle(domains)
+    selected: List[Tuple[Event, Article]] = []
+    target = min(limit, len(pairs))
+    while len(selected) < target:
+        added = False
+        for domain in domains:
+            groups = domain_queues[domain]
+            if not groups or len(selected) >= target:
+                continue
+            group = groups.popleft()
+            selected.append(group.popleft())
+            if group:
+                groups.append(group)
+            added = True
+        if not added:
+            break
+    return selected
 
 
 def _select_event_article_pairs(

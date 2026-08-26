@@ -15,6 +15,7 @@ from src.domain.models import (
     Article,
     ArticleQualityFlag,
     ArticleQualityRecord,
+    DateLabel,
     DatasetRepairRecord,
     Domain,
     Event,
@@ -712,6 +713,46 @@ async def test_grounding_requires_traceable_exact_passages(tmp_path: Path) -> No
     assert len(repairs) == 1
     assert repairs[0].action == RepairAction.ACCEPT
     assert repairs[0].applied is False
+
+
+@pytest.mark.asyncio
+async def test_verifier_accepts_near_match_date_label() -> None:
+    article = _article(
+        "The council approved the proposal on January 3 after a public vote. "
+        "Officials published the result later that day."
+    )
+    event = _event()
+    extraction = EventEvidenceExtraction(
+        event_id=event.id,
+        article_id=article.id,
+        dataset_version="v2.0",
+        supporting_passages=["The council approved the proposal on January 3"],
+        date_passages=["on January 3"],
+        all_passages_traceable=True,
+        model="extractor-model",
+        prompt_version="event-evidence-extractor-v1",
+    )
+    verifier = EventEvidenceVerifier(
+        FakeStructuredLLM(
+            "independent-verifier",
+            [
+                {
+                    "support": "full",
+                    "date_validity": "near_match",
+                    "entity_match": "correct",
+                    "action": "revise",
+                    "confidence": 0.9,
+                    "reason_codes": ["same_event_within_two_days"],
+                    "notes": "The article establishes the event one day later.",
+                }
+            ],
+        )
+    )
+
+    verification = await verifier.verify(event, article, extraction)
+
+    assert verification.date_validity == DateLabel.NEAR_MATCH
+    assert verification.prompt_version == "event-evidence-verifier-v2"
 
 
 @pytest.mark.asyncio

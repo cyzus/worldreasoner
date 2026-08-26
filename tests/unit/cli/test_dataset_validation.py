@@ -5,9 +5,24 @@ from pathlib import Path
 
 import pytest
 
-from src.cli.commands.dataset import _select_event_article_pairs
+from src.cli.commands.dataset import (
+    _current_validation_pairs,
+    _sample_validation_pairs,
+    _select_event_article_pairs,
+)
 from src.core.database import GenericDatabase
-from src.domain.models import Article, Domain, Event, EventStatus, EventType
+from src.domain.models import (
+    Article,
+    DateLabel,
+    Domain,
+    EntityLabel,
+    Event,
+    EventEvidenceVerification,
+    EventStatus,
+    EventType,
+    RepairAction,
+    SupportLabel,
+)
 
 
 def _article(article_id: str) -> Article:
@@ -109,3 +124,78 @@ def test_all_sources_deduplicates_primary_article(tmp_path: Path) -> None:
     )
 
     assert [article.id for _, article in pairs] == [first.id, second.id]
+
+
+def test_current_validation_pairs_excludes_old_verifier_decisions() -> None:
+    records = [
+        EventEvidenceVerification(
+            extraction_id=f"extraction-{index}",
+            event_id=f"event-{index}",
+            article_id=f"article-{index}",
+            dataset_version="v2.0",
+            support=SupportLabel.FULL,
+            date_validity=DateLabel.CORRECT,
+            entity_match=EntityLabel.CORRECT,
+            action=RepairAction.ACCEPT,
+            confidence=0.9,
+            model="test-model",
+            prompt_version=prompt_version,
+        )
+        for index, prompt_version in enumerate(
+            [
+                "event-evidence-verifier-v1",
+                "event-evidence-verifier-v2",
+                "markdown-visible-v2",
+            ],
+            1,
+        )
+    ]
+
+    pairs = _current_validation_pairs(records, "v2.0")
+
+    assert pairs == {("event-2", "article-2"), ("event-3", "article-3")}
+
+
+def test_question_stratified_sampling_spreads_questions_and_domains() -> None:
+    pairs = []
+    for domain in [Domain.POLITICS, Domain.SCIENCE]:
+        for question_index in range(3):
+            for pair_index in range(4):
+                suffix = f"{domain.value}-{question_index}-{pair_index}"
+                article = _article(f"article-{suffix}")
+                event = _event(f"event-{suffix}", [article.id])
+                event.domain = domain
+                event.extracted_for_question_id = (
+                    f"question-{domain.value}-{question_index}"
+                )
+                pairs.append((event, article))
+
+    selected = _sample_validation_pairs(
+        pairs,
+        limit=6,
+        sampling="question-stratified",
+        seed=42,
+    )
+
+    assert len(selected) == 6
+    assert len({event.extracted_for_question_id for event, _ in selected}) == 6
+    assert {event.domain for event, _ in selected} == {
+        Domain.POLITICS,
+        Domain.SCIENCE,
+    }
+
+
+def test_question_stratified_sampling_is_reproducible() -> None:
+    pairs = []
+    for index in range(10):
+        article = _article(f"article-{index}")
+        event = _event(f"event-{index}", [article.id])
+        event.extracted_for_question_id = f"question-{index}"
+        pairs.append((event, article))
+
+    first = _sample_validation_pairs(pairs, 5, "question-stratified", 7)
+    second = _sample_validation_pairs(pairs, 5, "question-stratified", 7)
+
+    assert [(event.id, article.id) for event, article in first] == [
+        (event.id, article.id) for event, article in second
+    ]
